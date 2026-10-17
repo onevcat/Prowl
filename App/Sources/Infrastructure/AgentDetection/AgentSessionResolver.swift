@@ -228,7 +228,7 @@ actor AgentSessionResolver {
   /// The immutable inputs of one uncached resolution, grouped so the scan and
   /// match steps take a single subject rather than a long parameter list.
   private struct ResolveRequest {
-    let identified: IdentifiedAgentProcess
+    let identified: LocalAgentProcess
     let processStartedAt: Date
     let workingDirectory: URL?
     let activeText: String
@@ -240,7 +240,7 @@ actor AgentSessionResolver {
   }
 
   private struct ResolveInput {
-    let identified: IdentifiedAgentProcess
+    let identified: LocalAgentProcess
     let workingDirectory: URL?
     let activeText: String
     let configRoot: URL?
@@ -321,7 +321,7 @@ actor AgentSessionResolver {
   private var rootScans: [RootScanKey: RootScan] = [:]
   private let fileManager: FileManager
   private let homeDirectory: URL
-  typealias DaemonBinding = @Sendable (UUID, AgentProcessGeneration, URL?) async -> CodexDaemonBindingLookup
+  typealias DaemonBinding = @Sendable (UUID, LocalProcessGeneration, URL?) async -> CodexDaemonBindingLookup
   private let daemonBinding: DaemonBinding
   private let tuiOpenFilePaths: @Sendable (pid_t) -> [String]?
 
@@ -344,7 +344,7 @@ actor AgentSessionResolver {
   }
 
   func resolve(
-    identified: IdentifiedAgentProcess,
+    identified: LocalAgentProcess,
     workingDirectory: URL?,
     activeText: String,
     configRoot: URL? = nil,
@@ -370,7 +370,7 @@ actor AgentSessionResolver {
   /// of replaying a `PaneAgentState` or pid-result cache entry. File/root parsing
   /// caches remain valid optimizations because they are keyed by file identity.
   func resolveFresh(
-    identified: IdentifiedAgentProcess,
+    identified: LocalAgentProcess,
     workingDirectory: URL?,
     activeText: String,
     configRoot: URL? = nil,
@@ -395,12 +395,12 @@ actor AgentSessionResolver {
   /// A daemon binding is live evidence, not a five-second process-cache entry. Check it
   /// before the fallback cache so a new submit can select another thread immediately.
   private func resolveDaemon(
-    identified: IdentifiedAgentProcess, surfaceID: UUID?, configRoot: URL?
+    identified: LocalAgentProcess, surfaceID: UUID?, configRoot: URL?
   ) async -> AgentSessionResolution? {
     guard identified.agent == .codex, let surfaceID,
-      let startedAt = ProcessDetection.processStartDate(pid: identified.process.pid)
+      let startedAt = ProcessDetection.processStartDate(pid: identified.pid)
     else { return nil }
-    let process = AgentProcessGeneration(pid: identified.process.pid, startedAt: startedAt)
+    let process = LocalProcessGeneration(pid: identified.pid, startedAt: startedAt)
     let home = configRoot ?? CodexLogProvider.codexHome(forTUI: process.pid)
     let parse = Self.pathParser(profile: .profile(for: .codex), configRoot: home)
     // Read selection after the FD scan so a reset during enumeration invalidates the old binding.
@@ -448,11 +448,11 @@ actor AgentSessionResolver {
     let activeText = input.activeText
     let configRoot = input.configRoot
     let now = input.now
-    let process = identified.process
-    guard let startedAt = ProcessDetection.processStartDate(pid: process.pid) else {
+    let pid = identified.pid
+    guard let startedAt = ProcessDetection.processStartDate(pid: pid) else {
       return AgentSessionResolution(session: nil, isFresh: true)
     }
-    let key = CacheKey(pid: process.pid, startedAt: startedAt)
+    let key = CacheKey(pid: pid, startedAt: startedAt)
     let cached = cache[key]
     if !bypassResultCache, let cached {
       let lifetime = Self.cacheLifetime(
@@ -562,7 +562,7 @@ actor AgentSessionResolver {
     let profile = AgentSessionProfile.profile(for: identified.agent)
     let parsePath = Self.pathParser(profile: profile, configRoot: request.configRoot)
 
-    let openSessions = ProcessDetection.openFilePaths(pid: identified.process.pid)
+    let openSessions = ProcessDetection.openFilePaths(pid: identified.pid)
       .compactMap { parsePath($0) }
       .compactMap { session -> AgentSession? in
         guard let path = session.transcriptPath,
@@ -584,13 +584,13 @@ actor AgentSessionResolver {
 
     var pidKeyedMissed = false
     if let configRoot = request.configRoot, let lookup = profile.rootedPIDKeyedSession {
-      if let session = lookup(configRoot, identified.process.pid, request.processStartedAt) {
+      if let session = lookup(configRoot, identified.pid, request.processStartedAt) {
         return UncachedResolution(session: session, usedWideScan: false)
       }
       pidKeyedMissed = true
     }
     if request.configRoot == nil, let lookup = profile.pidKeyedSession {
-      if let session = lookup(homeDirectory, identified.process.pid, request.processStartedAt) {
+      if let session = lookup(homeDirectory, identified.pid, request.processStartedAt) {
         return UncachedResolution(session: session, usedWideScan: false)
       }
       pidKeyedMissed = true

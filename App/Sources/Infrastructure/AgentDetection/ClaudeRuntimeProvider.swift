@@ -20,7 +20,7 @@ actor ClaudeRuntimeProvider {
     self.diagnostic = diagnostic
   }
 
-  func sample(process: AgentProcessGeneration, configRoot: URL?) -> [AgentDetectionEvent] {
+  func sample(process: LocalProcessGeneration, configRoot: URL?) -> [AgentDetectionEvent] {
     guard processStart(process.pid) == process.startedAt else {
       lastUpdatedAt = nil
       report("processChanged")

@@ -42,8 +42,8 @@ struct DevinSupportTests {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 100, processes: processes)))
       #expect(identified.agent == expected)
-      #expect(identified.process.pid == 101)
-      #expect(identified.launchProcessID == 100)
+      #expect(identified.process.ref == .local(101))
+      #expect(identified.launchProcess == .local(100))
     }
     #expect(identifyAgent(processName: "devin-model") == nil)
     let unrelated = ForegroundProcess(

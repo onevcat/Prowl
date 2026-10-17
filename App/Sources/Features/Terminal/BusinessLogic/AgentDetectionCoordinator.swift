@@ -25,7 +25,7 @@ final class AgentDetectionCoordinator {
   private var lastCapturedAt: TimeInterval?
   private var observationInFlight = false
   private var observationWaiters: [CheckedContinuation<Void, Never>] = []
-  typealias Sample = (AgentProcessGeneration, URL?) async -> [AgentDetectionEvent]
+  typealias Sample = (LocalProcessGeneration, URL?) async -> [AgentDetectionEvent]
   private let sampleOverride: Sample?
   private let time: () -> TimeInterval
   private var interactionRevision: UInt64 = 0
@@ -138,15 +138,19 @@ final class AgentDetectionCoordinator {
     // An OSC-capable agent rebinds on a relaunch too, so the arrival-time fence
     // compares against the generation the probe actually confirmed.
     let rebindsOnProcessChange = hasProvider || agent.programStatusApp != nil
+    // An origin change retires every agent's evidence, not only a provider's.
+    let originChanged = process.map { process in self.process.map { $0.origin != process.origin } ?? false } ?? false
     if self.agent != agent || (rebindsOnProcessChange && process != nil && self.process != process)
-      || (hasProvider && self.configRoot != configRoot)
+      || (hasProvider && self.configRoot != configRoot) || originChanged
     {
       reset()
       self.agent = agent
       self.process = process
       self.configRoot = configRoot
-      if agent == .codex, process != nil { logProvider = CodexLogProvider(surfaceID: surfaceID) }
-      if agent == .claude, process != nil { nativeProvider = ClaudeRuntimeProvider() }
+      // Providers read local files and descriptors, so only a local generation gets one.
+      let isLocal = process?.localGeneration != nil
+      if agent == .codex, isLocal { logProvider = CodexLogProvider(surfaceID: surfaceID) }
+      if agent == .claude, isLocal { nativeProvider = ClaudeRuntimeProvider() }
     }
     // A poll's snapshot can be older than a push that arrived while the poll was
     // queued; the newer store stays.
@@ -164,7 +168,7 @@ final class AgentDetectionCoordinator {
     // Under OSC authority the provider is not sampled at all, including on the tick
     // that takes authority: a native snapshot applied now would recreate the facts
     // the transition just retired and resurface after a withdrawal.
-    if hasProvider, !delegated, !machine.hasProgramStatusAuthority, let process = self.process {
+    if hasProvider, !delegated, !machine.hasProgramStatusAuthority, let process = self.process?.localGeneration {
       let epoch = authorityEpoch
       let events: [AgentDetectionEvent]
       if let sampleOverride {
@@ -203,6 +207,18 @@ final class AgentDetectionCoordinator {
     return hadAuthority ? .withdrawn : .none
   }
 
+  /// When the pane's agent origin last changed (the owner keeps it per surface). Records
+  /// that arrived before it belong to the departed origin.
+  var programStatusOriginFence: Date?
+
+  /// The arrival-time fence for the bound generation: its start, or a later origin change.
+  /// A remote generation has no local start time; until the remote binding supplies its
+  /// fence, no record counts for it.
+  private var programStatusNotBefore: Date? {
+    guard let startedAt = process?.localGeneration?.startedAt else { return nil }
+    return programStatusOriginFence.map { max($0, startedAt) } ?? startedAt
+  }
+
   private var isVerified: Bool {
     agent.map { support($0) == .verified } ?? false
   }
@@ -211,8 +227,8 @@ final class AgentDetectionCoordinator {
   /// it to the machine. Returns the evidence for the shadow comparison.
   @discardableResult
   private func applyProgramStatus() -> ProgramStatusEvidence? {
-    guard let agent, let app = agent.programStatusApp, let process else { return nil }
-    let evidence = ProgramStatusEvidence(store: programStatusStore, app: app, notBefore: process.startedAt)
+    guard let agent, let app = agent.programStatusApp, let notBefore = programStatusNotBefore else { return nil }
+    let evidence = ProgramStatusEvidence(store: programStatusStore, app: app, notBefore: notBefore)
     guard support(agent) == .verified else { return evidence }
     let hadAuthority = machine.hasProgramStatusAuthority
     machine.receive(.programStatus(evidence, revision: programStatusStore.revision), now: now)

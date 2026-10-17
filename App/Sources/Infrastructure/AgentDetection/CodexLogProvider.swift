@@ -33,7 +33,7 @@ actor CodexLogProvider {
   /// (docs-ai 073.002). Nil for a caller that has no pane.
   private let daemonBinding: DaemonBinding?
 
-  typealias DaemonBinding = @Sendable (AgentProcessGeneration, URL?) async -> CodexDaemonBinding?
+  typealias DaemonBinding = @Sendable (LocalProcessGeneration, URL?) async -> CodexDaemonBinding?
 
   init(
     surfaceID: UUID? = nil,
@@ -48,7 +48,7 @@ actor CodexLogProvider {
     self.daemonBinding = daemonBinding ?? surfaceID.map(Self.daemonBinding(surfaceID:))
   }
 
-  func sample(process: AgentProcessGeneration, configRoot: URL?) async -> [AgentDetectionEvent] {
+  func sample(process: LocalProcessGeneration, configRoot: URL?) async -> [AgentDetectionEvent] {
     processID = process.pid
     guard ProcessDetection.processStartDate(pid: process.pid) == process.startedAt else { return [.unavailable] }
     let parse = AgentSessionResolver.pathParser(profile: .profile(for: .codex), configRoot: configRoot)
@@ -212,7 +212,7 @@ actor CodexLogProvider {
   }
 
   nonisolated static func lookupDaemonBinding(
-    surfaceID: UUID, process: AgentProcessGeneration, configRoot: URL?
+    surfaceID: UUID, process: LocalProcessGeneration, configRoot: URL?
   ) async -> CodexDaemonBindingLookup {
     let home = configRoot ?? codexHome(forTUI: process.pid)
     guard let daemonPID = managedDaemonPID(codexHome: home) else { return .unavailable }

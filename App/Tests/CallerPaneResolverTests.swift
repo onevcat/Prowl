@@ -46,8 +46,8 @@ struct CallerPaneResolverTests {
     #expect(resolved.surfaceID == pane.surfaceID)
     #expect(
       resolved.processAncestry == [
-        AgentProcessGeneration(pid: 400, startedAt: callerStart),
-        AgentProcessGeneration(pid: 300, startedAt: agentStart),
+        LocalProcessGeneration(pid: 400, startedAt: callerStart),
+        LocalProcessGeneration(pid: 300, startedAt: agentStart),
       ]
     )
   }
@@ -146,13 +146,13 @@ struct CallerPaneResolverTests {
     #expect(resolved?.surfaceID == drivingPane.surfaceID)
     #expect(resolved?.worktreeID == "driver")
     #expect(resolved?.codexSessionStartedAt == started)
-    #expect(resolved?.processAncestry == [AgentProcessGeneration(pid: 400, startedAt: callerStart)])
+    #expect(resolved?.processAncestry == [LocalProcessGeneration(pid: 400, startedAt: callerStart)])
     #expect(CallerPaneResolver.pane(for: unmapped, paneByShellPID: panes) == nil)
   }
 
   @Test func codexSessionProvesOnlyTheTUIThatStartedIt() {
     let tuiStart = Date(timeIntervalSince1970: 1_000)
-    let tui = AgentProcessGeneration(pid: 200, startedAt: tuiStart)
+    let tui = LocalProcessGeneration(pid: 200, startedAt: tuiStart)
     func caller(sessionStartedAt: Date?) -> CallerPane {
       CallerPane(worktreeID: "wt", surfaceID: UUID(), codexSessionStartedAt: sessionStartedAt)
     }

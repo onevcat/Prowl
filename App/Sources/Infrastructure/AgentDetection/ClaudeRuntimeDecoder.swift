@@ -15,7 +15,7 @@ nonisolated enum ClaudeRuntimeDecoder {
     let statusUpdatedAt: Double
   }
 
-  static func decode(_ data: Data, process: AgentProcessGeneration) throws -> AgentNativeSnapshot {
+  static func decode(_ data: Data, process: LocalProcessGeneration) throws -> AgentNativeSnapshot {
     try snapshot(record(data), process: process)
   }
 
@@ -28,7 +28,7 @@ nonisolated enum ClaudeRuntimeDecoder {
   /// an interactive Darwin kind, a UUID session id, and an absolute cwd. The status fields
   /// are not consulted, so a status this decoder does not know still yields the identity
   /// (the session resolver reads it through `ClaudeSessionRegistry`, docs-ai 079.004).
-  static func sessionID(_ record: Record, process: AgentProcessGeneration) -> String? {
+  static func sessionID(_ record: Record, process: LocalProcessGeneration) -> String? {
     guard record.pid == process.pid, record.kind == "interactive", record.pidDomain == "darwin",
       UUID(uuidString: record.sessionId) != nil, record.cwd.hasPrefix("/"),
       let start = processStart(record),
@@ -37,7 +37,7 @@ nonisolated enum ClaudeRuntimeDecoder {
     return record.sessionId
   }
 
-  static func snapshot(_ record: Record, process: AgentProcessGeneration) throws -> AgentNativeSnapshot {
+  static func snapshot(_ record: Record, process: LocalProcessGeneration) throws -> AgentNativeSnapshot {
     guard let sessionID = sessionID(record, process: process), let start = processStart(record),
       record.updatedAt.isFinite, record.statusUpdatedAt.isFinite,
       record.updatedAt >= record.statusUpdatedAt,

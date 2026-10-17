@@ -9,7 +9,7 @@ import Testing
 @MainActor
 struct AgentCoordinatorProgramStatusTests {
   private let started = Date(timeIntervalSince1970: 1_000)
-  private var generation: AgentProcessGeneration { AgentProcessGeneration(pid: 42, startedAt: started) }
+  private var generation: AgentProcessGeneration { .local(pid: 42, startedAt: started) }
   private let idle = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
   private let working = AgentScreenDetection(state: .working, reason: .noRuleMatched)
   private let legacyWorking = AgentScreenDetection(state: .working, reason: .legacyDetector)
@@ -232,7 +232,7 @@ struct AgentCoordinatorProgramStatusTests {
       agent: .pi, process: generation, screen: legacyWorking, configRoot: nil, programStatus: records)
     #expect(bound?.reason.identifier == "osc.idle")
 
-    let relaunch = AgentProcessGeneration(pid: 42, startedAt: started.addingTimeInterval(5))
+    let relaunch = AgentProcessGeneration.local(pid: 42, startedAt: started.addingTimeInterval(5))
     let rebound = await coordinator.observe(
       agent: .pi, process: relaunch, screen: legacyWorking, configRoot: nil, programStatus: records)
 

@@ -288,7 +288,7 @@ struct CodexLogProviderTests {
       tui.waitUntilExit()
     }
     let started = try #require(ProcessDetection.processStartDate(pid: tui.processIdentifier))
-    let process = AgentProcessGeneration(pid: tui.processIdentifier, startedAt: started)
+    let process = LocalProcessGeneration(pid: tui.processIdentifier, startedAt: started)
     let requested = Mutex<[URL?]>([])
     let configRoot = directory.appending(path: "home")
     let provider = CodexLogProvider(
@@ -319,7 +319,7 @@ struct CodexLogProviderTests {
       tui.waitUntilExit()
     }
     let started = try #require(ProcessDetection.processStartDate(pid: tui.processIdentifier))
-    let process = AgentProcessGeneration(pid: tui.processIdentifier, startedAt: started)
+    let process = LocalProcessGeneration(pid: tui.processIdentifier, startedAt: started)
     let available = Mutex(true)
     let provider = CodexLogProvider(
       startedAt: .distantFuture,

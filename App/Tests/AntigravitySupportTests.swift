@@ -29,8 +29,8 @@ struct AntigravitySupportTests {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
       #expect(identified.agent == expected)
-      #expect(identified.process.pid == 200)
-      #expect(identified.launchProcessID == 200)
+      #expect(identified.process.ref == .local(200))
+      #expect(identified.launchProcess == .local(200))
     }
 
     // The updater demotion covers every registered argv0 alias — a shim or
@@ -42,7 +42,7 @@ struct AntigravitySupportTests {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
       #expect(identified.agent == expected)
-      #expect(identified.process.pid == 200)
+      #expect(identified.process.ref == .local(200))
     }
 
     // `--bg-updater` is pinned to the first argument: a TUI whose seeded prompt
@@ -53,7 +53,7 @@ struct AntigravitySupportTests {
     for processes in [[promptedTUI, updater], [updater, promptedTUI]] {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 204, processes: processes)))
-      #expect(identified.process.pid == 204)
+      #expect(identified.process.ref == .local(204))
     }
 
     // Go flag equivalence: `-bg-updater` spells the same updater mode.
@@ -63,7 +63,7 @@ struct AntigravitySupportTests {
     for processes in [[tui, singleDashUpdater], [singleDashUpdater, tui]] {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
-      #expect(identified.process.pid == 200)
+      #expect(identified.process.ref == .local(200))
     }
 
     // Without argv0 (procargs failure) the comm-name candidate is still demoted
@@ -74,7 +74,7 @@ struct AntigravitySupportTests {
     for processes in [[nameOnlyTUI, nameOnlyUpdater], [nameOnlyUpdater, nameOnlyTUI]] {
       let identified = try #require(
         identifyAgentInJob(ForegroundJob(processGroupID: 205, processes: processes)))
-      #expect(identified.process.pid == 205)
+      #expect(identified.process.ref == .local(205))
     }
 
     // Native-executable name: a cmdline token inside a wrapped runtime must not

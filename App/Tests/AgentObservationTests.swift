@@ -221,7 +221,7 @@ struct AgentObservationTests {
     )
     let idleState = PaneAgentState(
       detectedAgent: .pi,
-      agentProcessID: processID,
+      agentProcess: .local(processID),
       session: session,
       state: .idle
     )
@@ -236,7 +236,7 @@ struct AgentObservationTests {
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
       processAncestry: [
-        AgentProcessGeneration(pid: processID, startedAt: startedAt)
+        LocalProcessGeneration(pid: processID, startedAt: startedAt)
       ]
     )
 
@@ -245,7 +245,7 @@ struct AgentObservationTests {
 
     let workingState = PaneAgentState(
       detectedAgent: .pi,
-      agentProcessID: processID,
+      agentProcess: .local(processID),
       session: session,
       state: .working
     )
@@ -268,7 +268,7 @@ struct AgentObservationTests {
     let startedAt = try #require(ProcessDetection.processStartDate(pid: processID))
     let state = PaneAgentState(
       detectedAgent: .pi,
-      agentProcessID: processID,
+      agentProcess: .local(processID),
       session: AgentSession(
         id: "guessed-session",
         transcriptPath: nil,
@@ -296,7 +296,7 @@ struct AgentObservationTests {
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
       processAncestry: [
-        AgentProcessGeneration(pid: processID, startedAt: startedAt)
+        LocalProcessGeneration(pid: processID, startedAt: startedAt)
       ]
     )
 
@@ -311,7 +311,7 @@ struct AgentObservationTests {
     let startedAt = try #require(ProcessDetection.processStartDate(pid: processID))
     let mediumState = PaneAgentState(
       detectedAgent: .pi,
-      agentProcessID: processID,
+      agentProcess: .local(processID),
       session: AgentSession(
         id: "guessed-session",
         transcriptPath: nil,
@@ -339,7 +339,7 @@ struct AgentObservationTests {
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
       processAncestry: [
-        AgentProcessGeneration(pid: processID, startedAt: startedAt)
+        LocalProcessGeneration(pid: processID, startedAt: startedAt)
       ]
     )
     #expect(fixture.manager.recordAgentSignal(signal, caller: caller) == .recorded(binding: .current))
@@ -347,7 +347,7 @@ struct AgentObservationTests {
 
     fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(
       detectedAgent: .pi,
-      agentProcessID: processID,
+      agentProcess: .local(processID),
       session: AgentSession(
         id: "actual-session",
         transcriptPath: nil,
@@ -398,8 +398,8 @@ struct AgentObservationTests {
     let engineStartedAt = try #require(ProcessDetection.processStartDate(pid: engine.processIdentifier))
     let launchOnly = PaneAgentState(
       detectedAgent: .droid,
-      agentProcessID: launchPID,
-      launchProcessID: launchPID,
+      agentProcess: .local(launchPID),
+      launchProcess: .local(launchPID),
       state: .idle
     )
     fixture.state.surfaceAgentStates[fixture.surfaceID] = launchOnly
@@ -409,8 +409,8 @@ struct AgentObservationTests {
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
       processAncestry: [
-        AgentProcessGeneration(pid: engine.processIdentifier, startedAt: engineStartedAt),
-        AgentProcessGeneration(pid: launchPID, startedAt: launchStartedAt),
+        LocalProcessGeneration(pid: engine.processIdentifier, startedAt: engineStartedAt),
+        LocalProcessGeneration(pid: launchPID, startedAt: launchStartedAt),
       ]
     )
     #expect(fixture.manager.recordAgentSignal(signal, caller: caller) == .recorded(binding: .current))
@@ -421,8 +421,8 @@ struct AgentObservationTests {
     // generation: the evidence must survive.
     let engineBound = PaneAgentState(
       detectedAgent: .droid,
-      agentProcessID: engine.processIdentifier,
-      launchProcessID: launchPID,
+      agentProcess: .local(engine.processIdentifier),
+      launchProcess: .local(launchPID),
       state: .idle
     )
     fixture.state.surfaceAgentStates[fixture.surfaceID] = engineBound
@@ -464,8 +464,8 @@ struct AgentObservationTests {
     for (identified, state) in [(launchPID, AgentRawState.idle), (engine.processIdentifier, .working)] {
       let paneState = PaneAgentState(
         detectedAgent: .droid,
-        agentProcessID: identified,
-        launchProcessID: launchPID,
+        agentProcess: .local(identified),
+        launchProcess: .local(launchPID),
         state: state
       )
       fixture.state.surfaceAgentStates[fixture.surfaceID] = paneState
@@ -486,8 +486,8 @@ struct AgentObservationTests {
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
       processAncestry: [
-        AgentProcessGeneration(pid: engine.processIdentifier, startedAt: engineStartedAt),
-        AgentProcessGeneration(pid: launchPID, startedAt: launchStartedAt),
+        LocalProcessGeneration(pid: engine.processIdentifier, startedAt: engineStartedAt),
+        LocalProcessGeneration(pid: launchPID, startedAt: launchStartedAt),
       ]
     )
     #expect(fixture.manager.recordAgentNativeHook(input, caller: caller))
@@ -572,6 +572,36 @@ struct AgentObservationTests {
     #expect(!fixture.manager.recordAgentNativeHook(hook("session.idle", session: "ses_1"), caller: caller))
   }
 
+  /// A local launch's managed hook never vouches for an agent on another origin: when the
+  /// pane's process becomes remote, the hook is revoked and its evidence leaves the epoch.
+  @Test func remoteOriginRevokesTheLocalManagedHook() throws {
+    let fixture = makeFixture()
+    let table = AgentNativeHookDecoder.nativeEvents(for: .omp)
+    let caller = try registerRelayedRuntime(.omp, table: table, fixture: fixture)
+    let start = AgentNativeHookInput(
+      runtime: .omp,
+      token: "token-relayed",
+      signal: AgentNativeHookSignal(
+        event: table["session_start"]!, nativeEvent: "session_start", cwd: "/tmp/agent-observation",
+        sessionID: "S1")
+    )
+    #expect(fixture.manager.recordAgentNativeHook(start, caller: caller))
+    let epoch = try #require(fixture.manager.agentEvidenceEpochForTesting(surfaceID: fixture.surfaceID))
+
+    let remote = ProcessRef.remote(
+      RemoteProcessRef(
+        connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), bootID: "boot", pid: getpid(),
+        startToken: "t1"))
+    let remoteState = PaneAgentState(
+      detectedAgent: .omp, agentProcess: remote, launchProcess: remote, state: .working)
+    fixture.state.surfaceAgentStates[fixture.surfaceID] = remoteState
+    fixture.state.emitAgentEntry(surfaceID: fixture.surfaceID, tabId: fixture.tabID, state: remoteState)
+
+    #expect(fixture.manager.agentEvidenceEpochForTesting(surfaceID: fixture.surfaceID) != epoch)
+    #expect(fixture.manager.agentSignalsPayload(surfaceID: fixture.surfaceID).channels.isEmpty)
+    #expect(!fixture.manager.recordAgentNativeHook(start, caller: caller))
+  }
+
   /// Register a single-process relayed runtime (Pi family, OpenCode TUI) on the fixture's pane
   /// and return the exact caller the bridge would present.
   private func registerRelayedRuntime(
@@ -605,8 +635,8 @@ struct AgentObservationTests {
     #expect(fixture.state.onAgentProfileSurfacePrepared?(fixture.surfaceID, plan) == true)
     let paneState = PaneAgentState(
       detectedAgent: runtime.agent,
-      agentProcessID: launchPID,
-      launchProcessID: launchPID,
+      agentProcess: .local(launchPID),
+      launchProcess: .local(launchPID),
       state: .working
     )
     fixture.state.surfaceAgentStates[fixture.surfaceID] = paneState
@@ -614,7 +644,7 @@ struct AgentObservationTests {
     return CallerPane(
       worktreeID: "/tmp/agent-observation",
       surfaceID: fixture.surfaceID,
-      processAncestry: [AgentProcessGeneration(pid: launchPID, startedAt: launchStartedAt)]
+      processAncestry: [LocalProcessGeneration(pid: launchPID, startedAt: launchStartedAt)]
     )
   }
 

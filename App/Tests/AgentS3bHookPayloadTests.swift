@@ -224,7 +224,7 @@ struct AgentS3bHookPayloadTests {
       forwardingRecord: nil
     )
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
 
     // The hook reports the same directory through its resolved path.
@@ -279,7 +279,7 @@ struct AgentS3bHookPayloadTests {
         forwardingRecord: nil
       )
       _ = store.registerManagedHook(registration, surfaceID: surfaceID)
-      let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+      let generation = LocalProcessGeneration(pid: 900, startedAt: now)
       _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
 
       func send(_ nativeEvent: String, _ event: AgentSignalEvent) -> ManagedHookRecordResult {
@@ -357,7 +357,7 @@ struct AgentS3bHookPayloadTests {
         forwardingRecord: nil
       )
       _ = store.registerManagedHook(registration, surfaceID: surfaceID)
-      let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+      let generation = LocalProcessGeneration(pid: 900, startedAt: now)
       _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
 
       func send(_ nativeEvent: String, _ event: AgentSignalEvent, _ session: String) -> ManagedHookRecordResult {

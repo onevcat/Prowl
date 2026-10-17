@@ -2,12 +2,29 @@ import Darwin
 import Foundation
 
 struct ForegroundProcess: Equatable, Sendable {
-  let pid: pid_t
-  let parentProcessID: pid_t?
+  let ref: ProcessRef
+  /// The parent's pid in the namespace of `ref`. It relates members of one job only.
+  let parentPID: Int32?
   let name: String
   let argv0: String?
   let cmdline: String?
   let arguments: [String]?
+
+  nonisolated init(
+    ref: ProcessRef,
+    parentPID: Int32? = nil,
+    name: String,
+    argv0: String?,
+    cmdline: String?,
+    arguments: [String]? = nil
+  ) {
+    self.ref = ref
+    self.parentPID = parentPID
+    self.name = name
+    self.argv0 = argv0
+    self.cmdline = cmdline
+    self.arguments = arguments
+  }
 
   nonisolated init(
     pid: pid_t,
@@ -17,12 +34,9 @@ struct ForegroundProcess: Equatable, Sendable {
     cmdline: String?,
     arguments: [String]? = nil
   ) {
-    self.pid = pid
-    self.parentProcessID = parentProcessID
-    self.name = name
-    self.argv0 = argv0
-    self.cmdline = cmdline
-    self.arguments = arguments
+    self.init(
+      ref: .local(pid), parentPID: parentProcessID, name: name, argv0: argv0, cmdline: cmdline,
+      arguments: arguments)
   }
 }
 
@@ -30,17 +44,17 @@ struct ForegroundJob: Equatable, Sendable {
   let processGroupID: pid_t
   let processes: [ForegroundProcess]
 
-  /// The job member the shell launched on behalf of `pid`: its topmost ancestor
+  /// The job member the shell launched on behalf of `process`: its topmost ancestor
   /// that is still part of this job. A runtime that forks an engine child
   /// (Droid's `droid exec`) moves the identified process while this stays put.
-  nonisolated func launchProcessID(of pid: pid_t) -> pid_t {
-    var current = pid
+  nonisolated func launchProcess(of process: ProcessRef) -> ProcessRef {
+    var current = process
     var hops = 0
     while hops < processes.count,
-      let parent = processes.first(where: { $0.pid == current })?.parentProcessID,
-      processes.contains(where: { $0.pid == parent })
+      let parent = processes.first(where: { $0.ref == current })?.parentPID,
+      let parentProcess = processes.first(where: { $0.ref.namespacePID == parent })
     {
-      current = parent
+      current = parentProcess.ref
       hops += 1
     }
     return current

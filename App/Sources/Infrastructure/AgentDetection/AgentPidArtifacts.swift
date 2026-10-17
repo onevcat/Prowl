@@ -195,7 +195,7 @@ nonisolated enum ClaudeSessionRegistry {
     guard let data = try? handle.read(upToCount: 65_537),
       let record = try? ClaudeRuntimeDecoder.record(data),
       let id = ClaudeRuntimeDecoder.sessionID(
-        record, process: AgentProcessGeneration(pid: pid, startedAt: processStartedAt))
+        record, process: LocalProcessGeneration(pid: pid, startedAt: processStartedAt))
     else { return nil }
     let transcript = root.appending(
       path: "projects/\(AgentSessionProfile.alphanumericDashed(record.cwd))/\(id).jsonl")

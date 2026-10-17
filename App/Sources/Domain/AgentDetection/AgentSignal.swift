@@ -1,11 +1,6 @@
 import Foundation
 import ProwlCLIShared
 
-nonisolated struct AgentProcessGeneration: Equatable, Hashable, Sendable {
-  let pid: pid_t
-  let startedAt: Date
-}
-
 struct AgentSignal: Equatable, Sendable {
   enum Kind: Equatable, Sendable {
     case turnEnded

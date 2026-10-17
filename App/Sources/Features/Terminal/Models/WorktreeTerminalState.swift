@@ -101,7 +101,7 @@ struct AgentDetectionDiagnostic {
   var summary: String {
     let processSummary =
       job?.processes
-      .map { "\($0.pid):\($0.argv0 ?? $0.name)" }
+      .map { "\($0.ref):\($0.argv0 ?? $0.name)" }
       .joined(separator: ",") ?? "none"
     return [
       "tab=\(tabId.rawValue.uuidString.prefix(8))",
@@ -109,8 +109,8 @@ struct AgentDetectionDiagnostic {
       "ptyPGID=\(processGroupID.map(String.init) ?? "nil")",
       "fgPGID=\(job.map { String($0.processGroupID) } ?? "nil")",
       "processes=\(processSummary)",
-      "identified=\(identified.map { "\($0.agent.rawValue)(\($0.name)):\($0.process.pid)" } ?? "nil")",
-      "launch=\(identified.map { String($0.launchProcessID) } ?? "nil")",
+      "identified=\(identified.map { "\($0.agent.rawValue)(\($0.name)):\($0.process.ref)" } ?? "nil")",
+      "launch=\(identified.map { String(describing: $0.launchProcess) } ?? "nil")",
       "retained=\(retainedAgent?.rawValue ?? "nil")",
       "raw=\(raw?.rawValue ?? "nil")",
       "reason=\(reason?.identifier ?? "nil")",
@@ -208,6 +208,11 @@ final class WorktreeTerminalState {
   /// not to a process: a store outlives `forgetSurface` while its surface is retained
   /// for undo and is dropped when the surface is freed or closed for good.
   @ObservationIgnored var programStatusStoresBySurface: [UUID: ProgramStatusRecordStore] = [:]
+  /// The origin of the last agent identified on each surface and when it began, kept as
+  /// long as the surface's record store. A store record that arrived before an origin
+  /// change came from the departed origin, so it never counts for the current agent
+  /// (docs-ai 082), even after the coordinator is rebuilt.
+  @ObservationIgnored var programStatusOriginBySurface: [UUID: ProgramStatusOrigin] = [:]
   /// The sleeping half of each detection loop; `wakeAgentDetection` cancels it so a
   /// report, a key press, or a finished command gets an immediate probe.
   @ObservationIgnored var agentDetectionSleepersBySurface: [UUID: AgentDetectionSleeper] = [:]

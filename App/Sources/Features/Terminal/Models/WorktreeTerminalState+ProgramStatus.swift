@@ -9,6 +9,12 @@ private let agentDetectionLogger = ProwlLogger("AgentDetection")
 /// published in the same main-thread turn; a report for an unbound pane only wakes
 /// the probe. `COMMAND_FINISHED` (OSC 133 D, from the shell) is exit evidence for
 /// every agent: it wakes a cache-bypassing probe whose single miss releases the entry.
+struct ProgramStatusOrigin: Equatable {
+  let origin: ProcessOrigin
+  /// When this origin replaced another one; nil for the surface's first origin.
+  let since: Date?
+}
+
 extension WorktreeTerminalState {
   /// What the fresh probe after a `COMMAND_FINISHED` found.
   enum CommandFinishedOutcome: Equatable {
@@ -25,17 +31,17 @@ extension WorktreeTerminalState {
   static func commandFinishedOutcome(
     identified: IdentifiedAgentProcess?,
     previous: PaneAgentState,
-    isLiveAncestor: (_ ancestor: pid_t, _ descendant: pid_t) -> Bool
+    isLiveAncestor: (_ ancestor: ProcessRef, _ descendant: ProcessRef) -> Bool
   ) -> CommandFinishedOutcome {
     guard let identified else { return .released }
-    guard previous.detectedAgent != nil, previous.launchProcessID != nil else { return .successor }
-    let launch = PaneAgentState.retainedLaunchProcessID(
-      identifiedLaunchProcessID: identified.launchProcessID,
-      identifiedProcessID: identified.process.pid,
+    guard previous.detectedAgent != nil, previous.launchProcess != nil else { return .successor }
+    let launch = PaneAgentState.retainedLaunchProcess(
+      identifiedLaunch: identified.launchProcess,
+      identifiedProcess: identified.process.ref,
       previous: previous,
       isLiveAncestor: isLiveAncestor
     )
-    return launch == previous.launchProcessID ? .sameOwner : .successor
+    return launch == previous.launchProcess ? .sameOwner : .successor
   }
 
   /// The schedule after one tick: a verified producer's eligible root slows the loop
@@ -107,7 +113,25 @@ extension WorktreeTerminalState {
     for surfaceID in surfaceIDs {
       programStatusStoresBySurface.removeValue(forKey: surfaceID)
       programStatusUnmappedAppsLoggedBySurface.removeValue(forKey: surfaceID)
+      programStatusOriginBySurface.removeValue(forKey: surfaceID)
     }
+  }
+
+  /// Records the identified agent's origin and returns the surface's origin fence: the
+  /// moment the current origin replaced another one, or nil while the surface has seen
+  /// one origin only. A probe gap keeps the last origin. `now` is when the probe that saw
+  /// the change returned, so reports that arrived before that confirmation (also those
+  /// that landed while the probe ran) are left out; the screen decides until the next report.
+  func noteAgentOrigin(_ identified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date) -> Date? {
+    let previous = programStatusOriginBySurface[surfaceID]
+    guard let origin = identified?.process.ref.origin else { return previous?.since }
+    guard let previous else {
+      programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(origin: origin, since: nil)
+      return nil
+    }
+    guard previous.origin != origin else { return previous.since }
+    programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(origin: origin, since: now)
+    return now
   }
 
   /// New producers show up in dogfooding logs: a root record whose `app` is not the

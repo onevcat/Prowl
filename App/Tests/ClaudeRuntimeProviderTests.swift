@@ -21,25 +21,25 @@ struct ClaudeRuntimeProviderTests {
       ("busy", AgentRawState.working), ("shell", .working), ("waiting", .blocked), ("idle", .idle),
     ] {
       let snapshot = try ClaudeRuntimeDecoder.decode(
-        record(status: raw), process: AgentProcessGeneration(pid: 42, startedAt: start))
+        record(status: raw), process: LocalProcessGeneration(pid: 42, startedAt: start))
       #expect(snapshot.state == expected)
       #expect(snapshot.sessionID == session)
     }
   }
 
   @Test func wrongGenerationUnknownStateAndPartialRecordsFailClosed() throws {
-    let process = AgentProcessGeneration(pid: 42, startedAt: start)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
     for data in [try record(pid: 43), try record(status: "future-state"), Data("{".utf8), Data("{}".utf8)] {
       #expect(throws: (any Error).self) { try ClaudeRuntimeDecoder.decode(data, process: process) }
     }
     #expect(throws: (any Error).self) {
       try ClaudeRuntimeDecoder.decode(
-        record(), process: AgentProcessGeneration(pid: 42, startedAt: start.addingTimeInterval(2)))
+        record(), process: LocalProcessGeneration(pid: 42, startedAt: start.addingTimeInterval(2)))
     }
   }
 
   @Test func identityAndSizeBoundariesRejectUnsupportedRecords() throws {
-    let process = AgentProcessGeneration(pid: 42, startedAt: start)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
     for (key, value) in [
       ("sessionId", "../../other"), ("kind", "background"), ("pidDomain", "linux"), ("cwd", "relative"),
     ] {
@@ -54,15 +54,15 @@ struct ClaudeRuntimeProviderTests {
   }
 
   @Test func sessionIdentityIgnoresTheStatusFields() throws {
-    let process = AgentProcessGeneration(pid: 42, startedAt: start)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
     let unknown = try ClaudeRuntimeDecoder.record(record(status: "future-state"))
     #expect(ClaudeRuntimeDecoder.sessionID(unknown, process: process) == session)
     #expect(throws: (any Error).self) { try ClaudeRuntimeDecoder.snapshot(unknown, process: process) }
     let known = try ClaudeRuntimeDecoder.record(record())
-    #expect(ClaudeRuntimeDecoder.sessionID(known, process: AgentProcessGeneration(pid: 43, startedAt: start)) == nil)
+    #expect(ClaudeRuntimeDecoder.sessionID(known, process: LocalProcessGeneration(pid: 43, startedAt: start)) == nil)
     #expect(
       ClaudeRuntimeDecoder.sessionID(
-        known, process: AgentProcessGeneration(pid: 42, startedAt: start.addingTimeInterval(2)))
+        known, process: LocalProcessGeneration(pid: 42, startedAt: start.addingTimeInterval(2)))
         == nil)
   }
 
@@ -79,7 +79,7 @@ struct ClaudeRuntimeProviderTests {
           return count == 1 ? self.start : self.start.addingTimeInterval(10)
         }
       }, diagnostic: { _ in })
-    let result = await provider.sample(process: AgentProcessGeneration(pid: 42, startedAt: start), configRoot: root)
+    let result = await provider.sample(process: LocalProcessGeneration(pid: 42, startedAt: start), configRoot: root)
     guard case .unavailable = result.last else {
       Issue.record("Published replaced process")
       return
@@ -91,7 +91,7 @@ struct ClaudeRuntimeProviderTests {
     defer { try? FileManager.default.removeItem(at: root) }
     try FileManager.default.createDirectory(at: root.appending(path: "sessions"), withIntermediateDirectories: true)
     let path = root.appending(path: "sessions/42.json")
-    let process = AgentProcessGeneration(pid: 42, startedAt: start)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
     let provider = ClaudeRuntimeProvider(processStart: { _ in self.start }, diagnostic: { _ in })
     try record().write(to: path, options: .atomic)
     _ = await provider.sample(process: process, configRoot: root)
@@ -110,7 +110,7 @@ struct ClaudeRuntimeProviderTests {
     defer { try? FileManager.default.removeItem(at: root) }
     try FileManager.default.createDirectory(at: root.appending(path: "sessions"), withIntermediateDirectories: true)
     let path = root.appending(path: "sessions/42.json")
-    let process = AgentProcessGeneration(pid: 42, startedAt: start)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
     let provider = ClaudeRuntimeProvider(processStart: { _ in self.start }, diagnostic: { _ in })
     #expect(await provider.sample(process: process, configRoot: root).isEmpty == false)
     try record(status: "busy").write(to: path)

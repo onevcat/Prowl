@@ -34,12 +34,12 @@ struct AgentDetectionPipelineTests {
     _ screen: String,
     agent: DetectedAgent = .claude,
     through coordinator: AgentDetectionCoordinator? = nil,
-    process: AgentProcessGeneration? = nil
+    process: LocalProcessGeneration? = nil
   ) async -> PaneAgentState? {
     let detection = agent.detectScreen(in: screen)
     let decision = await (coordinator ?? self.coordinator).observe(
       agent: agent,
-      process: process,
+      process: process.map(AgentProcessGeneration.local),
       screen: detection,
       screenContentID: detection.state == .blocked ? screen.hashValue : nil,
       capturedAt: clock.now,
@@ -135,7 +135,7 @@ struct AgentDetectionPipelineTests {
       },
       time: { clock.now }
     )
-    let generation = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+    let generation = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
 
     let working = try #require(await report(Self.finishedScreen, through: live, process: generation))
     #expect(working.fallbackState == .idle)

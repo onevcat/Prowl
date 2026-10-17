@@ -8,7 +8,7 @@ import Testing
 struct ManagedAgentHookObservationTests {
   @Test func historyIdentitySurvivesCooperativeProgressUntilHookEpochEnds() throws {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let pane = UUID()
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
@@ -76,7 +76,7 @@ struct ManagedAgentHookObservationTests {
     #expect(
       store.recordManagedHook(
         input,
-        callerAncestry: [AgentProcessGeneration(pid: 900, startedAt: now)],
+        callerAncestry: [LocalProcessGeneration(pid: 900, startedAt: now)],
         surfaceID: surfaceID
       ) == .pending
     )
@@ -85,7 +85,7 @@ struct ManagedAgentHookObservationTests {
 
     let update = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
-      processGeneration: AgentProcessGeneration(pid: 900, startedAt: now),
+      processGeneration: LocalProcessGeneration(pid: 900, startedAt: now),
       sessionID: nil
     )
     #expect(update.activatedSignals.count == 1)
@@ -106,7 +106,7 @@ struct ManagedAgentHookObservationTests {
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
-      processGeneration: AgentProcessGeneration(pid: 900, startedAt: now),
+      processGeneration: LocalProcessGeneration(pid: 900, startedAt: now),
       sessionID: nil
     )
 
@@ -120,7 +120,7 @@ struct ManagedAgentHookObservationTests {
       #expect(
         store.recordManagedHook(
           input,
-          callerAncestry: [AgentProcessGeneration(pid: 900, startedAt: now)],
+          callerAncestry: [LocalProcessGeneration(pid: 900, startedAt: now)],
           surfaceID: surfaceID
         ) == .rejected
       )
@@ -134,7 +134,7 @@ struct ManagedAgentHookObservationTests {
     #expect(
       store.recordManagedHook(
         valid,
-        callerAncestry: [AgentProcessGeneration(pid: 901, startedAt: now)],
+        callerAncestry: [LocalProcessGeneration(pid: 901, startedAt: now)],
         surfaceID: surfaceID
       ) == .rejected
     )
@@ -142,7 +142,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func detectorNilCannotEraseVerifiedClaudeSessionOrAdmitDifferentStopSession() {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
@@ -186,7 +186,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func detectorSessionReplacementRequiresClaudeSessionStartBeforeReverification() throws {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
@@ -244,7 +244,7 @@ struct ManagedAgentHookObservationTests {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
@@ -285,7 +285,7 @@ struct ManagedAgentHookObservationTests {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
@@ -328,7 +328,7 @@ struct ManagedAgentHookObservationTests {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
@@ -365,7 +365,7 @@ struct ManagedAgentHookObservationTests {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
@@ -403,7 +403,7 @@ struct ManagedAgentHookObservationTests {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
@@ -442,13 +442,13 @@ struct ManagedAgentHookObservationTests {
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
-      processGeneration: AgentProcessGeneration(pid: 900, startedAt: now),
+      processGeneration: LocalProcessGeneration(pid: 900, startedAt: now),
       sessionID: nil
     )
 
     let replacement = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
-      processGeneration: AgentProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1)),
+      processGeneration: LocalProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1)),
       sessionID: nil
     )
     #expect(replacement.revokedForwardingRecords == [forward])
@@ -461,7 +461,7 @@ struct ManagedAgentHookObservationTests {
     #expect(
       store.recordManagedHook(
         input,
-        callerAncestry: [AgentProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1))],
+        callerAncestry: [LocalProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1))],
         surfaceID: surfaceID
       ) == .rejected
     )
@@ -469,7 +469,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func transientGenerationLookupFailureKeepsManagedTrustAndForwarding() {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let forward = CodexForwardingRecord(locator: URL(filePath: "/tmp/private/record.json"))
@@ -506,7 +506,7 @@ struct ManagedAgentHookObservationTests {
     let registration = makeRegistration(runtime: .codex, cwd: "/tmp/project")
     _ = store.registerManagedHook(registration, surfaceID: surfaceID)
     now.addTimeInterval(11)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
 
     let update = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
@@ -527,7 +527,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func codexThreadRotationRebindsTheManagedHook() throws {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let registration = makeRegistration(runtime: .codex, cwd: "/tmp/project")
@@ -565,7 +565,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func detectorConfirmedThreadRotationRejectsLatePreviousThreadHook() {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let registration = makeRegistration(runtime: .codex, cwd: "/tmp/project")
@@ -599,7 +599,7 @@ struct ManagedAgentHookObservationTests {
 
   @Test func hookDrivenThreadRotationRejectsLatePreviousThreadHook() {
     let now = Date(timeIntervalSince1970: 100)
-    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let generation = LocalProcessGeneration(pid: 900, startedAt: now)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     let registration = makeRegistration(runtime: .codex, cwd: "/tmp/project")
@@ -627,8 +627,8 @@ struct ManagedAgentHookObservationTests {
 
   @Test func processReplacementClearsThePreviousSessionIdentity() {
     let now = Date(timeIntervalSince1970: 100)
-    let first = AgentProcessGeneration(pid: 900, startedAt: now)
-    let second = AgentProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1))
+    let first = LocalProcessGeneration(pid: 900, startedAt: now)
+    let second = LocalProcessGeneration(pid: 901, startedAt: now.addingTimeInterval(1))
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })
     let surfaceID = UUID()
     _ = store.updateEvidenceEpoch(
@@ -660,7 +660,7 @@ struct ManagedAgentHookObservationTests {
     let firstEpoch = store.registerManagedHook(registration, surfaceID: surfaceID)
     _ = store.updateEvidenceEpoch(
       surfaceID: surfaceID,
-      processGeneration: AgentProcessGeneration(pid: 900, startedAt: now),
+      processGeneration: LocalProcessGeneration(pid: 900, startedAt: now),
       sessionID: nil
     )
     let first = makeInput(
@@ -674,7 +674,7 @@ struct ManagedAgentHookObservationTests {
     #expect(
       store.recordManagedHook(
         first,
-        callerAncestry: [AgentProcessGeneration(pid: 900, startedAt: now)],
+        callerAncestry: [LocalProcessGeneration(pid: 900, startedAt: now)],
         surfaceID: surfaceID
       ).isAccepted
     )
@@ -690,7 +690,7 @@ struct ManagedAgentHookObservationTests {
     #expect(
       store.recordManagedHook(
         second,
-        callerAncestry: [AgentProcessGeneration(pid: 900, startedAt: now)],
+        callerAncestry: [LocalProcessGeneration(pid: 900, startedAt: now)],
         surfaceID: surfaceID
       ).isAccepted
     )

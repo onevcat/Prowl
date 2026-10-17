@@ -9,8 +9,8 @@ struct AgentEvidenceEpochTests {
   @Test func dispatchEpochAttachesFirstProcessButRejectsReplacementProcess() {
     let store = AgentObservationStore(bufferCapacity: 8)
     let surfaceID = UUID()
-    let first = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
-    let replacement = AgentProcessGeneration(pid: 43, startedAt: Date(timeIntervalSince1970: 2))
+    let first = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+    let replacement = LocalProcessGeneration(pid: 43, startedAt: Date(timeIntervalSince1970: 2))
     let dispatchEpoch = store.beginDispatchEpoch(surfaceID: surfaceID)
 
     store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: first, sessionID: nil)
@@ -29,7 +29,7 @@ struct AgentEvidenceEpochTests {
     )
     let surfaceID = UUID()
     let dispatchEpoch = store.beginDispatchEpoch(surfaceID: surfaceID)
-    let unrelatedLaterProcess = AgentProcessGeneration(
+    let unrelatedLaterProcess = LocalProcessGeneration(
       pid: 42,
       startedAt: launchTime.addingTimeInterval(11)
     )
@@ -46,8 +46,8 @@ struct AgentEvidenceEpochTests {
   @Test func pidStartTimeAndSessionReplacementInvalidateCurrentChannels() {
     let store = AgentObservationStore(bufferCapacity: 8)
     let surfaceID = UUID()
-    let first = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
-    let reused = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 2))
+    let first = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+    let reused = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 2))
     store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: first, sessionID: "A")
     store.publishSignal(signal(.turnEnded, source: .cooperativeCLI), binding: .current, surfaceID: surfaceID)
     store.publishSignal(signal(.needsInput, source: .osc), binding: .current, surfaceID: surfaceID)
@@ -81,7 +81,7 @@ struct AgentEvidenceEpochTests {
   @Test func workingMetadataChurnDoesNotInvalidateTerminalEvidence() {
     let store = AgentObservationStore(bufferCapacity: 8)
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+    let generation = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
     store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
     store.publishAgentChanged(agentEntry(surfaceID: surfaceID, title: "Working A"))
     let terminal = signal(.turnEnded, source: .cooperativeCLI)
@@ -95,7 +95,7 @@ struct AgentEvidenceEpochTests {
   @Test func workingRedetectionAfterRemovalInvalidatesTerminalEvidence() {
     let store = AgentObservationStore(bufferCapacity: 8)
     let surfaceID = UUID()
-    let generation = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+    let generation = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
     store.updateEvidenceEpoch(surfaceID: surfaceID, processGeneration: generation, sessionID: nil)
     store.publishAgentChanged(agentEntry(surfaceID: surfaceID, title: "Idle", displayState: .idle))
     let terminal = signal(.turnEnded, source: .cooperativeCLI)
@@ -135,8 +135,8 @@ struct AgentEvidenceEpochTests {
     #expect(
       resolved.processAncestry
         == [
-          AgentProcessGeneration(pid: 300, startedAt: dates[300]!),
-          AgentProcessGeneration(pid: 200, startedAt: dates[200]!),
+          LocalProcessGeneration(pid: 300, startedAt: dates[300]!),
+          LocalProcessGeneration(pid: 200, startedAt: dates[200]!),
         ])
   }
 

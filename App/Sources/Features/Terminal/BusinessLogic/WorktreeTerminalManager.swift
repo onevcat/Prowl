@@ -598,8 +598,11 @@ final class WorktreeTerminalManager {
   @discardableResult
   private func refreshEvidenceEpoch(
     surfaceID: UUID
-  ) -> (generation: AgentProcessGeneration?, sessionID: String?) {
+  ) -> (generation: LocalProcessGeneration?, sessionID: String?) {
     let evidence = currentAgentEvidence(surfaceID: surfaceID)
+    // Managed hooks belong to a local launch; an agent on another origin retires them
+    // with the rest of the local evidence.
+    if evidence.isRemote { revokeManagedHook(surfaceID: surfaceID, state: nil) }
     handleEvidenceEpochUpdate(
       agentObservationStore.updateEvidenceEpoch(
         surfaceID: surfaceID,
@@ -608,7 +611,7 @@ final class WorktreeTerminalManager {
       ),
       surfaceID: surfaceID
     )
-    return evidence
+    return (evidence.generation, evidence.sessionID)
   }
 
   private func handleEvidenceEpochUpdate(
@@ -701,25 +704,32 @@ final class WorktreeTerminalManager {
     currentAgentSignalEvidence(surfaceID: surfaceID).activeTerminal
   }
 
-  private func currentAgentEvidence(
-    surfaceID: UUID
-  ) -> (generation: AgentProcessGeneration?, sessionID: String?) {
+  private struct CurrentAgentEvidence {
+    var generation: LocalProcessGeneration?
+    var sessionID: String?
+    /// The pane's agent runs on another origin; no local evidence describes it.
+    var isRemote = false
+  }
+
+  private func currentAgentEvidence(surfaceID: UUID) -> CurrentAgentEvidence {
     for state in states.values {
       guard let paneState = state.surfaceAgentStates[surfaceID] else { continue }
+      let process = paneState.launchProcess ?? paneState.agentProcess
+      if let process, process.origin != .local { return CurrentAgentEvidence(isRemote: true) }
       // The launch process, not the identified one, is the generation subject:
       // hooks descend from both, and only the launch survives an engine child
       // taking over identification.
-      let generation = (paneState.launchProcessID ?? paneState.agentProcessID).flatMap { pid in
+      let generation = process?.localPID.flatMap { pid in
         ProcessDetection.processStartDate(pid: pid).map {
-          AgentProcessGeneration(pid: pid, startedAt: $0)
+          LocalProcessGeneration(pid: pid, startedAt: $0)
         }
       }
       let trustedSessionID = paneState.session.flatMap {
         $0.confidence == .medium ? nil : $0.id
       }
-      return (generation, trustedSessionID)
+      return CurrentAgentEvidence(generation: generation, sessionID: trustedSessionID)
     }
-    return (nil, nil)
+    return CurrentAgentEvidence()
   }
 
   private static let agentSignalDateFormatter: ISO8601DateFormatter = {

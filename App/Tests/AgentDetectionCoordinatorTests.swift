@@ -5,7 +5,7 @@ import Testing
 
 @MainActor
 struct AgentDetectionCoordinatorTests {
-  private let generation = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
+  private let generation = LocalProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
   private let idle = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
 
   @Test func screenOnlyAgentsNeverAcquireProviders() async {
@@ -14,22 +14,25 @@ struct AgentDetectionCoordinatorTests {
         Issue.record("Screen-only agent attempted log acquisition")
         return [.unavailable]
       })
-      let decision = await coordinator.observe(agent: agent, process: generation, screen: idle, configRoot: nil)
+      let decision = await coordinator.observe(agent: agent, process: .local(generation), screen: idle, configRoot: nil)
       #expect(decision?.state == .idle)
       #expect(decision?.logSessionID == nil)
     }
   }
 
   @Test func nativeProviderRebindsAndRejectsOlderCapture() async {
-    var sampled: [AgentProcessGeneration] = []
+    var sampled: [LocalProcessGeneration] = []
     let coordinator = AgentDetectionCoordinator(sample: { process, _ in
       sampled.append(process)
       return [.native(AgentNativeSnapshot(sessionID: "a", state: .working, statusUpdatedAt: 1))]
     })
-    _ = await coordinator.observe(agent: .claude, process: generation, screen: idle, capturedAt: 2, configRoot: nil)
-    let replacement = AgentProcessGeneration(pid: 43, startedAt: Date(timeIntervalSince1970: 3))
-    _ = await coordinator.observe(agent: .claude, process: replacement, screen: idle, capturedAt: 3, configRoot: nil)
-    _ = await coordinator.observe(agent: .claude, process: generation, screen: idle, capturedAt: 1, configRoot: nil)
+    _ = await coordinator.observe(
+      agent: .claude, process: .local(generation), screen: idle, capturedAt: 2, configRoot: nil)
+    let replacement = LocalProcessGeneration(pid: 43, startedAt: Date(timeIntervalSince1970: 3))
+    _ = await coordinator.observe(
+      agent: .claude, process: .local(replacement), screen: idle, capturedAt: 3, configRoot: nil)
+    _ = await coordinator.observe(
+      agent: .claude, process: .local(generation), screen: idle, capturedAt: 1, configRoot: nil)
     #expect(sampled == [generation, replacement])
   }
 
@@ -38,7 +41,7 @@ struct AgentDetectionCoordinatorTests {
     let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
     for raw in [AgentRawState.unknown, .working, .blocked, .idle] {
       let definite = await coordinator.observe(
-        agent: agent, process: generation,
+        agent: agent, process: .local(generation),
         screen: AgentScreenDetection(state: raw, reason: .noRuleMatched), configRoot: nil)
       #expect(definite?.state == raw)
       let held = await coordinator.observe(
@@ -57,7 +60,9 @@ struct AgentDetectionCoordinatorTests {
         entered.continuation.yield(())
       }
     })
-    let pending = Task { await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil) }
+    let pending = Task {
+      await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
+    }
     var iterator = entered.stream.makeAsyncIterator()
     _ = await iterator.next()
     coordinator.invalidate()
@@ -68,7 +73,7 @@ struct AgentDetectionCoordinatorTests {
   @Test func screenOnlyProbeGapRetainsStableScreenState() async {
     let coordinator = AgentDetectionCoordinator()
     _ = await coordinator.observe(
-      agent: .claude, process: generation,
+      agent: .claude, process: .local(generation),
       screen: AgentScreenDetection(state: .working, reason: .noRuleMatched), configRoot: nil)
     let decision = await coordinator.observe(
       agent: .claude, process: nil,
@@ -83,10 +88,12 @@ struct AgentDetectionCoordinatorTests {
       return calls == 1 ? [.inventory(["a"]), .turnStarted(session: "a", turn: "1")] : [.inventory(["a"])]
     })
     #expect(
-      await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)?.state == .working)
-    let replacement = AgentProcessGeneration(pid: 42, startedAt: generation.startedAt.addingTimeInterval(1))
+      await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)?.state
+        == .working)
+    let replacement = LocalProcessGeneration(pid: 42, startedAt: generation.startedAt.addingTimeInterval(1))
     #expect(
-      await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)?.state == .idle)
+      await coordinator.observe(agent: .codex, process: .local(replacement), screen: idle, configRoot: nil)?.state
+        == .idle)
   }
   @Test func overlappingObservationsApplyConsumedCompletionExactlyOnce() async {
     var calls = 0
@@ -103,19 +110,21 @@ struct AgentDetectionCoordinatorTests {
       }
       return [.inventory(["a"])]
     })
-    _ = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
-    let first = Task { await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil) }
+    _ = await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
+    let first = Task {
+      await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
+    }
     var iterator = entered.stream.makeAsyncIterator()
     _ = await iterator.next()
     let second = Task {
       entered.continuation.yield(())
-      return await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+      return await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
     }
     _ = await iterator.next()
     resume?.resume(returning: [.turnEnded(session: "a", turn: "1")])
     #expect(await first.value?.state == .idle)
     #expect(await second.value?.state == .idle)
-    let final = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    let final = await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
     #expect(final?.hasOutstandingWork == false)
   }
 
@@ -127,13 +136,13 @@ struct AgentDetectionCoordinatorTests {
       if calls == 3 { return [.inventory(["a"]), .turnEnded(session: "a", turn: "1")] }
       return [.inventory(["a"])]
     })
-    _ = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    _ = await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
     let gap = await coordinator.observe(
       agent: .codex, process: nil,
       screen: AgentScreenDetection(state: .unknown, reason: .noRuleMatched), configRoot: nil)
     #expect(gap?.state == .working)
     #expect(gap?.hasOutstandingWork == true)
-    let recovered = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    let recovered = await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
     #expect(recovered?.reason.identifier == "log.turnEnded")
     #expect(recovered?.hasOutstandingWork == false)
   }
@@ -147,17 +156,18 @@ struct AgentDetectionCoordinatorTests {
       return [.inventory(["a"])]
     })
     let working = AgentScreenDetection(state: .working, reason: .noRuleMatched)
-    _ = await coordinator.observe(agent: .codex, process: generation, screen: working, capturedAt: 1, configRoot: nil)
+    _ = await coordinator.observe(
+      agent: .codex, process: .local(generation), screen: working, capturedAt: 1, configRoot: nil)
     #expect(
       await coordinator.observe(
-        agent: .codex, process: generation, screen: working,
+        agent: .codex, process: .local(generation), screen: working,
         capturedAt: 3, configRoot: nil)?.state == .idle)
     _ = await coordinator.observe(
-      agent: .codex, process: generation,
+      agent: .codex, process: .local(generation),
       screen: AgentScreenDetection(state: .blocked, reason: .noRuleMatched), capturedAt: 2, configRoot: nil)
     #expect(
       await coordinator.observe(
-        agent: .codex, process: generation, screen: working,
+        agent: .codex, process: .local(generation), screen: working,
         capturedAt: 4, configRoot: nil)?.state == .idle)
   }
 
@@ -175,18 +185,20 @@ struct AgentDetectionCoordinatorTests {
       }
       return [.inventory(["b"])]
     })
-    let first = Task { await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil) }
+    let first = Task {
+      await coordinator.observe(agent: .codex, process: .local(generation), screen: idle, configRoot: nil)
+    }
     var iterator = entered.stream.makeAsyncIterator()
     _ = await iterator.next()
-    let replacement = AgentProcessGeneration(pid: 43, startedAt: generation.startedAt)
+    let replacement = LocalProcessGeneration(pid: 43, startedAt: generation.startedAt)
     let second = Task {
       entered.continuation.yield(())
-      return await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)
+      return await coordinator.observe(agent: .codex, process: .local(replacement), screen: idle, configRoot: nil)
     }
     _ = await iterator.next()
     let third = Task {
       entered.continuation.yield(())
-      return await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)
+      return await coordinator.observe(agent: .codex, process: .local(replacement), screen: idle, configRoot: nil)
     }
     _ = await iterator.next()
     resume?.resume(returning: [.inventory(["a"])])
@@ -195,4 +207,22 @@ struct AgentDetectionCoordinatorTests {
     #expect(await third.value != nil)
   }
 
+  @Test func remoteGenerationNeverSamplesALocalProvider() async {
+    var sampled: [LocalProcessGeneration] = []
+    let coordinator = AgentDetectionCoordinator(sample: { process, _ in
+      sampled.append(process)
+      return []
+    })
+    let remote = AgentProcessGeneration.remote(
+      RemoteProcessRef(
+        connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), bootID: "boot", pid: 42,
+        startToken: "t1"))
+    _ = await coordinator.observe(agent: .codex, process: remote, screen: idle, capturedAt: 1, configRoot: nil)
+    _ = await coordinator.observe(agent: .claude, process: remote, screen: idle, capturedAt: 2, configRoot: nil)
+    #expect(sampled.isEmpty)
+    #expect(coordinator.boundProcess == remote)
+    _ = await coordinator.observe(
+      agent: .claude, process: .local(generation), screen: idle, capturedAt: 3, configRoot: nil)
+    #expect(sampled == [generation])
+  }
 }

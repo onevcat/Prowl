@@ -38,11 +38,8 @@ struct AgentSessionDaemonResolutionTests {
       try tui.run()
     }
 
-    @MainActor var process: IdentifiedAgentProcess {
-      IdentifiedAgentProcess(
-        agent: .codex, name: "codex",
-        process: ForegroundProcess(
-          pid: tui.processIdentifier, name: "codex", argv0: nil, cmdline: nil))
+    @MainActor var process: LocalAgentProcess {
+      LocalAgentProcess(agent: .codex, pid: tui.processIdentifier)
     }
 
     func cleanUp() {
@@ -274,7 +271,7 @@ struct AgentSessionDaemonResolutionTests {
       configRoot: fixture.home, surfaceID: pane)
     #expect(initial.session?.id == fixture.firstID)
     #expect(initial.session?.confidence == .exact)
-    var previous = PaneAgentState(agentProcessID: fixture.tui.processIdentifier, session: initial.session)
+    var previous = PaneAgentState(agentProcess: .local(fixture.tui.processIdentifier), session: initial.session)
     let transitions: [(CodexDaemonBindingLookup, String?)] = [
       (.unavailable, fixture.firstID),
       (.selectionPending, nil),
@@ -288,7 +285,7 @@ struct AgentSessionDaemonResolutionTests {
         configRoot: fixture.home, surfaceID: pane)
       let retained = PaneAgentState.retainedSession(
         resolution: resolution,
-        previous: previous, identifiedPID: fixture.tui.processIdentifier)
+        previous: previous, identified: .local(fixture.tui.processIdentifier))
       #expect(retained.session?.id == expected)
       if expected == nil { #expect(retained.missStreak == 0) }
       previous.session = retained.session
@@ -357,7 +354,7 @@ struct AgentSessionDaemonResolutionTests {
     let initial = await resolve()
     #expect(initial.session?.id == fixture.firstID)
     #expect(initial.session?.confidence == (exact ? .exact : .high))
-    var previous = PaneAgentState(agentProcessID: fixture.tui.processIdentifier, session: initial.session)
+    var previous = PaneAgentState(agentProcess: .local(fixture.tui.processIdentifier), session: initial.session)
     try append(reset, to: log)
     for failRead in [false, true, false] {
       unstable.withLock { $0 = failRead }
@@ -366,7 +363,7 @@ struct AgentSessionDaemonResolutionTests {
       #expect(resolution.session == nil)
       #expect(resolution.invalidatesRetainedSession)
       let retained = PaneAgentState.retainedSession(
-        resolution: resolution, previous: previous, identifiedPID: fixture.tui.processIdentifier)
+        resolution: resolution, previous: previous, identified: .local(fixture.tui.processIdentifier))
       #expect(retained.session == nil)
       previous.session = retained.session
       previous.sessionMissStreak = retained.missStreak
@@ -387,7 +384,7 @@ struct AgentSessionDaemonResolutionTests {
       #expect(resolution.isFresh)
       #expect(!resolution.invalidatesRetainedSession)
       let retained = PaneAgentState.retainedSession(
-        resolution: resolution, previous: previous, identifiedPID: fixture.tui.processIdentifier)
+        resolution: resolution, previous: previous, identified: .local(fixture.tui.processIdentifier))
       #expect(retained.session?.id == (miss < 3 ? fixture.secondID : nil))
       previous.session = retained.session
       previous.sessionMissStreak = retained.missStreak

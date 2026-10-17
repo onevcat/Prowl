@@ -2,11 +2,11 @@ import Foundation
 
 struct PaneAgentState: Equatable, Sendable {
   var detectedAgent: DetectedAgent?
-  var agentProcessID: pid_t?
+  var agentProcess: ProcessRef?
   /// The process the shell launched for the agent, which may differ from
-  /// `agentProcessID` once the runtime forks an engine child. Process
+  /// `agentProcess` once the runtime forks an engine child. Process
   /// generations key on this so such a child is not mistaken for a relaunch.
-  var launchProcessID: pid_t?
+  var launchProcess: ProcessRef?
   var launchObservation: AgentLaunchObservation?
   var session: AgentSession?
   /// Consecutive resolver misses while the same process stayed detected;
@@ -21,8 +21,8 @@ struct PaneAgentState: Equatable, Sendable {
 
   init(
     detectedAgent: DetectedAgent? = nil,
-    agentProcessID: pid_t? = nil,
-    launchProcessID: pid_t? = nil,
+    agentProcess: ProcessRef? = nil,
+    launchProcess: ProcessRef? = nil,
     launchObservation: AgentLaunchObservation? = nil,
     session: AgentSession? = nil,
     iconLookupToken: String? = nil,
@@ -32,8 +32,8 @@ struct PaneAgentState: Equatable, Sendable {
     lastChangedAt: Date = Date()
   ) {
     self.detectedAgent = detectedAgent
-    self.agentProcessID = agentProcessID
-    self.launchProcessID = launchProcessID
+    self.agentProcess = agentProcess
+    self.launchProcess = launchProcess
     self.launchObservation = launchObservation
     self.session = session
     self.iconLookupToken = iconLookupToken
@@ -45,21 +45,21 @@ struct PaneAgentState: Equatable, Sendable {
 
   /// Explicit selection invalidation clears retained identity immediately. Otherwise,
   /// a resolution always wins; a probe gap
-  /// (`identifiedPID == nil`, presence hold) keeps the last session without
+  /// (`identified == nil`, presence hold) keeps the last session without
   /// aging it; a FRESH ambiguous resolution on the same process keeps it for
   /// at most two misses so a rotated-away session id cannot survive
   /// indefinitely. Cache replays during resolver backoff (`isFresh == false`)
-  /// are not new evidence and never age the session. A different pid discards
-  /// it immediately.
+  /// are not new evidence and never age the session. A different process
+  /// (another pid, or another origin) discards it immediately.
   static func retainedSession(
     resolution: AgentSessionResolution,
     previous: PaneAgentState,
-    identifiedPID: pid_t?
+    identified: ProcessRef?
   ) -> (session: AgentSession?, missStreak: Int) {
     if resolution.invalidatesRetainedSession { return (nil, 0) }
     if let resolved = resolution.session { return (resolved, 0) }
-    guard let identifiedPID else { return (previous.session, previous.sessionMissStreak) }
-    guard identifiedPID == previous.agentProcessID else { return (nil, 0) }
+    guard let identified else { return (previous.session, previous.sessionMissStreak) }
+    guard identified == previous.agentProcess else { return (nil, 0) }
     guard resolution.isFresh else { return (previous.session, previous.sessionMissStreak) }
     let streak = previous.sessionMissStreak + 1
     return (streak >= 3 ? nil : previous.session, streak)
@@ -69,19 +69,21 @@ struct PaneAgentState: Equatable, Sendable {
   /// so a transient sample that drops it from the foreground job must not read as a relaunch.
   /// A full probe gap (no agent identified) keeps the previous value; when the identified root
   /// changes, keep the previous one only while it is still a live ancestor of the identified
-  /// process — otherwise the launch genuinely moved and the new root wins.
-  static func retainedLaunchProcessID(
-    identifiedLaunchProcessID: pid_t?,
-    identifiedProcessID: pid_t?,
+  /// process — otherwise the launch genuinely moved and the new root wins. A launch on
+  /// another origin is never an ancestor.
+  static func retainedLaunchProcess(
+    identifiedLaunch: ProcessRef?,
+    identifiedProcess: ProcessRef?,
     previous: PaneAgentState,
-    isLiveAncestor: (_ ancestor: pid_t, _ descendant: pid_t) -> Bool
-  ) -> pid_t? {
-    guard let candidate = identifiedLaunchProcessID else { return previous.launchProcessID }
-    guard let previousLaunch = previous.launchProcessID,
+    isLiveAncestor: (_ ancestor: ProcessRef, _ descendant: ProcessRef) -> Bool
+  ) -> ProcessRef? {
+    guard let candidate = identifiedLaunch else { return previous.launchProcess }
+    guard let previousLaunch = previous.launchProcess,
       previousLaunch != candidate,
-      let identifiedProcessID
+      previousLaunch.origin == candidate.origin,
+      let identifiedProcess
     else { return candidate }
-    return isLiveAncestor(previousLaunch, identifiedProcessID) ? previousLaunch : candidate
+    return isLiveAncestor(previousLaunch, identifiedProcess) ? previousLaunch : candidate
   }
 
   /// An argv observation is usable only while it belongs to the same detected
@@ -89,10 +91,10 @@ struct PaneAgentState: Equatable, Sendable {
   static func retainedLaunchObservation(
     observed: AgentLaunchObservation?,
     previous: PaneAgentState,
-    identifiedPID: pid_t?
+    identified: ProcessRef?
   ) -> AgentLaunchObservation? {
     if let observed { return observed }
-    guard let identifiedPID, identifiedPID == previous.agentProcessID else { return nil }
+    guard let identified, identified == previous.agentProcess else { return nil }
     return previous.launchObservation
   }
 

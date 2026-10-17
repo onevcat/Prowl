@@ -617,7 +617,7 @@ struct ProwlApp: App {
       processGroupID: surface.bridge.foregroundProcessGroupID(),
       childPID: surface.bridge.childPID()
     )
-    guard let identified = job.flatMap(identifyAgentInJob), identified.agent == detectedAgent else {
+    guard let identified = job.flatMap(identifyAgentInJob)?.local, identified.agent == detectedAgent else {
       return .failure(.agentNotFound("Pane '\(pane)' no longer hosts the selected agent."))
     }
 

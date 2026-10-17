@@ -119,9 +119,7 @@ struct ClaudeSessionRegistryTests {
 
     let resolver = AgentSessionResolver(
       homeDirectory: home, tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in .unavailable })
-    let identified = IdentifiedAgentProcess(
-      agent: .claude, name: "claude",
-      process: ForegroundProcess(pid: pid, name: "claude", argv0: nil, cmdline: nil))
+    let identified = LocalAgentProcess(agent: .claude, pid: pid)
     let now = Date()
     let first = await resolver.resolve(identified: identified, workingDirectory: nil, activeText: "", now: now)
     #expect(first.session?.id == sessionA)
@@ -175,9 +173,7 @@ struct ClaudeSessionRegistryTests {
 
     let resolver = AgentSessionResolver(
       homeDirectory: home, tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in .unavailable })
-    let identified = IdentifiedAgentProcess(
-      agent: .claude, name: "claude",
-      process: ForegroundProcess(pid: pid, name: "claude", argv0: nil, cmdline: nil))
+    let identified = LocalAgentProcess(agent: .claude, pid: pid)
     let now = Date()
     func resolve(after seconds: TimeInterval) async -> AgentSessionResolution {
       await resolver.resolve(
@@ -235,9 +231,7 @@ struct ClaudeSessionRegistryTests {
 
     let resolver = AgentSessionResolver(
       homeDirectory: home, tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in .unavailable })
-    let identified = IdentifiedAgentProcess(
-      agent: .claude, name: "claude",
-      process: ForegroundProcess(pid: pid, name: "claude", argv0: nil, cmdline: nil))
+    let identified = LocalAgentProcess(agent: .claude, pid: pid)
     let now = Date()
     func poll(after seconds: TimeInterval) async -> AgentSessionResolution {
       await resolver.resolve(

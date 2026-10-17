@@ -55,14 +55,14 @@ nonisolated struct CLICommandContext: Sendable, Equatable {
 nonisolated struct CallerPane: Sendable, Equatable {
   let worktreeID: Worktree.ID
   let surfaceID: UUID
-  let processAncestry: [AgentProcessGeneration]
+  let processAncestry: [LocalProcessGeneration]
   /// Set only for a Codex daemon caller mapped through the pane's TUI session log.
   let codexSessionStartedAt: Date?
 
   init(
     worktreeID: Worktree.ID,
     surfaceID: UUID,
-    processAncestry: [AgentProcessGeneration] = [],
+    processAncestry: [LocalProcessGeneration] = [],
     codexSessionStartedAt: Date? = nil
   ) {
     self.worktreeID = worktreeID
@@ -73,7 +73,7 @@ nonisolated struct CallerPane: Sendable, Equatable {
 
   /// Whether the caller runs inside `generation`: in its process tree, or, for a Codex daemon
   /// caller, in a thread driven by the TUI that started the pane's session log.
-  func belongs(to generation: AgentProcessGeneration) -> Bool {
+  func belongs(to generation: LocalProcessGeneration) -> Bool {
     if processAncestry.contains(generation) { return true }
     guard let codexSessionStartedAt else { return false }
     return CodexTUISessionLog.belongs(sessionStartedAt: codexSessionStartedAt, toProcessStartedAt: generation.startedAt)
@@ -166,7 +166,7 @@ nonisolated enum CallerPaneResolver {
         worktreeID: pane.worktreeID,
         surfaceID: pane.surfaceID,
         processAncestry: context.callerProcessAncestry.compactMap { identity in
-          identity.startedAt.map { AgentProcessGeneration(pid: identity.processID, startedAt: $0) }
+          identity.startedAt.map { LocalProcessGeneration(pid: identity.processID, startedAt: $0) }
         },
         codexSessionStartedAt: mapped.sessionStartedAt
       )
@@ -182,11 +182,11 @@ nonisolated enum CallerPaneResolver {
     forCallerProcessAncestry identities: [CallerProcessIdentity],
     paneByShellPID: [pid_t: CallerPane]
   ) -> CallerPane? {
-    var generations: [AgentProcessGeneration] = []
+    var generations: [LocalProcessGeneration] = []
     for identity in identities {
       if let startedAt = identity.startedAt {
         generations.append(
-          AgentProcessGeneration(pid: identity.processID, startedAt: startedAt)
+          LocalProcessGeneration(pid: identity.processID, startedAt: startedAt)
         )
       }
       if let pane = paneByShellPID[identity.processID] {

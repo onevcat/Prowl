@@ -13,7 +13,7 @@ private struct AgentSignalChannelRecord {
 
 private struct PendingManagedHookSignal {
   let input: AgentNativeHookInput
-  let callerAncestry: [AgentProcessGeneration]
+  let callerAncestry: [LocalProcessGeneration]
 }
 
 private struct ManagedHookRegistrationRecord {
@@ -26,7 +26,7 @@ private struct ManagedHookRegistrationRecord {
   /// sessions must be retired explicitly or a late one would silently take the channel back.
   var announcesSessionStarts: Bool { launch.coveredEvents.contains(.sessionStart) }
   var evidenceEpoch: UUID
-  var processGeneration: AgentProcessGeneration?
+  var processGeneration: LocalProcessGeneration?
   var sessionID: String?
   /// Sessions the hook itself rotated away from (an authoritative SessionStart moved on). These
   /// are permanent until a fresh SessionStart resumes one; a lagging detector read of one is
@@ -72,7 +72,7 @@ final class AgentObservationStore {
     var latestCurrentSignal: AgentSignal?
     var latestManagedHookSignal: AgentSignal?
     var activeTerminalSignal: AgentSignal?
-    var processGeneration: AgentProcessGeneration?
+    var processGeneration: LocalProcessGeneration?
     var sessionID: String?
     var sessionlessSignalsAllowed = true
     var evidenceEpoch = UUID()
@@ -292,7 +292,7 @@ final class AgentObservationStore {
 
   func recordManagedHook(
     _ input: AgentNativeHookInput,
-    callerAncestry: [AgentProcessGeneration],
+    callerAncestry: [LocalProcessGeneration],
     surfaceID: UUID
   ) -> ManagedHookRecordResult {
     guard input.validationErrorMessage == nil,
@@ -433,7 +433,7 @@ final class AgentObservationStore {
   @discardableResult
   func updateEvidenceEpoch(
     surfaceID: UUID,
-    processGeneration: AgentProcessGeneration?,
+    processGeneration: LocalProcessGeneration?,
     sessionID: String?
   ) -> AgentEvidenceEpochUpdate {
     var record = records[surfaceID] ?? SurfaceRecord()
