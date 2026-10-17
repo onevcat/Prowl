@@ -9,9 +9,28 @@ nonisolated struct RemoteFenceHistory: Equatable, Sendable {
   /// The agent the fence belongs to.
   private(set) var process: ProcessRef?
   private(set) var fence: Date?
+  /// When the `ssh`'s current foreground interval began; nil for the first one, which
+  /// counts from the `ssh` start.
+  private(set) var foregroundSince: Date?
+  /// The `ssh` left the foreground (a local agent took over); the next tracker starts a new
+  /// interval. A closed and restored pane keeps its interval.
+  var leftForeground = false
+  /// The accepted degraded binding (L0 item 9), restored with the pane.
+  var unprobedAgent: DetectedAgent?
 
   init(ssh: LocalProcessGeneration) {
     self.ssh = ssh
+  }
+
+  /// The history a new tracker continues with: a new foreground interval, without the
+  /// degraded binding, when the `ssh` left the foreground in between.
+  func resumed(at now: Date) -> RemoteFenceHistory {
+    guard leftForeground else { return self }
+    var next = self
+    next.foregroundSince = now
+    next.leftForeground = false
+    next.unprobedAgent = nil
+    return next
   }
 
   mutating func bind(_ process: ProcessRef, confirmedAt now: Date) {
@@ -144,10 +163,6 @@ final class RemotePaneTracker {
   private var presence = RemoteProcessPresence()
   /// The OSC fence of this `ssh` generation; it outlives the tracker (close and Undo).
   private(set) var fenceHistory: RemoteFenceHistory
-  /// When this tracker took over an `ssh` that an earlier tracker followed: the `ssh` left
-  /// the foreground (a local agent ran while it was suspended) or the pane was closed and
-  /// restored. Records from before it are not this foreground interval's.
-  let resumedAt: Date?
 
   init(
     surfaceID: UUID,
@@ -163,8 +178,7 @@ final class RemotePaneTracker {
     self.ssh = ssh
     self.invocation = invocation
     let retained = fenceHistory.flatMap { $0.ssh == ssh ? $0 : nil }
-    self.fenceHistory = retained ?? RemoteFenceHistory(ssh: ssh)
-    resumedAt = retained == nil ? nil : now
+    self.fenceHistory = retained?.resumed(at: now) ?? RemoteFenceHistory(ssh: ssh)
     self.source = source
     self.uptime = uptime
     self.onSnapshot = onSnapshot
@@ -238,7 +252,14 @@ final class RemotePaneTracker {
       verdict = consume(latest, report: report, now: now)
     }
     // A probed session supersedes the unprobed binding: its own evidence decides from here.
-    if correlation == .correlated { unprobed = nil }
+    if correlation == .correlated {
+      unprobed = nil
+      fenceHistory.unprobedAgent = nil
+    }
+    // A restored pane resumes the binding it had accepted.
+    if unprobed == nil, bound == nil, let agent = fenceHistory.unprobedAgent, correlation != .correlated {
+      unprobed = makeUnprobed(agent)
+    }
     if bound == nil, let unprobed {
       return Observation(
         correlation: correlation, connection: lease?.connection, identified: unprobed, verdict: nil,
@@ -263,19 +284,24 @@ final class RemotePaneTracker {
   /// foreground interval's start when the `ssh` was resumed, and to the retained successor
   /// fence, so a record that an earlier binding of this `ssh` excluded never comes back.
   var unprobedRecordFence: Date {
-    [ssh.startedAt, resumedAt, fenceHistory.fence].compactMap(\.self).max() ?? ssh.startedAt
+    [ssh.startedAt, fenceHistory.foregroundSince, fenceHistory.fence].compactMap(\.self).max() ?? ssh.startedAt
   }
 
   /// Binds `agent` from its OSC root record (L0 item 9). The reference names this `ssh`,
   /// never a remote pid.
   func bindUnprobed(_ agent: DetectedAgent) -> IdentifiedAgentProcess {
     if let unprobed, unprobed.agent == agent { return unprobed }
-    let identified = IdentifiedAgentProcess(
+    let identified = makeUnprobed(agent)
+    unprobed = identified
+    fenceHistory.unprobedAgent = agent
+    return identified
+  }
+
+  private func makeUnprobed(_ agent: DetectedAgent) -> IdentifiedAgentProcess {
+    IdentifiedAgentProcess(
       agent: agent, name: agent.iconLookupToken,
       process: ForegroundProcess(
         ref: .unprobedRemote(ssh), parentPID: nil, name: agent.iconLookupToken, argv0: nil, cmdline: nil))
-    unprobed = identified
-    return identified
   }
 
   /// Applies a new snapshot to the binding and returns its verdict for the bound agent.

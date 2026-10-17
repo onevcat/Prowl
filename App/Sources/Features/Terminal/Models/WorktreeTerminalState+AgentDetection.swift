@@ -319,7 +319,17 @@ extension WorktreeTerminalState {
   private func observeRemoteAgent(
     job: ForegroundJob?, localIdentified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date
   ) -> RemotePaneTracker.Observation? {
-    guard remoteAgentDetectionEnabled, localIdentified == nil, let ssh = job.flatMap(Self.foregroundSSH) else {
+    guard remoteAgentDetectionEnabled else {
+      retireRemotePaneTracker(surfaceID: surfaceID)
+      return nil
+    }
+    // A probe gap (no job read) is not evidence that the `ssh` left the foreground.
+    if job == nil, let tracker = remotePaneTrackers[surfaceID] {
+      return tracker.observe(active: true, now: now)
+    }
+    guard localIdentified == nil, let ssh = job.flatMap(Self.foregroundSSH) else {
+      // The `ssh` left the foreground: its next tracker starts a new interval.
+      remoteFenceHistoryBySurface[surfaceID]?.leftForeground = true
       retireRemotePaneTracker(surfaceID: surfaceID)
       return nil
     }
@@ -342,9 +352,10 @@ extension WorktreeTerminalState {
     }
     let active =
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
-    var observation = tracker.observe(active: active, now: now)
+    let observation = bindUnprobedProducer(
+      observation: tracker.observe(active: active, now: now), tracker: tracker, surfaceID: surfaceID)
     remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
-    return bindUnprobedProducer(observation: observation, tracker: tracker, surfaceID: surfaceID)
+    return observation
   }
 
   /// The degraded OSC-only binding (docs-ai 082, L0 item 9): with no probed agent, a
