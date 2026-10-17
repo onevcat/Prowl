@@ -157,7 +157,8 @@ the degraded OSC-only binding and admission refusal. Both stay behind
     `unsupported`. Only `correlated` binds. The session that first carried the pane id is
     also recognized by its anchor pid: back at the macOS system shell the id is hidden again.
     Only that single mapped session is evidence; an unmapped or ambiguous scan neither
-    releases nor confirms the bound agent (review round 1).
+    releases nor confirms the bound agent (review round 1). The anchor is valid only in the
+    connection epoch and boot it was seen in (review round 2).
   - The bound agent is held across ticks, so the coordinator can delegate. It is
     released by the C3 rule (two complete fresh snapshots without it) or at once when the
     local `ssh` is gone. An OSC 133 D from the remote shell asks for a snapshot right away.
@@ -169,7 +170,9 @@ the degraded OSC-only binding and admission refusal. Both stay behind
     loop's sleep without opening a settle window.
 - **Remote OSC fence.** The first agent since the `ssh` started counts reports from the
   `ssh` start; a successor counts only reports after the snapshot that confirmed it,
-  timestamped after the tick's local probe returns (review round 1). The S1
+  timestamped after the tick's local probe returns (review round 1). The fence belongs to the
+  `ssh` generation and lives with the surface's record store (`remoteFenceHistoryBySurface`),
+  so a tracker recreated by an undone close never moves it back (review round 2). The S1
   origin fence applies to local generations only.
 - **Measured** in a Debug instance with the flag on:
   - mini (macOS 26.5), Claude Code 2.1.302 started by hand: appeared 0.62 s after the

@@ -328,6 +328,7 @@ extension WorktreeTerminalState {
         surfaceID: surfaceID, ssh: ssh.generation,
         invocation: SSHInvocation.parse(
           ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
+        fenceHistory: remoteFenceHistoryBySurface[surfaceID],
         source: remoteSnapshotSourceForTesting ?? .live
       ) { [weak self] in
         self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
@@ -337,7 +338,9 @@ extension WorktreeTerminalState {
     }
     let active =
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
-    return tracker.observe(active: active, now: now)
+    let observation = tracker.observe(active: active, now: now)
+    remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
+    return observation
   }
 
   /// A local foreground `ssh` and its arguments (without `argv[0]`), with the generation
@@ -735,6 +738,7 @@ extension WorktreeTerminalState {
     programStatusStoresBySurface.removeAll()
     programStatusUnmappedAppsLoggedBySurface.removeAll()
     programStatusOriginBySurface.removeAll()
+    remoteFenceHistoryBySurface.removeAll()
     agentDetectionSchedules.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()

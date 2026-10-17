@@ -115,7 +115,8 @@ struct RemoteAgentDetectionTests {
 
   private func snapshot(
     _ sequence: UInt64, pane: UUID?, foreground: RemoteProbeProcess?, extraPane: UUID? = nil,
-    outcome: RemoteProbeSnapshot.Outcome = .complete, anchor: Int32 = 100
+    outcome: RemoteProbeSnapshot.Outcome = .complete, anchor: Int32 = 100, epoch: UInt64 = 0,
+    bootID: String = "boot"
   ) -> RemoteProbeSnapshot {
     func session(_ id: UUID?) -> RemoteProbeSession {
       let process = foreground ?? remoteProcess(101, name: "zsh")
@@ -127,9 +128,9 @@ struct RemoteAgentDetectionTests {
     if let extraPane { sessions.append(session(extraPane)) }
     let now = ProcessInfo.processInfo.systemUptime
     return RemoteProbeSnapshot(
-      connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: sequence,
+      connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: epoch, sequence: sequence,
       startedAt: now, finishedAt: now, outcome: outcome,
-      report: RemoteProbeReport(operatingSystem: .linux, bootID: "boot", sessions: sessions))
+      report: RemoteProbeReport(operatingSystem: .linux, bootID: bootID, sessions: sessions))
   }
 
   private func remoteRef(_ pid: Int32, start: String = "t1") -> ProcessRef {
@@ -238,6 +239,51 @@ struct RemoteAgentDetectionTests {
     await deliver(fixture, snapshot(7, pane: fixture.surfaceID, foreground: claude))
     await detect(fixture)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+  }
+
+  @Test func anAnchorFromAnotherEpochOrBootIdentifiesNothing() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    // The host rebooted while the connection was down: a pane-less session reuses the
+    // anchor pid and runs another agent. Neither releases nor replaces the binding.
+    await deliver(
+      fixture,
+      snapshot(2, pane: nil, foreground: remoteProcess(999, name: "claude"), epoch: 1, bootID: "boot-2"))
+    await detect(fixture)
+    await deliver(fixture, snapshot(3, pane: nil, foreground: nil, epoch: 1, bootID: "boot-2"))
+    await detect(fixture)
+    await deliver(fixture, snapshot(4, pane: nil, foreground: nil, epoch: 1, bootID: "boot-2"))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+    // A new epoch on the same boot is a new scope too.
+    await deliver(fixture, snapshot(5, pane: nil, foreground: remoteProcess(998, name: "claude"), epoch: 2))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+  }
+
+  @Test func aRecreatedTrackerKeepsTheSuccessorFenceOfItsSSH() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "claude")))
+    await detect(fixture)
+    let fence = try #require(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.remoteProgramStatusFence)
+    let sshStart = try #require(ProcessDetection.processStartDate(pid: getpid()))
+    #expect(fence > sshStart)
+
+    // A close retained for undo retires the tracker and keeps the record store; the
+    // restored pane gets a new tracker for the same `ssh`.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 2 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "claude")))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(300))
+    #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.remoteProgramStatusFence == fence)
+    // Dropping the store for good drops the fence with it.
+    fixture.state.dropProgramStatusStores(forSurfaceIDs: [fixture.surfaceID])
+    #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID] == nil)
   }
 
   @Test func sshPanesKeepTickingOnTheRemoteCadence() async {

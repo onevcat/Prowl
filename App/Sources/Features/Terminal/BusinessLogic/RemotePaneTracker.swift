@@ -1,5 +1,26 @@
 import Foundation
 
+/// The OSC fence of one local `ssh` generation (docs-ai 082, L0 item 5): the first agent
+/// since the `ssh` started counts reports from the `ssh` start, a successor only those after
+/// the snapshot that confirmed it. The terminal keeps it with the surface's record store, so
+/// a tracker recreated for the same `ssh` (an undone close) never moves the fence back.
+nonisolated struct RemoteFenceHistory: Equatable, Sendable {
+  let ssh: LocalProcessGeneration
+  /// The agent the fence belongs to.
+  private(set) var process: ProcessRef?
+  private(set) var fence: Date?
+
+  init(ssh: LocalProcessGeneration) {
+    self.ssh = ssh
+  }
+
+  mutating func bind(_ process: ProcessRef, confirmedAt now: Date) {
+    guard process != self.process else { return }
+    fence = self.process == nil && fence == nil ? ssh.startedAt : now
+    self.process = process
+  }
+}
+
 /// A pane's subscription to the host its foreground `ssh` reaches (docs-ai 082, L0).
 nonisolated struct RemoteConnectionLease: Sendable {
   let connection: ConnectionKey
@@ -92,22 +113,28 @@ final class RemotePaneTracker {
   private(set) var latest: RemoteProbeSnapshot?
   private var consumedSequence: (epoch: UInt64, sequence: UInt64)?
 
-  /// The remote session's anchor, learned from the snapshot that first carried this
-  /// pane's id. On macOS the id is readable only from non-platform foreground processes, so
-  /// the session that showed it once is recognized by its anchor when the system shell is
-  /// back in front.
-  private var anchor: Int32?
+  /// The remote session's anchor, learned from a snapshot that carried this pane's id. On
+  /// macOS the id is readable only from non-platform foreground processes, so the session
+  /// that showed it is recognized by its anchor when the system shell is back in front. The
+  /// anchor is valid only within the connection epoch and boot it was seen in: a pid in a
+  /// new scope can be another session.
+  private var anchor: Anchor?
+
+  private struct Anchor {
+    let pid: Int32
+    let epoch: UInt64
+    let bootID: String
+  }
   private var bound: IdentifiedAgentProcess?
   private var presence = RemoteProcessPresence()
-  private var boundFence: Date?
-  /// Whether any agent was bound since this `ssh` started; the first agent's reports
-  /// count from the `ssh` start, a successor's only after the snapshot that confirmed it.
-  private var hadAgent = false
+  /// The OSC fence of this `ssh` generation; it outlives the tracker (close and Undo).
+  private(set) var fenceHistory: RemoteFenceHistory
 
   init(
     surfaceID: UUID,
     ssh: LocalProcessGeneration,
     invocation: SSHInvocation,
+    fenceHistory: RemoteFenceHistory? = nil,
     source: RemoteSnapshotSource,
     uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     onSnapshot: @escaping @MainActor () -> Void
@@ -115,6 +142,7 @@ final class RemotePaneTracker {
     self.surfaceID = surfaceID
     self.ssh = ssh
     self.invocation = invocation
+    self.fenceHistory = fenceHistory.flatMap { $0.ssh == ssh ? $0 : nil } ?? RemoteFenceHistory(ssh: ssh)
     self.source = source
     self.uptime = uptime
     self.onSnapshot = onSnapshot
@@ -173,24 +201,25 @@ final class RemotePaneTracker {
     }
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
-      programStatusFence: boundFence)
+      programStatusFence: fenceHistory.fence)
   }
 
   /// Applies a new snapshot to the binding and returns its verdict for the bound agent.
   private func consume(_ snapshot: RemoteProbeSnapshot, report: RemoteProbeReport, now: Date)
     -> RemoteProcessPresence.Verdict?
   {
-    let mapped = sessions(in: report)
-    if anchor == nil, mapped.count == 1, mapped[0].paneID == surfaceID { anchor = mapped[0].anchorPID }
+    let mapped = sessions(in: report, epoch: snapshot.connectionEpoch)
+    if mapped.count == 1, mapped[0].paneID == surfaceID {
+      anchor = Anchor(pid: mapped[0].anchorPID, epoch: snapshot.connectionEpoch, bootID: report.bootID)
+    }
     // Only this pane's own session is evidence about its agent: an unmapped or
     // ambiguous scan proves nothing (C3).
     guard mapped.count == 1 else { return bound == nil ? nil : .unchanged }
-    let job = correlatedJob(report: report)
+    let job = correlatedJob(report: report, epoch: snapshot.connectionEpoch)
     if let identified = job.flatMap(identifyAgentInJob), identified.process.ref != bound?.process.ref {
       bound = identified
       presence = RemoteProcessPresence()
-      boundFence = hadAgent ? now : ssh.startedAt
-      hadAgent = true
+      fenceHistory.bind(identified.process.ref, confirmedAt: now)
     }
     guard let current = bound else { return nil }
     let contains = job?.processes.contains { $0.ref == current.process.ref } ?? false
@@ -210,21 +239,22 @@ final class RemotePaneTracker {
       if case .failed(let failure) = latest.outcome { return .probeUnavailable(failure) }
       return .probeUnavailable(nil)
     }
-    switch sessions(in: report).count {
+    switch sessions(in: report, epoch: latest.connectionEpoch).count {
     case 0: return latest.isComplete ? .unmapped : .pending
     case 1: return .correlated
     default: return .ambiguous
     }
   }
 
-  private func sessions(in report: RemoteProbeReport) -> [RemoteProbeSession] {
-    report.sessions.filter { session in
-      session.paneID == surfaceID || (session.paneID == nil && anchor != nil && session.anchorPID == anchor)
+  private func sessions(in report: RemoteProbeReport, epoch: UInt64) -> [RemoteProbeSession] {
+    let anchorPID = anchor.flatMap { $0.epoch == epoch && $0.bootID == report.bootID ? $0.pid : nil }
+    return report.sessions.filter { session in
+      session.paneID == surfaceID || (session.paneID == nil && anchorPID != nil && session.anchorPID == anchorPID)
     }
   }
 
-  private func correlatedJob(report: RemoteProbeReport) -> ForegroundJob? {
-    let matching = sessions(in: report)
+  private func correlatedJob(report: RemoteProbeReport, epoch: UInt64) -> ForegroundJob? {
+    let matching = sessions(in: report, epoch: epoch)
     guard matching.count == 1, let session = matching.first, let connection = lease?.connection else { return nil }
     return session.foregroundJob(connection: connection, bootID: report.bootID)
   }
