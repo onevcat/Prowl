@@ -50,9 +50,16 @@ struct RemoteAgentPresentationTests {
       iconLookupToken: "claude", agent: .claude, session: nil, rawState: .idle, displayState: .idle,
       lastChangedAt: now)
     #expect(ActiveAgentRowPresentation.helpText(for: entry, branchName: "main", showTabTitles: true) == "main")
+    #expect(ActiveAgentRowPresentation.remoteHelpText(for: entry) == nil)
     entry.remote = RemoteAgentContext(connection: key, correlation: .correlated, confirmedAt: now, now: now)
     #expect(
       ActiveAgentRowPresentation.helpText(for: entry, branchName: "main", showTabTitles: true)
         == "main\nProwl reads this agent from alice@box.example over a separate SSH connection.")
+    // The island roster shows the same reason on its own.
+    entry.remote = RemoteAgentContext(
+      connection: key, correlation: .unmapped, confirmedAt: now, now: now, isUnprobed: true)
+    let island = try? #require(ActiveAgentRowPresentation.remoteHelpText(for: entry))
+    #expect(island?.contains("AcceptEnv") == true)
+    #expect(island?.contains("terminal reports") == true)
   }
 }

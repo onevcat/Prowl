@@ -18,8 +18,14 @@ enum ActiveAgentRowPresentation {
     showTabTitles: Bool
   ) -> String {
     let text = showTabTitles ? branchName : paneTitle(for: entry)
-    guard let remote = entry.remote else { return text }
-    return "\(text)\n\(RemoteAgentPresentation.explanation(for: remote))"
+    guard let remote = remoteHelpText(for: entry) else { return text }
+    return "\(text)\n\(remote)"
+  }
+
+  /// The reason a remote agent's observation rests on what it does; nil for a local agent.
+  /// The island roster, whose subtitle already shows title and branch, uses it alone.
+  static func remoteHelpText(for entry: ActiveAgentEntry) -> String? {
+    entry.remote.map(RemoteAgentPresentation.explanation)
   }
 
   /// The island roster has room for both, so it shows "pane title · branch" regardless of the
