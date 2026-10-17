@@ -68,7 +68,7 @@ saved packet and continues the task. A completed run confirms save/launch, not t
 ## Built-in Review Loop
 
 Use `prowl workflow run prowl.review-loop --role reviewer=<Profile> --json` from the
-implementing agent. Follow the returned `self_initiated.line` to deliver the scope,
+implementing agent. When present, follow the returned `self_initiated.line` to deliver the scope,
 plan, and verification brief. The reviewer opens in a right split in the same tab.
 Optional inputs: `min_rounds=2`, `max_rounds=4` (each 1–30, minimum must not exceed
 maximum), and `focus=<one-line instruction>`. Any qualifying Profile can review.
@@ -104,6 +104,15 @@ prowl workflow cancel <run-id> [--json]
   `self_initiated` (`.data.self_initiated` with `--json`). If present, follow its `line` or
   `prompt_path` and completion command yourself; Prowl does not type that first task
   back into the same pane. Waiting for another message would leave your own step unfinished.
+- If caller resolution is unavailable, pass `--pane <UUID>` only for an independently
+  selected source (the user chose it, or a controller created and retained its ID). Do not
+  infer identity from `PROWL_PANE_ID`, focus, cwd, or `prowl agents` session matching.
+  Explicit source selection fixes where the `current` role receives messages; it does not
+  prove who issued `run`. Without a verified caller, `self_initiated` is absent and Prowl
+  waits for the selected pane to become idle. If that pane is yours, **end your turn after
+  reporting the run ID**; do not poll or wait in a tool. Process the next `[Prowl]` task
+  with its exact token-prefixed read and delivery commands. This fallback complements
+  caller resolution and does not enable caller-scoped signals or ordinary dispatch receipts.
 - The run is asynchronous: `run` returns the run id and frozen bindings; poll
   `prowl workflow status <run-id> --json` (`.data.status.state` is `running`,
   `needs_attention`, or a terminal state; `.data.finished_at` appears when it ended) or read
@@ -136,8 +145,11 @@ looks like this:
    output file exists. A provisional delivery waits for the user's decision; **Ask again**
    reopens delivery so you can correct it. Do not blindly resubmit or invent a replacement
    token; [runbook](references/runbook.md) explains the states.
-4. Lost? `prowl workflow status` (no arguments) answers "who am I": this pane's run, role,
-   awaited step, its requirements and completion command.
+4. Lost? With a resolved caller, `prowl workflow status` (no arguments) answers "who am I":
+   this pane's run, role, awaited step, its requirements and completion command. Without
+   caller identity, use `status <run-id>` to inspect progress; it does not reveal task tokens.
+   Keep the token-prefixed commands from the assigned task. An observer can poll progress;
+   a source waiting for its first task must end its turn as described above.
 5. Never use `prowl agents dispatch-complete` for a workflow activation — it is rejected
    with `WORKFLOW_DELIVERY_REQUIRED` naming the correct command.
 6. A launched participant finds the same contract in its kickoff prompt ("Prowl workflow

@@ -173,6 +173,32 @@ struct WorkflowCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.workflowFailed)
   }
 
+  @Test func anExplicitSourceWithoutACallerSelectsAPaneWithoutClaimingItsIdentity() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let snapshot = fixture.snapshot()
+    let handler = WorkflowCommandHandler { snapshot }
+
+    // A focused pane is not evidence of who invoked the command.
+    for selector in [TargetSelector.none, .worktree("main")] {
+      let source = try handler.resolveSource(selector, snapshot: snapshot, callerPane: nil).get()
+      #expect(source.paneID == nil)
+      #expect(!source.paneIsCaller)
+    }
+    let explicit = try handler.resolveSource(
+      .pane(fixture.paneID.uuidString), snapshot: snapshot, callerPane: nil
+    ).get()
+    #expect(explicit.paneID == fixture.paneID)
+    #expect(!explicit.paneIsCaller)
+
+    let missing = handler.resolveSource(.pane(UUID().uuidString), snapshot: snapshot, callerPane: nil)
+    guard case .failure(let refusal) = missing else {
+      Issue.record("A closed source must not fall back to the focused pane")
+      return
+    }
+    #expect(refusal.response.error?.code == CLIErrorCode.targetNotFound)
+  }
+
   @Test func repositoryEnabledStateUsesTheResolvedRepositoryIdentity() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

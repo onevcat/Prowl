@@ -314,6 +314,12 @@ struct WorkflowRunAdmissionTests {
     #expect(admitted.callerRole == nil)
     #expect(admitted.session.run.selfInitiatedLine == nil)
     #expect(admitted.session.run.phase == .waitingForRole(role: "author", ordinal: 1))
+    #expect(admitted.session.run.context.sourcePaneID == fixture.authorPane)
+    #expect(admitted.session.run.bindings["author"]?.pane?.surfaceID == fixture.authorPane)
+    let response = WorkflowRunPayload(run: admitted.session.run, callerRole: nil, includeSelfInitiated: true)
+    #expect(response.selfInitiated == nil)
+    let completion = response.activation?.expect.completion ?? []
+    #expect(completion.isEmpty)
   }
 
   @Test func definitionSelectionCoversIdNameShadowingValidityAndEnabledState() throws {

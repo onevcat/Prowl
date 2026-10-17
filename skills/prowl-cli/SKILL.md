@@ -56,7 +56,16 @@ fi
 
 The variable is inherited, not verified: it is missing after `sudo`/`ssh`/containers and can name the wrong pane inside a tmux/screen session attached from elsewhere. A set value that matches no `pane.id` usually means `prowl` is talking to a different Prowl instance than the one hosting your pane (two apps running; see `PROWL_CLI_SOCKET` under Pitfalls). A match only proves that pane exists, not that you are running in it: trust the value only when your process ancestry reaches the pane's shell (no tmux/screen server or detached wrapper in between); under tmux/screen or a detached wrapper, identify your pane by other means — `prowl agents --json` for the pane hosting your own agent session, or a unique `pane.cwd` — and pass it explicitly. If it is unset or matches nothing, stop rather than guess: `pane.cwd` only narrows the candidates — several panes usually share one cwd — and may stand in for you only when the match is unique. Never assume the focused pane is you — `open` and `focus` move focus, and the user may be looking anywhere.
 
-Inside Codex, do not trust `PROWL_PANE_ID`. Codex 0.157+ runs the commands of a `codex` typed by hand in a shared background daemon that keeps the environment of whichever terminal last started it, so `PROWL_PANE_ID`, `PROWL_WORKTREE_PATH`, and `PROWL_ROOT_PATH` there can name another live pane or a closed one. `prowl list --json` reports `.data.caller` — the pane Prowl resolved from your `CODEX_THREAD_ID` — and omits it when your pane cannot be mapped yet (for example before your first message in that Codex session): then stop. Caller-scoped commands (`agents signal`, `agents dispatch-complete`, `workflow deliver`) resolve the same way on the server, so they need nothing from you.
+Inside Codex, do not trust `PROWL_PANE_ID`. Codex 0.157+ runs the commands of a `codex` typed by hand in a shared background daemon that keeps the environment of whichever terminal last started it, so `PROWL_PANE_ID`, `PROWL_WORKTREE_PATH`, and `PROWL_ROOT_PATH` there can name another live pane or a closed one. `prowl list --json` reports `.data.caller` — the pane Prowl resolved from your `CODEX_THREAD_ID` — and omits it when the mapping is unavailable. Do not guess your pane from focus, cwd, or a detected session entry. Caller-scoped commands such as `agents signal` and `agents dispatch-complete` resolve identity on the server; stop if that identity is unavailable.
+
+Workflows have a separate, limited fallback: start with `workflow run <id> --pane <UUID>`
+only when that source was independently selected (for example by the user or by a controller
+that created the pane). Later messages return to the run's fixed role bindings. This does
+not establish caller identity. Inspect `data.self_initiated`: follow it if present; if absent
+and the selected pane is yours, **end your turn** so Prowl can message the idle pane. Do not
+poll or hold that turn open. Use each task's exact token-prefixed `workflow read` and
+`workflow deliver` commands; they work with an unresolved caller. Use `workflow status <run-id>`
+for inspection from another pane. See the `prowl-workflow` skill for the full protocol.
 
 ## Safe Default Workflow
 
@@ -165,13 +174,14 @@ run="$(prowl workflow run review --role reviewer=Codex --input max_rounds=3 --js
 printf '%s\n' "$run" | jq -r '.data.id, .data.status.state, .data.self_initiated.line'
 ```
 
-A workflow with a `current` role runs from the pane you call it in (that pane becomes the
-role; `SOURCE_REQUIRED` outside a pane, `PANE_BUSY` when it already belongs to a run). Launch
+A workflow with a `current` role uses the resolved caller or an explicitly selected source
+pane (`SOURCE_REQUIRED` without either, `PANE_BUSY` when it already belongs to a run). Launch
 roles freeze a Profile before anything happens: `--role <role>=<profile name|UUID|auto>`, else
 the remembered, suggested, or Recommended one (`PROFILE_NOT_FOUND` when nothing qualifies);
-`pick` roles need `--role <role>=pN`. When the first step messages your own pane, nothing is
-typed: `.data.self_initiated.line` is the instruction to follow now, and its completion command
-delivers your output. Every step Prowl types into a pane ends with the exact command that
+`pick` roles need `--role <role>=pN`. When `.data.self_initiated.line` is present, nothing is
+typed: it is the instruction to follow now, and its completion command delivers your output.
+Without it, a selected source that is your own pane must become idle before receiving a
+message: end your turn. Every step Prowl types into a pane ends with the exact command that
 completes it — run it with the output on stdin when your work for that step is fully done:
 
 ```bash

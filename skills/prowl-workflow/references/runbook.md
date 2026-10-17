@@ -29,6 +29,13 @@ response returns the task directly in `self_initiated` (`.data.self_initiated` i
 `line`, optional `prompt_path`, and `completion`. The agent that invoked `run` must
 perform it and deliver; there is no separate injected first message to wait for.
 
+If caller resolution fails, an independently selected `--pane <UUID>` still binds the
+`current` role. It does not establish caller identity, so no `self_initiated` task is
+returned. If the selected pane is the invoking agent's own pane, that agent must end
+its turn after `run` returns. Prowl then messages the idle pane. Do not keep the turn
+busy by polling; an observer can inspect `status <run-id>` from another pane. Subsequent
+messages follow the frozen bindings even if focus changes.
+
 ## While it runs
 
 - Steps execute strictly in order; one step is active at a time. A `message` step injects
@@ -129,15 +136,18 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
   the kickoff prompt's protocol block spells the bare `prowl workflow deliver [--verdict v] -`.
 - **Messaged panes** (`current`/`pick`): the token rides the typed line as an environment
   prefix — the command in the `[Prowl] …` line is complete and directly executable.
-- Delivery requires the caller pane and the token to agree; a stale, duplicated, or
-  token-less delivery is rejected instead of misattributed.
+- With a resolved caller, delivery requires its pane and token to agree. Without one,
+  the supplied step token identifies the activation for delivery and authorizes scoped
+  reads. It never overrides a resolved conflicting pane. A stale, duplicated, or
+  token-less delivery is rejected instead of misattributed. Explicit `status <run-id>`
+  without caller identity does not reveal completion tokens.
 
 ## Common errors
 
 | Error | Meaning / fix |
 | --- | --- |
 | `WORKFLOW_NOT_FOUND` / `WORKFLOW_INVALID` | wrong id, or the file fails validation — run `prowl workflow validate` on it |
-| `SOURCE_REQUIRED` | the workflow has a `current` role and the call wasn't made from a pane — pass a source |
+| `SOURCE_REQUIRED` | Prowl could not resolve the caller: for `run`, pass an independently selected source pane; for `read`/`deliver`, use the assigned task's token; for `status`, pass the run ID. Do not infer a pane from focus or inherited environment variables. |
 | `INVALID_ARGUMENT` | bad `--input` value, unknown/duplicate `--role`, or a `--skip` on a step another step depends on (the message names it) |
 | `PANE_BUSY` | the pane chosen for a `pick` role already belongs to a run |
 | `DISPATCH_PENDING` | a `pick` pane still holds a pending `prowl agents dispatch`; complete or abandon it first |
