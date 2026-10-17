@@ -13,6 +13,8 @@ struct PaneAgentState: Equatable, Sendable {
   /// bounds how long a previously resolved session may be retained.
   var sessionMissStreak: Int = 0
   var iconLookupToken: String?
+  /// Set for an agent on a remote host (docs-ai 082): host, correlation, and staleness.
+  var remote: RemoteAgentContext?
   var fallbackState: AgentRawState
   var decision: AgentStateDecision?
   var state: AgentRawState

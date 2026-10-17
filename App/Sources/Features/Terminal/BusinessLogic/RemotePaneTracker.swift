@@ -88,6 +88,12 @@ final class RemotePaneTracker {
     var verdict: RemoteProcessPresence.Verdict?
     /// The arrival-time fence for OSC records of the bound remote agent (L0 item 5).
     var programStatusFence: Date?
+    /// When a snapshot last confirmed the bound agent.
+    var confirmedAt: Date?
+
+    func context(now: Date) -> RemoteAgentContext {
+      RemoteAgentContext(connection: connection, correlation: correlation, confirmedAt: confirmedAt, now: now)
+    }
   }
 
   var boundAgent: IdentifiedAgentProcess? { bound }
@@ -129,6 +135,7 @@ final class RemotePaneTracker {
     let bootID: String
   }
   private var bound: IdentifiedAgentProcess?
+  private var confirmedAt: Date?
   private var presence = RemoteProcessPresence()
   /// The OSC fence of this `ssh` generation; it outlives the tracker (close and Undo).
   private(set) var fenceHistory: RemoteFenceHistory
@@ -220,7 +227,7 @@ final class RemotePaneTracker {
     }
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
-      programStatusFence: fenceHistory.fence)
+      programStatusFence: fenceHistory.fence, confirmedAt: confirmedAt)
   }
 
   /// Applies a new snapshot to the binding and returns its verdict for the bound agent.
@@ -243,9 +250,15 @@ final class RemotePaneTracker {
     guard let current = bound else { return nil }
     let contains = job?.processes.contains { $0.ref == current.process.ref } ?? false
     let verdict = presence.observe(snapshot, contains: contains, now: uptime())
-    if verdict == .released {
+    switch verdict {
+    case .present:
+      confirmedAt = now
+    case .released:
       bound = nil
+      confirmedAt = nil
       presence = RemoteProcessPresence()
+    case .missing, .unchanged:
+      break
     }
     return verdict
   }

@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 import Testing
 
 @testable import Prowl
@@ -161,11 +162,11 @@ struct RemoteAgentDetectionTests {
   }
 
   @discardableResult
-  private func detect(_ fixture: Fixture, screen: AgentRawState = .idle) async -> Bool {
+  private func detect(_ fixture: Fixture, screen: AgentRawState = .idle, now: Date = Date()) async -> Bool {
     fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
       agent: .claude, text: "", detection: AgentScreenDetection(state: screen, reason: .legacyDetector))
     return await fixture.state.detectAgentState(
-      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
+      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: now)
   }
 
   /// Waits for the tracker's consumer task, which runs on the main actor between test steps.
@@ -208,6 +209,44 @@ struct RemoteAgentDetectionTests {
     // No local file evidence for a remote process.
     #expect(pane?.session == nil)
     #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.boundProcess?.localGeneration == nil)
+  }
+
+  @Test func anUnconfirmedRemoteAgentTurnsStaleAndProvesNothing() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    await bindClaude(fixture, probe: probe)
+    let fresh = try #require(emitted.last?.remote)
+    #expect(fresh.hostLabel == "onevcat@mini.local")
+    #expect(fresh.correlation == .correlated)
+    #expect(!fresh.isStale)
+    #expect(fresh.lastConfirmedAt == nil)
+
+    // Eleven seconds without a confirming snapshot (the host stopped answering).
+    await detect(fixture, now: Date().addingTimeInterval(11))
+    let stale = try #require(emitted.last?.remote)
+    #expect(stale.isStale)
+    #expect(stale.lastConfirmedAt != nil)
+    // The entry keeps its agent and last state.
+    #expect(emitted.last?.agent == .claude)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    let condition = AgentConditionSnapshot(
+      agent: emitted.last, signal: nil, revision: 1, isLive: true, signals: .empty)
+    #expect(AgentConditionEvidence.normalizedState(condition) == AgentConditionEvidence.unavailableState)
+    #expect(
+      !AgentConditionEvidence.detectorReports(.idle, normalizedState: AgentConditionEvidence.normalizedState(condition))
+    )
+    #expect(AgentConditionEvidence.idleVerdict(for: condition) == .busy(AgentConditionEvidence.unavailableState))
+    #expect(
+      !AgentConditionEvidence.heuristicMatches(
+        condition: .exit, snapshot: condition, normalizedState: AgentConditionEvidence.unavailableState,
+        baseline: AgentConditionEvidence.Baseline(snapshot: condition)))
+
+    // A confirming snapshot makes it fresh again.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+    #expect(emitted.last?.remote?.isStale == false)
   }
 
   @Test func twoCompleteSnapshotsWithoutTheAgentReleaseIt() async {
@@ -584,5 +623,26 @@ struct RemoteAgentDetectionTests {
       skipsSurfaceCreationForTesting: true)
     #expect(surface.launchEnvironment["LC_PROWL_PANE"] == surface.id.uuidString)
     #expect(surface.launchEnvironment["PROWL_PANE_ID"] == surface.id.uuidString)
+  }
+}
+
+struct RemoteAgentContextTests {
+  @Test func stalenessFollowsTheLastConfirmation() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    let key = ConnectionKey(user: "dev", hostname: "box")
+    let fresh = RemoteAgentContext(
+      connection: key, correlation: .correlated, confirmedAt: now.addingTimeInterval(-9), now: now)
+    #expect(!fresh.isStale)
+    // A steady stream of confirmations never changes a fresh context.
+    #expect(
+      fresh
+        == RemoteAgentContext(
+          connection: key, correlation: .correlated, confirmedAt: now.addingTimeInterval(-1), now: now))
+    let stale = RemoteAgentContext(
+      connection: key, correlation: .unmapped, confirmedAt: now.addingTimeInterval(-11), now: now)
+    #expect(stale.isStale)
+    #expect(stale.lastConfirmedAt == now.addingTimeInterval(-11))
+    #expect(RemoteAgentContext(connection: nil, correlation: .pending, confirmedAt: nil, now: now).isStale)
+    #expect(stale.hostLabel == "dev@box")
   }
 }

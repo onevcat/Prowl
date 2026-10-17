@@ -139,9 +139,14 @@ enum AgentConditionEvidence {
     return .busy(state)
   }
 
+  /// The state of a remote agent the host has not confirmed for a while (docs-ai 082, C3):
+  /// its last observation stands, but it satisfies no idle, blocked or exit condition.
+  static let unavailableState = "unavailable"
+
   static func normalizedState(_ snapshot: AgentConditionSnapshot) -> String {
     guard snapshot.isLive else { return "gone" }
     guard let agent = snapshot.agent else { return "absent" }
+    if agent.remote?.isStale == true { return unavailableState }
     let state = status(for: agent, fallback: .idle).rawValue
     // An unmatched or unrecognized screen is not idle evidence: a retained
     // `.idle` may have been stabilized before the layout became unclassifiable.

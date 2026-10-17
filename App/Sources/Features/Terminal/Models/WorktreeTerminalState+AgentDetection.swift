@@ -237,6 +237,7 @@ extension WorktreeTerminalState {
     )
     next.sessionMissStreak = sessionMissStreak
     next.decision = decision
+    next.remote = next.agentProcess?.origin == .local ? nil : remote?.context(now: now)
     // Limit logging to meaningful transitions - agent identity or
     // stabilized state changes. Raw oscillation and `seen` flips are
     // routine and would otherwise dominate the log stream.
@@ -678,7 +679,8 @@ extension WorktreeTerminalState {
       rawState: state.fallbackState,
       displayState: state.displayState,
       lastChangedAt: state.lastChangedAt,
-      launchProfileName: launchProfileName(surfaceID: surfaceID, detected: agent)
+      launchProfileName: launchProfileName(surfaceID: surfaceID, detected: agent),
+      remote: state.remote
     )
   }
 

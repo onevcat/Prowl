@@ -505,7 +505,8 @@ extension ProwlApp {
             token: entry.agent.rawValue, displayName: entry.agent.displayName,
             sessionIdentity: WorkflowHistorySessionIdentity.resolve(
               agent: entry.agent, detected: entry.session,
-              currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID).latestManagedHook))
+              currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID).latestManagedHook),
+            isRemote: entry.remote != nil)
         }
       },
       pendingDispatchID: { surfaceID in

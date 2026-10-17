@@ -308,6 +308,31 @@ struct AgentDispatchCommandHandlerTests {
     #expect(await closed.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.agentGone)
   }
 
+  @Test func dispatchRefusesARemoteAgentBeforeTypingAnything() async throws {
+    let target = resolvedTarget()
+    var remote = snapshot(target, status: .idle, signal: turnEnded)
+    var entry = try #require(remote.agent)
+    entry.remote = RemoteAgentContext(
+      connection: ConnectionKey(user: "dev", hostname: "box"), correlation: .correlated, confirmedAt: Self.start,
+      now: Self.start)
+    remote = AgentConditionSnapshot(
+      agent: entry, signal: remote.signal, revision: remote.revision, isLive: true, signals: remote.signals)
+    var issued = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      // An unverifiable composer must not mask the reason.
+      inputProtection: { _ in "The input area could not be verified." },
+      conditionSnapshot: { _ in remote },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.surfacePending)
+      }
+    )
+    let response = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(response.error?.code == CLIErrorCode.remoteAgentUnsupported)
+    #expect(issued == 0)
+  }
+
   @Test func dispatchRefusesWorkingBlockedAndRuntimeNeedsInputAgents() async throws {
     struct BusyCase {
       let status: AgentDisplayState
@@ -536,7 +561,8 @@ struct AgentDispatchCommandHandlerTests {
     await clock.advance(by: .milliseconds(200))
     let response = await task.value
     #expect(response.ok)
-    #expect(reads == 11)
+    // One read for the remote-agent refusal, then the idle wait's.
+    #expect(reads == 12)
   }
 
   @Test func dispatchStabilizationAbortsWhenTheAgentStartsWorking() async throws {

@@ -180,7 +180,19 @@ final class AgentDispatchCommandHandler: CommandHandler {
     }
   }
 
+  /// The receipt is reported with `prowl agents dispatch-complete` from inside the pane,
+  /// which an agent on a remote host cannot run (docs-ai 082, L0 item 11).
+  private func remoteAgentRefusal(_ snapshot: AgentConditionSnapshot, target: TabResolvedTarget) -> CommandResponse? {
+    guard snapshot.agent?.remote != nil else { return nil }
+    return failure(
+      code: CLIErrorCode.remoteAgentUnsupported,
+      message: "The selected pane's agent runs on a remote host; dispatch needs a local agent to report its receipt.",
+      details: AgentDispatchErrorDetails(target: TabTarget(from: target), signals: snapshot.signals)
+    )
+  }
+
   private func prepareDelivery(target: TabResolvedTarget) async -> CommandResponse? {
+    if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target) { return refusal }
     // Code security: do not clear local IME input or append into an actively edited composer.
     if let reason = inputProtection(target) {
       return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
@@ -215,6 +227,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
           details: AgentDispatchErrorDetails(target: TabTarget(from: target), signals: snapshot.signals)
         )
       }
+      if let refusal = remoteAgentRefusal(snapshot, target: target) { return refusal }
       switch verdict(for: snapshot) {
       case .idle:
         return nil

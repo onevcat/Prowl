@@ -109,6 +109,8 @@ nonisolated public enum CLIErrorCode {
   // Run-time codes of the workflow runner (dsl-spec §9); emitted by `workflow run/deliver` from B3 on.
   public static let runNotFound = "RUN_NOT_FOUND"
   public static let paneBusy = "PANE_BUSY"
+  /// The pane's agent runs on a remote host; it can be observed but not driven by receipts.
+  public static let remoteAgentUnsupported = "REMOTE_AGENT_UNSUPPORTED"
   public static let roleMismatch = "ROLE_MISMATCH"
   public static let stepNotExpecting = "STEP_NOT_EXPECTING"
   public static let tokenRequired = "TOKEN_REQUIRED"
