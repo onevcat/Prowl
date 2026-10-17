@@ -344,6 +344,11 @@ label, the ssh-ended marker, and turning the flag on.
   shows a multicolor warning glyph. Only that capsule takes the pointer, so its tooltip
   (`RemotePaneBadge.issueExplanation`, reusing `RemoteAgentPresentation`) can say why, and
   that only OSC 7501 producers are detected.
+- **Accessibility (review round 3).** The split container lists only the pane views as AX
+  children, so the badge's own metadata cannot be reached. The pane's AX element carries
+  the state itself, through `RemoteAgentPresentation.paneAccessibility`. The label gains
+  ", connected to host" or ", disconnected from host" (only while the ended marker shows),
+  and the help gains the issue explanation after "Pane n of m".
 - **Pane.** `RemotePaneBadge` sits in the bottom-trailing corner: a material capsule with a
   network glyph and the host. It does not take hits. After an exit it reads "Disconnected
   from host" with `network.slash` until five seconds after the exit (`showsEndedMarker`,

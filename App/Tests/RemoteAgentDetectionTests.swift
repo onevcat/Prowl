@@ -358,6 +358,26 @@ struct RemoteAgentDetectionTests {
           host: "onevcat@mini.local", ssh: sshGeneration, issue: nil))
   }
 
+  @Test func thePaneAccessibilityElementCarriesTheRemoteState() {
+    let surface = GhosttySurfaceView(
+      runtime: GhosttyRuntime(), workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true), fontSize: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB, skipsSurfaceCreationForTesting: true)
+    surface.bridge.state.title = "Claude Code"
+    surface.setAccessibilityPaneIndex(index: 1, total: 2)
+    #expect(surface.accessibilityLabel() == "Claude Code")
+    #expect(surface.accessibilityHelp() == "Pane 1 of 2")
+    surface.bridge.state.remoteIndicator = .connected(host: "dev@box", ssh: sshGeneration, issue: .unmapped)
+    #expect(surface.accessibilityLabel() == "Claude Code, connected to dev@box")
+    #expect(surface.accessibilityHelp()?.hasPrefix("Pane 1 of 2 dev@box has no session for this pane.") == true)
+    surface.bridge.state.remoteIndicator = .ended(host: "dev@box", endedAt: Date())
+    #expect(surface.accessibilityLabel() == "Claude Code, disconnected from dev@box")
+    // An old exit is not announced.
+    surface.bridge.state.remoteIndicator = .ended(host: "dev@box", endedAt: Date().addingTimeInterval(-10))
+    #expect(surface.accessibilityLabel() == "Claude Code")
+    surface.bridge.state.remoteIndicator = nil
+    #expect(surface.accessibilityHelp() == "Pane 1 of 2")
+  }
+
   @Test func anUnreachableHostIsReportedWithoutAnAgent() async throws {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
@@ -373,7 +393,7 @@ struct RemoteAgentDetectionTests {
     }
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
     #expect(
-      RemotePaneBadge.issueExplanation(.probeUnavailable(.authentication), host: "h")
+      RemoteAgentPresentation.paneIssueExplanation(.probeUnavailable(.authentication), host: "h")
         == "Prowl cannot read h: the key was refused or needs a prompt. "
         + "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
   }

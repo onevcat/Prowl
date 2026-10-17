@@ -22,6 +22,13 @@ extension GhosttySurfaceView {
   }
 
   override func accessibilityLabel() -> String? {
+    let label = baseAccessibilityLabel
+    guard let remote = RemoteAgentPresentation.paneAccessibility(bridge.state.remoteIndicator, now: Date()).label
+    else { return label }
+    return "\(label), \(remote)"
+  }
+
+  private var baseAccessibilityLabel: String {
     let title = bridge.state.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !title.isEmpty {
       return title
@@ -38,7 +45,9 @@ extension GhosttySurfaceView {
   }
 
   override func accessibilityHelp() -> String? {
-    accessibilityPaneIndexHelp
+    let remote = RemoteAgentPresentation.paneAccessibility(bridge.state.remoteIndicator, now: Date()).help
+    let parts = [accessibilityPaneIndexHelp, remote].compactMap(\.self)
+    return parts.isEmpty ? nil : parts.joined(separator: " ")
   }
 
   override func accessibilitySelectedTextRange() -> NSRange {

@@ -59,6 +59,29 @@ nonisolated enum RemoteAgentPresentation {
     }
   }
 
+  /// Why Prowl does not read a pane's agents, with what still works.
+  static func paneIssueExplanation(_ issue: RemotePaneCorrelation, host: String) -> String {
+    let reason = correlationExplanation(issue, host: host)
+    let fallback = String(
+      localized: "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
+    return "\(reason) \(fallback)"
+  }
+
+  /// What the pane's own accessibility element says about its `ssh`: the badge is not in the
+  /// terminal's accessibility tree, so the pane carries the same information.
+  static func paneAccessibility(_ indicator: RemotePaneIndicator?, now: Date) -> (label: String?, help: String?) {
+    switch indicator {
+    case .connected(let host, _, nil):
+      return (String(localized: "connected to \(host)"), nil)
+    case .connected(let host, _, let issue?):
+      return (String(localized: "connected to \(host)"), paneIssueExplanation(issue, host: host))
+    case .ended(let host, _) where indicator?.showsEndedMarker(now: now) == true:
+      return (String(localized: "disconnected from \(host)"), nil)
+    case .ended, nil:
+      return (nil, nil)
+    }
+  }
+
   static func failureReason(_ failure: RemoteProbeFailure?) -> String {
     switch failure {
     case .authentication:

@@ -16,7 +16,7 @@ struct RemotePaneBadge: View {
           .allowsHitTesting(false)
       case .connected(let host, _, let issue?):
         // The reason is the tooltip, so this capsule (and only it) takes the pointer.
-        let explanation = RemotePaneBadge.issueExplanation(issue, host: host)
+        let explanation = RemoteAgentPresentation.paneIssueExplanation(issue, host: host)
         label(Text(verbatim: host), systemImage: "exclamationmark.triangle.fill", multicolor: true)
           .help(explanation)
           .accessibilityLabel(Text("Connected to \(host). Agents are not detected."))
@@ -39,14 +39,6 @@ struct RemotePaneBadge: View {
       if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
       isEndedMarkerExpired = true
     }
-  }
-
-  /// Why Prowl does not read this pane's agents, with what still works.
-  static func issueExplanation(_ issue: RemotePaneCorrelation, host: String) -> String {
-    let reason = RemoteAgentPresentation.correlationExplanation(issue, host: host)
-    let fallback = String(
-      localized: "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
-    return "\(reason) \(fallback)"
   }
 
   private func label(_ text: Text, systemImage: String, multicolor: Bool = false) -> some View {
