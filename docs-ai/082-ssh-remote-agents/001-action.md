@@ -13,7 +13,7 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
 | 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag). Review Loop: 4 rounds, then two follow-ups, clean | #928 |
 | 2026-10-18 | S4a: host label and connection health on Active Agents rows, `remote` object in `prowl agents --json`, docs (behind the flag). Review Loop clean after 2 rounds | #930 |
-| 2026-10-18 | S4b: pane and tab host label, ssh-ended marker; remote detection on by default | S4b PR |
+| 2026-10-18 | S4b: pane and tab host label, ssh-ended marker; remote detection on by default | #931 |
 
 ## S1 — Typed process references
 
