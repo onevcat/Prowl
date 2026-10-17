@@ -211,12 +211,22 @@ final class AgentDetectionCoordinator {
   /// that arrived before it belong to the departed origin.
   var programStatusOriginFence: Date?
 
-  /// The arrival-time fence for the bound generation: its start, or a later origin change.
-  /// A remote generation has no local start time; until the remote binding supplies its
-  /// fence, no record counts for it.
+  /// The fence of a bound remote agent (docs-ai 082, L0 item 5), from the pane's tracker:
+  /// the `ssh` start for the first agent of a connection, the confirming snapshot for a
+  /// successor.
+  var remoteProgramStatusFence: Date?
+
+  /// The arrival-time fence for the bound generation: its start or a later origin change
+  /// for a local one, the tracker's fence for a remote one. Without a fence no record counts.
   private var programStatusNotBefore: Date? {
-    guard let startedAt = process?.localGeneration?.startedAt else { return nil }
-    return programStatusOriginFence.map { max($0, startedAt) } ?? startedAt
+    switch process {
+    case .local(let generation):
+      return programStatusOriginFence.map { max($0, generation.startedAt) } ?? generation.startedAt
+    case .remote:
+      return remoteProgramStatusFence
+    case nil:
+      return nil
+    }
   }
 
   private var isVerified: Bool {
