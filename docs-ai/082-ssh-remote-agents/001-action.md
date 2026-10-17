@@ -254,8 +254,12 @@ degraded OSC-only binding.
   report (OSC has no heartbeat). `RemoteAgentContext.isUnprobed` marks it heuristic. Once the
   pane is mapped (`correlated`), the probed path takes over. A later verified producer in the
   same `ssh` (Claude exits, Pi starts) replaces the binding. Only the bound producer's own
-  report confirms it. Records count from the `ssh` start, raised to the last time a local
-  agent was seen on the surface when it ran while the `ssh` was suspended (review round 1).
+  report confirms it. Records count from the `ssh` start, raised to the start of the
+  `ssh`'s current foreground interval and to the retained successor fence. A tracker that
+  takes over an `ssh` an earlier tracker followed means the `ssh` left the foreground (a
+  local agent ran while it was suspended) or the pane was closed and restored. Records from
+  before that interval, or ones an earlier binding excluded, never acquire or confirm the
+  agent (review rounds 1–2).
 - **Measured** in a Debug instance with the flag on. `ssh -F /dev/null -t mini` skips the
   system `SendEnv`, so the host shows the session as pane `-` and the pane is `unmapped`.
   - Claude Code bound through `osc.idle` 1.49 s after the command, then went

@@ -753,10 +753,9 @@ struct RemoteAgentDetectionTests {
       agent: .pi, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
     _ = await fixture.state.detectAgentState(
       for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
-    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
-    _ = await fixture.state.detectAgentState(
-      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .local(getpid()))
+    // Its last root arrives after its last local poll; then it stops without a clear.
+    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
     // `fg`: the remote side cannot be probed and sends nothing new.
     probe.job = sshJob
     await detect(fixture, screen: .unknown)
@@ -771,6 +770,34 @@ struct RemoteAgentDetectionTests {
     await detect(fixture, screen: .unknown)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+  }
+
+  @Test func aDegradedReacquisitionKeepsTheRetainedSuccessorFence() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.recipes.count == 1 }
+    // Claude reports, then the probe identifies a successor (Pi) whose fence excludes it.
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "pi")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .pi)
+    // Close and undo: the new tracker for the same `ssh` cannot connect.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    fixture.source.failNext(100)
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report after the reacquisition binds.
+    fixture.state.handleProgramStatus(report(.working, app: "pi"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .pi)
   }
 
   @Test func unprobedBindingNeedsAVerifiedReportFromThisSSH() async throws {

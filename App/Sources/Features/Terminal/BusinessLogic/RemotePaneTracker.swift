@@ -144,6 +144,10 @@ final class RemotePaneTracker {
   private var presence = RemoteProcessPresence()
   /// The OSC fence of this `ssh` generation; it outlives the tracker (close and Undo).
   private(set) var fenceHistory: RemoteFenceHistory
+  /// When this tracker took over an `ssh` that an earlier tracker followed: the `ssh` left
+  /// the foreground (a local agent ran while it was suspended) or the pane was closed and
+  /// restored. Records from before it are not this foreground interval's.
+  let resumedAt: Date?
 
   init(
     surfaceID: UUID,
@@ -151,13 +155,16 @@ final class RemotePaneTracker {
     invocation: SSHInvocation,
     fenceHistory: RemoteFenceHistory? = nil,
     source: RemoteSnapshotSource,
+    now: Date = Date(),
     uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     onSnapshot: @escaping @MainActor () -> Void
   ) {
     self.surfaceID = surfaceID
     self.ssh = ssh
     self.invocation = invocation
-    self.fenceHistory = fenceHistory.flatMap { $0.ssh == ssh ? $0 : nil } ?? RemoteFenceHistory(ssh: ssh)
+    let retained = fenceHistory.flatMap { $0.ssh == ssh ? $0 : nil }
+    self.fenceHistory = retained ?? RemoteFenceHistory(ssh: ssh)
+    resumedAt = retained == nil ? nil : now
     self.source = source
     self.uptime = uptime
     self.onSnapshot = onSnapshot
@@ -250,6 +257,13 @@ final class RemotePaneTracker {
     case .unmapped, .probeUnavailable, .unsupported: return true
     case .pending, .correlated, .ambiguous: return false
     }
+  }
+
+  /// The earliest arrival a degraded binding counts: the `ssh` start, raised to this
+  /// foreground interval's start when the `ssh` was resumed, and to the retained successor
+  /// fence, so a record that an earlier binding of this `ssh` excluded never comes back.
+  var unprobedRecordFence: Date {
+    [ssh.startedAt, resumedAt, fenceHistory.fence].compactMap(\.self).max() ?? ssh.startedAt
   }
 
   /// Binds `agent` from its OSC root record (L0 item 9). The reference names this `ssh`,

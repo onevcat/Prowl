@@ -349,7 +349,8 @@ extension WorktreeTerminalState {
 
   /// The degraded OSC-only binding (docs-ai 082, L0 item 9): with no probed agent, a
   /// verified producer's root record identifies the agent, and a later verified producer
-  /// replaces it. Records before `unprobedRecordFence` never acquire or confirm it.
+  /// replaces it. Records before the tracker's `unprobedRecordFence` never acquire or
+  /// confirm it.
   private func bindUnprobedProducer(
     observation: RemotePaneTracker.Observation, tracker: RemotePaneTracker, surfaceID: UUID
   ) -> RemotePaneTracker.Observation {
@@ -357,7 +358,7 @@ extension WorktreeTerminalState {
     let current = observation.identified
     let currentIsUnprobed = current.map { if case .unprobedRemote = $0.process.ref { true } else { false } } ?? false
     guard currentIsUnprobed || (current == nil && tracker.allowsUnprobedBinding) else { return observation }
-    let fence = unprobedRecordFence(surfaceID: surfaceID, ssh: tracker.ssh)
+    let fence = tracker.unprobedRecordFence
     if let producer = verifiedRootProducer(surfaceID: surfaceID, notBefore: fence), producer != current?.agent {
       observation.identified = tracker.bindUnprobed(producer)
     }
@@ -369,16 +370,6 @@ extension WorktreeTerminalState {
       verifiedRootProducer(surfaceID: surfaceID, notBefore: fence) == bound.agent
       ? programStatusStoresBySurface[surfaceID]?.root?.arrivedAt : nil
     return observation
-  }
-
-  /// The earliest arrival an unprobed binding counts: the `ssh` start, raised to the last
-  /// time a local agent was seen on this surface when it ran after the `ssh` started (a
-  /// suspended `ssh` with a local agent in between).
-  private func unprobedRecordFence(surfaceID: UUID, ssh: LocalProcessGeneration) -> Date {
-    guard let origin = programStatusOriginBySurface[surfaceID], origin.origin == .local,
-      let seen = origin.lastSeenAt, seen > ssh.startedAt
-    else { return ssh.startedAt }
-    return seen
   }
 
   /// The verified OSC 7501 producer whose root record arrived on this surface no earlier
