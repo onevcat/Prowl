@@ -295,10 +295,11 @@ label, the ssh-ended marker, and turning the flag on.
   `lastSeen(date)` (stale), or `unavailable` (never confirmed). The row keeps the agent's
   last state. A state that is not live is greyed out, with no working spinner. A
   state-unknown pill reads "Unknown".
-- **Row.** The subtitle line starts with a network glyph and `user@host` (or "Remote
-  host" while unresolved). A health text follows: "Status unknown", "Last seen … ago"
-  (a self-updating relative date), or "Status unavailable". The row's height does not
-  change. The tooltip adds a reason-specific explanation (`RemoteAgentPresentation`): the
+- **Row.** The subtitle line starts with a network glyph, then one text `user@host ·
+  subtitle` ("Remote host" while unresolved), which truncates at its tail. The health
+  text sits under the state pill, so a long host never hides it: "Last seen … ago" (a
+  self-updating relative date) or "Status unavailable". An offscreen render showed that
+  health inline on the subtitle line overflowed under the pill. The tooltip adds a reason-specific explanation (`RemoteAgentPresentation`): the
   correlation, the probe failure, or the unsupported `ssh` option. For a degraded binding
   it adds that the status comes only from the agent's terminal reports. The context menu
   hides "Copy Path" and "Reveal in Finder" for a remote agent, because the local path is

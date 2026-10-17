@@ -414,8 +414,8 @@ edits no rc file.
 - **Host label and health.** The Active Agents row shows `user@host` with a network
   glyph. Connection health is shown apart from the agent's state. If no snapshot has
   confirmed the agent for 10 s, the row keeps the last state, greys it out, and adds
-  "Last seen … ago". "Status unavailable" means the host was never read. "Status unknown"
-  means the host confirms the agent but no evidence decides its state. The tooltip names
+  "Last seen … ago". "Status unavailable" means the host was never read. A state of
+  "Unknown" means the host confirms the agent but no evidence decides its state. The tooltip names
   the reason (for example, an unknown host key, or a server that does not accept
   `LC_PROWL_PANE`).
 - **Degraded binding.** Sometimes the host cannot be read, or has no session for the pane:

@@ -44,8 +44,8 @@ struct ActiveAgentRow: View {
     .lineLimit(1)
   }
 
-  /// A remote agent shows its host and, when the host does not confirm it, its connection
-  /// health before the usual subtitle (docs-ai 082, L0 item 10).
+  /// A remote agent shows its host before the usual subtitle (docs-ai 082, L0 item 10). One
+  /// text truncates as a unit, so the subtitle goes first.
   @ViewBuilder
   private var subtitleLine: some View {
     if let remote = entry.remote {
@@ -53,31 +53,27 @@ struct ActiveAgentRow: View {
         Image(systemName: "network")
           .imageScale(.small)
           .accessibilityHidden(true)
-        Text(RemoteAgentPresentation.hostLabel(for: remote))
-          .layoutPriority(1)
-        switch RemoteAgentHealth(remote) {
-        case .live:
-          EmptyView()
-        case .unknownState:
-          separator
-          Text("Status unknown")
-        case .lastSeen(let date):
-          separator
-          Text("Last seen \(date, style: .relative) ago")
-        case .unavailable:
-          separator
-          Text("Status unavailable")
-        }
-        separator
-        Text(subtitle)
+        Text(verbatim: "\(RemoteAgentPresentation.hostLabel(for: remote)) \u{00B7} \(subtitle)")
       }
     } else {
       Text(subtitle)
     }
   }
 
-  private var separator: some View {
-    Text("·").foregroundStyle(.tertiary)
+  /// The connection health of a remote agent the host does not confirm, under its state.
+  @ViewBuilder
+  private var healthText: some View {
+    if let remote = entry.remote {
+      switch RemoteAgentHealth(remote) {
+      case .live, .unknownState:
+        // An unknown state is the pill's "Unknown": the connection itself is healthy.
+        EmptyView()
+      case .lastSeen(let date):
+        Text("Last seen \(date, style: .relative) ago")
+      case .unavailable:
+        Text("Status unavailable")
+      }
+    }
   }
 
   /// A remote state the host does not confirm, or that no evidence decides, is shown but not
@@ -100,14 +96,21 @@ struct ActiveAgentRow: View {
   }
 
   private var statusPill: some View {
-    HStack(spacing: 4) {
-      if entry.displayState == .working, !reduceMotion, !isStateUnconfirmed {
-        BaguaWorkingIndicator()
-      } else {
-        statusText
+    VStack(alignment: .trailing, spacing: 1) {
+      HStack(spacing: 4) {
+        if entry.displayState == .working, !reduceMotion, !isStateUnconfirmed {
+          BaguaWorkingIndicator()
+        } else {
+          statusText
+        }
       }
+      .foregroundStyle(isStateUnconfirmed ? Color.secondary : entry.displayState.foregroundStyle)
+      healthText
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
-    .foregroundStyle(isStateUnconfirmed ? Color.secondary : entry.displayState.foregroundStyle)
+    .fixedSize()
   }
 
   private var statusText: some View {
