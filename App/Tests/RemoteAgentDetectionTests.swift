@@ -893,7 +893,8 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
   }
 
-  @Test func switchingBetweenSuspendedSSHClientsKeepsEachForegroundInterval() async throws {
+  @Test(arguments: [true, false])
+  func switchingBetweenSuspendedSSHClientsKeepsEachForegroundInterval(sampleShell: Bool) async throws {
     // A second real process stands in for the other `ssh` client, so it has a generation.
     let other = Process()
     other.executableURL = URL(fileURLWithPath: "/bin/sleep")
@@ -910,17 +911,21 @@ struct RemoteAgentDetectionTests {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
     fixture.source.failNext(100)
-    // `ssh` A runs, then is suspended (the shell is in front).
+    // `ssh` A runs, then is suspended (the shell is in front, sampled or not).
     probe.job = sshJob
     await detect(fixture, screen: .unknown)
-    probe.job = shellJob
-    await detect(fixture, screen: .unknown)
+    if sampleShell {
+      probe.job = shellJob
+      await detect(fixture, screen: .unknown)
+    }
     // `ssh` B runs and its Pi reports; then B is suspended.
     probe.job = sshB
     await detect(fixture, screen: .unknown)
     fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
-    probe.job = shellJob
-    await detect(fixture, screen: .unknown)
+    if sampleShell {
+      probe.job = shellJob
+      await detect(fixture, screen: .unknown)
+    }
     // A is in front again and cannot be probed: B's report is not A's agent.
     probe.job = sshJob
     await detect(fixture, screen: .unknown)

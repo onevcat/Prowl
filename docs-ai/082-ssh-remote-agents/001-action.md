@@ -263,8 +263,9 @@ degraded OSC-only binding.
   the agent (review rounds 1–3).
 - **Per `ssh` client.** Fence histories are kept per surface and `ssh` generation, because
   one pane can hold several suspended `ssh` clients; histories of exited clients are
-  dropped. Switching back to a suspended client starts its own new foreground interval, so
-  another client's records never bind or confirm its agent (follow-up review round 2).
+  dropped. Another client in front (sampled directly, or after a shell sample) ends the
+  previous client's interval, so switching back starts a new one and another client's
+  records never bind or confirm its agent (follow-up reviews).
 - **One boundary.** The coordinator's state fence for a remote agent is the tracker's:
   `unprobedRecordFence` for a degraded binding, and the successor fence raised to the
   foreground interval for a probed one. The S3a origin-raise (last-seen times on the

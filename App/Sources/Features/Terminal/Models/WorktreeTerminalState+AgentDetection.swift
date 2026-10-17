@@ -402,7 +402,11 @@ extension WorktreeTerminalState {
   private func remotePaneTracker(
     surfaceID: UUID, ssh: (generation: LocalProcessGeneration, arguments: [String])
   ) -> RemotePaneTracker {
-    if let existing = remotePaneTrackers[surfaceID], existing.ssh == ssh.generation { return existing }
+    if let existing = remotePaneTrackers[surfaceID] {
+      if existing.ssh == ssh.generation { return existing }
+      // Another `ssh` is in front: the previous one left the foreground.
+      remoteFenceHistoryBySurface[surfaceID]?[existing.ssh]?.leftForeground = true
+    }
     retireRemotePaneTracker(surfaceID: surfaceID)
     let tracker = RemotePaneTracker(
       surfaceID: surfaceID, ssh: ssh.generation,
