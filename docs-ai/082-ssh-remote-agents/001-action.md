@@ -9,7 +9,8 @@ sections below record what shipped and what differs from the plan.
 | --- | --- | --- |
 | 2026-10-17 | S1: typed process references (C2) and the `ConnectionKey` value type; local-only OS entry points; evidence retirement on an origin change. No behaviour change for local panes. Review Loop clean after 3 rounds | #924 |
 | 2026-10-17 | S2: host identity (C1), connection owner (C4), snapshot contract (C3), structured commands (C5), probe and parser (C6), all unused by the app. Review Loop clean after 2 rounds | #925 |
-| 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence | S3a PR |
+| 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence. Review Loop: 4 rounds plus a 2-round follow-up, clean (R1–R10) | #926 |
+| 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag) | S3b PR |
 
 ## S1 — Typed process references
 
@@ -200,3 +201,38 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   - Debug build CPU: a delegated remote Claude costs 0.1–0.8 % of a core. A screen-rule
     agent costs as much as it does locally. Before the bound agent was held across ticks,
     a remote OSC producer could not delegate and read the screen every 300 ms.
+
+## S3b — Stale projection and remote refusals (behind the flag)
+
+The plan's S3 remainder is split once more: S3b covers staleness and admission; S3c adds the
+degraded OSC-only binding.
+
+- **Context.** `RemoteAgentContext` (host, correlation, staleness) rides on `PaneAgentState`
+  and `ActiveAgentEntry` for agents on a remote origin. The tracker records when a snapshot
+  last confirmed the bound agent, counted from the snapshot's acquisition, not from when a
+  tick read it (review round 1). Without a confirmation for 10 s the context is stale and
+  carries that time. While fresh it carries no time, so a steady probe stream changes no
+  published entry.
+- **Stale proves nothing.** A stale entry keeps its agent and last state. Condition evidence
+  reports it as `unavailable`, so `agents wait --until idle|blocked` and dispatch readiness
+  never resolve on it. `exit` still needs the entry to go (an `ssh` exit or the snapshot
+  rule), not a stale observation. A remote agent whose state is unknown (an unrecognized
+  screen with no eligible OSC record, for example after a withdrawn root or a successor
+  start) stays listed: its context marks the state unknown, and conditions read it as
+  `unknown`. No earlier state is carried over, so a predecessor's Blocked never describes
+  a successor (review rounds 1–2).
+- **Admission.**
+  - `agents dispatch` refuses a remote agent with `REMOTE_AGENT_UNSUPPORTED` before typing
+    anything: the receipt is reported with `prowl agents dispatch-complete` from inside the
+    pane, which the remote host cannot run. Human input (`agents input`, which the Mirror
+    Send uses) needs no receipt and is still delivered (review round 1).
+  - Workflow admission refuses a `current` or `pick` role on such a pane with the same code.
+- **Measured** in a Debug instance with the flag on:
+  - `agents dispatch` to a remote Claude in the Debian container returned
+    `REMOTE_AGENT_UNSUPPORTED` before anything was typed (an unverifiable composer no
+    longer masks the reason).
+  - mini, Claude idle through OSC:
+    - `agents wait --until idle` resolved while the observation was fresh.
+    - With Prowl's side-channel master stopped (`SIGSTOP` on the `[mux]` process), the
+      same wait timed out after 12 s, and the entry kept its agent and last state.
+    - After `SIGCONT`, the wait resolved again.

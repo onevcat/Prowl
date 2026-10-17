@@ -27,6 +27,8 @@ nonisolated struct WorkflowDetectedAgent: Equatable, Sendable {
   let token: String
   let displayName: String
   var sessionIdentity: String?
+  /// The agent runs on a remote host (docs-ai 082); it cannot deliver workflow steps.
+  var isRemote = false
 }
 
 /// Main-actor facts admission reads through closures so it stays testable without the app.
@@ -420,6 +422,15 @@ enum WorkflowRunAdmission {
       self.deliversToCurrent = deliversToCurrent
     }
 
+    /// A workflow participant delivers each step with `prowl workflow deliver` from inside
+    /// its pane, which an agent on a remote host cannot run (docs-ai 082, L0 item 11).
+    static func remoteAgentRefusal(_ agent: WorkflowDetectedAgent?, pane: String) -> WorkflowAdmissionFailure? {
+      guard agent?.isRemote == true else { return nil }
+      return .init(
+        code: CLIErrorCode.remoteAgentUnsupported,
+        message: "\(pane) runs its agent on a remote host; a workflow role needs a local agent to deliver its steps.")
+    }
+
     mutating func bind(_ role: WorkflowRoleDefinition) -> WorkflowAdmissionFailure? {
       switch role.source {
       case .current: bindCurrent(role)
@@ -450,6 +461,7 @@ enum WorkflowRunAdmission {
         return pendingDispatch(dispatchID, pane: "The source pane")
       }
       let agent = environment.detectedAgent(paneID)
+      if let failure = Self.remoteAgentRefusal(agent, pane: "The source pane") { return failure }
       if deliversToCurrent, agent == nil {
         return .init(
           code: CLIErrorCode.agentNotFound,
@@ -499,6 +511,7 @@ enum WorkflowRunAdmission {
           message: "Pane '\(override)' hosts no detected agent for role '\(role.name)'."
         )
       }
+      if let failure = Self.remoteAgentRefusal(agent, pane: "Pane '\(override)'") { return failure }
       guard let identity = paneIdentity(paneID, agent: agent, worktree: source.worktree) else {
         return .init(
           code: CLIErrorCode.targetNotFound, message: "Pane '\(override)' is no longer available.")

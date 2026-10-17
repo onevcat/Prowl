@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 import Testing
 
 @testable import Prowl
@@ -161,11 +162,11 @@ struct RemoteAgentDetectionTests {
   }
 
   @discardableResult
-  private func detect(_ fixture: Fixture, screen: AgentRawState = .idle) async -> Bool {
+  private func detect(_ fixture: Fixture, screen: AgentRawState = .idle, now: Date = Date()) async -> Bool {
     fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
       agent: .claude, text: "", detection: AgentScreenDetection(state: screen, reason: .legacyDetector))
     return await fixture.state.detectAgentState(
-      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
+      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: now)
   }
 
   /// Waits for the tracker's consumer task, which runs on the main actor between test steps.
@@ -208,6 +209,174 @@ struct RemoteAgentDetectionTests {
     // No local file evidence for a remote process.
     #expect(pane?.session == nil)
     #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.boundProcess?.localGeneration == nil)
+  }
+
+  @Test func anUnconfirmedRemoteAgentTurnsStaleAndProvesNothing() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    await bindClaude(fixture, probe: probe)
+    let fresh = try #require(emitted.last?.remote)
+    #expect(fresh.hostLabel == "onevcat@mini.local")
+    #expect(fresh.correlation == .correlated)
+    #expect(!fresh.isStale)
+    #expect(fresh.lastConfirmedAt == nil)
+
+    // Eleven seconds without a confirming snapshot (the host stopped answering).
+    await detect(fixture, now: Date().addingTimeInterval(11))
+    let stale = try #require(emitted.last?.remote)
+    #expect(stale.isStale)
+    #expect(stale.lastConfirmedAt != nil)
+    // The entry keeps its agent and last state.
+    #expect(emitted.last?.agent == .claude)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    let condition = AgentConditionSnapshot(
+      agent: emitted.last, signal: nil, revision: 1, isLive: true, signals: .empty)
+    #expect(AgentConditionEvidence.normalizedState(condition) == AgentConditionEvidence.unavailableState)
+    #expect(
+      !AgentConditionEvidence.detectorReports(.idle, normalizedState: AgentConditionEvidence.normalizedState(condition))
+    )
+    #expect(AgentConditionEvidence.idleVerdict(for: condition) == .busy(AgentConditionEvidence.unavailableState))
+    #expect(
+      !AgentConditionEvidence.heuristicMatches(
+        condition: .exit, snapshot: condition, normalizedState: AgentConditionEvidence.unavailableState,
+        baseline: AgentConditionEvidence.Baseline(snapshot: condition)))
+
+    // A confirming snapshot makes it fresh again.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+    #expect(emitted.last?.remote?.isStale == false)
+  }
+
+  @Test func freshnessCountsFromTheSnapshotsAcquisition() async {
+    var clock: TimeInterval = 100
+    let source = FakeRemoteSource()
+    let surfaceID = UUID()
+    let tracker = RemotePaneTracker(
+      surfaceID: surfaceID, ssh: LocalProcessGeneration(pid: 1, startedAt: Date()),
+      invocation: .supported(SSHConnectionRecipe(destination: "mini")), source: source.source,
+      uptime: { clock }, onSnapshot: {})
+    tracker.start()
+    await settle { source.recipes.count == 1 }
+    // Acquired at 100, read by a tick at 104.
+    let acquired = RemoteProbeSnapshot(
+      connection: source.connection, connectionEpoch: 0, sequence: 1, startedAt: 100, finishedAt: 104,
+      outcome: .complete,
+      report: RemoteProbeReport(
+        operatingSystem: .linux, bootID: "boot",
+        sessions: [
+          RemoteProbeSession(
+            paneID: surfaceID, anchorPID: 100, tty: "/dev/pts/0", foregroundProcessGroupID: 200,
+            processes: [remoteProcess(200, name: "claude")])
+        ]))
+    source.push(acquired)
+    await settle { tracker.latest?.sequence == 1 }
+    clock = 104
+    let read = Date()
+    let observation = tracker.observe(active: true, now: read)
+    #expect(observation.identified?.agent == .claude)
+    // Seven seconds after the read is eleven after the acquisition: stale.
+    #expect(observation.context(now: read.addingTimeInterval(7)).isStale)
+    #expect(!observation.context(now: read.addingTimeInterval(5)).isStale)
+  }
+
+  @Test func aWithdrawnRootOverAnUnknownScreenKeepsTheRemoteEntry() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.recipes.count == 1 }
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .idle, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .idle)
+    // The root is withdrawn; no snapshot has proven the agent gone.
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .clear, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    await detect(fixture, screen: .unknown)
+    #expect(removed.isEmpty)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    // The state is unknown again, not the withdrawn root's: it stays listed and proves nothing.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStateKnown == false)
+  }
+
+  /// The condition view of the pane's published entry.
+  private func condition(_ fixture: Fixture, entries: [ActiveAgentEntry]) -> AgentConditionSnapshot {
+    AgentConditionSnapshot(
+      agent: entries.last { $0.surfaceID == fixture.surfaceID }, signal: nil, revision: 1, isLive: true,
+      signals: .empty)
+  }
+
+  @Test func aRemoteAgentWithAnUnknownStateIsListedButSatisfiesNoCondition() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.recipes.count == 1 }
+    // A correlated agent at an unrecognized startup screen, without OSC records.
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    let entry = try #require(emitted.last)
+    #expect(entry.agent == .claude)
+    #expect(entry.remote?.isStateKnown == false)
+    let fresh = condition(fixture, entries: emitted)
+    #expect(AgentConditionEvidence.normalizedState(fresh) == "unknown")
+    #expect(
+      !AgentConditionEvidence.heuristicMatches(
+        condition: .exit, snapshot: fresh, normalizedState: "unknown", baseline: .init(snapshot: fresh)))
+    // Stale later: still listed, still nothing.
+    await detect(fixture, screen: .unknown, now: Date().addingTimeInterval(11))
+    #expect(removed.isEmpty)
+    let stale = condition(fixture, entries: emitted)
+    #expect(AgentConditionEvidence.normalizedState(stale) == AgentConditionEvidence.unavailableState)
+    #expect(
+      !AgentConditionEvidence.heuristicMatches(
+        condition: .exit, snapshot: stale, normalizedState: AgentConditionEvidence.unavailableState,
+        baseline: .init(snapshot: stale)))
+  }
+
+  @Test func aPredecessorsBlockedStateNeverProvesTheSuccessorBlocked() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.recipes.count == 1 }
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .blocked, kind: nil, id: "", app: "claude-code"),
+      surfaceID: fixture.surfaceID)
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+    // A successor replaced it between snapshots; its screen is not recognized yet.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(300))
+    let successor = condition(fixture, entries: emitted)
+    #expect(AgentConditionEvidence.normalizedState(successor) == "unknown")
+    #expect(
+      !AgentConditionEvidence.detectorReports(
+        .blocked, normalizedState: AgentConditionEvidence.normalizedState(successor)))
+    // A withdrawn Blocked root over an unknown screen proves nothing either.
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .blocked, kind: nil, id: "", app: "claude-code"),
+      surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .clear, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(AgentConditionEvidence.normalizedState(condition(fixture, entries: emitted)) == "unknown")
   }
 
   @Test func twoCompleteSnapshotsWithoutTheAgentReleaseIt() async {
@@ -584,5 +753,26 @@ struct RemoteAgentDetectionTests {
       skipsSurfaceCreationForTesting: true)
     #expect(surface.launchEnvironment["LC_PROWL_PANE"] == surface.id.uuidString)
     #expect(surface.launchEnvironment["PROWL_PANE_ID"] == surface.id.uuidString)
+  }
+}
+
+struct RemoteAgentContextTests {
+  @Test func stalenessFollowsTheLastConfirmation() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    let key = ConnectionKey(user: "dev", hostname: "box")
+    let fresh = RemoteAgentContext(
+      connection: key, correlation: .correlated, confirmedAt: now.addingTimeInterval(-9), now: now)
+    #expect(!fresh.isStale)
+    // A steady stream of confirmations never changes a fresh context.
+    #expect(
+      fresh
+        == RemoteAgentContext(
+          connection: key, correlation: .correlated, confirmedAt: now.addingTimeInterval(-1), now: now))
+    let stale = RemoteAgentContext(
+      connection: key, correlation: .unmapped, confirmedAt: now.addingTimeInterval(-11), now: now)
+    #expect(stale.isStale)
+    #expect(stale.lastConfirmedAt == now.addingTimeInterval(-11))
+    #expect(RemoteAgentContext(connection: nil, correlation: .pending, confirmedAt: nil, now: now).isStale)
+    #expect(stale.hostLabel == "dev@box")
   }
 }

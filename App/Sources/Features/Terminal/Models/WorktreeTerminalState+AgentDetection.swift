@@ -237,6 +237,8 @@ extension WorktreeTerminalState {
     )
     next.sessionMissStreak = sessionMissStreak
     next.decision = decision
+    next.remote =
+      next.agentProcess?.origin == .local ? nil : remote?.context(now: now, stateKnown: stabilized != .unknown)
     // Limit logging to meaningful transitions - agent identity or
     // stabilized state changes. Raw oscillation and `seen` flips are
     // routine and would otherwise dominate the log stream.
@@ -657,7 +659,9 @@ extension WorktreeTerminalState {
   }
 
   func activeAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) -> ActiveAgentEntry? {
-    guard let agent = state.detectedAgent, state.state != .unknown else { return nil }
+    // A local unknown hides the entry. A remote agent stays listed with an unknown state
+    // until the snapshot rule or the `ssh` exit releases it (docs-ai 082, C3).
+    guard let agent = state.detectedAgent, state.state != .unknown || state.remote != nil else { return nil }
     let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
     let paneIndex = paneIDs.firstIndex(of: surfaceID).map { $0 + 1 } ?? 1
     let tabTitle = tabManager.tabs.first(where: { $0.id == tabId })?.displayTitle ?? "?"
@@ -678,7 +682,8 @@ extension WorktreeTerminalState {
       rawState: state.fallbackState,
       displayState: state.displayState,
       lastChangedAt: state.lastChangedAt,
-      launchProfileName: launchProfileName(surfaceID: surfaceID, detected: agent)
+      launchProfileName: launchProfileName(surfaceID: surfaceID, detected: agent),
+      remote: state.remote
     )
   }
 

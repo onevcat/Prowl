@@ -265,6 +265,23 @@ struct WorkflowRunAdmissionTests {
         == .string(fixture.tabID.uuidString))
   }
 
+  @Test func remoteAgentPanesCannotBeWorkflowRoles() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review")
+    // A pick role on a pane whose agent runs on a remote host.
+    fixture.agents[fixture.partnerPane]?.isRemote = true
+    let picked = admit(
+      fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2", "reviewer=Codex"])
+    #expect(code(picked) == CLIErrorCode.remoteAgentUnsupported)
+    // The current role on such a pane.
+    fixture.agents[fixture.partnerPane]?.isRemote = false
+    fixture.agents[fixture.authorPane]?.isRemote = true
+    let current = admit(
+      fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2", "reviewer=Codex"])
+    #expect(code(current) == CLIErrorCode.remoteAgentUnsupported)
+  }
+
   @Test func aCompleteRequestFreezesEveryBindingAndWritesTheInitialRecord() throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

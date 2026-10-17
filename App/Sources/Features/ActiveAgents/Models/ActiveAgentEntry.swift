@@ -37,6 +37,9 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   /// (docs-ai 053). Detected-but-not-launched agents stay honest: nil, so
   /// the row never guesses a profile attribution.
   var launchProfileName: String?
+  /// Set for an agent on a remote host (docs-ai 082). A stale observation keeps the entry
+  /// with its last state but proves nothing: conditions and admission refuse it.
+  var remote: RemoteAgentContext?
   var displayName: String {
     launchProfileName ?? Self.displayName(iconLookupToken: iconLookupToken, agent: agent)
   }
