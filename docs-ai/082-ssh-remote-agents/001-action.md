@@ -348,7 +348,10 @@ label, the ssh-ended marker, and turning the flag on.
   children, so the badge's own metadata cannot be reached. The pane's AX element carries
   the state itself, through `RemoteAgentPresentation.paneAccessibility`. The label gains
   ", connected to host" or ", disconnected from host" (only while the ended marker shows),
-  and the help gains the issue explanation after "Pane n of m".
+  and the help gains the issue explanation after "Pane n of m". When the spoken label or
+  help changes, `setRemoteIndicator` posts `.titleChanged` for the pane, as the title path
+  does, so a focused VoiceOver user hears it (follow-up review). An equal sample posts
+  nothing.
 - **Pane.** `RemotePaneBadge` sits in the bottom-trailing corner: a material capsule with a
   network glyph and the host. It does not take hits. After an exit it reads "Disconnected
   from host" with `network.slash` until five seconds after the exit (`showsEndedMarker`,

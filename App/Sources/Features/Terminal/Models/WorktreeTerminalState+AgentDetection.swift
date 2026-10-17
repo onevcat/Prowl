@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GhosttyKit
 
@@ -386,8 +387,19 @@ extension WorktreeTerminalState {
 
   func setRemoteIndicator(_ indicator: RemotePaneIndicator?, surfaceID: UUID) {
     guard let view = surfaces[surfaceID], view.bridge.state.remoteIndicator != indicator else { return }
+    let now = Date()
+    let spoken = RemoteAgentPresentation.paneAccessibility(view.bridge.state.remoteIndicator, now: now)
     view.bridge.state.remoteIndicator = indicator
     if let tabId = tabId(containing: surfaceID) { updateRemoteHosts(for: tabId) }
+    // The pane's accessibility label and help carry the remote state; like a title change,
+    // a change there is announced, or a focused VoiceOver user never hears it.
+    if RemoteAgentPresentation.paneAccessibility(indicator, now: now) != spoken {
+      if let poster = accessibilityPosterForTesting {
+        poster(view, .titleChanged)
+      } else {
+        NSAccessibility.post(element: view, notification: .titleChanged)
+      }
+    }
   }
 
   /// The tab shows the hosts its panes reach; tree changes (moved or closed panes) refresh it

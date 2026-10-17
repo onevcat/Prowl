@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GhosttyKit
 import ProwlCLIShared
@@ -376,6 +377,35 @@ struct RemoteAgentDetectionTests {
     #expect(surface.accessibilityLabel() == "Claude Code")
     surface.bridge.state.remoteIndicator = nil
     #expect(surface.accessibilityHelp() == "Pane 1 of 2")
+  }
+
+  @Test func aChangedSpokenRemoteStateIsAnnounced() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var posts: [NSAccessibility.Notification] = []
+    fixture.state.accessibilityPosterForTesting = { _, notification in posts.append(notification) }
+    probe.job = job
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // Healthy, then an issue: two announcements.
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(101, name: "zsh")))
+    await detect(fixture)
+    #expect(posts == [.titleChanged])
+    // The pane's session is gone (neither its id nor its pinned anchor is on the host).
+    await deliver(fixture, snapshot(2, pane: nil, foreground: nil, anchor: 999))
+    await detect(fixture)
+    #expect(posts == [.titleChanged, .titleChanged])
+    // An equal sample says nothing new.
+    await detect(fixture)
+    #expect(posts.count == 2)
+    // The `ssh` ends: announced.
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(posts.count == 3)
   }
 
   @Test func anUnreachableHostIsReportedWithoutAnAgent() async throws {

@@ -251,6 +251,7 @@ final class WorktreeTerminalState {
   @ObservationIgnored var remoteFenceHistoryBySurface: [UUID: [LocalProcessGeneration: RemoteFenceHistory]] = [:]
   @ObservationIgnored var remoteSnapshotSourceForTesting: RemoteSnapshotSource?
   @ObservationIgnored var remoteAgentDetectionEnabledForTesting: Bool?
+  @ObservationIgnored var accessibilityPosterForTesting: (@MainActor (Any, NSAccessibility.Notification) -> Void)?
   var remoteAgentDetectionEnabled: Bool {
     remoteAgentDetectionEnabledForTesting ?? RemoteAgentDetection.isEnabled
   }
