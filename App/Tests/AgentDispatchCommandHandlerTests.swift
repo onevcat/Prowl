@@ -331,6 +331,25 @@ struct AgentDispatchCommandHandlerTests {
     let response = await handler.handle(envelope: dispatch(pane: target.paneID))
     #expect(response.error?.code == CLIErrorCode.remoteAgentUnsupported)
     #expect(issued == 0)
+
+    // Human input needs no receipt: it reaches the same remote agent as typed text.
+    var delivered: [String] = []
+    let input = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in remote },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.surfacePending)
+      },
+      deliverPrompt: { _, text in
+        delivered.append(text)
+        return true
+      }
+    )
+    let sent = await input.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    #expect(sent.ok)
+    #expect(delivered == ["hello"])
+    #expect(issued == 0)
   }
 
   @Test func dispatchRefusesWorkingBlockedAndRuntimeNeedsInputAgents() async throws {

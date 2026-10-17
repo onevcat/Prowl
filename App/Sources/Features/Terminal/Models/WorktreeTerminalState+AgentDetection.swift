@@ -218,7 +218,7 @@ extension WorktreeTerminalState {
     if let withdrawnAt = coordinator.lastProgramStatusWithdrawalAt, capturedAt < withdrawnAt {
       return true
     }
-    let stabilized = decision.state
+    let stabilized = Self.publishedState(decision.state, agent: agent, previous: previous, remote: remote != nil)
     let launchObservation = resolvedLaunchObservation(identified: identified, previous: previous)
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
     var next = PaneAgentState(
@@ -290,6 +290,18 @@ extension WorktreeTerminalState {
   private func retireLocalLaunchContextForRemoteLaunch(identified: IdentifiedAgentProcess?, surfaceID: UUID) {
     guard let identified, identified.launchProcess.origin != .local else { return }
     launchProfilesBySurface.removeValue(forKey: surfaceID)
+  }
+
+  /// The state a pane publishes. A local unknown hides the entry, but a remote agent keeps
+  /// its last observation until the snapshot rule or the `ssh` exit releases it (docs-ai
+  /// 082, C3): a withdrawn OSC root over an unrecognized screen must not read as gone.
+  static func publishedState(
+    _ state: AgentRawState, agent: DetectedAgent, previous: PaneAgentState, remote: Bool
+  ) -> AgentRawState {
+    guard state == .unknown, remote, previous.detectedAgent == agent,
+      previous.agentProcess.map({ $0.origin != .local }) ?? false
+    else { return state }
+    return previous.state
   }
 
   /// The pane's presence after one probe. A remote agent is identified on every tick while

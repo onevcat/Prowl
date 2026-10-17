@@ -252,7 +252,8 @@ final class RemotePaneTracker {
     let verdict = presence.observe(snapshot, contains: contains, now: uptime())
     switch verdict {
     case .present:
-      confirmedAt = now
+      // Freshness counts from the snapshot's acquisition, not from when a tick read it.
+      confirmedAt = now.addingTimeInterval(-max(0, uptime() - snapshot.startedAt))
     case .released:
       bound = nil
       confirmedAt = nil

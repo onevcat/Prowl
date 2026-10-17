@@ -103,7 +103,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     if !interactive, let pending = pendingDispatch(target) {
       return pendingFailure(pending, target: target)
     }
-    if let refusal = await prepareDelivery(target: target) {
+    if let refusal = await prepareDelivery(target: target, needsReceipt: !interactive) {
       return refusal
     }
 
@@ -181,9 +181,12 @@ final class AgentDispatchCommandHandler: CommandHandler {
   }
 
   /// The receipt is reported with `prowl agents dispatch-complete` from inside the pane,
-  /// which an agent on a remote host cannot run (docs-ai 082, L0 item 11).
-  private func remoteAgentRefusal(_ snapshot: AgentConditionSnapshot, target: TabResolvedTarget) -> CommandResponse? {
-    guard snapshot.agent?.remote != nil else { return nil }
+  /// which an agent on a remote host cannot run (docs-ai 082, L0 item 11). Human input
+  /// (`agents input`) needs no receipt and is delivered as to any agent.
+  private func remoteAgentRefusal(
+    _ snapshot: AgentConditionSnapshot, target: TabResolvedTarget, needsReceipt: Bool
+  ) -> CommandResponse? {
+    guard needsReceipt, snapshot.agent?.remote != nil else { return nil }
     return failure(
       code: CLIErrorCode.remoteAgentUnsupported,
       message: "The selected pane's agent runs on a remote host; dispatch needs a local agent to report its receipt.",
@@ -191,13 +194,15 @@ final class AgentDispatchCommandHandler: CommandHandler {
     )
   }
 
-  private func prepareDelivery(target: TabResolvedTarget) async -> CommandResponse? {
-    if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target) { return refusal }
+  private func prepareDelivery(target: TabResolvedTarget, needsReceipt: Bool) async -> CommandResponse? {
+    if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target, needsReceipt: needsReceipt) {
+      return refusal
+    }
     // Code security: do not clear local IME input or append into an actively edited composer.
     if let reason = inputProtection(target) {
       return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
     }
-    if let refusal = await awaitIdleAgent(target: target) { return refusal }
+    if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
     if let reason = inputProtection(target) {
       return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
     }
@@ -205,7 +210,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
   }
 
   /// Nil when the pane hosts an idle agent; otherwise the structured refusal.
-  private func awaitIdleAgent(target: TabResolvedTarget) async -> CommandResponse? {
+  private func awaitIdleAgent(target: TabResolvedTarget, needsReceipt: Bool) async -> CommandResponse? {
     var elapsedMilliseconds = 0
     var stabilizer = AgentConditionEvidence.HeuristicStabilizer()
     while true {
@@ -227,7 +232,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
           details: AgentDispatchErrorDetails(target: TabTarget(from: target), signals: snapshot.signals)
         )
       }
-      if let refusal = remoteAgentRefusal(snapshot, target: target) { return refusal }
+      if let refusal = remoteAgentRefusal(snapshot, target: target, needsReceipt: needsReceipt) { return refusal }
       switch verdict(for: snapshot) {
       case .idle:
         return nil

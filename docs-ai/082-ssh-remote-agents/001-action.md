@@ -209,17 +209,21 @@ degraded OSC-only binding.
 
 - **Context.** `RemoteAgentContext` (host, correlation, staleness) rides on `PaneAgentState`
   and `ActiveAgentEntry` for agents on a remote origin. The tracker records when a snapshot
-  last confirmed the bound agent. Without a confirmation for 10 s the context is stale and
+  last confirmed the bound agent, counted from the snapshot's acquisition, not from when a
+  tick read it (review round 1). Without a confirmation for 10 s the context is stale and
   carries that time. While fresh it carries no time, so a steady probe stream changes no
   published entry.
 - **Stale proves nothing.** A stale entry keeps its agent and last state. Condition evidence
   reports it as `unavailable`, so `agents wait --until idle|blocked` and dispatch readiness
   never resolve on it. `exit` still needs the entry to go (an `ssh` exit or the snapshot
-  rule), not a stale observation.
+  rule), not a stale observation. A remote agent whose decision falls back to `unknown`
+  (for example, a withdrawn OSC root over an unrecognized screen) keeps its last state
+  instead of hiding the entry (review round 1).
 - **Admission.**
   - `agents dispatch` refuses a remote agent with `REMOTE_AGENT_UNSUPPORTED` before typing
     anything: the receipt is reported with `prowl agents dispatch-complete` from inside the
-    pane, which the remote host cannot run.
+    pane, which the remote host cannot run. Human input (`agents input`, which the Mirror
+    Send uses) needs no receipt and is still delivered (review round 1).
   - Workflow admission refuses a `current` or `pick` role on such a pane with the same code.
 - **Measured** in a Debug instance with the flag on:
   - `agents dispatch` to a remote Claude in the Debian container returned
