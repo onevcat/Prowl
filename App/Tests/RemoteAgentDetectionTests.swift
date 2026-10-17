@@ -112,6 +112,13 @@ struct RemoteAgentDetectionTests {
     return Fixture(state: state, tabID: tabID, surface: surface, source: source)
   }
 
+  /// The pane's shell in front again: what the probe reads once the `ssh` exited.
+  private var shellJob: ForegroundJob {
+    ForegroundJob(
+      processGroupID: getpid(),
+      processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "zsh", argv0: "zsh", cmdline: "zsh")])
+  }
+
   private var sshJob: ForegroundJob {
     ForegroundJob(
       processGroupID: getpid(),
@@ -560,7 +567,7 @@ struct RemoteAgentDetectionTests {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
     await bindClaude(fixture, probe: probe)
-    probe.job = nil
+    probe.job = shellJob
     await detect(fixture)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
     fixture.source.push(snapshot(9, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
@@ -665,6 +672,328 @@ struct RemoteAgentDetectionTests {
     _ = tracker.observe(active: true, now: Date())
     for _ in 0..<20 { await Task.yield() }
     #expect(source.attempts == 3)
+  }
+
+  private var sshGeneration: LocalProcessGeneration {
+    LocalProcessGeneration(pid: getpid(), startedAt: ProcessDetection.processStartDate(pid: getpid()) ?? .distantPast)
+  }
+
+  private func report(_ state: GhosttyProgramStatusReport.State, app: String = "claude-code")
+    -> GhosttyProgramStatusReport
+  {
+    GhosttyProgramStatusReport(state: state, kind: nil, id: "", app: app)
+  }
+
+  @Test func aVerifiedProducerBindsAnUnprobedPaneWithoutARemotePid() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(pane?.decision?.reason.identifier == "osc.working")
+    let entry = try #require(emitted.last)
+    #expect(entry.remote?.isUnprobed == true)
+    #expect(entry.remote?.isStale == false)
+    #expect(pane?.session == nil)
+
+    // A withdrawal or quiet producer never releases it; the observation turns stale instead.
+    fixture.state.handleProgramStatus(report(.clear), surfaceID: fixture.surfaceID)
+    await detect(fixture, now: Date().addingTimeInterval(11))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(removed.isEmpty)
+    #expect(emitted.last?.remote?.isStale == true)
+    // Only the `ssh` exit releases it.
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(removed == [fixture.surfaceID])
+  }
+
+  @Test func aLaterVerifiedProducerReplacesTheUnprobedAgent() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    // Claude exits; Pi starts in the same `ssh` and reports.
+    fixture.state.handleProgramStatus(report(.clear), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    fixture.state.handleProgramStatus(report(.working, app: "pi"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.detectedAgent == .pi)
+    #expect(pane?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(pane?.decision?.reason.identifier == "osc.working")
+    #expect(emitted.last?.remote?.isStale == false)
+  }
+
+  @Test func aLocalAgentBetweenSuspendAndResumeNeverBindsAnUnprobedPane() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.attempts == 1 }
+    // Ctrl-Z: a local Pi runs and leaves an idle root.
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "pi", argv0: "pi", cmdline: "pi")])
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: .pi, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    _ = await fixture.state.detectAgentState(
+      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .local(getpid()))
+    // Its last root arrives after its last local poll; then it stops without a clear.
+    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
+    // `fg`: the remote side cannot be probed and sends nothing new.
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    // The local Pi may still be inside its local presence hold, but its record never
+    // becomes a remote agent.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report from the remote side after the resume binds.
+    fixture.state.handleProgramStatus(report(.blocked), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+  }
+
+  @Test func aDegradedReacquisitionKeepsTheRetainedSuccessorFence() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.recipes.count == 1 }
+    // Claude reports, then the probe identifies a successor (Pi) whose fence excludes it.
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "pi")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .pi)
+    // Close and undo: the new tracker for the same `ssh` cannot connect.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    fixture.source.failNext(100)
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report after the reacquisition binds.
+    fixture.state.handleProgramStatus(report(.working, app: "pi"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .pi)
+    // The report that bound the agent also decides its state, now and on later ticks.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .working)
+  }
+
+  @Test func anUndoneCloseRestoresAQuietUnprobedBinding() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    var tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.blocked), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    // Close (retained for undo) and undo; the producer stays quiet.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(lastChangedAt: Date())
+    await detect(fixture, screen: .unknown)
+    tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(pane?.detectedAgent == .claude)
+    #expect(pane?.state == .blocked)
+    #expect(emitted.last?.remote?.isStale == false)
+  }
+
+  @Test func aProbeGapRightAfterUndoNeverEndsTheForegroundInterval() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    var tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.blocked), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(lastChangedAt: Date())
+    // The first sample after the restore reads no job.
+    probe.job = nil
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID]?[sshGeneration]?.leftForeground == false)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+  }
+
+  @Test func aProbeGapKeepsTheDegradedConfirmation() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(emitted.last?.remote?.isStale == false)
+    // A tick whose local probe reads nothing keeps the binding and its fresh confirmation.
+    probe.job = nil
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
+    // Stale only once the report is older than ten seconds.
+    await detect(fixture, screen: .unknown, now: Date().addingTimeInterval(11))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == true)
+    // A newer eligible report during the gap refreshes it.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
+  }
+
+  @Test(arguments: [true, false])
+  func switchingBetweenSuspendedSSHClientsKeepsEachForegroundInterval(sampleShell: Bool) async throws {
+    // A second real process stands in for the other `ssh` client, so it has a generation.
+    let other = Process()
+    other.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    other.arguments = ["30"]
+    try other.run()
+    defer { other.terminate() }
+    let sshB = ForegroundJob(
+      processGroupID: other.processIdentifier,
+      processes: [
+        ForegroundProcess(
+          pid: other.processIdentifier, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: "ssh box",
+          arguments: ["ssh", "box"])
+      ])
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    // `ssh` A runs, then is suspended (the shell is in front, sampled or not).
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    if sampleShell {
+      probe.job = shellJob
+      await detect(fixture, screen: .unknown)
+    }
+    // `ssh` B runs and its Pi reports; then B is suspended.
+    probe.job = sshB
+    await detect(fixture, screen: .unknown)
+    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
+    if sampleShell {
+      probe.job = shellJob
+      await detect(fixture, screen: .unknown)
+    }
+    // A is in front again and cannot be probed: B's report is not A's agent.
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    #expect(tracker.ssh == sshGeneration)
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report from A's own interval binds.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+  }
+
+  @Test func aProbeGapKeepsTheRemoteBinding() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    await bindClaude(fixture, probe: probe)
+    // The local probe reads nothing for a tick.
+    probe.job = nil
+    await detect(fixture)
+    probe.job = sshJob
+    await detect(fixture)
+    #expect(removed.isEmpty)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+    #expect(fixture.source.recipes.count == 1)
+  }
+
+  @Test func unprobedBindingNeedsAVerifiedReportFromThisSSH() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    // A root that arrived before this `ssh` started belongs to something else.
+    let sshStart = sshGeneration.startedAt
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID, now: sshStart.addingTimeInterval(-1))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    // An unverified producer never binds.
+    fixture.state.programStatusSupportForTesting = { _ in .unverified }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+  }
+
+  @Test func aProbedSessionSupersedesTheUnprobedBinding() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // Unmapped: the host is reachable but no session carries this pane's id.
+    await deliver(fixture, snapshot(1, pane: UUID(), foreground: remoteProcess(200, name: "claude")))
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    // The pane is mapped now and shows the agent: the probed reference takes over and keeps
+    // the report the degraded binding accepted.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
   }
 
   @Test func unsupportedArgvNeverConnects() async throws {

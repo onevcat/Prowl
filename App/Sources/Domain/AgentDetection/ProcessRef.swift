@@ -43,6 +43,10 @@ nonisolated struct RemoteProcessRef: Hashable, Sendable {
 nonisolated enum ProcessRef: Hashable, Sendable {
   case local(pid_t)
   case remote(RemoteProcessRef)
+  /// An agent known only from its OSC 7501 records in a pane whose foreground is this local
+  /// `ssh`, when the host cannot be probed or the pane not mapped (docs-ai 082, L0 item 9).
+  /// It names no remote process: Prowl never invents a remote pid.
+  case unprobedRemote(LocalProcessGeneration)
 
   var localPID: pid_t? {
     guard case .local(let pid) = self else { return nil }
@@ -55,6 +59,7 @@ nonisolated enum ProcessRef: Hashable, Sendable {
     switch self {
     case .local(let pid): pid
     case .remote(let remote): remote.pid
+    case .unprobedRemote: 0
     }
   }
 
@@ -62,6 +67,7 @@ nonisolated enum ProcessRef: Hashable, Sendable {
     switch self {
     case .local: .local
     case .remote(let remote): .remote(remote.connection)
+    case .unprobedRemote(let ssh): .unprobedRemote(ssh)
     }
   }
 }
@@ -72,6 +78,8 @@ nonisolated enum ProcessRef: Hashable, Sendable {
 nonisolated enum ProcessOrigin: Hashable, Sendable {
   case local
   case remote(ConnectionKey)
+  /// Remote behind this local `ssh`, without a probed host identity.
+  case unprobedRemote(LocalProcessGeneration)
 }
 
 extension ProcessRef: CustomStringConvertible {
@@ -79,6 +87,7 @@ extension ProcessRef: CustomStringConvertible {
     switch self {
     case .local(let pid): "\(pid)"
     case .remote(let remote): "\(remote.connection.hostname):\(remote.pid)"
+    case .unprobedRemote(let ssh): "unprobed(ssh \(ssh.pid))"
     }
   }
 }
@@ -95,6 +104,7 @@ nonisolated struct LocalProcessGeneration: Equatable, Hashable, Sendable {
 nonisolated enum AgentProcessGeneration: Equatable, Hashable, Sendable {
   case local(LocalProcessGeneration)
   case remote(RemoteProcessRef)
+  case unprobedRemote(LocalProcessGeneration)
 
   static func local(pid: pid_t, startedAt: Date) -> AgentProcessGeneration {
     .local(LocalProcessGeneration(pid: pid, startedAt: startedAt))
@@ -109,6 +119,7 @@ nonisolated enum AgentProcessGeneration: Equatable, Hashable, Sendable {
     switch self {
     case .local: .local
     case .remote(let remote): .remote(remote.connection)
+    case .unprobedRemote(let ssh): .unprobedRemote(ssh)
     }
   }
 }

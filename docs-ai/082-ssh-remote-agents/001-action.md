@@ -10,7 +10,8 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-17 | S1: typed process references (C2) and the `ConnectionKey` value type; local-only OS entry points; evidence retirement on an origin change. No behaviour change for local panes. Review Loop clean after 3 rounds | #924 |
 | 2026-10-17 | S2: host identity (C1), connection owner (C4), snapshot contract (C3), structured commands (C5), probe and parser (C6), all unused by the app. Review Loop clean after 2 rounds | #925 |
 | 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence. Review Loop: 4 rounds plus a 2-round follow-up, clean (R1–R10) | #926 |
-| 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag) | S3b PR |
+| 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
+| 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag) | S3c PR |
 
 ## S1 — Typed process references
 
@@ -176,11 +177,11 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   `ssh` start; a successor counts only reports after the snapshot that confirmed it,
   timestamped after the tick's local probe returns (review round 1). The fence belongs to the
   `ssh` generation and lives with the surface's record store (`remoteFenceHistoryBySurface`),
-  so a tracker recreated by an undone close never moves it back (review round 2). The surface
-  origin record also keeps when each origin was last seen. When the pane returns to a remote
-  origin and the origin it left was seen after the `ssh` started, the remote fence rises to
-  the switch, so a local agent run while the `ssh` was suspended cannot decide for the
-  resumed remote one (review round 4). The S1
+  so a tracker recreated by an undone close never moves it back (review round 2). A local
+  agent run while the `ssh` was suspended cannot decide for the resumed remote one (review
+  round 4). Since S3c, this rests on the fence history's foreground interval: a probed agent's
+  fence is the later of its successor fence and the start of the `ssh`'s current foreground
+  interval. The S1
   origin fence applies to local generations only.
 - **Measured** in a Debug instance with the flag on:
   - mini (macOS 26.5), Claude Code 2.1.302 started by hand: appeared 0.62 s after the
@@ -236,3 +237,49 @@ degraded OSC-only binding.
     - With Prowl's side-channel master stopped (`SIGSTOP` on the `[mux]` process), the
       same wait timed out after 12 s, and the entry kept its agent and last state.
     - After `SIGCONT`, the wait resolved again.
+
+## S3c — Degraded OSC-only binding (behind the flag)
+
+- **When.** The pane's foreground is a local `ssh` whose tracker is `unmapped`,
+  `probeUnavailable`, or `unsupported`, and no probed agent is bound. The surface's root
+  record must come from a `.verified` producer and must have arrived after that `ssh`
+  started. The plan names `unmapped` and `probeUnavailable`; `unsupported` (argv outside the
+  grammar) is a pane that cannot be probed either.
+- **Identity.** `ProcessRef.unprobedRemote(ssh generation)` (with matching
+  `AgentProcessGeneration` and `ProcessOrigin` cases) names the local `ssh`, never a remote
+  pid. Its origin is not local, so local providers, hooks, sessions and admission treat it as
+  remote. The OSC fence is the `ssh` start.
+- **Release and confidence.** Only the `ssh` exit releases the binding. A withdrawal or a
+  quiet producer only ages it: the context is stale 10 s after the producer's last root
+  report (OSC has no heartbeat). `RemoteAgentContext.isUnprobed` marks it heuristic. Once the
+  pane is mapped (`correlated`), the probed path takes over. A later verified producer in the
+  same `ssh` (Claude exits, Pi starts) replaces the binding. Only the bound producer's own
+  report confirms it. Records count from the `ssh` start, raised to the start of the
+  `ssh`'s current foreground interval and to the retained successor fence. The interval
+  starts again only when the `ssh` left the foreground (a local agent took over, so the
+  fence history is marked `leftForeground`). A closed and restored pane keeps its interval
+  and its accepted degraded agent, so a quiet producer is listed again after Undo. Records
+  from before that interval, or ones an earlier binding excluded, never acquire or confirm
+  the agent (review rounds 1–3).
+- **Per `ssh` client.** Fence histories are kept per surface and `ssh` generation, because
+  one pane can hold several suspended `ssh` clients; histories of exited clients are
+  dropped. Another client in front (sampled directly, or after a shell sample) ends the
+  previous client's interval, so switching back starts a new one and another client's
+  records never bind or confirm its agent (follow-up reviews).
+- **One boundary.** The coordinator's state fence for a remote agent is the tracker's:
+  `unprobedRecordFence` for a degraded binding, and the successor fence raised to the
+  foreground interval for a probed one. The S3a origin-raise (last-seen times on the
+  surface's origin record) is removed, so the record that acquires a degraded binding also
+  decides its state. A degraded binding taken over by a probed one keeps the report it
+  accepted (follow-up review).
+- **Probe gaps.** A tick whose local probe reads no job is not a foreground change. An
+  existing tracker observes through the same path (degraded binding, confirmation, history
+  write-back); without one, nothing changes until a real sample. Only a job without the
+  `ssh`, or with a local agent, retires the tracker and starts a new interval (review rounds
+  3–4).
+- **Measured** in a Debug instance with the flag on. `ssh -F /dev/null -t mini` skips the
+  system `SendEnv`, so the host shows the session as pane `-` and the pane is `unmapped`.
+  - Claude Code bound through `osc.idle` 1.49 s after the command, then went
+    `osc.working` → `osc.done`; dispatch was refused.
+  - After `/exit` the entry stayed listed (by design, stale after 10 s); the `ssh` exit
+    released it.

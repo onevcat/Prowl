@@ -15,6 +15,9 @@ nonisolated struct RemoteAgentContext: Equatable, Sendable {
   /// False while no evidence decides the agent's state (an unrecognized screen without an
   /// eligible OSC record). The entry stays listed, but its state is evidence for nothing.
   var isStateKnown: Bool
+  /// The agent is known only from its OSC records (L0 item 9): heuristic, no remote
+  /// process, stale whenever its producer has been quiet for `staleAfter`.
+  var isUnprobed: Bool
 
   /// `user@hostname`, the label a remote pane shows.
   var hostLabel: String? {
@@ -23,11 +26,12 @@ nonisolated struct RemoteAgentContext: Equatable, Sendable {
 
   init(
     connection: ConnectionKey?, correlation: RemotePaneCorrelation, confirmedAt: Date?, now: Date,
-    stateKnown: Bool = true
+    stateKnown: Bool = true, isUnprobed: Bool = false
   ) {
     self.connection = connection
     self.correlation = correlation
     isStateKnown = stateKnown
+    self.isUnprobed = isUnprobed
     let isStale = confirmedAt.map { now.timeIntervalSince($0) > Self.staleAfter } ?? true
     self.isStale = isStale
     lastConfirmedAt = isStale ? confirmedAt : nil

@@ -222,7 +222,7 @@ final class AgentDetectionCoordinator {
     switch process {
     case .local(let generation):
       return programStatusOriginFence.map { max($0, generation.startedAt) } ?? generation.startedAt
-    case .remote:
+    case .remote, .unprobedRemote:
       return remoteProgramStatusFence
     case nil:
       return nil

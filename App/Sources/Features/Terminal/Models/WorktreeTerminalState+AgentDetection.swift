@@ -164,7 +164,7 @@ extension WorktreeTerminalState {
     let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
     agentDetectionCoordinators[surfaceID] = coordinator
     coordinator.programStatusOriginFence = originFence
-    coordinator.remoteProgramStatusFence = remoteProgramStatusFence(remote?.programStatusFence, surfaceID: surfaceID)
+    coordinator.remoteProgramStatusFence = remote?.programStatusFence
     let process = Self.processGeneration(identified)
     // The tick is delegated only while the schedule says so (a key press puts one full
     // tick back on the active schedule and keeps it there for the settle window) and the
@@ -280,6 +280,8 @@ extension WorktreeTerminalState {
       ProcessDetection.processStartDate(pid: pid).map { .local(pid: pid, startedAt: $0) }
     case .remote(let remote):
       .remote(remote)
+    case .unprobedRemote(let ssh):
+      .unprobedRemote(ssh)
     case nil:
       nil
     }
@@ -317,32 +319,107 @@ extension WorktreeTerminalState {
   private func observeRemoteAgent(
     job: ForegroundJob?, localIdentified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date
   ) -> RemotePaneTracker.Observation? {
-    guard remoteAgentDetectionEnabled, localIdentified == nil, let ssh = job.flatMap(Self.foregroundSSH) else {
+    guard remoteAgentDetectionEnabled else {
       retireRemotePaneTracker(surfaceID: surfaceID)
       return nil
     }
     let tracker: RemotePaneTracker
-    if let existing = remotePaneTrackers[surfaceID], existing.ssh == ssh.generation {
-      tracker = existing
-    } else {
-      retireRemotePaneTracker(surfaceID: surfaceID)
-      tracker = RemotePaneTracker(
-        surfaceID: surfaceID, ssh: ssh.generation,
-        invocation: SSHInvocation.parse(
-          ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
-        fenceHistory: remoteFenceHistoryBySurface[surfaceID],
-        source: remoteSnapshotSourceForTesting ?? .live
-      ) { [weak self] in
-        self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
+    if let job {
+      guard localIdentified == nil, let ssh = Self.foregroundSSH(job) else {
+        // The `ssh` left the foreground: its next tracker starts a new interval.
+        if let ssh = remotePaneTrackers[surfaceID]?.ssh {
+          remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
+        }
+        retireRemotePaneTracker(surfaceID: surfaceID)
+        return nil
       }
-      remotePaneTrackers[surfaceID] = tracker
-      tracker.start()
+      tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh)
+    } else {
+      // A probe gap (no job read) is not evidence of a foreground change: an existing
+      // tracker keeps observing, and a missing one waits for the next real sample.
+      guard let existing = remotePaneTrackers[surfaceID] else { return nil }
+      tracker = existing
     }
     let active =
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
-    let observation = tracker.observe(active: active, now: now)
-    remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
+    let observation = bindUnprobedProducer(
+      observation: tracker.observe(active: active, now: now), tracker: tracker, surfaceID: surfaceID)
+    storeFenceHistory(tracker.fenceHistory, surfaceID: surfaceID)
     return observation
+  }
+
+  /// Keeps `history` for its `ssh` and drops the histories of `ssh` clients that exited.
+  private func storeFenceHistory(_ history: RemoteFenceHistory, surfaceID: UUID) {
+    var histories = remoteFenceHistoryBySurface[surfaceID] ?? [:]
+    histories[history.ssh] = history
+    if histories.count > 1 {
+      histories = histories.filter { ssh, _ in
+        ssh == history.ssh || ProcessDetection.processStartDate(pid: ssh.pid) == ssh.startedAt
+      }
+    }
+    remoteFenceHistoryBySurface[surfaceID] = histories
+  }
+
+  /// The degraded OSC-only binding (docs-ai 082, L0 item 9): with no probed agent, a
+  /// verified producer's root record identifies the agent, and a later verified producer
+  /// replaces it. Records before the tracker's `unprobedRecordFence` never acquire or
+  /// confirm it.
+  private func bindUnprobedProducer(
+    observation: RemotePaneTracker.Observation, tracker: RemotePaneTracker, surfaceID: UUID
+  ) -> RemotePaneTracker.Observation {
+    var observation = observation
+    let current = observation.identified
+    let currentIsUnprobed = current.map { if case .unprobedRemote = $0.process.ref { true } else { false } } ?? false
+    guard currentIsUnprobed || (current == nil && tracker.allowsUnprobedBinding) else { return observation }
+    let fence = tracker.unprobedRecordFence
+    if let producer = verifiedRootProducer(surfaceID: surfaceID, notBefore: fence), producer != current?.agent {
+      observation.identified = tracker.bindUnprobed(producer)
+    }
+    guard let bound = observation.identified else { return observation }
+    observation.programStatusFence = fence
+    // OSC has no heartbeat: the bound producer's own last eligible report is the only
+    // confirmation.
+    observation.confirmedAt =
+      verifiedRootProducer(surfaceID: surfaceID, notBefore: fence) == bound.agent
+      ? programStatusStoresBySurface[surfaceID]?.root?.arrivedAt : nil
+    return observation
+  }
+
+  /// The verified OSC 7501 producer whose root record arrived on this surface no earlier
+  /// than `notBefore`, if any. "Verified" means its protocol behaviour was checked, not that
+  /// the payload is authentic.
+  private func verifiedRootProducer(surfaceID: UUID, notBefore: Date) -> DetectedAgent? {
+    guard let store = programStatusStoresBySurface[surfaceID], let root = store.root, root.arrivedAt >= notBefore,
+      let app = store.app(of: root),
+      let agent = DetectedAgent.allCases.first(where: { $0.programStatusApp == app })
+    else { return nil }
+    let support = programStatusSupportForTesting ?? ProgramStatusSupport.level(for:)
+    return support(agent) == .verified ? agent : nil
+  }
+
+  /// The pane's tracker for `ssh`, created (with the retained fence history) when the pane
+  /// has none for that generation.
+  private func remotePaneTracker(
+    surfaceID: UUID, ssh: (generation: LocalProcessGeneration, arguments: [String])
+  ) -> RemotePaneTracker {
+    if let existing = remotePaneTrackers[surfaceID] {
+      if existing.ssh == ssh.generation { return existing }
+      // Another `ssh` is in front: the previous one left the foreground.
+      remoteFenceHistoryBySurface[surfaceID]?[existing.ssh]?.leftForeground = true
+    }
+    retireRemotePaneTracker(surfaceID: surfaceID)
+    let tracker = RemotePaneTracker(
+      surfaceID: surfaceID, ssh: ssh.generation,
+      invocation: SSHInvocation.parse(
+        ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
+      fenceHistory: remoteFenceHistoryBySurface[surfaceID]?[ssh.generation],
+      source: remoteSnapshotSourceForTesting ?? .live
+    ) { [weak self] in
+      self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
+    }
+    remotePaneTrackers[surfaceID] = tracker
+    tracker.start()
+    return tracker
   }
 
   /// The terminal's own foreground `ssh` and its arguments (without `argv[0]`), with the
