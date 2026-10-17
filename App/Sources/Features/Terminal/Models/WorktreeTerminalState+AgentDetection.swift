@@ -344,22 +344,46 @@ extension WorktreeTerminalState {
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
     var observation = tracker.observe(active: active, now: now)
     remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
-    if observation.identified == nil, tracker.allowsUnprobedBinding,
-      let agent = verifiedRootProducer(surfaceID: surfaceID, notBefore: ssh.generation.startedAt)
-    {
-      observation.identified = tracker.bindUnprobed(agent)
-      observation.programStatusFence = ssh.generation.startedAt
+    return bindUnprobedProducer(observation: observation, tracker: tracker, surfaceID: surfaceID)
+  }
+
+  /// The degraded OSC-only binding (docs-ai 082, L0 item 9): with no probed agent, a
+  /// verified producer's root record identifies the agent, and a later verified producer
+  /// replaces it. Records before `unprobedRecordFence` never acquire or confirm it.
+  private func bindUnprobedProducer(
+    observation: RemotePaneTracker.Observation, tracker: RemotePaneTracker, surfaceID: UUID
+  ) -> RemotePaneTracker.Observation {
+    var observation = observation
+    let current = observation.identified
+    let currentIsUnprobed = current.map { if case .unprobedRemote = $0.process.ref { true } else { false } } ?? false
+    guard currentIsUnprobed || (current == nil && tracker.allowsUnprobedBinding) else { return observation }
+    let fence = unprobedRecordFence(surfaceID: surfaceID, ssh: tracker.ssh)
+    if let producer = verifiedRootProducer(surfaceID: surfaceID, notBefore: fence), producer != current?.agent {
+      observation.identified = tracker.bindUnprobed(producer)
     }
-    if case .unprobedRemote = observation.identified?.process.ref {
-      // OSC has no heartbeat: the producer's last report is the only confirmation.
-      observation.confirmedAt = programStatusStoresBySurface[surfaceID]?.root?.arrivedAt
-    }
+    guard let bound = observation.identified else { return observation }
+    observation.programStatusFence = fence
+    // OSC has no heartbeat: the bound producer's own last eligible report is the only
+    // confirmation.
+    observation.confirmedAt =
+      verifiedRootProducer(surfaceID: surfaceID, notBefore: fence) == bound.agent
+      ? programStatusStoresBySurface[surfaceID]?.root?.arrivedAt : nil
     return observation
   }
 
-  /// The verified OSC 7501 producer whose root record arrived on this surface after
-  /// `notBefore`, if any. "Verified" means its protocol behaviour was checked, not that the
-  /// payload is authentic.
+  /// The earliest arrival an unprobed binding counts: the `ssh` start, raised to the last
+  /// time a local agent was seen on this surface when it ran after the `ssh` started (a
+  /// suspended `ssh` with a local agent in between).
+  private func unprobedRecordFence(surfaceID: UUID, ssh: LocalProcessGeneration) -> Date {
+    guard let origin = programStatusOriginBySurface[surfaceID], origin.origin == .local,
+      let seen = origin.lastSeenAt, seen > ssh.startedAt
+    else { return ssh.startedAt }
+    return seen
+  }
+
+  /// The verified OSC 7501 producer whose root record arrived on this surface no earlier
+  /// than `notBefore`, if any. "Verified" means its protocol behaviour was checked, not that
+  /// the payload is authentic.
   private func verifiedRootProducer(surfaceID: UUID, notBefore: Date) -> DetectedAgent? {
     guard let store = programStatusStoresBySurface[surfaceID], let root = store.root, root.arrivedAt >= notBefore,
       let app = store.app(of: root),

@@ -252,11 +252,13 @@ degraded OSC-only binding.
 - **Release and confidence.** Only the `ssh` exit releases the binding. A withdrawal or a
   quiet producer only ages it: the context is stale 10 s after the producer's last root
   report (OSC has no heartbeat). `RemoteAgentContext.isUnprobed` marks it heuristic. Once the
-  pane is mapped (`correlated`), the probed path takes over.
+  pane is mapped (`correlated`), the probed path takes over. A later verified producer in the
+  same `ssh` (Claude exits, Pi starts) replaces the binding. Only the bound producer's own
+  report confirms it. Records count from the `ssh` start, raised to the last time a local
+  agent was seen on the surface when it ran while the `ssh` was suspended (review round 1).
 - **Measured** in a Debug instance with the flag on. `ssh -F /dev/null -t mini` skips the
   system `SendEnv`, so the host shows the session as pane `-` and the pane is `unmapped`.
   - Claude Code bound through `osc.idle` 1.49 s after the command, then went
     `osc.working` → `osc.done`; dispatch was refused.
   - After `/exit` the entry stayed listed (by design, stale after 10 s); the `ssh` exit
     released it.
-

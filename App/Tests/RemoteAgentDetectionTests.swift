@@ -712,6 +712,67 @@ struct RemoteAgentDetectionTests {
     #expect(removed == [fixture.surfaceID])
   }
 
+  @Test func aLaterVerifiedProducerReplacesTheUnprobedAgent() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    // Claude exits; Pi starts in the same `ssh` and reports.
+    fixture.state.handleProgramStatus(report(.clear), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    fixture.state.handleProgramStatus(report(.working, app: "pi"), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.detectedAgent == .pi)
+    #expect(pane?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(pane?.decision?.reason.identifier == "osc.working")
+    #expect(emitted.last?.remote?.isStale == false)
+  }
+
+  @Test func aLocalAgentBetweenSuspendAndResumeNeverBindsAnUnprobedPane() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    await settle { fixture.source.attempts == 1 }
+    // Ctrl-Z: a local Pi runs and leaves an idle root.
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "pi", argv0: "pi", cmdline: "pi")])
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: .pi, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    _ = await fixture.state.detectAgentState(
+      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
+    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
+    _ = await fixture.state.detectAgentState(
+      for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .local(getpid()))
+    // `fg`: the remote side cannot be probed and sends nothing new.
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    // The local Pi may still be inside its local presence hold, but its record never
+    // becomes a remote agent.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report from the remote side after the resume binds.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+  }
+
   @Test func unprobedBindingNeedsAVerifiedReportFromThisSSH() async throws {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
