@@ -13,7 +13,8 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
 | 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag). Review Loop: 4 rounds, then two follow-ups, clean | #928 |
 | 2026-10-18 | S4a: host label and connection health on Active Agents rows, `remote` object in `prowl agents --json`, docs (behind the flag). Review Loop clean after 2 rounds | #930 |
-| 2026-10-18 | S4b: pane and tab host label, ssh-ended marker; remote detection on by default | #931 |
+| 2026-10-18 | S4b: pane and tab host label, ssh-ended marker; remote detection on by default. Review Loop: 3 rounds plus a 2-round follow-up, clean | #931 |
+| 2026-10-18 | S5a: probe format 2 maps a session's tmux client to its active pane, with the pane's foreground job and visible screen | S5a PR |
 
 ## S1 — Typed process references
 
@@ -367,4 +368,45 @@ label, the ssh-ended marker, and turning the flag on.
 - **Docs.** The `agent-detection.md` section drops the opt-in and documents the kill
   switch, the pane and tab label, and the ended marker. `active-agents.md` documents the
   remote row. `terminal.md` documents the tab glyph and pane corner.
+
+## S5a — tmux in the probe (format 2)
+
+S5 is split. S5a teaches the probe and parser about tmux. S5b makes the tracker take
+identity from the mapping and state from the screen.
+
+- **Records.** Format 2 adds four records:
+  - `X <pane> <anchor pid> <client pid> <tmux pane> <pane tty> <in mode> <tpgid>`: a tmux
+    client in a session's foreground and its active pane. It names its session by anchor
+    pid, so it follows all sessions.
+  - `Y` and `Z`: as `P` and `D`, for that pane's foreground job.
+  - `C <pane> <truncated> <text>`: the pane's visible screen (`capture-pane -p`), capped at
+    64 KiB.
+
+  `END` carries four counts (sessions, session members, clients, pane members). A pane
+  without its `C` record makes the snapshot partial.
+- **Finding the server.** The pane's processes inherit the server's first client's
+  environment, so the probe never maps by environment. On Linux, tmux overwrites the
+  client's argv (`-L` is lost), so the probe also does not parse argv. Instead it asks
+  every socket in `${TMUX_TMPDIR:-/tmp}/tmux-$uid/` for `list-clients` and keeps the line
+  whose `client_pid` is the session's foreground member. The tmux binary is not on the side
+  channel's `PATH` (Homebrew), so the probe runs the client's own executable: `lsof` txt on
+  macOS, `/proc/<pid>/exe` on Linux.
+- **Pitfalls found on the hosts.**
+  - Under `LC_ALL=C`, tmux prints control characters in formats as `_`, so a TAB-separated
+    `-F` comes back joined. The fields are spaces-separated, because none of them can hold a
+    space.
+  - Linux names the client `tmux: client` (macOS: `tmux`).
+  - The heredoc that feeds the client loop keeps the counters in the main shell. A
+    `printf | while` pipeline would run them in a subshell.
+- **Measured.** On macOS 26.5 with tmux 3.7c and Debian trixie with tmux 3.5a:
+  - The plain mapping shows Claude (`comm` `2.1.302`) or `sleep 600` in pane `%0`.
+  - Copy mode sets `in mode` to 1 and keeps the identity.
+  - A split with the other pane active maps to `%1`.
+  - A second `ssh` session attached to the same tmux session maps its own Prowl pane to
+    the same `%0`.
+  - `RemoteConnectionLiveTests` on both hosts (with a tmux session attached) returns a
+    complete report.
+- **Limits.** A server socket outside `${TMUX_TMPDIR:-/tmp}/tmux-$uid/` (as the side
+  channel sees `TMUX_TMPDIR`) is not found. Such a client stays a plain foreground
+  `tmux`, with no agent.
 
