@@ -27,7 +27,8 @@ actor RemoteConnectionRegistry {
   func resolve(_ recipe: SSHConnectionRecipe) async -> ConnectionKey? {
     let outcome = await runner.run(
       configuration.sshExecutable, SSHSideChannel.resolveArguments(recipe: recipe), Data(),
-      RemoteCommandLimits(deadline: 3, outputBytes: 64 * 1024, errorBytes: 4 * 1024))
+      RemoteCommandLimits(deadline: 3, outputBytes: 64 * 1024, errorBytes: 4 * 1024),
+      workingDirectory: recipe.workingDirectory)
     guard case .exited(let result) = outcome, result.exitCode == 0 else { return nil }
     return ConnectionKey(
       effectiveConfiguration: String(bytes: result.output, encoding: .utf8) ?? "", configFile: recipe.configFile)

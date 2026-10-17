@@ -114,7 +114,8 @@ actor RemoteConnectionOwner {
       configuration.sshExecutable,
       ["-o", "ControlPath=\(controlPath)", "-O", "exit", "--", recipe.destination],
       Data(),
-      RemoteCommandLimits(deadline: 2, outputBytes: 1024, errorBytes: 1024))
+      RemoteCommandLimits(deadline: 2, outputBytes: 1024, errorBytes: 1024),
+      workingDirectory: recipe.workingDirectory)
   }
 
   nonisolated static func defaultControlDirectory() -> String {
@@ -149,7 +150,8 @@ actor RemoteConnectionOwner {
     let arguments = SSHSideChannel.scriptArguments(
       recipe: recipe, controlPath: controlPath, persist: configuration.controlPersistSeconds)
     let outcome = await runner.run(
-      configuration.sshExecutable, arguments, Data(RemoteProbeScript.text.utf8), configuration.limits)
+      configuration.sshExecutable, arguments, Data(RemoteProbeScript.text.utf8), configuration.limits,
+      workingDirectory: recipe.workingDirectory)
     let (result, report) = Self.interpret(outcome)
     switch result {
     case .complete, .partial:

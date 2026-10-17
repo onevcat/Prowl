@@ -31,12 +31,33 @@ nonisolated enum RemoteCommandOutcome: Equatable, Sendable {
 /// suspension and never wait for a shared pool: a busy app must not turn a finished probe
 /// into a timeout.
 nonisolated struct RemoteCommandRunner: Sendable {
-  var run:
-    @Sendable (_ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits) async ->
-      RemoteCommandOutcome
+  var execute:
+    @Sendable (
+      _ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits,
+      _ workingDirectory: String?
+    ) async -> RemoteCommandOutcome
 
-  static let live = RemoteCommandRunner { executable, arguments, input, limits in
-    await RemoteProcess.run(executable: executable, arguments: arguments, input: input, limits: limits)
+  init(
+    execute: @escaping @Sendable (URL, [String], Data, RemoteCommandLimits, String?) async -> RemoteCommandOutcome
+  ) {
+    self.execute = execute
+  }
+
+  /// Runs in `workingDirectory` when it names an existing directory, else in the app's.
+  func run(
+    _ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits,
+    workingDirectory: String? = nil
+  ) async -> RemoteCommandOutcome {
+    await execute(executable, arguments, input, limits, workingDirectory)
+  }
+
+  static let live = RemoteCommandRunner { executable, arguments, input, limits, workingDirectory in
+    var isDirectory: ObjCBool = false
+    let directory = workingDirectory.flatMap {
+      FileManager.default.fileExists(atPath: $0, isDirectory: &isDirectory) && isDirectory.boolValue ? $0 : nil
+    }
+    return await RemoteProcess.run(
+      executable: executable, arguments: arguments, input: input, limits: limits, workingDirectory: directory)
   }
 
   /// Grace period between SIGTERM and SIGKILL.
@@ -105,12 +126,12 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     if let (continuation, outcome) = ready { continuation.resume(returning: outcome) }
   }
 
-  static func run(executable: URL, arguments: [String], input: Data, limits: RemoteCommandLimits) async
-    -> RemoteCommandOutcome
-  {
+  static func run(
+    executable: URL, arguments: [String], input: Data, limits: RemoteCommandLimits, workingDirectory: String?
+  ) async -> RemoteCommandOutcome {
     let pipes = Pipes()
     let pid: pid_t
-    switch spawn(executable: executable, arguments: arguments, pipes: pipes) {
+    switch spawn(executable: executable, arguments: arguments, pipes: pipes, workingDirectory: workingDirectory) {
     case .success(let spawned): pid = spawned
     case .failure(let message): return .launchFailed(message)
     }
@@ -167,10 +188,11 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     case failure(String)
   }
 
-  private static func spawn(executable: URL, arguments: [String], pipes: Pipes) -> Spawned {
+  private static func spawn(executable: URL, arguments: [String], pipes: Pipes, workingDirectory: String?) -> Spawned {
     var actions: posix_spawn_file_actions_t?
     posix_spawn_file_actions_init(&actions)
     defer { posix_spawn_file_actions_destroy(&actions) }
+    if let workingDirectory { posix_spawn_file_actions_addchdir_np(&actions, workingDirectory) }
     posix_spawn_file_actions_adddup2(&actions, pipes.input.fileHandleForReading.fileDescriptor, 0)
     posix_spawn_file_actions_adddup2(&actions, pipes.output.fileHandleForWriting.fileDescriptor, 1)
     posix_spawn_file_actions_adddup2(&actions, pipes.error.fileHandleForWriting.fileDescriptor, 2)

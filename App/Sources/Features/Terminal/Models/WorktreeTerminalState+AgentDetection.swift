@@ -21,6 +21,7 @@ extension WorktreeTerminalState {
     }
     agentDetectionFullTickRequests.insert(view.id)
     agentDetectionSettleUntilBySurface[view.id] = now.addingTimeInterval(AgentDetectionSchedule.settleWindow)
+    remotePaneTrackers[view.id]?.requestSoon()
     startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
     interruptAgentDetectionSleep(forSurfaceID: view.id)
   }
@@ -50,7 +51,10 @@ extension WorktreeTerminalState {
         self.agentDetectionSchedules[view.id] = self.nextScheduleAfterTick(
           surfaceID: view.id, hasAgent: hasAgent, now: now)
 
-        guard let interval = self.agentDetectionSchedules[view.id]?.nextInterval(now: now) else {
+        guard
+          let interval = self.remoteAdjustedInterval(
+            surfaceID: view.id, self.agentDetectionSchedules[view.id]?.nextInterval(now: now))
+        else {
           self.finishColdAgentDetection(forSurfaceID: view.id)
           return
         }
@@ -71,6 +75,17 @@ extension WorktreeTerminalState {
       && !isAgentDetectionSettling(surfaceID: surfaceID, now: now)
     return Self.nextSchedule(
       agentDetectionSchedules[surfaceID] ?? .cold, hasAgent: hasAgent, delegated: delegated, now: now)
+  }
+
+  /// A pane with a foreground `ssh` keeps ticking whatever the local schedule says: the
+  /// host is probed only from ticks, and a remote agent can start without a key press here.
+  /// A bound remote agent is ticked at least every second so two absent snapshots release it
+  /// within the L0 budget.
+  func remoteAdjustedInterval(surfaceID: UUID, _ interval: Duration?) -> Duration? {
+    guard let tracker = remotePaneTrackers[surfaceID] else { return interval }
+    let cap: Duration = .seconds(
+      tracker.boundAgent != nil ? RemotePaneTracker.activeCadence : RemotePaneTracker.idleCadence)
+    return min(interval ?? cap, cap)
   }
 
   /// Whether a wake still holds the surface on the active cadence; an expired window is
@@ -121,18 +136,15 @@ extension WorktreeTerminalState {
       return false
     }
 
-    let identified = job.flatMap { identifyAgentInJob($0) }
-    let probedAgent = identified?.agent
+    let localIdentified = job.flatMap { identifyAgentInJob($0) }
+    // A successor is confirmed when the probe returns, not when the poll began (as below).
+    let remote = observeRemoteAgent(
+      job: job, localIdentified: localIdentified, surfaceID: surfaceID, now: max(now, Date()))
+    let identified = localIdentified ?? remote?.identified
     // The origin change is confirmed when the probe returns, not when the poll began:
     // a report that landed while the probe ran still belongs to the departed origin.
     let originFence = applyAgentOrigin(identified, surfaceID: surfaceID, now: max(now, Date()))
-
-    var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
-    let agent = presence.update(detectedAgent: probedAgent, releaseOnMiss: finished != nil)
-    agentDetectionPresenceBySurface[surfaceID] = presence
-    if let finished {
-      applyCommandFinished(finished, identified: identified, surfaceID: surfaceID)
-    }
+    let agent = updateAgentPresence(identified: identified, remote: remote, finished: finished, surfaceID: surfaceID)
     logUnmappedProgramStatusAppIfNeeded(surfaceID: surfaceID, agent: agent)
 
     let probe = AgentDetectionDiagnostic.Probe(
@@ -152,6 +164,7 @@ extension WorktreeTerminalState {
     let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
     agentDetectionCoordinators[surfaceID] = coordinator
     coordinator.programStatusOriginFence = originFence
+    coordinator.remoteProgramStatusFence = remoteProgramStatusFence(remote?.programStatusFence, surfaceID: surfaceID)
     let process = Self.processGeneration(identified)
     // The tick is delegated only while the schedule says so (a key press puts one full
     // tick back on the active schedule and keeps it there for the settle window) and the
@@ -276,6 +289,97 @@ extension WorktreeTerminalState {
   private func retireLocalLaunchContextForRemoteLaunch(identified: IdentifiedAgentProcess?, surfaceID: UUID) {
     guard let identified, identified.launchProcess.origin != .local else { return }
     launchProfilesBySurface.removeValue(forKey: surfaceID)
+  }
+
+  /// The pane's presence after one probe. A remote agent is identified on every tick while
+  /// its tracker holds it; the tracker releases it by the snapshot rule (docs-ai 082, C3)
+  /// instead of the local miss count, and a gone `ssh` releases it at once. A finished
+  /// command (OSC 133 D) on a remote pane asks the host for a snapshot right away.
+  private func updateAgentPresence(
+    identified: IdentifiedAgentProcess?, remote: RemotePaneTracker.Observation?,
+    finished: PendingCommandFinished?, surfaceID: UUID
+  ) -> DetectedAgent? {
+    var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
+    defer { agentDetectionPresenceBySurface[surfaceID] = presence }
+    if remote != nil, finished != nil { remotePaneTrackers[surfaceID]?.requestSoon() }
+    let previousIsRemote = surfaceAgentStates[surfaceID]?.agentProcess.map { $0.origin != .local } ?? false
+    let releasesAtOnce = identified == nil && previousIsRemote
+    let agent = presence.update(detectedAgent: identified?.agent, releaseOnMiss: finished != nil || releasesAtOnce)
+    if let finished { applyCommandFinished(finished, identified: identified, surfaceID: surfaceID) }
+    return agent
+  }
+
+  /// The remote side of one probe (docs-ai 082, L0): when no local agent is in the
+  /// foreground but an `ssh` is, the pane's tracker for that `ssh` generation reports what
+  /// the host shows. Anything else retires the tracker.
+  private func observeRemoteAgent(
+    job: ForegroundJob?, localIdentified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date
+  ) -> RemotePaneTracker.Observation? {
+    guard remoteAgentDetectionEnabled, localIdentified == nil, let ssh = job.flatMap(Self.foregroundSSH) else {
+      retireRemotePaneTracker(surfaceID: surfaceID)
+      return nil
+    }
+    let tracker: RemotePaneTracker
+    if let existing = remotePaneTrackers[surfaceID], existing.ssh == ssh.generation {
+      tracker = existing
+    } else {
+      retireRemotePaneTracker(surfaceID: surfaceID)
+      tracker = RemotePaneTracker(
+        surfaceID: surfaceID, ssh: ssh.generation,
+        invocation: SSHInvocation.parse(
+          ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
+        fenceHistory: remoteFenceHistoryBySurface[surfaceID],
+        source: remoteSnapshotSourceForTesting ?? .live
+      ) { [weak self] in
+        self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
+      }
+      remotePaneTrackers[surfaceID] = tracker
+      tracker.start()
+    }
+    let active =
+      surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
+    let observation = tracker.observe(active: active, now: now)
+    remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
+    return observation
+  }
+
+  /// The terminal's own foreground `ssh` and its arguments (without `argv[0]`), with the
+  /// generation that its tracker belongs to. An `ssh` that another `ssh` of the job started
+  /// (the `-W` transport of `-J`, or one under a `ProxyCommand` shell) is never it.
+  nonisolated static func foregroundSSH(
+    _ job: ForegroundJob
+  ) -> (generation: LocalProcessGeneration, arguments: [String])? {
+    func isSSH(_ process: ForegroundProcess) -> Bool { process.argv0 == "ssh" || process.name == "ssh" }
+    func hasSSHAncestor(_ process: ForegroundProcess) -> Bool {
+      var parent = process.parentPID
+      for _ in job.processes.indices {
+        guard let pid = parent, let ancestor = job.processes.first(where: { $0.ref.namespacePID == pid }) else {
+          return false
+        }
+        if isSSH(ancestor) { return true }
+        parent = ancestor.parentPID
+      }
+      return false
+    }
+    for process in job.processes where isSSH(process) && !hasSSHAncestor(process) {
+      guard let pid = process.ref.localPID, let arguments = process.arguments,
+        let startedAt = ProcessDetection.processStartDate(pid: pid)
+      else { continue }
+      return (LocalProcessGeneration(pid: pid, startedAt: startedAt), Array(arguments.dropFirst()))
+    }
+    return nil
+  }
+
+  func retireRemotePaneTracker(surfaceID: UUID) {
+    remotePaneTrackers.removeValue(forKey: surfaceID)?.retire()
+  }
+
+  /// A snapshot arrived: run the next tick now, without the settle window a key press
+  /// opens, so a steady probe cadence does not keep the pane on the active schedule.
+  private func wakeAgentDetectionForRemoteSnapshot(surfaceID: UUID) {
+    guard let view = surfaces[surfaceID], let tabId = tabId(containing: surfaceID) else { return }
+    startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
+    interruptAgentDetectionSleep(forSurfaceID: surfaceID)
   }
 
   /// Origin bookkeeping for one probe: retires launch context a remote launch cannot
@@ -602,6 +706,7 @@ extension WorktreeTerminalState {
 
   func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {
     agentDetectionLifecycleBySurface[surfaceId, default: 0] &+= 1
+    retireRemotePaneTracker(surfaceID: surfaceId)
     agentDetectionCoordinators.removeValue(forKey: surfaceId)?.invalidate()
     agentDetectionTasks[surfaceId]?.cancel()
     agentDetectionTasks.removeValue(forKey: surfaceId)
@@ -626,6 +731,8 @@ extension WorktreeTerminalState {
 
   func cleanupAllAgentDetectionState() {
     for coordinator in agentDetectionCoordinators.values { coordinator.invalidate() }
+    for tracker in remotePaneTrackers.values { tracker.retire() }
+    remotePaneTrackers.removeAll()
     agentDetectionCoordinators.removeAll()
     for task in agentDetectionTasks.values {
       task.cancel()
@@ -644,6 +751,7 @@ extension WorktreeTerminalState {
     programStatusStoresBySurface.removeAll()
     programStatusUnmappedAppsLoggedBySurface.removeAll()
     programStatusOriginBySurface.removeAll()
+    remoteFenceHistoryBySurface.removeAll()
     agentDetectionSchedules.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()

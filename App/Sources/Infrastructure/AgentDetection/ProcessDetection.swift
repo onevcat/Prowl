@@ -230,6 +230,22 @@ nonisolated enum ProcessDetection {
     return result == Int32(size) ? info : nil
   }
 
+  /// The current working directory of a same-user process.
+  static func currentDirectory(pid: pid_t) -> String? {
+    var info = proc_vnodepathinfo()
+    let size = MemoryLayout<proc_vnodepathinfo>.size
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+      proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, pointer, Int32(size))
+    }
+    guard result == Int32(size) else { return nil }
+    return withUnsafeBytes(of: info.pvi_cdir.vip_path) { rawBuffer -> String? in
+      let bytes = rawBuffer.bindMemory(to: UInt8.self)
+      let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
+      guard end > bytes.startIndex else { return nil }
+      return String(bytes: bytes[..<end], encoding: .utf8)
+    }
+  }
+
   static func processStartDate(pid: pid_t) -> Date? {
     guard let info = processBSDInfo(pid: pid), info.pbi_start_tvsec > 0 else { return nil }
     return Date(

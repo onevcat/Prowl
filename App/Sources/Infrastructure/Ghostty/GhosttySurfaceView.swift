@@ -119,6 +119,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   /// without guessing from focus. Convenience identity only: the value is
   /// inherited and forgeable, so trusted attribution stays on caller-PID resolution.
   static let paneIdentityEnvironmentKey = "PROWL_PANE_ID"
+  static let remotePaneIdentityEnvironmentKey = "LC_PROWL_PANE"
 
   let runtime: GhosttyRuntime
   let id: UUID
@@ -323,6 +324,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     var launchEnvironment = environment
     launchEnvironment[Self.paneIdentityEnvironmentKey] = id.uuidString
+    // The pane id under a name that `ssh` sends by default (`SendEnv LC_*`), so a remote
+    // session can be matched to its pane (docs-ai 082).
+    launchEnvironment[Self.remotePaneIdentityEnvironmentKey] = id.uuidString
     // Codex's shared daemon hides which pane drives a thread; this log restores it (docs-ai 073).
     launchEnvironment.merge(CodexTUISessionLog.environment(for: id)) { explicit, _ in explicit }
     self.launchEnvironment = launchEnvironment

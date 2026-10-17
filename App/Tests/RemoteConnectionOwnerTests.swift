@@ -97,7 +97,7 @@ struct RemoteConnectionOwnerTests {
     configuration.controlPersistSeconds = 30
     return RemoteConnectionOwner(
       connection: Self.key, recipe: Self.recipe, configuration: configuration,
-      runner: RemoteCommandRunner { _, arguments, input, _ in await fake.run(arguments, input) },
+      runner: RemoteCommandRunner { _, arguments, input, _, _ in await fake.run(arguments, input) },
       now: { 100 },
       sleep: { recorder.delays.append($0) },
       random: { 0.5 })
@@ -188,7 +188,7 @@ struct RemoteConnectionOwnerTests {
     await fake.setHoldsExit(true)
     let registry = RemoteConnectionRegistry(
       configuration: RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests"),
-      runner: RemoteCommandRunner { _, arguments, input, _ in await fake.run(arguments, input) })
+      runner: RemoteCommandRunner { _, arguments, input, _, _ in await fake.run(arguments, input) })
     let first = await registry.acquire(Self.key, recipe: Self.recipe)
     #expect(await registry.leaseCount(Self.key) == 1)
     let retiring = Task { await registry.release(Self.key) }
@@ -212,7 +212,7 @@ struct RemoteConnectionOwnerTests {
     let fake = FakeRunner()
     let registry = RemoteConnectionRegistry(
       configuration: RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests"),
-      runner: RemoteCommandRunner { _, arguments, input, _ in await fake.run(arguments, input) })
+      runner: RemoteCommandRunner { _, arguments, input, _, _ in await fake.run(arguments, input) })
     let first = await registry.acquire(Self.key, recipe: Self.recipe)
     let second = await registry.acquire(Self.key, recipe: Self.recipe)
     #expect(first === second)

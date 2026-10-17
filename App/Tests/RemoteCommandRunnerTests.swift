@@ -92,6 +92,29 @@ nonisolated struct RemoteCommandRunnerTests {
     #expect(result.errorOutput == "oops\n")
   }
 
+  @Test func theCommandRunsInTheGivenDirectory() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "prowl-runner-cwd-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let outcome = await runner.run(
+      URL(filePath: "/bin/pwd"), ["-P"], Data(), RemoteCommandLimits(),
+      workingDirectory: directory.path(percentEncoded: false))
+    guard case .exited(let result) = outcome else {
+      Issue.record("expected exit, got \(outcome)")
+      return
+    }
+    let printed = String(bytes: result.output, encoding: .utf8)?.trimmingCharacters(in: .newlines) ?? ""
+    #expect(printed.hasSuffix(directory.lastPathComponent))
+    // A directory that no longer exists falls back to the app's own.
+    let missing = await runner.run(
+      URL(filePath: "/bin/pwd"), [], Data(), RemoteCommandLimits(), workingDirectory: "/nonexistent/prowl")
+    guard case .exited(let fallback) = missing else {
+      Issue.record("expected exit, got \(missing)")
+      return
+    }
+    #expect(fallback.exitCode == 0)
+  }
+
   @Test func aMissingExecutableFailsToLaunch() async {
     let outcome = await runner.run(URL(filePath: "/nonexistent/ssh"), [], Data(), RemoteCommandLimits())
     guard case .launchFailed = outcome else {

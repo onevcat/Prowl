@@ -86,6 +86,9 @@ process launched inside it (agents, their tools, scripts):
   `create pane`, and as the guard that keeps automation from acting on itself.
 - `PROWL_WORKTREE_PATH`, `PROWL_ROOT_PATH` — the worktree directory and repository root
   (see [custom-actions](custom-actions.md)).
+- `LC_PROWL_PANE` — the same UUID as `PROWL_PANE_ID`, under a name that `ssh` forwards by
+  default (`SendEnv LC_*` on the client, `AcceptEnv LC_*` on most servers). Prowl uses it
+  to match a remote session to its pane; do not use it as a selector.
 
 Resolve your own pane, tab, and worktree. Inside Codex (`CODEX_THREAD_ID` is set), take the
 pane from `.data.caller` instead of the variable (see below):
