@@ -10,15 +10,23 @@ nonisolated struct SSHConnectionRecipe: Hashable, Sendable, Codable {
   /// supported connection-shaping set.
   let options: [String]
 
-  init(destination: String, options: [String] = []) {
+  /// The directory relative operands resolve against: the user's `ssh` ran there, so
+  /// `-F ./config` or `-i keys/id` must mean the same files for the side channel.
+  let workingDirectory: String?
+
+  init(destination: String, options: [String] = [], workingDirectory: String? = nil) {
     self.destination = destination
     self.options = options
+    self.workingDirectory = workingDirectory
   }
 
-  /// The `-F` file the options name, if any; part of the connection key.
+  /// The `-F` file the options name, absolute, if any; part of the connection key.
   var configFile: String? {
     guard let index = options.firstIndex(of: "-F"), options.indices.contains(index + 1) else { return nil }
-    return options[index + 1]
+    let path = options[index + 1]
+    guard !path.hasPrefix("/"), !path.hasPrefix("~"), let workingDirectory else { return path }
+    return URL(filePath: workingDirectory, directoryHint: .isDirectory).appending(path: path).standardized
+      .path(percentEncoded: false)
   }
 }
 

@@ -46,51 +46,79 @@ nonisolated enum SSHInvocation: Equatable, Sendable {
     "connecttimeout",
   ]
 
-  /// Parses `arguments` (argv without `ssh` itself).
-  static func parse(_ arguments: [String]) -> SSHInvocation {
+  /// Parses `arguments` (argv without `ssh` itself). Like OpenSSH, options are read
+  /// before and after the destination; the first other argument starts the remote command.
+  /// `workingDirectory` is the `ssh` process's directory: relative file operands (`-F`,
+  /// `-i`, `IdentityFile`, …) resolve against it, as they do for the user's `ssh`.
+  static func parse(_ arguments: [String], workingDirectory: String? = nil) -> SSHInvocation {
     var options: [String] = []
+    var destination: String?
     var index = arguments.startIndex
     while index < arguments.endIndex {
       let argument = arguments[index]
       if argument == "--" {
-        index += 1
+        // Ends the options; a destination may still follow.
+        if destination == nil, arguments.indices.contains(index + 1) { destination = arguments[index + 1] }
         break
       }
-      guard argument.hasPrefix("-"), argument.count > 1 else { break }
-      var letters = argument.dropFirst()[...]
-      while let letter = letters.popFirst() {
-        if replayedFlags.contains(letter) {
-          options.append("-\(letter)")
-          continue
+      if argument.hasPrefix("-"), argument.count > 1 {
+        switch parseOptionGroup(arguments, at: &index) {
+        case .success(let parsed): options += parsed
+        case .failure(let reason): return .unsupported(reason.message)
         }
-        if droppedFlags.contains(letter) { continue }
-        guard replayedValues.contains(letter) || droppedValues.contains(letter) || letter == "o" else {
-          return .unsupported("ssh option -\(letter)")
-        }
-        // The value is the rest of this argument, or the next one.
-        let value: String
-        if !letters.isEmpty {
-          value = String(letters)
-          letters = ""
-        } else {
-          index += 1
-          guard index < arguments.endIndex else { return .unsupported("ssh option -\(letter) without a value") }
-          value = arguments[index]
-        }
-        if letter == "o" {
-          switch configOption(value) {
-          case .replayed: options += ["-o", value]
-          case .dropped: break
-          case .unsupported(let key): return .unsupported("ssh option -o \(key)")
-          }
-        } else if replayedValues.contains(letter) {
-          options += ["-\(letter)", value]
-        }
+        index += 1
+        continue
       }
+      guard destination == nil else { break }
+      destination = argument
       index += 1
     }
-    guard index < arguments.endIndex, !arguments[index].isEmpty else { return .unsupported("no destination") }
-    return .supported(SSHConnectionRecipe(destination: arguments[index], options: options))
+    guard let destination, !destination.isEmpty else { return .unsupported("no destination") }
+    return .supported(
+      SSHConnectionRecipe(
+        destination: destination, options: options, workingDirectory: workingDirectory))
+  }
+
+  private struct ParseFailure: Error {
+    let message: String
+  }
+
+  /// One `-xyz` argument (and the value it consumes); `index` moves to the last argument read.
+  private static func parseOptionGroup(_ arguments: [String], at index: inout Int) -> Result<[String], ParseFailure> {
+    var options: [String] = []
+    var letters = arguments[index].dropFirst()[...]
+    while let letter = letters.popFirst() {
+      if replayedFlags.contains(letter) {
+        options.append("-\(letter)")
+        continue
+      }
+      if droppedFlags.contains(letter) { continue }
+      guard replayedValues.contains(letter) || droppedValues.contains(letter) || letter == "o" else {
+        return .failure(ParseFailure(message: "ssh option -\(letter)"))
+      }
+      // The value is the rest of this argument, or the next one.
+      let value: String
+      if !letters.isEmpty {
+        value = String(letters)
+        letters = ""
+      } else {
+        index += 1
+        guard index < arguments.endIndex else {
+          return .failure(ParseFailure(message: "ssh option -\(letter) without a value"))
+        }
+        value = arguments[index]
+      }
+      if letter == "o" {
+        switch configOption(value) {
+        case .replayed: options += ["-o", value]
+        case .dropped: break
+        case .unsupported(let key): return .failure(ParseFailure(message: "ssh option -o \(key)"))
+        }
+      } else if replayedValues.contains(letter) {
+        options += ["-\(letter)", value]
+      }
+    }
+    return .success(options)
   }
 
   private enum ConfigOption: Equatable {

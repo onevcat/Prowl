@@ -51,7 +51,10 @@ extension WorktreeTerminalState {
         self.agentDetectionSchedules[view.id] = self.nextScheduleAfterTick(
           surfaceID: view.id, hasAgent: hasAgent, now: now)
 
-        guard let interval = self.agentDetectionSchedules[view.id]?.nextInterval(now: now) else {
+        guard
+          let interval = self.remoteAdjustedInterval(
+            surfaceID: view.id, self.agentDetectionSchedules[view.id]?.nextInterval(now: now))
+        else {
           self.finishColdAgentDetection(forSurfaceID: view.id)
           return
         }
@@ -72,6 +75,17 @@ extension WorktreeTerminalState {
       && !isAgentDetectionSettling(surfaceID: surfaceID, now: now)
     return Self.nextSchedule(
       agentDetectionSchedules[surfaceID] ?? .cold, hasAgent: hasAgent, delegated: delegated, now: now)
+  }
+
+  /// A pane with a foreground `ssh` keeps ticking whatever the local schedule says: the
+  /// host is probed only from ticks, and a remote agent can start without a key press here.
+  /// A bound remote agent is ticked at least every second so two absent snapshots release it
+  /// within the L0 budget.
+  func remoteAdjustedInterval(surfaceID: UUID, _ interval: Duration?) -> Duration? {
+    guard let tracker = remotePaneTrackers[surfaceID] else { return interval }
+    let cap: Duration = .seconds(
+      tracker.boundAgent != nil ? RemotePaneTracker.activeCadence : RemotePaneTracker.idleCadence)
+    return min(interval ?? cap, cap)
   }
 
   /// Whether a wake still holds the surface on the active cadence; an expired window is
@@ -123,7 +137,9 @@ extension WorktreeTerminalState {
     }
 
     let localIdentified = job.flatMap { identifyAgentInJob($0) }
-    let remote = observeRemoteAgent(job: job, localIdentified: localIdentified, surfaceID: surfaceID, now: now)
+    // A successor is confirmed when the probe returns, not when the poll began (as below).
+    let remote = observeRemoteAgent(
+      job: job, localIdentified: localIdentified, surfaceID: surfaceID, now: max(now, Date()))
     let identified = localIdentified ?? remote?.identified
     // The origin change is confirmed when the probe returns, not when the poll began:
     // a report that landed while the probe ran still belongs to the departed origin.
@@ -309,7 +325,9 @@ extension WorktreeTerminalState {
     } else {
       retireRemotePaneTracker(surfaceID: surfaceID)
       tracker = RemotePaneTracker(
-        surfaceID: surfaceID, ssh: ssh.generation, invocation: SSHInvocation.parse(ssh.arguments),
+        surfaceID: surfaceID, ssh: ssh.generation,
+        invocation: SSHInvocation.parse(
+          ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
         source: remoteSnapshotSourceForTesting ?? .live
       ) { [weak self] in
         self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)

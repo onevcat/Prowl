@@ -92,6 +92,11 @@ final class RemotePaneTracker {
   private(set) var latest: RemoteProbeSnapshot?
   private var consumedSequence: (epoch: UInt64, sequence: UInt64)?
 
+  /// The remote session's anchor, learned from the snapshot that first carried this
+  /// pane's id. On macOS the id is readable only from non-platform foreground processes, so
+  /// the session that showed it once is recognized by its anchor when the system shell is
+  /// back in front.
+  private var anchor: Int32?
   private var bound: IdentifiedAgentProcess?
   private var presence = RemoteProcessPresence()
   private var boundFence: Date?
@@ -175,6 +180,11 @@ final class RemotePaneTracker {
   private func consume(_ snapshot: RemoteProbeSnapshot, report: RemoteProbeReport, now: Date)
     -> RemoteProcessPresence.Verdict?
   {
+    let mapped = sessions(in: report)
+    if anchor == nil, mapped.count == 1, mapped[0].paneID == surfaceID { anchor = mapped[0].anchorPID }
+    // Only this pane's own session is evidence about its agent: an unmapped or
+    // ambiguous scan proves nothing (C3).
+    guard mapped.count == 1 else { return bound == nil ? nil : .unchanged }
     let job = correlatedJob(report: report)
     if let identified = job.flatMap(identifyAgentInJob), identified.process.ref != bound?.process.ref {
       bound = identified
@@ -208,7 +218,9 @@ final class RemotePaneTracker {
   }
 
   private func sessions(in report: RemoteProbeReport) -> [RemoteProbeSession] {
-    report.sessions.filter { $0.paneID == surfaceID }
+    report.sessions.filter { session in
+      session.paneID == surfaceID || (session.paneID == nil && anchor != nil && session.anchorPID == anchor)
+    }
   }
 
   private func correlatedJob(report: RemoteProbeReport) -> ForegroundJob? {

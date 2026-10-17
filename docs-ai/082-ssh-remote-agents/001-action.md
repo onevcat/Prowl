@@ -144,23 +144,32 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   dropped: forwarding, session and control options, including `ConnectTimeout`,
   `SendEnv`, `SetEnv` and `LogLevel`. These are `unsupported`: `-N`, `-f`, `-W`, `-s`,
   `-G`, `-O`, `-Q`, `-V`, unknown flags, unknown `-o` keys, and a missing destination.
-  The remote command is never replayed.
+  The remote command is never replayed. As in OpenSSH, options are read before and after
+  the destination, up to the first other argument. The tracker runs `ssh -G` and the side
+  channel in the local `ssh`'s working directory, so relative `-F`/`-i` operands mean the
+  same files (review round 1).
 - **Trigger.** A foreground `ssh` with no local agent. The tracker belongs to that `ssh`
   generation (pid and start time); a new `ssh`, a local agent, the flag off or a closed
   pane retire it and close the lease, and snapshots that arrive later are dropped.
 - **Tracker** (`RemotePaneTracker`). It leases the host's owner (`ssh -G`, then the
   registry) and consumes snapshots on the main actor.
   - Correlation: `pending`, `correlated`, `ambiguous`, `unmapped`, `probeUnavailable`,
-    `unsupported`. Only `correlated` binds.
+    `unsupported`. Only `correlated` binds. The session that first carried the pane id is
+    also recognized by its anchor pid: back at the macOS system shell the id is hidden again.
+    Only that single mapped session is evidence; an unmapped or ambiguous scan neither
+    releases nor confirms the bound agent (review round 1).
   - The bound agent is held across ticks, so the coordinator can delegate. It is
     released by the C3 rule (two complete fresh snapshots without it) or at once when the
     local `ssh` is gone. An OSC 133 D from the remote shell asks for a snapshot right away.
   - Cadence: 1 s while an agent is bound or the pane settles after a wake, 3 s otherwise.
+    A pane with a foreground `ssh` never goes cold, and a bound agent is ticked at least
+    every second, even on the two-second delegated schedule (review round 1).
     It counts from the host's shared latest snapshot, so panes on one host do not double
     the probe rate. Wakes (input, reports) request at once; a snapshot interrupts the
     loop's sleep without opening a settle window.
 - **Remote OSC fence.** The first agent since the `ssh` started counts reports from the
-  `ssh` start; a successor counts only reports after the snapshot that confirmed it. The S1
+  `ssh` start; a successor counts only reports after the snapshot that confirmed it,
+  timestamped after the tick's local probe returns (review round 1). The S1
   origin fence applies to local generations only.
 - **Measured** in a Debug instance with the flag on:
   - mini (macOS 26.5), Claude Code 2.1.302 started by hand: appeared 0.62 s after the
@@ -173,6 +182,9 @@ the degraded OSC-only binding and admission refusal. Both stay behind
     after Ctrl+C.
   - Two panes on one host: separate attribution, one control socket.
   - Claude inside remote tmux: no entry (S5).
+  - After review round 1: `ssh host -l user` bound Claude in 0.36 s; release after Ctrl+C
+    through the anchor-pinned session took 2.87 s; after 40 s idle, `sleep 5; codex` was
+    found 2.6 s after Codex started.
   - Debug build CPU: a delegated remote Claude costs 0.1–0.8 % of a core. A screen-rule
     agent costs as much as it does locally. Before the bound agent was held across ticks,
     a remote OSC producer could not delegate and read the screen every 300 ms.

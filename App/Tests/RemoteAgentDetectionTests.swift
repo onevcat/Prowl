@@ -21,6 +21,9 @@ struct RemoteAgentDetectionTests {
 
   private final class Probe {
     var job: ForegroundJob?
+    /// When set, the next probe call suspends here until resumed.
+    var gate: CheckedContinuation<Void, Never>?
+    var entered: AsyncStream<Void>.Continuation?
   }
 
   nonisolated final class FakeRemoteSource: @unchecked Sendable {
@@ -68,7 +71,16 @@ struct RemoteAgentDetectionTests {
     state.remoteAgentDetectionEnabledForTesting = enabled
     state.remoteSnapshotSourceForTesting = source.source
     state.programStatusSupportForTesting = { _ in .verified }
-    state.agentProcessProbeForTesting = { _, _, _ in probe.job }
+    state.agentProcessProbeForTesting = { _, _, _ in
+      if let entered = probe.entered {
+        probe.entered = nil
+        await withCheckedContinuation { continuation in
+          probe.gate = continuation
+          entered.yield(())
+        }
+      }
+      return probe.job
+    }
     state.lastWindowIsKey = false
     state.lastWindowIsVisible = false
     let tabID = state.tabManager.createTab(title: "worktree 1", icon: "terminal")
@@ -103,12 +115,12 @@ struct RemoteAgentDetectionTests {
 
   private func snapshot(
     _ sequence: UInt64, pane: UUID?, foreground: RemoteProbeProcess?, extraPane: UUID? = nil,
-    outcome: RemoteProbeSnapshot.Outcome = .complete
+    outcome: RemoteProbeSnapshot.Outcome = .complete, anchor: Int32 = 100
   ) -> RemoteProbeSnapshot {
     func session(_ id: UUID?) -> RemoteProbeSession {
       let process = foreground ?? remoteProcess(101, name: "zsh")
       return RemoteProbeSession(
-        paneID: id, anchorPID: 100, tty: "/dev/pts/0", foregroundProcessGroupID: process.processGroupID,
+        paneID: id, anchorPID: anchor, tty: "/dev/pts/0", foregroundProcessGroupID: process.processGroupID,
         processes: [process])
     }
     var sessions = [session(pane)]
@@ -170,7 +182,10 @@ struct RemoteAgentDetectionTests {
     fixture.state.onAgentEntryChanged = { emitted.append($0) }
     await bindClaude(fixture, probe: probe)
 
-    #expect(fixture.source.recipes == [SSHConnectionRecipe(destination: "mini", options: ["-p", "2222"])])
+    #expect(fixture.source.recipes.map(\.destination) == ["mini"])
+    #expect(fixture.source.recipes.first?.options == ["-p", "2222"])
+    // Relative operands resolve where the user's `ssh` runs.
+    #expect(fixture.source.recipes.first?.workingDirectory == ProcessDetection.currentDirectory(pid: getpid()))
     let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
     #expect(pane?.detectedAgent == .claude)
     #expect(pane?.agentProcess == remoteRef(200))
@@ -193,14 +208,81 @@ struct RemoteAgentDetectionTests {
     // An inconclusive run neither proves absence nor resets the count.
     await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: nil, outcome: .partial))
     await detect(fixture)
-    await deliver(fixture, snapshot(3, pane: fixture.surfaceID, foreground: nil))
+    // Back at a system shell, macOS hides the pane id; the session is known by its anchor.
+    await deliver(fixture, snapshot(3, pane: nil, foreground: nil))
     await detect(fixture)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
     #expect(removed.isEmpty)
-    await deliver(fixture, snapshot(4, pane: fixture.surfaceID, foreground: nil))
+    await deliver(fixture, snapshot(4, pane: nil, foreground: nil))
     await detect(fixture)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
     #expect(removed == [fixture.surfaceID])
+  }
+
+  @Test func unmappedOrAmbiguousScansNeverReleaseABoundAgent() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    let claude = remoteProcess(200, name: "claude")
+    // Another anchor without a pane id, then this pane's id twice: neither is evidence.
+    for sequence in UInt64(2)...4 {
+      await deliver(fixture, snapshot(sequence, pane: nil, foreground: nil, anchor: 900))
+      await detect(fixture)
+    }
+    await deliver(fixture, snapshot(5, pane: fixture.surfaceID, foreground: nil, extraPane: fixture.surfaceID))
+    await detect(fixture)
+    await deliver(fixture, snapshot(6, pane: fixture.surfaceID, foreground: nil, extraPane: fixture.surfaceID))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+    // Mapped evidence counts again as soon as it returns.
+    await deliver(fixture, snapshot(7, pane: fixture.surfaceID, foreground: claude))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+  }
+
+  @Test func sshPanesKeepTickingOnTheRemoteCadence() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    #expect(fixture.state.remoteAdjustedInterval(surfaceID: fixture.surfaceID, nil) == nil)
+    #expect(fixture.state.remoteAdjustedInterval(surfaceID: fixture.surfaceID, .seconds(2)) == .seconds(2))
+    probe.job = sshJob
+    await detect(fixture)
+    // No agent: never cold, at most every three seconds.
+    #expect(fixture.state.remoteAdjustedInterval(surfaceID: fixture.surfaceID, nil) == .seconds(3))
+    #expect(
+      fixture.state.remoteAdjustedInterval(surfaceID: fixture.surfaceID, .milliseconds(300)) == .milliseconds(300))
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+    // A bound agent (even a delegated one on the two-second schedule) ticks every second.
+    #expect(fixture.state.remoteAdjustedInterval(surfaceID: fixture.surfaceID, .seconds(2)) == .seconds(1))
+  }
+
+  @Test func predecessorReportsDuringTheConfirmingProbeNeverDecideForTheSuccessor() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .working, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    // The tick that will see the successor starts; while its local probe runs, the
+    // successor's snapshot arrives and the predecessor's last reports land.
+    let entered = AsyncStream<Void>.makeStream()
+    probe.entered = entered.continuation
+    let tick = Task { await self.detect(fixture) }
+    var iterator = entered.stream.makeAsyncIterator()
+    _ = await iterator.next()
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(300, name: "claude")))
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .done, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .blocked, kind: nil, id: "child", app: "claude-code"),
+      surfaceID: fixture.surfaceID)
+    probe.gate?.resume()
+    _ = await tick.value
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.agentProcess == remoteRef(300))
+    #expect(pane?.decision?.reason.identifier != "osc.done")
+    #expect(pane?.state != .blocked)
   }
 
   @Test func theLocalSSHExitingReleasesAtOnceAndClosesTheLease() async {

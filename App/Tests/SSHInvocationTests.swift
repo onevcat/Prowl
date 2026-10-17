@@ -23,6 +23,32 @@ struct SSHInvocationTests {
     #expect(recipe(["-F", "/tmp/cfg", "--", "box"])?.configFile == "/tmp/cfg")
   }
 
+  @Test func optionsAfterTheDestinationShapeTheConnectionUntilTheCommand() {
+    // OpenSSH keeps reading options after the destination.
+    #expect(
+      recipe(["host", "-p", "2222", "-l", "reviewer"])
+        == SSHConnectionRecipe(destination: "host", options: ["-p", "2222", "-l", "reviewer"]))
+    #expect(recipe(["host", "-o", "HostName=10.0.0.2"])?.options == ["-o", "HostName=10.0.0.2"])
+    // The first other argument starts the command; what follows is the command's.
+    #expect(
+      recipe(["-p", "22", "host", "claude", "-p", "prompt"])
+        == SSHConnectionRecipe(destination: "host", options: ["-p", "22"]))
+    #expect(recipe(["host", "--", "-p", "2222"])?.options == [])
+  }
+
+  @Test func relativeOperandsKeepTheSSHWorkingDirectory() {
+    guard
+      case .supported(let parsed) = SSHInvocation.parse(["-F", "./ssh_config", "dev"], workingDirectory: "/work/proj")
+    else {
+      Issue.record("expected supported")
+      return
+    }
+    #expect(parsed.workingDirectory == "/work/proj")
+    #expect(parsed.configFile == "/work/proj/ssh_config")
+    #expect(
+      SSHConnectionRecipe(destination: "d", options: ["-F", "~/cfg"], workingDirectory: "/w").configFile == "~/cfg")
+  }
+
   @Test func forwardingSessionAndControlOptionsAreDropped() {
     let parsed = recipe([
       "-t", "-A", "-X", "-v", "-L", "8080:localhost:80", "-R", "9000:localhost:9000", "-D", "1080", "-S", "/tmp/ctl",
