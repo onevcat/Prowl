@@ -327,7 +327,9 @@ extension WorktreeTerminalState {
     if let job {
       guard localIdentified == nil, let ssh = Self.foregroundSSH(job) else {
         // The `ssh` left the foreground: its next tracker starts a new interval.
-        remoteFenceHistoryBySurface[surfaceID]?.leftForeground = true
+        if let ssh = remotePaneTrackers[surfaceID]?.ssh {
+          remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
+        }
         retireRemotePaneTracker(surfaceID: surfaceID)
         return nil
       }
@@ -342,8 +344,20 @@ extension WorktreeTerminalState {
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
     let observation = bindUnprobedProducer(
       observation: tracker.observe(active: active, now: now), tracker: tracker, surfaceID: surfaceID)
-    remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
+    storeFenceHistory(tracker.fenceHistory, surfaceID: surfaceID)
     return observation
+  }
+
+  /// Keeps `history` for its `ssh` and drops the histories of `ssh` clients that exited.
+  private func storeFenceHistory(_ history: RemoteFenceHistory, surfaceID: UUID) {
+    var histories = remoteFenceHistoryBySurface[surfaceID] ?? [:]
+    histories[history.ssh] = history
+    if histories.count > 1 {
+      histories = histories.filter { ssh, _ in
+        ssh == history.ssh || ProcessDetection.processStartDate(pid: ssh.pid) == ssh.startedAt
+      }
+    }
+    remoteFenceHistoryBySurface[surfaceID] = histories
   }
 
   /// The degraded OSC-only binding (docs-ai 082, L0 item 9): with no probed agent, a
@@ -394,7 +408,7 @@ extension WorktreeTerminalState {
       surfaceID: surfaceID, ssh: ssh.generation,
       invocation: SSHInvocation.parse(
         ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
-      fenceHistory: remoteFenceHistoryBySurface[surfaceID],
+      fenceHistory: remoteFenceHistoryBySurface[surfaceID]?[ssh.generation],
       source: remoteSnapshotSourceForTesting ?? .live
     ) { [weak self] in
       self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)

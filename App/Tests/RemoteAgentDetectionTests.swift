@@ -856,7 +856,7 @@ struct RemoteAgentDetectionTests {
     // The first sample after the restore reads no job.
     probe.job = nil
     await detect(fixture, screen: .unknown)
-    #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID]?.leftForeground == false)
+    #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID]?[sshGeneration]?.leftForeground == false)
     probe.job = sshJob
     await detect(fixture, screen: .unknown)
     tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
@@ -891,6 +891,49 @@ struct RemoteAgentDetectionTests {
     fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
     await detect(fixture, screen: .unknown)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
+  }
+
+  @Test func switchingBetweenSuspendedSSHClientsKeepsEachForegroundInterval() async throws {
+    // A second real process stands in for the other `ssh` client, so it has a generation.
+    let other = Process()
+    other.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    other.arguments = ["30"]
+    try other.run()
+    defer { other.terminate() }
+    let sshB = ForegroundJob(
+      processGroupID: other.processIdentifier,
+      processes: [
+        ForegroundProcess(
+          pid: other.processIdentifier, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: "ssh box",
+          arguments: ["ssh", "box"])
+      ])
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    // `ssh` A runs, then is suspended (the shell is in front).
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    probe.job = shellJob
+    await detect(fixture, screen: .unknown)
+    // `ssh` B runs and its Pi reports; then B is suspended.
+    probe.job = sshB
+    await detect(fixture, screen: .unknown)
+    fixture.state.handleProgramStatus(report(.idle, app: "pi"), surfaceID: fixture.surfaceID)
+    probe.job = shellJob
+    await detect(fixture, screen: .unknown)
+    // A is in front again and cannot be probed: B's report is not A's agent.
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    #expect(tracker.ssh == sshGeneration)
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
+    // A report from A's own interval binds.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
   }
 
   @Test func aProbeGapKeepsTheRemoteBinding() async {
