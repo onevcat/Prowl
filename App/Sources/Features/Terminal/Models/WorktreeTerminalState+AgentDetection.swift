@@ -332,7 +332,7 @@ extension WorktreeTerminalState {
           remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
         }
         retireRemotePaneTracker(surfaceID: surfaceID)
-        reconcileRemoteIndicator(foregroundSSH: nil, connection: nil, surfaceID: surfaceID, now: now)
+        reconcileRemoteIndicator(foregroundSSH: nil, observation: nil, surfaceID: surfaceID, now: now)
         return nil
       }
       tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh)
@@ -349,26 +349,32 @@ extension WorktreeTerminalState {
     storeFenceHistory(tracker.fenceHistory, surfaceID: surfaceID)
     if job != nil {
       reconcileRemoteIndicator(
-        foregroundSSH: tracker.ssh, connection: observation.connection, surfaceID: surfaceID, now: now)
+        foregroundSSH: tracker.ssh, observation: observation, surfaceID: surfaceID, now: now)
     }
     return observation
   }
 
   /// Sets the pane's label from a sample that read the foreground job (a probe gap changes
   /// nothing). It depends on no tracker, so a pane restored by Undo is reconciled too.
-  /// - The foreground `ssh` with a resolved connection: connected to that host.
-  /// - Another (or unresolved) `ssh`, or a shell: the label of an earlier `ssh` goes. An
+  /// - The foreground `ssh` with a resolved connection, or with a correlation issue: connected,
+  ///   with that issue, so a pane without a listed agent still says why (L0-8).
+  /// - Another (or pending) `ssh`, or a shell: the label of an earlier `ssh` goes. An
   ///   exited one leaves the ended marker for its duration; a suspended one leaves nothing.
   private func reconcileRemoteIndicator(
-    foregroundSSH: LocalProcessGeneration?, connection: ConnectionKey?, surfaceID: UUID, now: Date
+    foregroundSSH: LocalProcessGeneration?, observation: RemotePaneTracker.Observation?, surfaceID: UUID,
+    now: Date
   ) {
     let current = surfaces[surfaceID]?.bridge.state.remoteIndicator
-    if let foregroundSSH, let connection {
-      setRemoteIndicator(.connected(host: connection.label, ssh: foregroundSSH), surfaceID: surfaceID)
-      return
+    if let foregroundSSH, let observation {
+      let issue = RemotePaneIndicator.issue(observation.correlation)
+      if observation.connection != nil || issue != nil {
+        let host = observation.connection?.label ?? String(localized: "Remote host")
+        setRemoteIndicator(.connected(host: host, ssh: foregroundSSH, issue: issue), surfaceID: surfaceID)
+        return
+      }
     }
     switch current {
-    case .connected(let host, let ssh) where ssh != foregroundSSH:
+    case .connected(let host, let ssh, _) where ssh != foregroundSSH:
       let exited = ProcessDetection.processStartDate(pid: ssh.pid) != ssh.startedAt
       setRemoteIndicator(exited ? .ended(host: host, endedAt: now) : nil, surfaceID: surfaceID)
     case .ended where current?.showsEndedMarker(now: now) == false:

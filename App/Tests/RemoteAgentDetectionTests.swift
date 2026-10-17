@@ -321,8 +321,61 @@ struct RemoteAgentDetectionTests {
     defer { other.terminate() }
     probe.job = job
     await detect(fixture)
-    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
-    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+    // It is labelled as itself: an `ssh` Prowl cannot read, never as A.
+    guard case .connected(let host, let ssh, let issue) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("no label for the replacement ssh")
+      return
+    }
+    #expect(host == "Remote host")
+    #expect(ssh.pid == other.processIdentifier)
+    if case .unsupported = issue {
+    } else {
+      Issue.record("expected an unsupported issue, got \(String(describing: issue))")
+    }
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == ["Remote host"])
+  }
+
+  @Test func aPaneWithoutAnAgentStillReportsWhyItIsNotRead() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // The host answers, but no session carries this pane's id, and no producer reports.
+    await deliver(fixture, snapshot(1, pane: nil, foreground: nil))
+    await detect(fixture)
+    #expect(
+      fixture.surface.bridge.state.remoteIndicator
+        == .connected(
+          host: "onevcat@mini.local", ssh: sshGeneration, issue: .unmapped))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    // Once the pane maps, the issue goes.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(101, name: "zsh")))
+    await detect(fixture)
+    #expect(
+      fixture.surface.bridge.state.remoteIndicator
+        == .connected(
+          host: "onevcat@mini.local", ssh: sshGeneration, issue: nil))
+  }
+
+  @Test func anUnreachableHostIsReportedWithoutAnAgent() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture)
+    guard case .connected(_, _, .probeUnavailable?) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("expected a probe-unavailable issue")
+      return
+    }
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(
+      RemotePaneBadge.issueExplanation(.probeUnavailable(.authentication), host: "h")
+        == "Prowl cannot read h: the key was refused or needs a prompt. "
+        + "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
   }
 
   @Test func turningDetectionOffClearsTheRemoteLabel() async {

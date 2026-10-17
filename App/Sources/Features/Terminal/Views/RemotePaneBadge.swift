@@ -10,13 +10,22 @@ struct RemotePaneBadge: View {
   var body: some View {
     Group {
       switch indicator {
-      case .connected(let host, _):
+      case .connected(let host, _, nil):
         label(Text(verbatim: host), systemImage: "network")
           .accessibilityLabel(Text("Connected to \(host)"))
+          .allowsHitTesting(false)
+      case .connected(let host, _, let issue?):
+        // The reason is the tooltip, so this capsule (and only it) takes the pointer.
+        let explanation = RemotePaneBadge.issueExplanation(issue, host: host)
+        label(Text(verbatim: host), systemImage: "exclamationmark.triangle.fill", multicolor: true)
+          .help(explanation)
+          .accessibilityLabel(Text("Connected to \(host). Agents are not detected."))
+          .accessibilityHint(Text(verbatim: explanation))
       case .ended(let host, _):
         if !isEndedMarkerExpired, indicator?.showsEndedMarker(now: Date()) == true {
           label(Text("Disconnected from \(host)"), systemImage: "network.slash")
             .transition(.opacity)
+            .allowsHitTesting(false)
         }
       case nil:
         EmptyView()
@@ -30,15 +39,23 @@ struct RemotePaneBadge: View {
       if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
       isEndedMarkerExpired = true
     }
-    .allowsHitTesting(false)
   }
 
-  private func label(_ text: Text, systemImage: String) -> some View {
+  /// Why Prowl does not read this pane's agents, with what still works.
+  static func issueExplanation(_ issue: RemotePaneCorrelation, host: String) -> String {
+    let reason = RemoteAgentPresentation.correlationExplanation(issue, host: host)
+    let fallback = String(
+      localized: "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
+    return "\(reason) \(fallback)"
+  }
+
+  private func label(_ text: Text, systemImage: String, multicolor: Bool = false) -> some View {
     Label {
       text.lineLimit(1).truncationMode(.middle)
     } icon: {
       Image(systemName: systemImage)
         .imageScale(.small)
+        .symbolRenderingMode(multicolor ? .multicolor : .monochrome)
         .accessibilityHidden(true)
     }
     .labelStyle(.titleAndIcon)

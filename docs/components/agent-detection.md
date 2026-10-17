@@ -415,7 +415,11 @@ false` and relaunch Prowl, or launch it with `PROWL_REMOTE_AGENT_DETECTION=0`.
   bottom-trailing corner, and its tab shows a network glyph before the title (the tooltip
   names the hosts). When that `ssh` exits and the pane is back in its local shell, the
   corner reads "Disconnected from user@host" for five seconds. A suspended `ssh` (still
-  running) only removes the label.
+  running) only removes the label. When Prowl cannot read the pane's agents (the host has
+  no session for the pane, the side channel fails, or the `ssh` command is not supported),
+  the label shows a yellow warning glyph instead, whether or not an agent is listed. Its
+  tooltip gives the reason, and says that only agents that report their own status
+  (OSC 7501) are detected.
 - **Host label and health.** The Active Agents row shows `user@host` with a network
   glyph. Connection health is shown apart from the agent's state. If no snapshot has
   confirmed the agent for 10 s, the row keeps the last state, greys it out, and adds

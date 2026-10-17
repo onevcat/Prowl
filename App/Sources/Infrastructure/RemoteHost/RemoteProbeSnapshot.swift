@@ -2,7 +2,7 @@ import Foundation
 
 /// Why a probe produced no usable report (docs-ai 082, C3). Each reason maps to a
 /// different fix for the user, so the UX can name it.
-nonisolated enum RemoteProbeFailure: Equatable, Sendable {
+nonisolated enum RemoteProbeFailure: Hashable, Sendable {
   /// The key was refused or no key was available without a prompt (`BatchMode`).
   case authentication
   /// The host key is unknown or changed.
