@@ -323,32 +323,20 @@ extension WorktreeTerminalState {
       retireRemotePaneTracker(surfaceID: surfaceID)
       return nil
     }
-    // A probe gap (no job read) is not evidence that the `ssh` left the foreground.
-    if job == nil, let tracker = remotePaneTrackers[surfaceID] {
-      return tracker.observe(active: true, now: now)
-    }
-    guard localIdentified == nil, let ssh = job.flatMap(Self.foregroundSSH) else {
-      // The `ssh` left the foreground: its next tracker starts a new interval.
-      remoteFenceHistoryBySurface[surfaceID]?.leftForeground = true
-      retireRemotePaneTracker(surfaceID: surfaceID)
-      return nil
-    }
     let tracker: RemotePaneTracker
-    if let existing = remotePaneTrackers[surfaceID], existing.ssh == ssh.generation {
-      tracker = existing
-    } else {
-      retireRemotePaneTracker(surfaceID: surfaceID)
-      tracker = RemotePaneTracker(
-        surfaceID: surfaceID, ssh: ssh.generation,
-        invocation: SSHInvocation.parse(
-          ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
-        fenceHistory: remoteFenceHistoryBySurface[surfaceID],
-        source: remoteSnapshotSourceForTesting ?? .live
-      ) { [weak self] in
-        self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
+    if let job {
+      guard localIdentified == nil, let ssh = Self.foregroundSSH(job) else {
+        // The `ssh` left the foreground: its next tracker starts a new interval.
+        remoteFenceHistoryBySurface[surfaceID]?.leftForeground = true
+        retireRemotePaneTracker(surfaceID: surfaceID)
+        return nil
       }
-      remotePaneTrackers[surfaceID] = tracker
-      tracker.start()
+      tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh)
+    } else {
+      // A probe gap (no job read) is not evidence of a foreground change: an existing
+      // tracker keeps observing, and a missing one waits for the next real sample.
+      guard let existing = remotePaneTrackers[surfaceID] else { return nil }
+      tracker = existing
     }
     let active =
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
@@ -393,6 +381,27 @@ extension WorktreeTerminalState {
     else { return nil }
     let support = programStatusSupportForTesting ?? ProgramStatusSupport.level(for:)
     return support(agent) == .verified ? agent : nil
+  }
+
+  /// The pane's tracker for `ssh`, created (with the retained fence history) when the pane
+  /// has none for that generation.
+  private func remotePaneTracker(
+    surfaceID: UUID, ssh: (generation: LocalProcessGeneration, arguments: [String])
+  ) -> RemotePaneTracker {
+    if let existing = remotePaneTrackers[surfaceID], existing.ssh == ssh.generation { return existing }
+    retireRemotePaneTracker(surfaceID: surfaceID)
+    let tracker = RemotePaneTracker(
+      surfaceID: surfaceID, ssh: ssh.generation,
+      invocation: SSHInvocation.parse(
+        ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
+      fenceHistory: remoteFenceHistoryBySurface[surfaceID],
+      source: remoteSnapshotSourceForTesting ?? .live
+    ) { [weak self] in
+      self?.wakeAgentDetectionForRemoteSnapshot(surfaceID: surfaceID)
+    }
+    remotePaneTrackers[surfaceID] = tracker
+    tracker.start()
+    return tracker
   }
 
   /// The terminal's own foreground `ssh` and its arguments (without `argv[0]`), with the

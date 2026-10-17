@@ -261,8 +261,11 @@ degraded OSC-only binding.
   and its accepted degraded agent, so a quiet producer is listed again after Undo. Records
   from before that interval, or ones an earlier binding excluded, never acquire or confirm
   the agent (review rounds 1–3).
-- **Probe gaps.** A tick whose local probe reads no job keeps the tracker and its binding;
-  only a job without the `ssh` (or with a local agent) retires it (review round 3).
+- **Probe gaps.** A tick whose local probe reads no job is not a foreground change. An
+  existing tracker observes through the same path (degraded binding, confirmation, history
+  write-back); without one, nothing changes until a real sample. Only a job without the
+  `ssh`, or with a local agent, retires the tracker and starts a new interval (review rounds
+  3–4).
 - **Measured** in a Debug instance with the flag on. `ssh -F /dev/null -t mini` skips the
   system `SendEnv`, so the host shows the session as pane `-` and the pane is `unmapped`.
   - Claude Code bound through `osc.idle` 1.49 s after the command, then went

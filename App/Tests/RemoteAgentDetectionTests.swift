@@ -834,6 +834,58 @@ struct RemoteAgentDetectionTests {
     #expect(emitted.last?.remote?.isStale == false)
   }
 
+  @Test func aProbeGapRightAfterUndoNeverEndsTheForegroundInterval() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    var tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.blocked), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(lastChangedAt: Date())
+    // The first sample after the restore reads no job.
+    probe.job = nil
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID]?.leftForeground == false)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+  }
+
+  @Test func aProbeGapKeepsTheDegradedConfirmation() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture, screen: .unknown)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(emitted.last?.remote?.isStale == false)
+    // A tick whose local probe reads nothing keeps the binding and its fresh confirmation.
+    probe.job = nil
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
+    // Stale only once the report is older than ten seconds.
+    await detect(fixture, screen: .unknown, now: Date().addingTimeInterval(11))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == true)
+    // A newer eligible report during the gap refreshes it.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.isStale == false)
+  }
+
   @Test func aProbeGapKeepsTheRemoteBinding() async {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
