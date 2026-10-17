@@ -216,9 +216,11 @@ degraded OSC-only binding.
 - **Stale proves nothing.** A stale entry keeps its agent and last state. Condition evidence
   reports it as `unavailable`, so `agents wait --until idle|blocked` and dispatch readiness
   never resolve on it. `exit` still needs the entry to go (an `ssh` exit or the snapshot
-  rule), not a stale observation. A remote agent whose decision falls back to `unknown`
-  (for example, a withdrawn OSC root over an unrecognized screen) keeps its last state
-  instead of hiding the entry (review round 1).
+  rule), not a stale observation. A remote agent whose state is unknown (an unrecognized
+  screen with no eligible OSC record, for example after a withdrawn root or a successor
+  start) stays listed: its context marks the state unknown, and conditions read it as
+  `unknown`. No earlier state is carried over, so a predecessor's Blocked never describes
+  a successor (review rounds 1–2).
 - **Admission.**
   - `agents dispatch` refuses a remote agent with `REMOTE_AGENT_UNSUPPORTED` before typing
     anything: the receipt is reported with `prowl agents dispatch-complete` from inside the
@@ -234,4 +236,3 @@ degraded OSC-only binding.
     - With Prowl's side-channel master stopped (`SIGSTOP` on the `[mux]` process), the
       same wait timed out after 12 s, and the entry kept its agent and last state.
     - After `SIGCONT`, the wait resolved again.
-

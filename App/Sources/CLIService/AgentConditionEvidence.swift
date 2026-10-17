@@ -147,6 +147,8 @@ enum AgentConditionEvidence {
     guard snapshot.isLive else { return "gone" }
     guard let agent = snapshot.agent else { return "absent" }
     if agent.remote?.isStale == true { return unavailableState }
+    // A remote entry stays listed while its state is unknown; it proves no condition.
+    if agent.remote?.isStateKnown == false { return "unknown" }
     let state = status(for: agent, fallback: .idle).rawValue
     // An unmatched or unrecognized screen is not idle evidence: a retained
     // `.idle` may have been stabilized before the layout became unclassifiable.

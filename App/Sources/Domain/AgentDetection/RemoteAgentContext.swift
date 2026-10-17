@@ -12,15 +12,22 @@ nonisolated struct RemoteAgentContext: Equatable, Sendable {
   /// so a steady stream of confirmations does not change the published entry.
   var lastConfirmedAt: Date?
   var isStale: Bool
+  /// False while no evidence decides the agent's state (an unrecognized screen without an
+  /// eligible OSC record). The entry stays listed, but its state is evidence for nothing.
+  var isStateKnown: Bool
 
   /// `user@hostname`, the label a remote pane shows.
   var hostLabel: String? {
     connection.map { "\($0.user)@\($0.hostname)" }
   }
 
-  init(connection: ConnectionKey?, correlation: RemotePaneCorrelation, confirmedAt: Date?, now: Date) {
+  init(
+    connection: ConnectionKey?, correlation: RemotePaneCorrelation, confirmedAt: Date?, now: Date,
+    stateKnown: Bool = true
+  ) {
     self.connection = connection
     self.correlation = correlation
+    isStateKnown = stateKnown
     let isStale = confirmedAt.map { now.timeIntervalSince($0) > Self.staleAfter } ?? true
     self.isStale = isStale
     lastConfirmedAt = isStale ? confirmedAt : nil

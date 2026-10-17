@@ -91,8 +91,9 @@ final class RemotePaneTracker {
     /// When a snapshot last confirmed the bound agent.
     var confirmedAt: Date?
 
-    func context(now: Date) -> RemoteAgentContext {
-      RemoteAgentContext(connection: connection, correlation: correlation, confirmedAt: confirmedAt, now: now)
+    func context(now: Date, stateKnown: Bool = true) -> RemoteAgentContext {
+      RemoteAgentContext(
+        connection: connection, correlation: correlation, confirmedAt: confirmedAt, now: now, stateKnown: stateKnown)
     }
   }
 
