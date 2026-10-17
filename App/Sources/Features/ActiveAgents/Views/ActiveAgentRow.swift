@@ -14,7 +14,7 @@ struct ActiveAgentRow: View {
       agentIcon
       VStack(alignment: .leading, spacing: 2) {
         title
-        Text(subtitle)
+        subtitleLine
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -44,6 +44,49 @@ struct ActiveAgentRow: View {
     .lineLimit(1)
   }
 
+  /// A remote agent shows its host and, when the host does not confirm it, its connection
+  /// health before the usual subtitle (docs-ai 082, L0 item 10).
+  @ViewBuilder
+  private var subtitleLine: some View {
+    if let remote = entry.remote {
+      HStack(spacing: 3) {
+        Image(systemName: "network")
+          .imageScale(.small)
+          .accessibilityHidden(true)
+        Text(RemoteAgentPresentation.hostLabel(for: remote))
+          .layoutPriority(1)
+        switch RemoteAgentHealth(remote) {
+        case .live:
+          EmptyView()
+        case .unknownState:
+          separator
+          Text("Status unknown")
+        case .lastSeen(let date):
+          separator
+          Text("Last seen \(date, style: .relative) ago")
+        case .unavailable:
+          separator
+          Text("Status unavailable")
+        }
+        separator
+        Text(subtitle)
+      }
+    } else {
+      Text(subtitle)
+    }
+  }
+
+  private var separator: some View {
+    Text("·").foregroundStyle(.tertiary)
+  }
+
+  /// A remote state the host does not confirm, or that no evidence decides, is shown but not
+  /// emphasized.
+  private var isStateUnconfirmed: Bool {
+    guard let remote = entry.remote else { return false }
+    return RemoteAgentHealth(remote) != .live
+  }
+
   private var agentIcon: some View {
     Group {
       if let icon = entry.iconSource {
@@ -58,21 +101,17 @@ struct ActiveAgentRow: View {
 
   private var statusPill: some View {
     HStack(spacing: 4) {
-      if entry.displayState == .working {
-        if reduceMotion {
-          statusText
-        } else {
-          BaguaWorkingIndicator()
-        }
+      if entry.displayState == .working, !reduceMotion, !isStateUnconfirmed {
+        BaguaWorkingIndicator()
       } else {
         statusText
       }
     }
-    .foregroundStyle(entry.displayState.foregroundStyle)
+    .foregroundStyle(isStateUnconfirmed ? Color.secondary : entry.displayState.foregroundStyle)
   }
 
   private var statusText: some View {
-    Text(entry.displayState.label)
+    Text(entry.remote?.isStateKnown == false ? String(localized: "Unknown") : entry.displayState.label)
       .font(.caption2.weight(.semibold))
       .lineLimit(1)
   }

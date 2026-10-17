@@ -11,7 +11,8 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-17 | S2: host identity (C1), connection owner (C4), snapshot contract (C3), structured commands (C5), probe and parser (C6), all unused by the app. Review Loop clean after 2 rounds | #925 |
 | 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence. Review Loop: 4 rounds plus a 2-round follow-up, clean (R1–R10) | #926 |
 | 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
-| 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag) | S3c PR |
+| 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag). Review Loop: 4 rounds, then two follow-ups, clean | #928 |
+| 2026-10-18 | S4a: host label and connection health on Active Agents rows, `remote` object in `prowl agents --json`, docs (behind the flag) | S4a PR |
 
 ## S1 — Typed process references
 
@@ -283,3 +284,35 @@ degraded OSC-only binding.
     `osc.working` → `osc.done`; dispatch was refused.
   - After `/exit` the entry stayed listed (by design, stale after 10 s); the `ssh` exit
     released it.
+
+## S4a — Host label, health, and CLI fields (behind the flag)
+
+S4 is split. S4a holds the data and the Active Agents row. S4b holds the pane and tab
+label, the ssh-ended marker, and turning the flag on.
+
+- **Health apart from state.** `RemoteAgentHealth` maps `RemoteAgentContext` to one of
+  four values: `live`, `unknownState` (confirmed, but no evidence decides),
+  `lastSeen(date)` (stale), or `unavailable` (never confirmed). The row keeps the agent's
+  last state. A state that is not live is greyed out, with no working spinner. A
+  state-unknown pill reads "Unknown".
+- **Row.** The subtitle line starts with a network glyph and `user@host` (or "Remote
+  host" while unresolved). A health text follows: "Status unknown", "Last seen … ago"
+  (a self-updating relative date), or "Status unavailable". The row's height does not
+  change. The tooltip adds a reason-specific explanation (`RemoteAgentPresentation`): the
+  correlation, the probe failure, or the unsupported `ssh` option. For a degraded binding
+  it adds that the status comes only from the agent's terminal reports. The context menu
+  hides "Copy Path" and "Reveal in Finder" for a remote agent, because the local path is
+  the `ssh`'s.
+- **CLI.** `AgentsCommandRemote` in `ProwlCLIShared` (closed schema `agentsRemote`) has:
+  - `host`, `user`, `hostname`, `port`
+  - `correlation`, plus `correlation_reason` (a code for `probe_unavailable`, the option
+    for `unsupported`)
+  - `confidence` (`probed` | `heuristic`)
+  - `freshness` (`fresh` | `stale`), plus `last_confirmed_at` while stale
+  - `state_known`
+
+  It is absent for local agents. Text output appends `remote=<host> [qualifiers]`.
+- **Docs.** `agent-detection.md` gains "Remote agents over SSH" (how, label and health,
+  degraded binding, release, limits). `cli.md` documents the `remote` object. The
+  `prowl-cli` skill lists the fields.
+
