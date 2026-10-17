@@ -154,7 +154,8 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   generation (pid and start time); a new `ssh`, a local agent, the flag off or a closed
   pane retire it and close the lease, and snapshots that arrive later are dropped.
 - **Tracker** (`RemotePaneTracker`). It leases the host's owner (`ssh -G`, then the
-  registry) and consumes snapshots on the main actor.
+  registry) and consumes snapshots on the main actor. A failed connection is retried with a
+  bounded backoff (1 s doubling to 30 s), and at once on the next wake (follow-up review).
   - Correlation: `pending`, `correlated`, `ambiguous`, `unmapped`, `probeUnavailable`,
     `unsupported`. Only `correlated` binds. The session that first carried the pane id is
     also recognized by its anchor pid: back at the macOS system shell the id is hidden again.

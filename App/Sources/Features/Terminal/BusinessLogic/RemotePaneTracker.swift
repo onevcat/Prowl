@@ -108,6 +108,9 @@ final class RemotePaneTracker {
   private var lease: RemoteConnectionLease?
   private var connectTask: Task<Void, Never>?
   private var connectFailed = false
+  private var connectFailures = 0
+  /// When a failed connection may be tried again (bounded exponential backoff).
+  private var nextConnectAt: TimeInterval?
   private var retired = false
   private var lastRequestAt: TimeInterval?
   private(set) var latest: RemoteProbeSnapshot?
@@ -148,14 +151,25 @@ final class RemotePaneTracker {
     self.onSnapshot = onSnapshot
   }
 
-  /// Opens the connection lease and consumes snapshots until the tracker retires.
+  /// Longest wait between connection attempts after failures.
+  static let maximumConnectBackoff: TimeInterval = 30
+
+  /// Opens the connection lease and consumes snapshots until the tracker retires. A failed
+  /// attempt (for example `ssh -G` during a DNS change) is retried with a growing delay,
+  /// or at once on the next wake.
   func start() {
-    guard connectTask == nil, case .supported(let recipe) = invocation else { return }
+    guard connectTask == nil, lease == nil, !retired, case .supported(let recipe) = invocation else { return }
+    nextConnectAt = nil
     let source = source
     connectTask = Task { [weak self] in
       guard let lease = await source.connect(recipe) else {
-        self?.connectFailed = true
-        self?.onSnapshot()
+        guard let self else { return }
+        self.connectFailed = true
+        self.connectFailures += 1
+        self.nextConnectAt =
+          self.uptime() + min(Self.maximumConnectBackoff, pow(2, Double(self.connectFailures - 1)))
+        self.connectTask = nil
+        self.onSnapshot()
         return
       }
       guard let self, !self.retired else {
@@ -163,6 +177,8 @@ final class RemotePaneTracker {
         return
       }
       self.lease = lease
+      self.connectFailed = false
+      self.connectFailures = 0
       self.lastRequestAt = self.uptime()
       await lease.refresh()
       for await snapshot in lease.snapshots {
@@ -183,14 +199,17 @@ final class RemotePaneTracker {
     }
   }
 
-  /// Asks for a snapshot on the next tick, whatever the cadence (a key press or a report).
+  /// Asks for a snapshot on the next tick, whatever the cadence (a key press or a report);
+  /// a failed connection is tried again on that tick.
   func requestSoon() {
     lastRequestAt = nil
+    if nextConnectAt != nil { nextConnectAt = uptime() }
   }
 
   /// One tick's view. Requests a refresh when the cadence is due; reads only the latest
   /// snapshot, so pane ticks never wait for the host.
   func observe(active: Bool, now: Date) -> Observation {
+    if let nextConnectAt, uptime() >= nextConnectAt { start() }
     requestRefreshIfDue(active: active)
     var verdict: RemoteProcessPresence.Verdict?
     if let latest, let report = latest.report,

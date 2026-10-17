@@ -32,14 +32,28 @@ struct RemoteAgentDetectionTests {
     private var storedRecipes: [SSHConnectionRecipe] = []
     private var storedRefreshes = 0
     private var storedCloses = 0
+    private var storedFailures = 0
+    private var storedAttempts = 0
     let connection = ConnectionKey(user: "onevcat", hostname: "mini.local")
+
+    var attempts: Int { lock.withLock { storedAttempts } }
+    /// The next `count` connects fail as an unresolvable recipe would.
+    func failNext(_ count: Int) { lock.withLock { storedFailures = count } }
 
     var recipes: [SSHConnectionRecipe] { lock.withLock { storedRecipes } }
     var refreshes: Int { lock.withLock { storedRefreshes } }
     var closes: Int { lock.withLock { storedCloses } }
 
     var source: RemoteSnapshotSource {
-      RemoteSnapshotSource { [self] recipe in connect(recipe) }
+      RemoteSnapshotSource { [self] recipe in
+        let fails = lock.withLock {
+          storedAttempts += 1
+          guard storedFailures > 0 else { return false }
+          storedFailures -= 1
+          return true
+        }
+        return fails ? nil : connect(recipe)
+      }
     }
 
     private func connect(_ recipe: SSHConnectionRecipe) -> RemoteConnectionLease {
@@ -430,6 +444,58 @@ struct RemoteAgentDetectionTests {
     await settle { fixture.source.recipes.count == 1 }
     #expect(fixture.source.recipes.first?.destination == "dev@target")
     #expect(fixture.source.recipes.first?.options == ["-J", "jump"])
+  }
+
+  @Test func aFailedConnectionIsRetriedOnTheNextWake() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(1)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.attempts == 1 }
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    // A key press or report wakes the pane: the connection is tried again at once.
+    tracker.requestSoon()
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    #expect(fixture.source.attempts == 2)
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+  }
+
+  @Test func connectionRetriesBackOffWithoutAWake() async throws {
+    var clock: TimeInterval = 100
+    let source = FakeRemoteSource()
+    source.failNext(3)
+    let tracker = RemotePaneTracker(
+      surfaceID: UUID(), ssh: LocalProcessGeneration(pid: 1, startedAt: Date()),
+      invocation: .supported(SSHConnectionRecipe(destination: "mini")), source: source.source,
+      uptime: { clock }, onSnapshot: {})
+    tracker.start()
+    await settle { source.attempts == 1 }
+    for _ in 0..<20 { await Task.yield() }
+    _ = tracker.observe(active: true, now: Date())
+    #expect(source.attempts == 1)
+    clock += 1
+    _ = tracker.observe(active: true, now: Date())
+    await settle { source.attempts == 2 }
+    for _ in 0..<20 { await Task.yield() }
+    // The next attempt waits twice as long.
+    clock += 1
+    _ = tracker.observe(active: true, now: Date())
+    for _ in 0..<20 { await Task.yield() }
+    #expect(source.attempts == 2)
+    clock += 1
+    _ = tracker.observe(active: true, now: Date())
+    await settle { source.attempts == 3 }
+    // Retiring stops any further attempt.
+    tracker.retire()
+    clock += 100
+    _ = tracker.observe(active: true, now: Date())
+    for _ in 0..<20 { await Task.yield() }
+    #expect(source.attempts == 3)
   }
 
   @Test func unsupportedArgvNeverConnects() async throws {
