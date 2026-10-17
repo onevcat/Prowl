@@ -10,7 +10,8 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-17 | S1: typed process references (C2) and the `ConnectionKey` value type; local-only OS entry points; evidence retirement on an origin change. No behaviour change for local panes. Review Loop clean after 3 rounds | #924 |
 | 2026-10-17 | S2: host identity (C1), connection owner (C4), snapshot contract (C3), structured commands (C5), probe and parser (C6), all unused by the app. Review Loop clean after 2 rounds | #925 |
 | 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence. Review Loop: 4 rounds plus a 2-round follow-up, clean (R1–R10) | #926 |
-| 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag) | S3b PR |
+| 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
+| 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag) | S3c PR |
 
 ## S1 — Typed process references
 
@@ -236,3 +237,26 @@ degraded OSC-only binding.
     - With Prowl's side-channel master stopped (`SIGSTOP` on the `[mux]` process), the
       same wait timed out after 12 s, and the entry kept its agent and last state.
     - After `SIGCONT`, the wait resolved again.
+
+## S3c — Degraded OSC-only binding (behind the flag)
+
+- **When.** The pane's foreground is a local `ssh` whose tracker is `unmapped`,
+  `probeUnavailable`, or `unsupported`, and no probed agent is bound. The surface's root
+  record must come from a `.verified` producer and must have arrived after that `ssh`
+  started. The plan names `unmapped` and `probeUnavailable`; `unsupported` (argv outside the
+  grammar) is a pane that cannot be probed either.
+- **Identity.** `ProcessRef.unprobedRemote(ssh generation)` (with matching
+  `AgentProcessGeneration` and `ProcessOrigin` cases) names the local `ssh`, never a remote
+  pid. Its origin is not local, so local providers, hooks, sessions and admission treat it as
+  remote. The OSC fence is the `ssh` start.
+- **Release and confidence.** Only the `ssh` exit releases the binding. A withdrawal or a
+  quiet producer only ages it: the context is stale 10 s after the producer's last root
+  report (OSC has no heartbeat). `RemoteAgentContext.isUnprobed` marks it heuristic. Once the
+  pane is mapped (`correlated`), the probed path takes over.
+- **Measured** in a Debug instance with the flag on. `ssh -F /dev/null -t mini` skips the
+  system `SendEnv`, so the host shows the session as pane `-` and the pane is `unmapped`.
+  - Claude Code bound through `osc.idle` 1.49 s after the command, then went
+    `osc.working` → `osc.done`; dispatch was refused.
+  - After `/exit` the entry stayed listed (by design, stale after 10 s); the `ssh` exit
+    released it.
+

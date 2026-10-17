@@ -88,12 +88,14 @@ final class RemotePaneTracker {
     var verdict: RemoteProcessPresence.Verdict?
     /// The arrival-time fence for OSC records of the bound remote agent (L0 item 5).
     var programStatusFence: Date?
-    /// When a snapshot last confirmed the bound agent.
+    /// When a snapshot last confirmed the bound agent, or for an unprobed binding, when its
+    /// producer last reported.
     var confirmedAt: Date?
 
     func context(now: Date, stateKnown: Bool = true) -> RemoteAgentContext {
       RemoteAgentContext(
-        connection: connection, correlation: correlation, confirmedAt: confirmedAt, now: now, stateKnown: stateKnown)
+        connection: connection, correlation: correlation, confirmedAt: confirmedAt, now: now, stateKnown: stateKnown,
+        isUnprobed: identified.map { if case .unprobedRemote = $0.process.ref { true } else { false } } ?? false)
     }
   }
 
@@ -136,6 +138,8 @@ final class RemotePaneTracker {
     let bootID: String
   }
   private var bound: IdentifiedAgentProcess?
+  /// An agent known only from its OSC records (L0 item 9); released only with the `ssh`.
+  private var unprobed: IdentifiedAgentProcess?
   private var confirmedAt: Date?
   private var presence = RemoteProcessPresence()
   /// The OSC fence of this `ssh` generation; it outlives the tracker (close and Undo).
@@ -226,9 +230,38 @@ final class RemotePaneTracker {
       consumedSequence = (latest.connectionEpoch, latest.sequence)
       verdict = consume(latest, report: report, now: now)
     }
+    // A probed session supersedes the unprobed binding: its own evidence decides from here.
+    if correlation == .correlated { unprobed = nil }
+    if bound == nil, let unprobed {
+      return Observation(
+        correlation: correlation, connection: lease?.connection, identified: unprobed, verdict: nil,
+        programStatusFence: ssh.startedAt, confirmedAt: nil)
+    }
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
       programStatusFence: fenceHistory.fence, confirmedAt: confirmedAt)
+  }
+
+  /// Whether a verified producer's report may stand in for a probed agent: the host cannot
+  /// be probed, the pane is not mapped, or its `ssh` command line is outside the grammar.
+  var allowsUnprobedBinding: Bool {
+    guard bound == nil else { return false }
+    switch correlation {
+    case .unmapped, .probeUnavailable, .unsupported: return true
+    case .pending, .correlated, .ambiguous: return false
+    }
+  }
+
+  /// Binds `agent` from its OSC root record (L0 item 9). The reference names this `ssh`,
+  /// never a remote pid.
+  func bindUnprobed(_ agent: DetectedAgent) -> IdentifiedAgentProcess {
+    if let unprobed, unprobed.agent == agent { return unprobed }
+    let identified = IdentifiedAgentProcess(
+      agent: agent, name: agent.iconLookupToken,
+      process: ForegroundProcess(
+        ref: .unprobedRemote(ssh), parentPID: nil, name: agent.iconLookupToken, argv0: nil, cmdline: nil))
+    unprobed = identified
+    return identified
   }
 
   /// Applies a new snapshot to the binding and returns its verdict for the bound agent.

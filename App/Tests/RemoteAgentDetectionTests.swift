@@ -667,6 +667,88 @@ struct RemoteAgentDetectionTests {
     #expect(source.attempts == 3)
   }
 
+  private var sshGeneration: LocalProcessGeneration {
+    LocalProcessGeneration(pid: getpid(), startedAt: ProcessDetection.processStartDate(pid: getpid()) ?? .distantPast)
+  }
+
+  private func report(_ state: GhosttyProgramStatusReport.State, app: String = "claude-code")
+    -> GhosttyProgramStatusReport
+  {
+    GhosttyProgramStatusReport(state: state, kind: nil, id: "", app: app)
+  }
+
+  @Test func aVerifiedProducerBindsAnUnprobedPaneWithoutARemotePid() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var emitted: [ActiveAgentEntry] = []
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(pane?.decision?.reason.identifier == "osc.working")
+    let entry = try #require(emitted.last)
+    #expect(entry.remote?.isUnprobed == true)
+    #expect(entry.remote?.isStale == false)
+    #expect(pane?.session == nil)
+
+    // A withdrawal or quiet producer never releases it; the observation turns stale instead.
+    fixture.state.handleProgramStatus(report(.clear), surfaceID: fixture.surfaceID)
+    await detect(fixture, now: Date().addingTimeInterval(11))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(removed.isEmpty)
+    #expect(emitted.last?.remote?.isStale == true)
+    // Only the `ssh` exit releases it.
+    probe.job = nil
+    await detect(fixture)
+    #expect(removed == [fixture.surfaceID])
+  }
+
+  @Test func unprobedBindingNeedsAVerifiedReportFromThisSSH() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    // A root that arrived before this `ssh` started belongs to something else.
+    let sshStart = sshGeneration.startedAt
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID, now: sshStart.addingTimeInterval(-1))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    // An unverified producer never binds.
+    fixture.state.programStatusSupportForTesting = { _ in .unverified }
+    fixture.state.handleProgramStatus(report(.idle), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+  }
+
+  @Test func aProbedSessionSupersedesTheUnprobedBinding() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // Unmapped: the host is reachable but no session carries this pane's id.
+    await deliver(fixture, snapshot(1, pane: UUID(), foreground: remoteProcess(200, name: "claude")))
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    // The pane is mapped now and shows the agent: the probed reference takes over.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+  }
+
   @Test func unsupportedArgvNeverConnects() async throws {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)

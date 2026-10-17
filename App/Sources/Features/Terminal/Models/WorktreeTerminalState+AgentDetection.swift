@@ -280,6 +280,8 @@ extension WorktreeTerminalState {
       ProcessDetection.processStartDate(pid: pid).map { .local(pid: pid, startedAt: $0) }
     case .remote(let remote):
       .remote(remote)
+    case .unprobedRemote(let ssh):
+      .unprobedRemote(ssh)
     case nil:
       nil
     }
@@ -340,9 +342,31 @@ extension WorktreeTerminalState {
     }
     let active =
       surfaceAgentStates[surfaceID]?.detectedAgent != nil || isAgentDetectionSettling(surfaceID: surfaceID, now: now)
-    let observation = tracker.observe(active: active, now: now)
+    var observation = tracker.observe(active: active, now: now)
     remoteFenceHistoryBySurface[surfaceID] = tracker.fenceHistory
+    if observation.identified == nil, tracker.allowsUnprobedBinding,
+      let agent = verifiedRootProducer(surfaceID: surfaceID, notBefore: ssh.generation.startedAt)
+    {
+      observation.identified = tracker.bindUnprobed(agent)
+      observation.programStatusFence = ssh.generation.startedAt
+    }
+    if case .unprobedRemote = observation.identified?.process.ref {
+      // OSC has no heartbeat: the producer's last report is the only confirmation.
+      observation.confirmedAt = programStatusStoresBySurface[surfaceID]?.root?.arrivedAt
+    }
     return observation
+  }
+
+  /// The verified OSC 7501 producer whose root record arrived on this surface after
+  /// `notBefore`, if any. "Verified" means its protocol behaviour was checked, not that the
+  /// payload is authentic.
+  private func verifiedRootProducer(surfaceID: UUID, notBefore: Date) -> DetectedAgent? {
+    guard let store = programStatusStoresBySurface[surfaceID], let root = store.root, root.arrivedAt >= notBefore,
+      let app = store.app(of: root),
+      let agent = DetectedAgent.allCases.first(where: { $0.programStatusApp == app })
+    else { return nil }
+    let support = programStatusSupportForTesting ?? ProgramStatusSupport.level(for:)
+    return support(agent) == .verified ? agent : nil
   }
 
   /// The terminal's own foreground `ssh` and its arguments (without `argv[0]`), with the
