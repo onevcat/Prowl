@@ -1103,6 +1103,68 @@
         },
         "signals": {
           "$ref": "#/$defs/agentSignals"
+        },
+        "remote": {
+          "$ref": "#/$defs/agentsRemote"
+        }
+      }
+    },
+    "agentsRemote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correlation",
+        "confidence",
+        "freshness",
+        "state_known"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "type": "string"
+        },
+        "hostname": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "correlation": {
+          "enum": [
+            "pending",
+            "correlated",
+            "ambiguous",
+            "unmapped",
+            "probe_unavailable",
+            "unsupported"
+          ]
+        },
+        "correlation_reason": {
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "probed",
+            "heuristic"
+          ]
+        },
+        "freshness": {
+          "enum": [
+            "fresh",
+            "stale"
+          ]
+        },
+        "last_confirmed_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_known": {
+          "type": "boolean"
         }
       }
     },

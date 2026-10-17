@@ -72,6 +72,8 @@ struct AgentIslandRosterContent: View {
             }
           }
           .buttonStyle(.plain)
+          // An empty help string shows no tooltip, so local rows keep none.
+          .help(ActiveAgentRowPresentation.remoteHelpText(for: entry) ?? "")
           .accessibilityValue(
             store.islandNavigation.selectedEntryID == entry.id ? "Selected" : ""
           )

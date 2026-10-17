@@ -17,7 +17,15 @@ enum ActiveAgentRowPresentation {
     branchName: String,
     showTabTitles: Bool
   ) -> String {
-    showTabTitles ? branchName : paneTitle(for: entry)
+    let text = showTabTitles ? branchName : paneTitle(for: entry)
+    guard let remote = remoteHelpText(for: entry) else { return text }
+    return "\(text)\n\(remote)"
+  }
+
+  /// The reason a remote agent's observation rests on what it does; nil for a local agent.
+  /// The island roster, whose subtitle already shows title and branch, uses it alone.
+  static func remoteHelpText(for entry: ActiveAgentEntry) -> String? {
+    entry.remote.map(RemoteAgentPresentation.explanation)
   }
 
   /// The island roster has room for both, so it shows "pane title · branch" regardless of the
@@ -57,7 +65,8 @@ struct ActiveAgentRowContextMenu: View {
     }
     .help("Clear this agent's unread notifications without switching to it")
 
-    if let directory {
+    // A remote agent's directory is on its host; the local path is the `ssh`'s.
+    if let directory, entry.remote == nil {
       Divider()
       Button("Copy Path") {
         NSPasteboard.general.clearContents()

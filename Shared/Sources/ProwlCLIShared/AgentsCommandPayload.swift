@@ -25,6 +25,8 @@ public struct AgentsCommandAgent: Codable, Equatable {
   public let pane: AgentsCommandPane
   public let session: AgentsCommandSession?
   public let signals: AgentSignalsPayload?
+  /// Set for an agent on a remote host (docs-ai 082).
+  public let remote: AgentsCommandRemote?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -41,6 +43,7 @@ public struct AgentsCommandAgent: Codable, Equatable {
     case pane
     case session
     case signals
+    case remote
   }
 
   public init(
@@ -57,7 +60,8 @@ public struct AgentsCommandAgent: Codable, Equatable {
     tab: AgentsCommandTab,
     pane: AgentsCommandPane,
     session: AgentsCommandSession? = nil,
-    signals: AgentSignalsPayload? = nil
+    signals: AgentSignalsPayload? = nil,
+    remote: AgentsCommandRemote? = nil
   ) {
     self.id = id
     self.type = type
@@ -73,6 +77,65 @@ public struct AgentsCommandAgent: Codable, Equatable {
     self.pane = pane
     self.session = session
     self.signals = signals
+    self.remote = remote
+  }
+}
+
+/// The host of a remote agent and what its observation rests on (docs-ai 082, L0 item 10).
+public struct AgentsCommandRemote: Codable, Equatable {
+  /// `user@hostname`; absent while the connection is not resolved.
+  public let host: String?
+  public let user: String?
+  public let hostname: String?
+  public let port: Int?
+  /// `pending`, `correlated`, `ambiguous`, `unmapped`, `probe_unavailable`, or `unsupported`.
+  public let correlation: String
+  /// Why the host cannot be read, or why the `ssh` command is not supported.
+  public let correlationReason: String?
+  /// `probed` (a host snapshot shows the process) or `heuristic` (OSC reports only).
+  public let confidence: String
+  /// `fresh`, or `stale` when the host has not confirmed the agent recently.
+  public let freshness: String
+  /// The last confirmation of a stale observation.
+  public let lastConfirmedAt: String?
+  /// False when no evidence decides the agent's state; `status` is then not evidence.
+  public let stateKnown: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case host
+    case user
+    case hostname
+    case port
+    case correlation
+    case correlationReason = "correlation_reason"
+    case confidence
+    case freshness
+    case lastConfirmedAt = "last_confirmed_at"
+    case stateKnown = "state_known"
+  }
+
+  public init(
+    host: String?,
+    user: String?,
+    hostname: String?,
+    port: Int?,
+    correlation: String,
+    correlationReason: String? = nil,
+    confidence: String,
+    freshness: String,
+    lastConfirmedAt: String? = nil,
+    stateKnown: Bool
+  ) {
+    self.host = host
+    self.user = user
+    self.hostname = hostname
+    self.port = port
+    self.correlation = correlation
+    self.correlationReason = correlationReason
+    self.confidence = confidence
+    self.freshness = freshness
+    self.lastConfirmedAt = lastConfirmedAt
+    self.stateKnown = stateKnown
   }
 }
 

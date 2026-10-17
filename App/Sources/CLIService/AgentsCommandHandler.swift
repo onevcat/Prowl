@@ -149,11 +149,51 @@ final class AgentsCommandHandler: CommandHandler {
             source: $0.source.rawValue
           )
         },
-        signals: snapshot.signalsBySurfaceID[entry.surfaceID] ?? .empty
+        signals: snapshot.signalsBySurfaceID[entry.surfaceID] ?? .empty,
+        remote: entry.remote.map(remotePayload)
       )
     }
 
     return AgentsCommandPayload(count: agents.count, agents: agents)
+  }
+
+  private func remotePayload(_ remote: RemoteAgentContext) -> AgentsCommandRemote {
+    let (correlation, reason) = Self.correlation(remote.correlation)
+    return AgentsCommandRemote(
+      host: remote.hostLabel,
+      user: remote.connection?.user,
+      hostname: remote.connection?.hostname,
+      port: remote.connection?.port,
+      correlation: correlation,
+      correlationReason: reason,
+      confidence: remote.isUnprobed ? "heuristic" : "probed",
+      freshness: remote.isStale ? "stale" : "fresh",
+      lastConfirmedAt: remote.lastConfirmedAt.map(dateFormatter.string(from:)),
+      stateKnown: remote.isStateKnown
+    )
+  }
+
+  static func correlation(_ correlation: RemotePaneCorrelation) -> (String, String?) {
+    switch correlation {
+    case .pending: ("pending", nil)
+    case .correlated: ("correlated", nil)
+    case .ambiguous: ("ambiguous", nil)
+    case .unmapped: ("unmapped", nil)
+    case .probeUnavailable(let failure): ("probe_unavailable", failure.map(failureReason) ?? "connection_failed")
+    case .unsupported(let reason): ("unsupported", reason)
+    }
+  }
+
+  private static func failureReason(_ failure: RemoteProbeFailure) -> String {
+    switch failure {
+    case .authentication: "authentication"
+    case .hostKey: "host_key"
+    case .unresolvableHost: "unresolvable_host"
+    case .unreachable: "unreachable"
+    case .launch: "launch"
+    case .exit: "exit"
+    case .unrecognizedOutput: "unrecognized_output"
+    }
   }
 
   private func makeTerminalContexts(from snapshot: ListRuntimeSnapshot) -> [UUID:

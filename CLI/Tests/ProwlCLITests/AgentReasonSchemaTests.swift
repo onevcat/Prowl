@@ -5,6 +5,35 @@ import ProwlCLIShared
 import XCTest
 
 final class AgentReasonSchemaTests: XCTestCase {
+  func testRemoteAgentObjectMatchesTheClosedSchema() throws {
+    let remote = AgentsCommandRemote(
+      host: "alice@box", user: "alice", hostname: "box", port: 22, correlation: "probe_unavailable",
+      correlationReason: "host_key", confidence: "heuristic", freshness: "stale",
+      lastConfirmedAt: "2026-10-18T00:00:00Z", stateKnown: false)
+    let roster = AgentsCommandAgent(
+      id: "pane", type: "claude", name: "Claude", status: .working, rawState: "working",
+      lastChangedAt: "2026-10-18T00:00:00Z",
+      project: .init(name: "Prowl", branch: "main", path: "/tmp/repo"),
+      worktree: .init(id: "w", name: "main", path: "/tmp/repo", rootPath: "/tmp/repo", kind: "git"),
+      tab: .init(id: "tab", title: "Terminal", selected: true),
+      pane: .init(id: "pane", index: 1, title: "ssh", cwd: "/tmp/repo", focused: true), remote: remote)
+    var schema = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: ProwlCLIContractBundle.schemaData) as? [String: Any])
+    schema.removeValue(forKey: "oneOf")
+    schema["$ref"] = "#/$defs/agent"
+    let validator = try Schema(instance: String(decoding: try JSONSerialization.data(withJSONObject: schema), as: UTF8.self))
+    let data = try JSONEncoder().encode(roster)
+    let result = try validator.validate(instance: String(decoding: data, as: UTF8.self))
+    XCTAssertTrue(result.isValid, "\(result.errors ?? [])")
+    var invalid = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    var invalidRemote = try XCTUnwrap(invalid["remote"] as? [String: Any])
+    invalidRemote["freshness"] = "old"
+    invalid["remote"] = invalidRemote
+    let bad = try validator.validate(
+      instance: String(decoding: JSONSerialization.data(withJSONObject: invalid), as: UTF8.self))
+    XCTAssertFalse(bad.isValid)
+  }
+
   func testEncodedAgentReasonsMatchBothClosedSchemas() throws {
     let roster = AgentsCommandAgent(
       id: "pane", type: "codex", name: "Codex", status: .idle, rawState: "blocked",

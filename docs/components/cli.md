@@ -234,6 +234,25 @@ Each agent contains:
   `store_record`). Ambiguous sessions are omitted instead of guessed. A
   `medium` session id must not be used for automatic resume without
   additional confirmation.
+- `remote`: present only for an agent on a remote host behind the pane's `ssh` (see
+  [agent detection](agent-detection.md#remote-agents-over-ssh)). It contains:
+  - `host` (`user@hostname`), `user`, `hostname`, `port`: absent while the connection
+    is not resolved.
+  - `correlation`: `pending`, `correlated`, `ambiguous`, `unmapped`,
+    `probe_unavailable`, or `unsupported`.
+  - `correlation_reason`: why. For `probe_unavailable` it is a code: `authentication`,
+    `host_key`, `unresolvable_host`, `unreachable`, `launch`, `exit`,
+    `unrecognized_output`, or `connection_failed`. For `unsupported` it names the `ssh`
+    option.
+  - `confidence`: `probed` (a host snapshot shows the process) or `heuristic` (OSC 7501
+    reports only).
+  - `freshness`: `fresh`, or `stale` when nothing has confirmed the agent for 10 s.
+    `last_confirmed_at` gives the last confirmation of a stale agent.
+  - `state_known`: `false` when no evidence decides the state.
+
+  A stale or unknown `status` is not evidence: `agents wait --until idle|blocked` keeps
+  waiting until the host confirms the agent again. Text output appends `remote=<host>` with the weaker
+  qualifiers in brackets.
 
 `prowl agents` is read-only. Text output is sorted for triage: `Blocked`,
 `Working`, `Done`, then `Idle`. It prints a pane handle such as `p7`; JSON keeps

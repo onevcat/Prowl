@@ -56,6 +56,44 @@ struct CLIAgentsCommandHandlerTests {
     #expect(payload.agents.first?.rawState == "working")
   }
 
+  @Test func remoteAgentsCarryHostCorrelationAndFreshness() async throws {
+    let fixture = makePayloadFixture()
+    var state = fixture.snapshot.repositoriesState
+    let key = ConnectionKey(user: "alice", hostname: "box.example", port: 2222)
+    let confirmedAt = Date(timeIntervalSince1970: 1_790_000_000)
+    state.activeAgents.entries[0].remote = RemoteAgentContext(
+      connection: key, correlation: .correlated, confirmedAt: confirmedAt, now: confirmedAt.addingTimeInterval(30))
+    state.activeAgents.entries[1].remote = RemoteAgentContext(
+      connection: nil, correlation: .probeUnavailable(.hostKey), confirmedAt: confirmedAt, now: confirmedAt,
+      stateKnown: false, isUnprobed: true)
+    let snapshot = AgentsRuntimeSnapshot(
+      repositoriesState: state, listSnapshot: fixture.snapshot.listSnapshot,
+      screenDetectionsBySurfaceID: fixture.snapshot.screenDetectionsBySurfaceID)
+    let handler = AgentsCommandHandler { snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+    #expect(
+      payload.agents[0].remote
+        == AgentsCommandRemote(
+          host: "alice@box.example", user: "alice", hostname: "box.example", port: 2222, correlation: "correlated",
+          confidence: "probed", freshness: "stale", lastConfirmedAt: "2026-09-21T14:13:20Z", stateKnown: true))
+    #expect(
+      payload.agents[1].remote
+        == AgentsCommandRemote(
+          host: nil, user: nil, hostname: nil, port: nil, correlation: "probe_unavailable",
+          correlationReason: "host_key", confidence: "heuristic", freshness: "fresh", stateKnown: false))
+  }
+
+  @Test func localAgentsHaveNoRemoteObject() async throws {
+    let fixture = makePayloadFixture()
+    let handler = AgentsCommandHandler { fixture.snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let data = try #require(response.data?.bytes)
+    let raw = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let agents = try #require(raw["agents"] as? [[String: Any]])
+    #expect(agents.allSatisfy { $0["remote"] == nil })
+  }
+
   @Test func buildsAgentsPayloadFromActiveEntriesAndTerminalSnapshot() async throws {
     let fixture = makePayloadFixture()
     let handler = AgentsCommandHandler {

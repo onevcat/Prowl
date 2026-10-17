@@ -234,7 +234,7 @@ Every `--json` response is `{ "ok", "command", "schema_version", "data": {...} }
 Key fields by command:
 
 - `list` → `.data.items[]` with `.worktree.{id,name,path,root_path,kind}`, `.tab.{id,title,selected}`, `.pane.{id,title,cwd,focused,agent}`, `.task.status` (`running`|`idle`|null).
-- `agents` → `.data.agents[]` with `.status`, `.raw_state`, `.detection_reason`, `.screen_reason`, `.type`, `.name`, `.pane.{id,focused,cwd}`, `.tab`, `.worktree`, `.project.{name,branch,path}`.
+- `agents` → `.data.agents[]` with `.status`, `.raw_state`, `.detection_reason`, `.screen_reason`, `.type`, `.name`, `.pane.{id,focused,cwd}`, `.tab`, `.worktree`, `.project.{name,branch,path}`, and `.remote.{host,correlation,confidence,freshness,state_known}` only for an agent behind the pane's `ssh` (a `stale` or `state_known: false` status is not evidence).
 - `agents read` → `.data.agent`, `.data.blocker.text`, `.data.result.{state,text}` — `pending`, `unavailable`, `missing`, `incomplete`, `too_large` carry no partial text; `pending` is returned whenever the agent is working or blocked, even if an earlier turn completed.
 - `agents signal` → `.data.pane.{id,worktree_id}`, `.data.signal.{event,source,confidence,binding,at,session_id,detail,claimed_origin}`, optional `.data.warnings[]` (`code=signal_unbound`); optional fields are omitted.
 - `agents dispatch` → `.data.target` and the new pending `.data.dispatch.{id,state,created_at}`; refusals carry `.error.details.{target,record,observation,signals}`.

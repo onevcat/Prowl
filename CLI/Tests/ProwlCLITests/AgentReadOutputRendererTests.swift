@@ -5,6 +5,18 @@ import XCTest
 @testable import prowl
 
 final class AgentReadOutputRendererTests: XCTestCase {
+  func testRemoteLabelNamesTheHostAndEveryWeakerQualifier() {
+    let fresh = AgentsCommandRemote(
+      host: "alice@box", user: "alice", hostname: "box", port: 22, correlation: "correlated",
+      confidence: "probed", freshness: "fresh", stateKnown: true)
+    XCTAssertEqual(OutputRenderer.remoteLabel(fresh), "  remote=alice@box")
+    let degraded = AgentsCommandRemote(
+      host: nil, user: nil, hostname: nil, port: nil, correlation: "unmapped", confidence: "heuristic",
+      freshness: "stale", stateKnown: false)
+    XCTAssertEqual(
+      OutputRenderer.remoteLabel(degraded), "  remote=unresolved [heuristic, stale, state unknown, unmapped]")
+  }
+
   func testResultOnlyDataIsVerbatimWithoutSyntheticNewline() {
     let payload = makePayload(
       outputMode: .resultOnly,

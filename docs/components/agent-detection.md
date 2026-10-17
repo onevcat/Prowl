@@ -397,6 +397,40 @@ generic screen-motion inference. Viewer overlays (Claude's transcript / history-
 views) are an explicit exception: their chrome covers the live status area, so those
 frames keep the last trusted state instead of forcing Idle.
 
+## Remote agents over SSH
+
+When a pane's foreground command is a local `ssh`, Prowl can show the agent that runs on
+the host (docs-ai 082, L0). Until this ships on by default, launch Prowl with
+`PROWL_REMOTE_AGENT_DETECTION=1` to enable it. Prowl installs nothing on the host and
+edits no rc file.
+
+- **How.** Prowl opens its own SSH connection to the same target (`ssh -G` resolves user,
+  host name, port, `ProxyJump` and `-F`). It runs a read-only probe over that connection:
+  about once a second while a remote agent is listed, and every few seconds otherwise.
+  The probe finds the pane's session by `LC_PROWL_PANE`, which the default OpenSSH
+  `SendEnv`/`AcceptEnv` settings forward, and reads the session's foreground process. A
+  verified producer's OSC 7501 reports decide the state, as they do locally; otherwise the
+  screen decides.
+- **Host label and health.** The Active Agents row shows `user@host` with a network
+  glyph. Connection health is shown apart from the agent's state. If no snapshot has
+  confirmed the agent for 10 s, the row keeps the last state, greys it out, and adds
+  "Last seen … ago". "Status unavailable" means the host was never read. A state of
+  "Unknown" means the host confirms the agent but no evidence decides its state. The tooltip names
+  the reason (for example, an unknown host key, or a server that does not accept
+  `LC_PROWL_PANE`).
+- **Degraded binding.** Sometimes the host cannot be read, or has no session for the pane:
+  `-F` without `SendEnv`, a refused key, or an `ssh` command outside the supported grammar.
+  In that case a verified producer's OSC 7501 report still lists the agent, with
+  `heuristic` confidence. Only the `ssh` exit releases such an agent. When its producer is
+  quiet for 10 s, it becomes stale.
+- **Release.** A probed agent is released after two complete fresh snapshots without it
+  (about 2–3 s after it exits), or at once when the `ssh` exits.
+- **Limits.** A remote agent cannot be a `prowl agents dispatch` target that needs a
+  receipt, or a workflow `current`/`pick` participant: both fail with
+  `REMOTE_AGENT_UNSUPPORTED`. A stale or state-unknown observation never satisfies an
+  `idle` or `blocked` wait, or input readiness, until the host confirms the agent again. Local session files,
+  transcripts and hooks are never read for a remote agent.
+
 ## The state machine
 
 **Raw states:** `working`, `blocked`, `idle`, `unknown`.
