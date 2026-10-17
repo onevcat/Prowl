@@ -164,7 +164,7 @@ extension WorktreeTerminalState {
     let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
     agentDetectionCoordinators[surfaceID] = coordinator
     coordinator.programStatusOriginFence = originFence
-    coordinator.remoteProgramStatusFence = remote?.programStatusFence
+    coordinator.remoteProgramStatusFence = remoteProgramStatusFence(remote?.programStatusFence, surfaceID: surfaceID)
     let process = Self.processGeneration(identified)
     // The tick is delegated only while the schedule says so (a key press puts one full
     // tick back on the active schedule and keeps it there for the settle window) and the

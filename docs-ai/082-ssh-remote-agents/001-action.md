@@ -174,7 +174,11 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   `ssh` start; a successor counts only reports after the snapshot that confirmed it,
   timestamped after the tick's local probe returns (review round 1). The fence belongs to the
   `ssh` generation and lives with the surface's record store (`remoteFenceHistoryBySurface`),
-  so a tracker recreated by an undone close never moves it back (review round 2). The S1
+  so a tracker recreated by an undone close never moves it back (review round 2). The surface
+  origin record also keeps when each origin was last seen. When the pane returns to a remote
+  origin and the origin it left was seen after the `ssh` started, the remote fence rises to
+  the switch, so a local agent run while the `ssh` was suspended cannot decide for the
+  resumed remote one (review round 4). The S1
   origin fence applies to local generations only.
 - **Measured** in a Debug instance with the flag on:
   - mini (macOS 26.5), Claude Code 2.1.302 started by hand: appeared 0.62 s after the

@@ -147,9 +147,9 @@ struct RemoteAgentDetectionTests {
   }
 
   @discardableResult
-  private func detect(_ fixture: Fixture) async -> Bool {
+  private func detect(_ fixture: Fixture, screen: AgentRawState = .idle) async -> Bool {
     fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
-      agent: .claude, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+      agent: .claude, text: "", detection: AgentScreenDetection(state: screen, reason: .legacyDetector))
     return await fixture.state.detectAgentState(
       for: fixture.surface, tabId: fixture.tabID, resolveSession: noSession, now: Date())
   }
@@ -284,6 +284,32 @@ struct RemoteAgentDetectionTests {
     // Dropping the store for good drops the fence with it.
     fixture.state.dropProgramStatusStores(forSurfaceIDs: [fixture.surfaceID])
     #expect(fixture.state.remoteFenceHistoryBySurface[fixture.surfaceID] == nil)
+  }
+
+  @Test func aLocalAgentBetweenSuspendAndResumeNeverDecidesForTheReturningRemoteAgent() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    // Ctrl-Z on the `ssh`, a local Claude runs in the pane and ends with a `done` root.
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "claude", argv0: "claude", cmdline: "claude")
+      ])
+    await detect(fixture)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .local(getpid()))
+    fixture.state.handleProgramStatus(
+      GhosttyProgramStatusReport(state: .done, kind: nil, id: "", app: "claude-code"), surfaceID: fixture.surfaceID)
+    // `fg`: the same remote Claude is still at its permission prompt and sends nothing.
+    probe.job = sshJob
+    await detect(fixture, screen: .blocked)
+    await settle { fixture.source.recipes.count == 2 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture, screen: .blocked)
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.agentProcess == remoteRef(200))
+    #expect(pane?.decision?.reason.identifier != "osc.done")
+    #expect(pane?.state == .blocked)
   }
 
   @Test func sshPanesKeepTickingOnTheRemoteCadence() async {
