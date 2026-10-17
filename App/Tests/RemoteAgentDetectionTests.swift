@@ -380,6 +380,32 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
   }
 
+  @Test func aProxyJumpHelperNeverStandsInForTheTerminalsSSH() async throws {
+    // `ssh -J jump target` runs `ssh -W … jump` as its child in the same job; the helper is
+    // listed first. Its own process is real so its generation is readable.
+    let helper = Process()
+    helper.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    helper.arguments = ["30"]
+    try helper.run()
+    defer { helper.terminate() }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(
+          pid: helper.processIdentifier, parentProcessID: getpid(), name: "ssh", argv0: "ssh",
+          cmdline: "ssh -W [127.0.0.1]:22 jump", arguments: ["/usr/bin/ssh", "-W", "[127.0.0.1]:22", "jump"]),
+        ForegroundProcess(
+          pid: getpid(), parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: "ssh -J jump dev@target",
+          arguments: ["ssh", "-J", "jump", "dev@target"]),
+      ])
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    #expect(fixture.source.recipes.first?.destination == "dev@target")
+    #expect(fixture.source.recipes.first?.options == ["-J", "jump"])
+  }
+
   @Test func unsupportedArgvNeverConnects() async throws {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)

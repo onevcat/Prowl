@@ -148,7 +148,9 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   the destination, up to the first other argument. The tracker runs `ssh -G` and the side
   channel in the local `ssh`'s working directory, so relative `-F`/`-i` operands mean the
   same files (review round 1).
-- **Trigger.** A foreground `ssh` with no local agent. The tracker belongs to that `ssh`
+- **Trigger.** A foreground `ssh` with no local agent. It must be the terminal's own `ssh`:
+  one that another `ssh` of the job started (the `-W` transport of `-J`, or one under a
+  `ProxyCommand` shell) is skipped (review round 3). The tracker belongs to that `ssh`
   generation (pid and start time); a new `ssh`, a local agent, the flag off or a closed
   pane retire it and close the lease, and snapshots that arrive later are dropped.
 - **Tracker** (`RemotePaneTracker`). It leases the host's owner (`ssh -G`, then the
@@ -188,6 +190,8 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   - After review round 1: `ssh host -l user` bound Claude in 0.36 s; release after Ctrl+C
     through the anchor-pinned session took 2.87 s; after 40 s idle, `sleep 5; codex` was
     found 2.6 s after Codex started.
+  - After review round 3: `ssh -J mini onevcat@127.0.0.1` (ProxyJump to mini's loopback):
+    Claude bound in 0.37 s, released in 2.91 s.
   - Debug build CPU: a delegated remote Claude costs 0.1–0.8 % of a core. A screen-rule
     agent costs as much as it does locally. Before the bound agent was held across ticks,
     a remote OSC producer could not delegate and read the screen every 300 ms.

@@ -343,12 +343,25 @@ extension WorktreeTerminalState {
     return observation
   }
 
-  /// A local foreground `ssh` and its arguments (without `argv[0]`), with the generation
-  /// that its tracker belongs to.
+  /// The terminal's own foreground `ssh` and its arguments (without `argv[0]`), with the
+  /// generation that its tracker belongs to. An `ssh` that another `ssh` of the job started
+  /// (the `-W` transport of `-J`, or one under a `ProxyCommand` shell) is never it.
   nonisolated static func foregroundSSH(
     _ job: ForegroundJob
   ) -> (generation: LocalProcessGeneration, arguments: [String])? {
-    for process in job.processes where process.argv0 == "ssh" || process.name == "ssh" {
+    func isSSH(_ process: ForegroundProcess) -> Bool { process.argv0 == "ssh" || process.name == "ssh" }
+    func hasSSHAncestor(_ process: ForegroundProcess) -> Bool {
+      var parent = process.parentPID
+      for _ in job.processes.indices {
+        guard let pid = parent, let ancestor = job.processes.first(where: { $0.ref.namespacePID == pid }) else {
+          return false
+        }
+        if isSSH(ancestor) { return true }
+        parent = ancestor.parentPID
+      }
+      return false
+    }
+    for process in job.processes where isSSH(process) && !hasSSHAncestor(process) {
       guard let pid = process.ref.localPID, let arguments = process.arguments,
         let startedAt = ProcessDetection.processStartDate(pid: pid)
       else { continue }
