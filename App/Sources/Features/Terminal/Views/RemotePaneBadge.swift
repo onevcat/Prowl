@@ -1,21 +1,20 @@
 import SwiftUI
 
 /// The host a pane's foreground `ssh` reaches, in the pane's corner (docs-ai 082, L0
-/// item 10). When that `ssh` exits, it says so briefly, then goes away.
+/// item 10). When that `ssh` exits, it says so for `RemotePaneIndicator.endedMarkerDuration`
+/// after the exit, then goes away; a later mount of the view does not show it again.
 struct RemotePaneBadge: View {
-  static let endedMarkerDuration: Duration = .seconds(5)
-
   let indicator: RemotePaneIndicator?
   @State private var isEndedMarkerExpired = false
 
   var body: some View {
     Group {
       switch indicator {
-      case .connected(let host):
+      case .connected(let host, _):
         label(Text(verbatim: host), systemImage: "network")
           .accessibilityLabel(Text("Connected to \(host)"))
-      case .ended(let host):
-        if !isEndedMarkerExpired {
+      case .ended(let host, _):
+        if !isEndedMarkerExpired, indicator?.showsEndedMarker(now: Date()) == true {
           label(Text("Disconnected from \(host)"), systemImage: "network.slash")
             .transition(.opacity)
         }
@@ -26,8 +25,9 @@ struct RemotePaneBadge: View {
     .animation(.easeOut(duration: 0.3), value: isEndedMarkerExpired)
     .task(id: indicator) {
       isEndedMarkerExpired = false
-      guard case .ended = indicator else { return }
-      try? await Task.sleep(for: Self.endedMarkerDuration)
+      guard case .ended(_, let endedAt) = indicator else { return }
+      let remaining = endedAt.addingTimeInterval(RemotePaneIndicator.endedMarkerDuration).timeIntervalSinceNow
+      if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
       isEndedMarkerExpired = true
     }
     .allowsHitTesting(false)

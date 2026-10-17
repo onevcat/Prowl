@@ -321,18 +321,26 @@ label, the ssh-ended marker, and turning the flag on.
 
 ## S4b — Pane and tab label, ssh-ended marker, on by default
 
-- **Indicator.** `RemotePaneIndicator` (`connected(host)` or `ended(host)`) lives on the
-  surface's `GhosttySurfaceState`, so every host of a pane (tab content, Canvas, Shelf)
-  can read it without new plumbing. Agent detection sets it:
-  - `connected(user@hostname)` once the tracker's connection resolves;
-  - when a non-nil foreground job no longer shows the `ssh`: `ended(host)` if that `ssh`
-    generation exited, or nil if it still runs (suspended);
-  - nil when the flag turns off.
+- **Indicator.** `RemotePaneIndicator` lives on the surface's `GhosttySurfaceState`, so
+  every host of a pane (tab content, Canvas, Shelf) can read it without new plumbing. Its
+  cases are `connected(host, ssh: generation)` and `ended(host, at:)`.
+  `reconcileRemoteIndicator` sets it on every sample that read a job, and needs no tracker:
+  - the foreground `ssh` with a resolved connection: `connected` to that generation;
+  - otherwise (another or unresolved `ssh`, or a shell): a `connected` of another
+    generation becomes `ended(at: now)` if that `ssh` exited, or nil if it still runs
+    (suspended);
+  - an `ended` older than five seconds becomes nil;
+  - the flag turning off: nil.
 
-  A probe gap changes nothing. Writes are guarded, so equal values never notify.
+  A probe gap changes nothing. Writes are guarded, so equal values never notify. Review
+  round 1 made the indicator independent of the tracker: a pane restored by Undo after
+  its `ssh` exited, and an unresolvable replacement `ssh`, both lost the old label. It
+  also made the ended marker carry its exit time: a view that mounted later showed an old
+  exit again.
 - **Pane.** `RemotePaneBadge` sits in the bottom-trailing corner: a material capsule with a
   network glyph and the host. It does not take hits. After an exit it reads "Disconnected
-  from host" with `network.slash` for five seconds (a view `.task`), then fades out.
+  from host" with `network.slash` until five seconds after the exit (`showsEndedMarker`,
+  plus a view `.task` for the remainder), then fades out.
 - **Tab.** `TerminalTabItem.remoteHosts` lists the distinct hosts of the tab's panes in
   pane order, and `updateRemoteHosts` refreshes it on every indicator change and from
   `updateRunningState` (tree changes such as a moved or closed pane). The tab label shows

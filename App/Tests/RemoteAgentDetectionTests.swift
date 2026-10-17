@@ -222,7 +222,7 @@ struct RemoteAgentDetectionTests {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
     await bindClaude(fixture, probe: probe)
-    #expect(fixture.surface.bridge.state.remoteIndicator == .connected("onevcat@mini.local"))
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
     #expect(fixture.state.tabManager.tabs.first?.remoteHosts == ["onevcat@mini.local"])
     // A suspended `ssh` (still running) only drops the label.
     probe.job = shellJob
@@ -231,32 +231,97 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
   }
 
-  @Test func anExitedSSHLeavesAnEndedMarker() async throws {
-    let ssh = Process()
-    ssh.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    ssh.arguments = ["30"]
-    try ssh.run()
-    defer { if ssh.isRunning { ssh.terminate() } }
-    let pid = ssh.processIdentifier
-    let probe = Probe()
-    let fixture = makeFixture(probe: probe)
-    probe.job = ForegroundJob(
+  /// A spawned process that stands in for a local `ssh` client, so it has its own generation.
+  private func spawnSSH(_ arguments: [String] = ["ssh", "-p", "2222", "mini"]) throws -> (Process, ForegroundJob) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    process.arguments = ["30"]
+    try process.run()
+    let pid = process.processIdentifier
+    let job = ForegroundJob(
       processGroupID: pid,
       processes: [
         ForegroundProcess(
-          pid: pid, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: "ssh -p 2222 mini",
-          arguments: ["ssh", "-p", "2222", "mini"])
+          pid: pid, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: arguments.joined(separator: " "),
+          arguments: arguments)
       ])
+    return (process, job)
+  }
+
+  private func connect(_ fixture: Fixture, probe: Probe, job: ForegroundJob) async {
+    probe.job = job
     await detect(fixture)
-    await settle { fixture.source.recipes.count == 1 }
-    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh")))
+    await settle { fixture.state.remotePaneTrackers[fixture.surfaceID] != nil }
+    await settle { !fixture.source.recipes.isEmpty }
+    await deliver(
+      fixture,
+      snapshot(
+        (fixture.state.remotePaneTrackers[fixture.surfaceID]?.latest?.sequence ?? 0) + 1, pane: fixture.surfaceID,
+        foreground: remoteProcess(200, name: "zsh")))
     await detect(fixture)
-    #expect(fixture.surface.bridge.state.remoteIndicator == .connected("onevcat@mini.local"))
+  }
+
+  @Test func anExitedSSHLeavesAnEndedMarkerForItsDuration() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await connect(fixture, probe: probe, job: job)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    let exitedAt = Date()
+    await detect(fixture, now: exitedAt)
+    // Detection stamps the sample no earlier than the wall clock.
+    guard case .ended(let host, let endedAt) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("no ended marker")
+      return
+    }
+    #expect(host == "onevcat@mini.local")
+    #expect(endedAt >= exitedAt)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+    // After its duration the marker is gone from the state, not only from one view.
+    await detect(fixture, now: endedAt.addingTimeInterval(RemotePaneIndicator.endedMarkerDuration + 1))
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+  }
+
+  @Test func theEndedMarkerDescribesOneExit() {
+    let endedAt = Date(timeIntervalSince1970: 1_000)
+    let ended = RemotePaneIndicator.ended(host: "h", endedAt: endedAt)
+    #expect(ended.showsEndedMarker(now: endedAt.addingTimeInterval(4)))
+    // A view mounted later (a tab switch, a new split) does not show it again.
+    #expect(!ended.showsEndedMarker(now: endedAt.addingTimeInterval(5)))
+    #expect(!RemotePaneIndicator.connected(host: "h", ssh: sshGeneration).showsEndedMarker(now: endedAt))
+  }
+
+  @Test func aRestoredPaneWhoseSSHExitedDropsTheConnectedLabel() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await connect(fixture, probe: probe, job: job)
+    // Close (the tracker retires, the surface is retained), the `ssh` exits, then Undo.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
     ssh.terminate()
     ssh.waitUntilExit()
     probe.job = shellJob
     await detect(fixture)
-    #expect(fixture.surface.bridge.state.remoteIndicator == .ended("onevcat@mini.local"))
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
+  @Test func aReplacementSSHNeverInheritsThePreviousHost() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
+    // The next sampled job is another `ssh` that cannot be resolved (`-N` is unsupported).
+    let (other, job) = try spawnSSH(["ssh", "-N", "-L", "8080:localhost:80", "hostB"])
+    defer { other.terminate() }
+    probe.job = job
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
     #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
   }
 
