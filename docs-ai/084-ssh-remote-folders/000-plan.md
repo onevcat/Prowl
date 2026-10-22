@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | (fill in per the slice table) |
+| **Primary PRs** | #952 (this plan); P0 #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -312,3 +312,5 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Rebind UI for a changed `HostName`, and the behaviour of the folder lane while paused.
 
 ## Amendments
+
+- Updated 2026-10-22: P0 landed (partial loads prune only worktrees that left a loaded repository; snapshot restore prunes nothing) — see [002-p0-load-failure-prune.md](002-p0-load-failure-prune.md)

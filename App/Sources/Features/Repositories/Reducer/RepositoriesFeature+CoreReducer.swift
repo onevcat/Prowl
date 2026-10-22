@@ -94,7 +94,7 @@ extension RepositoriesFeature {
       _ = applyRepositories(
         repositories,
         roots: roots,
-        shouldPruneArchivedWorktrees: true,
+        origin: .snapshot,
         state: &state,
         animated: false
       )
@@ -221,7 +221,7 @@ extension RepositoriesFeature {
       let applyResult = applyRepositories(
         repositories,
         roots: roots,
-        shouldPruneArchivedWorktrees: failures.isEmpty,
+        origin: .live(failedRootIDs: Set(failures.map(\.rootID))),
         state: &state,
         animated: animated
       )
