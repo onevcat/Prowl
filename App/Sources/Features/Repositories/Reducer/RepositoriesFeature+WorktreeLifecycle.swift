@@ -101,6 +101,13 @@ extension RepositoriesFeature {
         return .none
       }
       state.alert = nil
+      if let reason = worktree.availability(of: .archiveScript).unavailableReason {
+        repositoriesLogger.info("Archiving \(worktreeID) without its archive script: \(reason.message)")
+        return .merge(
+          .send(.showToast(.warning(reason.message))),
+          .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
+        )
+      }
       @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
       let script = repositorySettings.archiveScript
       let commandText = archiveScriptCommand(script)

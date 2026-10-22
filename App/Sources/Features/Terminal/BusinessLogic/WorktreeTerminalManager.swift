@@ -136,13 +136,21 @@ final class WorktreeTerminalManager {
     _ request: AgentProfileLaunchRequest,
     in worktree: Worktree
   ) -> Result<LaunchedSurface, AgentProfileLaunchError> {
-    state(for: worktree).launchAgentProfile(request)
+    if let reason = worktree.availability(of: .profileLaunch).unavailableReason {
+      return .failure(.unavailable(reason))
+    }
+    return state(for: worktree).launchAgentProfile(request)
   }
 
   func prepareAgentProfileLaunch(
     _ request: AgentProfileLaunchRequest,
     in worktree: Worktree
   ) async -> Result<PreparedAgentProfileLaunch, AgentProfileLaunchError> {
+    // Every launch path (Agents menu, palette, CLI, workflows) converges here;
+    // the check runs before a terminal state exists for the target.
+    if let reason = worktree.availability(of: .profileLaunch).unavailableReason {
+      return .failure(.unavailable(reason))
+    }
     let terminalState = state(for: worktree)
     guard terminalState.provisionAgentProfileHome(for: request.plan) else {
       return .failure(.homeProvisioningFailed)

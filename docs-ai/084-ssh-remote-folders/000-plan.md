@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -255,7 +255,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | A1 | One `Repository.terminalWorktree`; ID → path reversals become lookups | None |
 | A2 | `RepositoryLocation`, the ID codec (normalizers keep non-local IDs unchanged), `localURL`, `.local` initializers, deprecated forwards | None |
 | A3 | Call-site migration by category, two PRs: identity and settings keys with the basename fix and copy migration (A3a); terminal cwd and cwd matching (A3b). CLI output moves with its `host` field in C2; git and file reads move in A5–A6 (amended 2026-10-23) | Settings directory key changes (migrated) |
-| A4 | Capabilities with location and reasons (including Profile launch), enforced at the reducer, launch and admission boundary | None |
+| A4 | Capabilities with location and reasons (including Profile launch), two PRs: the model and enforcement at the reducer, launch and admission boundary (A4a); disabled controls with the reason as tooltip, palette filtering, and the view-level Finder and copy-path actions routed through the reducer (A4b) (amended 2026-10-23) | None |
 | A5 | `GitClient(executor:)`, ad-hoc instances and bypasses routed, `gh --repo`; git reads move off the forwards | None |
 | A6 | Repository state reads and `observeChanges` as host operations; local fast paths kept; delete the forwards | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
@@ -317,3 +317,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-22: A2 landed (`RepositoryLocation`, the ID codec, location-backed models with local forwards, ID normalizers that keep non-local IDs) — see [004-a2-location-codec.md](004-a2-location-codec.md)
 - Updated 2026-10-23: A3a landed (IDs minted and decoded through the codec; settings directory `<basename>-<hash>` with copy-on-load from the basename directory) — see [005-a3a-identity-and-settings-keys.md](005-a3a-identity-and-settings-keys.md)
 - Updated 2026-10-23: A3b landed (terminal cwd, cwd matching); A3 ends with two PRs and the forwards are deleted at the end of A6, after git and file reads move to the host — see [006-a3b-cwd-matching-cli.md](006-a3b-cwd-matching-cli.md)
+- Updated 2026-10-23: A4a landed (`RepositoryFeature` availability by location with reasons; enforcement at the reducer and the Profile launch boundary); A4 split into A4a and A4b — see [007-a4a-capability-enforcement.md](007-a4a-capability-enforcement.md)

@@ -218,7 +218,10 @@ extension RepositoriesFeature.State {
   func diffTarget(for id: DiffTargetID) -> DiffTarget? {
     switch id {
     case .worktree(let worktreeID):
-      return worktree(for: worktreeID).map(DiffTarget.init(worktree:))
+      guard let worktree = worktree(for: worktreeID), worktree.availability(of: .diff).isAvailable else {
+        return nil
+      }
+      return DiffTarget(worktree: worktree)
     case .workspaceChild(let workspaceID, let path):
       guard let workspaceRepository = repositories[id: workspaceID],
         let terminalHost = workspaceRepository.terminalWorktree,
@@ -244,6 +247,9 @@ extension RepositoriesFeature.State {
   /// the selected worktree, else the selected workspace child.
   var selectedDiffTargetID: DiffTargetID? {
     if let selectedWorktreeID {
+      guard worktree(for: selectedWorktreeID)?.availability(of: .diff).isAvailable != false else {
+        return nil
+      }
       return .worktree(selectedWorktreeID)
     }
     if let selectedWorkspaceChildID,

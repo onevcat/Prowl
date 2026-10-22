@@ -165,6 +165,7 @@ enum WorkflowRunAdmission {
           code: CLIErrorCode.targetNotFound, message: "The source worktree is no longer available.")
       )
     }
+    if let failure = remoteFolderFailure(worktree) { return .failure(failure) }
     let arguments: Arguments
     switch parseArguments(input, definition: definition) {
     case .failure(let failure): return .failure(failure)
@@ -202,6 +203,12 @@ enum WorkflowRunAdmission {
     let source: WorkflowRunSource
     let literalActionInputs: Bool
     let environment: WorkflowAdmissionEnvironment
+  }
+
+  /// Run history and role launches are rooted in the local worktree directory (docs-ai 084 C2).
+  private static func remoteFolderFailure(_ worktree: Worktree) -> WorkflowAdmissionFailure? {
+    guard worktree.localURL == nil else { return nil }
+    return .init(code: CLIErrorCode.remoteAgentUnsupported, message: "Workflows cannot run in a remote folder yet.")
   }
 
   private static func start(_ admission: Admission) -> Result<

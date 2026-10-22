@@ -958,7 +958,9 @@ extension RepositoriesFeature {
           }
         }
       case .filesChanged(let worktreeID):
-        guard let worktree = state.worktree(for: worktreeID) else {
+        guard let worktree = state.worktree(for: worktreeID),
+          worktree.availability(of: .lineCounts).isAvailable
+        else {
           return .none
         }
         @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings

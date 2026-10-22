@@ -2,6 +2,7 @@ import ConcurrencyExtras
 import DependenciesTestSupport
 import Foundation
 import GhosttyKit
+import IdentifiedCollections
 import ProwlCLIShared
 import Testing
 
@@ -41,6 +42,31 @@ struct WorktreeTerminalManagerTests {
 
     #expect(manager.stateIfExists(for: worktree.id) === original)
     manager.prune(keeping: [])
+  }
+
+  @Test func profileLaunchInARemoteWorktreeIsRefusedBeforeAStateExists() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let plan = AgentProfileLaunchPlan(
+      profileID: UUID(),
+      profileName: "Codex",
+      runtime: .codex,
+      invocation: AgentInvocation(executable: "codex", arguments: []),
+      commandEnvironmentTokens: [],
+      placement: .tab,
+      splitDirection: .right,
+      surfaceEnvironment: [:],
+      dedicatedHome: nil
+    )
+    let request = AgentProfileLaunchRequest(plan: plan, placement: .tab(background: false))
+    let expected = AgentProfileLaunchError.unavailable(.remoteFolder(.profileLaunch))
+
+    let prepared = await manager.prepareAgentProfileLaunch(request, in: worktree)
+    let launched = manager.launchAgentProfile(request, in: worktree)
+
+    #expect(prepared.failure == expected)
+    #expect(launched.failure == expected)
+    #expect(manager.stateIfExists(for: worktree.id) == nil)
   }
 
   @Test func buffersEventsUntilStreamCreated() async {
@@ -1132,5 +1158,12 @@ private final class FocusChanger {
   func change() {
     calls += 1
     action()
+  }
+}
+
+extension Result {
+  fileprivate var failure: Failure? {
+    guard case .failure(let error) = self else { return nil }
+    return error
   }
 }

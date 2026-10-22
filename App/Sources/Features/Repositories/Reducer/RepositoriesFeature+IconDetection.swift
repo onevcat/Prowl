@@ -24,7 +24,8 @@ extension RepositoriesFeature {
     guard settingsFile.global.detectRepositoryIconsAutomatically else { return [] }
     @Shared(.repositoryAppearances) var appearances
     var effects: [Effect<Action>] = []
-    for repository in newRepositories.prefix(Self.maxIconDetectionsPerAdd) {
+    let detectable = newRepositories.filter { $0.availability(of: .iconDetection).isAvailable }
+    for repository in detectable.prefix(Self.maxIconDetectionsPerAdd) {
       guard repository.workspace == nil else { continue }
       let appearance = appearances[repository.id] ?? .empty
       guard appearance.icon == nil, !appearance.iconDetectionSuppressed else { continue }

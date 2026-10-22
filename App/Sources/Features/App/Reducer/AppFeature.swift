@@ -710,11 +710,14 @@ struct AppFeature {
         )
 
       case .openActionSelectionChanged(let action):
-        state.openActionSelection = action
-        state.openActionIsAutomatic = false
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
+        if let reason = worktree.availability(of: .openInEditor).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
+        state.openActionSelection = action
+        state.openActionIsAutomatic = false
         setRepositoryOpenActionID(
           action.settingsID, rootURL: worktree.repositoryRootURL, into: &state)
         return .none
@@ -722,6 +725,9 @@ struct AppFeature {
       case .openActionResetToAutomatic:
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
+        }
+        if let reason = worktree.availability(of: .openInEditor).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         // Clearing the pin only matters when the repo isn't already automatic;
         // re-resolve and reopen unconditionally so the entry behaves like the
@@ -753,6 +759,10 @@ struct AppFeature {
       case .openWorktree(let action):
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
+        }
+        let feature: RepositoryFeature = action == .finder ? .finder : .openInEditor
+        if let reason = worktree.availability(of: feature).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
         if action == .editor {

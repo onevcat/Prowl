@@ -4,7 +4,9 @@ import Foundation
 extension RepositoriesFeature.State {
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
     repositories.compactMap { repository in
-      guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id) else {
+      guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id),
+        repository.availability(of: .workspace).isAvailable
+      else {
         return nil
       }
       let name = repositoryCustomTitles[repository.id] ?? repository.name
