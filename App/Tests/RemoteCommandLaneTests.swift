@@ -186,6 +186,65 @@ nonisolated struct RemoteCommandLaneTests {
     #expect(calls.value.count == before)
   }
 
+  @Test func shutdownStopsActiveCommandsBeforeItsExitAndQueuedOnesNeverConnect() async throws {
+    let gate = CommandGate()
+    let events = LockIsolated<[String]>([])
+    var configuration = RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests")
+    configuration.maxConcurrentCommands = 1
+    let owner = RemoteConnectionOwner(
+      connection: Self.key, recipe: Self.recipe, configuration: configuration,
+      runner: RemoteCommandRunner { _, arguments, input, _, _ in
+        let text = String(bytes: input, encoding: .utf8) ?? ""
+        if arguments.contains("-O") {
+          events.withValue { $0.append("exit") }
+        } else if !text.contains("print_path") {
+          let name = text.contains("queued") ? "queued" : "active"
+          events.withValue { $0.append("start \(name)") }
+          // Like the live runner, a cancelled command stops.
+          await withTaskCancellationHandler {
+            await gate.enter()
+          } onCancel: {
+            Task { await gate.openAll() }
+          }
+          events.withValue { $0.append("end \(name)") }
+        }
+        return .exited(RemoteCommandResult(exitCode: 0, output: Data(), outputTruncated: false, errorOutput: ""))
+      })
+    _ = await owner.loginPath()
+    let active = Task { try await owner.run(RemoteShellCommand(executable: "echo", arguments: ["active"])) }
+    await gate.waitUntilEntered(1)
+    let queued = Task { try await owner.run(RemoteShellCommand(executable: "echo", arguments: ["queued"])) }
+    for _ in 0..<100 { await Task.yield() }
+
+    await owner.shutdown()
+
+    #expect(events.value == ["start active", "end active", "exit"])
+    #expect(try await queued.value == .launchFailed(RemoteConnectionOwner.laneClosedReason))
+    _ = try await active.value
+    #expect(await owner.runningCommandCount == 0)
+  }
+
+  @Test func theLoginPathHonoursAZDOTDIRSetInZshenv() async throws {
+    let home = FileManager.default.temporaryDirectory.appending(path: "prowl-zdot-\(UUID().uuidString)")
+    let zdot = home.appending(path: "zdot")
+    try FileManager.default.createDirectory(at: zdot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    try #"export ZDOTDIR="$HOME/zdot""#.write(to: home.appending(path: ".zshenv"), atomically: true, encoding: .utf8)
+    try #"export PATH="/prowl-zdot-marker:$PATH""#.write(
+      to: zdot.appending(path: ".zshrc"), atomically: true, encoding: .utf8)
+
+    let outcome = await RemoteCommandRunner.live.run(
+      URL(filePath: "/usr/bin/env"),
+      ["-u", "ZDOTDIR", "HOME=\(home.path(percentEncoded: false))", "SHELL=/bin/zsh", "/bin/sh", "-s"],
+      Data(RemoteConnectionOwner.loginPathScript.utf8), RemoteCommandLimits(deadline: 10))
+    guard case .exited(let result) = outcome else {
+      Issue.record("expected exit, got \(outcome)")
+      return
+    }
+
+    #expect(RemoteConnectionOwner.parseLoginPath(result.output)?.hasPrefix("/prowl-zdot-marker:") == true)
+  }
+
   @Test func concurrentCallersShareOneLoginPathReadAndAFailureIsKept() async {
     let reads = LockIsolated(0)
     let owner = Self.makeOwner(
