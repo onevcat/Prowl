@@ -298,8 +298,8 @@ struct CanvasView: View {
     let toGeometry = expandedGeometry()
     let unfocusedSplitOverlay = terminalManager.unfocusedSplitOverlay()
     let splitDivider = terminalManager.splitDividerAppearance()
-    let repositoryAppearance = appearance(for: state.repositoryRootURL)
-    let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
+    let repositoryAppearance = appearance(for: state)
+    let resolvedRepositoryName = repositoryDisplayName(for: state)
     let interaction = interactionState(for: tab.id, in: tree)
 
     AnimatedExpandableCard(

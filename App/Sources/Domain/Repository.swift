@@ -145,6 +145,11 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     )
   }
 
+  /// The folder name of a repository at `location`, on its own host.
+  static func name(for location: RepositoryLocation) -> String {
+    name(for: location.localURL ?? URL(filePath: location.path, directoryHint: .isDirectory))
+  }
+
   static func name(for rootURL: URL) -> String {
     let name = rootURL.lastPathComponent
     if name == ".bare" || name == ".git" {

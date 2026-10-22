@@ -129,6 +129,12 @@ struct RepositoryLocationTests {
     #expect(worktree.isMain)
   }
 
+  @Test func repositoryNameComesFromTheLocationPath() {
+    #expect(Repository.name(for: .remote(hostProfileID: hostProfileID, path: "/home/dev/app")) == "app")
+    #expect(Repository.name(for: .remote(hostProfileID: hostProfileID, path: "/home/dev/app/.bare")) == "app")
+    #expect(Repository.name(for: .local(URL(fileURLWithPath: "/tmp/work/notes"))) == "notes")
+  }
+
   @Test func remoteWorktreeAtRepositoryRootIsMain() {
     let root = RepositoryLocation.remote(hostProfileID: hostProfileID, path: "/home/dev/app")
     let linked = RepositoryLocation.remote(hostProfileID: hostProfileID, path: "/home/dev/app-feature")

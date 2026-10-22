@@ -304,31 +304,18 @@ extension CanvasView {
     // setSelectedWorktreeID in the async exit flow.
   }
 
-  /// Looks up the user-pinned `RepositoryAppearance` for a given repo
-  /// root URL by deriving the canonical `Repository.ID` (the
-  /// path-policy-normalized path string) and querying the @Shared
-  /// dict. Returns `.empty` when no entry exists, which keeps cards
-  /// visually identical to before the appearance feature shipped.
-  func appearance(for repositoryRootURL: URL) -> RepositoryAppearance {
-    let id = repositoryID(for: repositoryRootURL)
-    return repositoryAppearances[id] ?? .empty
+  /// The user-pinned `RepositoryAppearance` of a terminal's repository. Returns `.empty`
+  /// when no entry exists, which keeps cards visually identical to before the
+  /// appearance feature shipped.
+  func appearance(for state: WorktreeTerminalState) -> RepositoryAppearance {
+    repositoryAppearances[state.repositoryID] ?? .empty
   }
 
-  /// Resolves the user-defined display title for the repo at this root
-  /// URL, falling back to `Repository.name(for:)` (folder name) when no
-  /// custom title was set. Reads from the static dictionary populated
-  /// by the parent reducer — no per-call `@Shared` subscription on the
-  /// canvas hot path.
-  func repositoryDisplayName(for repositoryRootURL: URL) -> String {
-    let id = repositoryID(for: repositoryRootURL)
-    return repositoryCustomTitles[id] ?? Repository.name(for: repositoryRootURL)
-  }
-
-  /// Mirrors the same path normalization the `Repository.ID` is built
-  /// from, so dict lookups match what the reducer stores.
-  func repositoryID(for repositoryRootURL: URL) -> Repository.ID {
-    PathPolicy.normalizePath(
-      repositoryRootURL.path(percentEncoded: false), resolvingSymlinks: true
-    ) ?? repositoryRootURL.path(percentEncoded: false)
+  /// Resolves the user-defined display title of a repository, falling back
+  /// to `Repository.name(for:)` (folder name) when no custom title was set.
+  /// Reads from the static dictionary populated by the parent reducer — no
+  /// per-call `@Shared` subscription on the canvas hot path.
+  func repositoryDisplayName(for state: WorktreeTerminalState) -> String {
+    repositoryCustomTitles[state.repositoryID] ?? Repository.name(for: state.worktree.repositoryLocation)
   }
 }

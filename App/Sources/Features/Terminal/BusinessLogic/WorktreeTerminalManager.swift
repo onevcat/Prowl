@@ -1276,16 +1276,13 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>, preservingRepositoryIDs: Set<Repository.ID> = []) {
-    // Local IDs keep the filesystem-dependent trailing slash of `URL(fileURLWithPath:)`,
-    // so the comparison with each state's root is unchanged.
-    let failedRoots = Set(
-      preservingRepositoryIDs
-        .filter { RepositoryLocation(id: $0)?.localURL != nil }
-        .map { URL(fileURLWithPath: $0).standardizedFileURL }
-    )
+    // IDs are compared without trailing slashes: a failed repository's ID comes
+    // from its entry path, which lacks the slash that a path URL gains while the
+    // directory exists.
+    let failedIDs = Set(preservingRepositoryIDs.map(PathPolicy.trimmingTrailingSlashes))
     // A failed load is not evidence that its terminal sessions were removed.
     let preservedIDs = states.compactMap { id, state in
-      failedRoots.contains(state.repositoryRootURL.standardizedFileURL) ? id : nil
+      failedIDs.contains(PathPolicy.trimmingTrailingSlashes(state.repositoryID)) ? id : nil
     }
     let worktreeIDs = worktreeIDs.union(preservedIDs)
     var removed: [WorktreeTerminalState] = []

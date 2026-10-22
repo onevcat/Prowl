@@ -28,6 +28,21 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.stateIfExists(for: failed.id) == nil)
   }
 
+  @Test func prunePreservesFailedRepositorySessionsWhenOnlyATrailingSlashDiffers() {
+    // A failed repository's ID comes from its entry path, without the slash that
+    // path URLs add while the directory exists.
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let root = URL(fileURLWithPath: "/tmp/prowl-prune-\(UUID().uuidString)/", isDirectory: true)
+    let worktree = Worktree(
+      id: root.path(percentEncoded: false), name: "main", detail: "", workingDirectory: root, repositoryRootURL: root)
+    let original = manager.state(for: worktree)
+
+    manager.prune(keeping: [], preservingRepositoryIDs: [PathPolicy.trimmingTrailingSlashes(root.path)])
+
+    #expect(manager.stateIfExists(for: worktree.id) === original)
+    manager.prune(keeping: [])
+  }
+
   @Test func buffersEventsUntilStreamCreated() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

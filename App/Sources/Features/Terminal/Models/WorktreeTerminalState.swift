@@ -473,6 +473,8 @@ final class WorktreeTerminalState {
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
   var repositoryRootURL: URL { worktree.repositoryRootURL }
+  /// The `Repository.ID` of the worktree's repository.
+  var repositoryID: Repository.ID { worktree.repositoryLocation.id }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
     targetHandleRegistry.register(tabID: tabID)

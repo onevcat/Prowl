@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -254,10 +254,10 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | P0 | Load failures do not prune pins or `prowlCreatedWorktreeIDs` (independent fix from `main`) | Pins survive an unavailable repository |
 | A1 | One `Repository.terminalWorktree`; ID → path reversals become lookups | None |
 | A2 | `RepositoryLocation`, the ID codec (normalizers keep non-local IDs unchanged), `localURL`, `.local` initializers, deprecated forwards | None |
-| A3 | Call-site migration by category: identity and settings keys (with the basename fix and copy migration), git and file reads, terminal cwd and cwd matching, CLI; then delete the forwards. Two or three PRs | Settings directory key changes (migrated) |
+| A3 | Call-site migration by category, two PRs: identity and settings keys with the basename fix and copy migration (A3a); terminal cwd and cwd matching (A3b). CLI output moves with its `host` field in C2; git and file reads move in A5–A6 (amended 2026-10-23) | Settings directory key changes (migrated) |
 | A4 | Capabilities with location and reasons (including Profile launch), enforced at the reducer, launch and admission boundary | None |
-| A5 | `GitClient(executor:)`, ad-hoc instances and bypasses routed, `gh --repo` | None |
-| A6 | Repository state reads and `observeChanges` as host operations; local fast paths kept | None |
+| A5 | `GitClient(executor:)`, ad-hoc instances and bypasses routed, `gh --repo`; git reads move off the forwards | None |
+| A6 | Repository state reads and `observeChanges` as host operations; local fast paths kept; delete the forwards | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
@@ -316,3 +316,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-22: A1 landed (`Repository.terminalWorktree`; ID → path reversals with a model become lookups; the rest is listed for A2–A3) — see [003-a1-terminal-worktree.md](003-a1-terminal-worktree.md)
 - Updated 2026-10-22: A2 landed (`RepositoryLocation`, the ID codec, location-backed models with local forwards, ID normalizers that keep non-local IDs) — see [004-a2-location-codec.md](004-a2-location-codec.md)
 - Updated 2026-10-23: A3a landed (IDs minted and decoded through the codec; settings directory `<basename>-<hash>` with copy-on-load from the basename directory) — see [005-a3a-identity-and-settings-keys.md](005-a3a-identity-and-settings-keys.md)
+- Updated 2026-10-23: A3b landed (terminal cwd, cwd matching); A3 ends with two PRs and the forwards are deleted at the end of A6, after git and file reads move to the host — see [006-a3b-cwd-matching-cli.md](006-a3b-cwd-matching-cli.md)
