@@ -52,8 +52,10 @@ Two points to settle in L1f:
   carriers in the child, but not the profile override carriers (`PROWL_ENV_<NAME>`). The
   child therefore sees an override value under both its real name and its carrier name.
   A7 keeps this behaviour unchanged. The typed assignments make it a one-place change:
-  derive the `-u` list from the `.carrier` cases. That would also replace the
-  hand-written carrier list in `terminalInput`. It is a behaviour change for local
+  derive the environment part of the `-u` list from the `.carrier` cases. That would
+  also replace most of the hand-written carrier list in `terminalInput`. The prompt and
+  argv carriers are not environment assignments, so they still need their own `-u`
+  entries. It is a behaviour change for local
   launches, so it is left for onevcat to decide.
 
 ## Tests
