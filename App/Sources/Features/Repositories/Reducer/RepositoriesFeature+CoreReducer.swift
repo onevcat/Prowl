@@ -782,9 +782,11 @@ extension RepositoriesFeature {
         return .none
       }
       analyticsClient.capture("branch_renamed", nil)
+      let repositoryHost = repositoryHost
+      let worktreeLocation = worktree.location
       return .run { send in
         do {
-          try await gitClient.renameBranch(worktree.workingDirectory, trimmed)
+          try await repositoryHost.renameBranch(in: worktreeLocation, to: trimmed)
           await send(.reloadRepositories(animated: true))
         } catch {
           await send(
@@ -950,10 +952,10 @@ extension RepositoriesFeature {
         guard let worktree = state.worktree(for: worktreeID) else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         return .run { send in
-          if let name = await gitClient.branchName(worktreeURL) {
+          if let name = await repositoryHost.branchName(of: worktreeLocation) {
             await send(.worktreeBranchNameLoaded(worktreeID: worktreeID, name: name))
           }
         }
@@ -967,11 +969,11 @@ extension RepositoriesFeature {
         guard repositorySettings.observesLineDiffsAutomatically else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
         return .run { send in
-          if let changes = await gitClient.lineChanges(worktreeURL) {
+          if let changes = await repositoryHost.lineChanges(in: worktreeLocation) {
             let nextLineChanges = normalizedLineChanges(changes)
             guard nextLineChanges != previousLineChanges else {
               return
@@ -989,7 +991,7 @@ extension RepositoriesFeature {
       case .repositoryRemoteConfigurationChanged(let repositoryRootURL):
         guard
           let repository = state.repositories.first(where: {
-            $0.rootURL.standardizedFileURL == repositoryRootURL.standardizedFileURL
+            $0.location.localURL?.standardizedFileURL == repositoryRootURL.standardizedFileURL
           })
         else {
           return .none

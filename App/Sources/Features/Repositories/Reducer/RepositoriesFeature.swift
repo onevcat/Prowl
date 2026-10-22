@@ -67,7 +67,7 @@ struct DeleteWorktreeConfirmation: Equatable, Identifiable {
 
 struct ForceDeleteBranchRequest: Equatable {
   let branchName: String
-  let repositoryRootURL: URL
+  let repositoryLocation: RepositoryLocation
   let errorMessage: String
 }
 
@@ -605,6 +605,9 @@ struct RepositoriesFeature {
   @Dependency(AnalyticsClient.self) var analyticsClient
   @Dependency(GitClientDependency.self) var gitClient
   @Dependency(GithubCLIClient.self) var githubCLI
+  /// Repository-scoped git operations go through the host (docs-ai 084);
+  /// `gitClient` stays for local URLs that are not a repository's location.
+  var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient) }
   @Dependency(PullRequestRefreshCoordinatorClient.self) var pullRequestRefreshCoordinator
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(OpenURLClient.self) var openURLClient

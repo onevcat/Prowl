@@ -4124,7 +4124,7 @@ struct RepositoriesFeatureTests {
           .confirmForceDeleteBranch(
             ForceDeleteBranchRequest(
               branchName: "feature",
-              repositoryRootURL: URL(fileURLWithPath: repoRoot),
+              repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
               errorMessage: "Git command failed: git branch -d feature\nnot fully merged"
             )))))
 
@@ -4178,12 +4178,12 @@ struct RepositoriesFeatureTests {
     let repoRoot = "/tmp/repo"
     let firstRequest = ForceDeleteBranchRequest(
       branchName: "first",
-      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
       errorMessage: "first failed"
     )
     let secondRequest = ForceDeleteBranchRequest(
       branchName: "second",
-      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
       errorMessage: "second failed"
     )
     let store = TestStore(initialState: makeState(repositories: [])) {

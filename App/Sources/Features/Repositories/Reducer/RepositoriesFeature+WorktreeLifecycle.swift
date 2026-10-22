@@ -389,21 +389,20 @@ extension RepositoriesFeature {
         selectionWasRemoved
         ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
         : nil
+      let repositoryHost = repositoryHost
       return .run { send in
         do {
-          _ = try await gitClient.removeWorktree(
-            worktree,
-            false
-          )
+          _ = try await repositoryHost.removeWorktree(worktree, deleteBranch: false)
           let forceDeleteBranchRequest: ForceDeleteBranchRequest?
           if deleteBranch {
             do {
-              _ = try await gitClient.deleteLocalBranch(worktree.name, worktree.repositoryRootURL, false)
+              _ = try await repositoryHost.deleteLocalBranch(
+                named: worktree.name, in: worktree.repositoryLocation, force: false)
               forceDeleteBranchRequest = nil
             } catch {
               forceDeleteBranchRequest = ForceDeleteBranchRequest(
                 branchName: worktree.name,
-                repositoryRootURL: worktree.repositoryRootURL,
+                repositoryLocation: worktree.repositoryLocation,
                 errorMessage: error.localizedDescription
               )
             }
@@ -530,9 +529,11 @@ extension RepositoriesFeature {
       state.alert = nil
       removePendingForceDeleteBranchRequest(request, state: &state)
       presentNextForceDeleteBranchAlert(state: &state)
+      let repositoryHost = repositoryHost
       return .run { send in
         do {
-          _ = try await gitClient.deleteLocalBranch(request.branchName, request.repositoryRootURL, true)
+          _ = try await repositoryHost.deleteLocalBranch(
+            named: request.branchName, in: request.repositoryLocation, force: true)
         } catch {
           await send(.worktreeLifecycle(.forceDeleteBranchFailed(error.localizedDescription)))
         }
