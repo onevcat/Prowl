@@ -133,9 +133,10 @@ When GitHub refuses a request for its rate limit:
   `gh run` commands (re-run, copy logs) use REST.
 - A secondary limit (`Retry-After`, "secondary rate limit", abuse detection), or a
   refusal that does not say which limit, holds back every API on that host.
-- Other hosts are not affected. Commands that let `gh` pick the host from the
-  repository's remotes (`gh run`, `gh repo view`, `gh auth status`) share one
-  "default host" group.
+- Other hosts are not affected. `gh run` and pull request commands name their
+  repository (`--repo HOST/OWNER/REPO`), so they count against that host.
+  Commands that let `gh` pick the host from the repository's remotes
+  (`gh repo view`, `gh auth status`) share one "default host" group.
 - It waits as long as GitHub's `Retry-After` header asks. Without one, it waits
   until `X-RateLimit-Reset` when GitHub reports an exhausted budget. Otherwise,
   it waits one minute, then doubles the wait after each further refusal, up to

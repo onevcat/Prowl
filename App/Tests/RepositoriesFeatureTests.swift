@@ -5603,7 +5603,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
       $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
-      $0.githubCLI.mergePullRequest = { _, _, number, _, _ in
+      $0.githubCLI.mergePullRequest = { _, number, _, _ in
         mergedNumbers.withValue { $0.append(number) }
       }
     }
@@ -5658,7 +5658,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
       $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
-      $0.githubCLI.mergePullRequest = { _, _, _, strategy, _ in
+      $0.githubCLI.mergePullRequest = { _, _, strategy, _ in
         mergedStrategies.withValue { $0.append(strategy) }
       }
     }
@@ -5710,8 +5710,7 @@ struct RepositoriesFeatureTests {
         Issue.record("gh resolveRemoteInfo should not run when git remote resolves")
         return nil
       }
-      $0.githubCLI.mergePullRequest = { root, remoteInfo, number, _, _ in
-        #expect(root == featureWorktree.workingDirectory)
+      $0.githubCLI.mergePullRequest = { remoteInfo, number, _, _ in
         #expect(number == 12)
         mutationRemoteInfos.withValue { $0.append(remoteInfo) }
       }
@@ -5745,7 +5744,7 @@ struct RepositoriesFeatureTests {
         Issue.record("gh resolveRemoteInfo should not run when PR URL resolves")
         return nil
       }
-      $0.githubCLI.mergePullRequest = { _, remoteInfo, _, _, _ in
+      $0.githubCLI.mergePullRequest = { remoteInfo, _, _, _ in
         remoteInfos.withValue { $0.append(remoteInfo) }
       }
     }
@@ -5778,7 +5777,7 @@ struct RepositoriesFeatureTests {
         Issue.record("gh resolveRemoteInfo should not run when PR URL resolves")
         return nil
       }
-      $0.githubCLI.closePullRequest = { _, remoteInfo, _, _ in
+      $0.githubCLI.closePullRequest = { remoteInfo, _, _ in
         remoteInfos.withValue { $0.append(remoteInfo) }
       }
     }
@@ -5793,6 +5792,113 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.worktreeInfoEvent)
     #expect(remoteInfos.value == [fixture.expectedRemoteInfo])
+    await store.finish()
+  }
+
+  @Test func rerunFailedJobsTargetsThePullRequestURLRepository() async {
+    let fixture = makePullRequestURLRemoteInfoFixture(repoRoot: "/tmp/repo-pr-url-rerun")
+    let runTargets = LockIsolated<[GithubRemoteInfo]>([])
+    let store = TestStore(initialState: fixture.state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.gitClient.remoteInfo = { _ in
+        Issue.record("git remoteInfo should not run when PR URL resolves")
+        return nil
+      }
+      $0.githubCLI.resolveRemoteInfo = { _ in
+        Issue.record("gh resolveRemoteInfo should not run when PR URL resolves")
+        return nil
+      }
+      $0.githubCLI.latestRun = { remoteInfo, _, _ in
+        runTargets.withValue { $0.append(remoteInfo) }
+        return GithubWorkflowRun(
+          databaseId: 7, workflowName: "CI", name: "CI", displayTitle: "CI", status: "completed",
+          conclusion: "failure", createdAt: nil, updatedAt: nil)
+      }
+      $0.githubCLI.rerunFailedJobs = { remoteInfo, runID, _ in
+        #expect(runID == 7)
+        runTargets.withValue { $0.append(remoteInfo) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(fixture.featureWorktree.id, .rerunFailedJobs)))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Re-running failed jobs…")
+    }
+    await store.receive(\.showToast) {
+      $0.statusToast = .success("Failed jobs re-run started")
+    }
+    #expect(runTargets.value == [fixture.expectedRemoteInfo, fixture.expectedRemoteInfo])
+    await store.finish()
+  }
+
+  @Test func copyCiFailureLogsTargetsThePullRequestURLRepository() async {
+    let fixture = makePullRequestURLRemoteInfoFixture(repoRoot: "/tmp/repo-pr-url-logs")
+    let targets = LockIsolated<[String]>([])
+    let store = TestStore(initialState: fixture.state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { _ in
+        Issue.record("gh resolveRemoteInfo should not run when PR URL resolves")
+        return nil
+      }
+      $0.githubCLI.latestRun = { remoteInfo, _, _ in
+        targets.withValue { $0.append("list \(remoteInfo.owner)/\(remoteInfo.repo)") }
+        return GithubWorkflowRun(
+          databaseId: 9, workflowName: "CI", name: "CI", displayTitle: "CI", status: "completed",
+          conclusion: "failure", createdAt: nil, updatedAt: nil)
+      }
+      $0.githubCLI.failedRunLogs = { remoteInfo, _, _ in
+        targets.withValue { $0.append("failed \(remoteInfo.owner)/\(remoteInfo.repo)") }
+        return ""
+      }
+      $0.githubCLI.runLogs = { remoteInfo, runID, _ in
+        #expect(runID == 9)
+        targets.withValue { $0.append("all \(remoteInfo.owner)/\(remoteInfo.repo)") }
+        return ""
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(fixture.featureWorktree.id, .copyCiFailureLogs)))
+    await store.receive(\.showToast)
+    await store.receive(\.dismissToast)
+    await store.receive(\.presentAlert)
+    let repository = "\(fixture.expectedRemoteInfo.owner)/\(fixture.expectedRemoteInfo.repo)"
+    #expect(targets.value == ["list \(repository)", "failed \(repository)", "all \(repository)"])
+    await store.finish()
+  }
+
+  @Test func rerunFailedJobsExplainsAnUnresolvedRepository() async {
+    let fixture = makePullRequestURLRemoteInfoFixture(repoRoot: "/tmp/repo-pr-url-unresolved")
+    var state = fixture.state
+    let unparsable = GithubPullRequest(
+      number: 12, title: "PR", state: "OPEN", additions: 0, deletions: 0, isDraft: false, reviewDecision: nil,
+      mergeable: nil, mergeStateStatus: nil, updatedAt: nil, url: "https://example.com/not-a-pull-request",
+      headRefName: "feature", baseRefName: "main", commitsCount: 1, authorLogin: "khoi", statusCheckRollup: nil)
+    state.worktreeInfoByID[fixture.featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil, removedLines: nil, pullRequest: unparsable)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.resolveRemoteInfo = { _ in nil }
+      $0.githubCLI.latestRun = { _, _, _ in
+        Issue.record("no run may be looked up without a repository")
+        return nil
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(fixture.featureWorktree.id, .rerunFailedJobs)))
+    await store.receive(\.showToast)
+    await store.receive(\.dismissToast)
+    await store.receive(\.presentAlert)
+    #expect(store.state.alert != nil)
     await store.finish()
   }
 
@@ -5811,7 +5917,7 @@ struct RepositoriesFeatureTests {
         Issue.record("gh resolveRemoteInfo should not run when PR URL resolves")
         return nil
       }
-      $0.githubCLI.markPullRequestReady = { _, remoteInfo, _, _ in
+      $0.githubCLI.markPullRequestReady = { remoteInfo, _, _ in
         remoteInfos.withValue { $0.append(remoteInfo) }
       }
     }
@@ -5853,7 +5959,7 @@ struct RepositoriesFeatureTests {
       $0.githubIntegration.isAvailable = { true }
       $0.githubCLI.resolveRemoteInfo = { _ in nil }
       $0.gitClient.remoteInfo = { _ in nil }
-      $0.githubCLI.mergePullRequest = { _, _, _, _, _ in
+      $0.githubCLI.mergePullRequest = { _, _, _, _ in
         mergeAttempts.withValue { $0 += 1 }
       }
     }
@@ -5914,7 +6020,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
       $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
-      $0.githubCLI.closePullRequest = { _, _, number, _ in
+      $0.githubCLI.closePullRequest = { _, number, _ in
         closedNumbers.withValue { $0.append(number) }
       }
     }

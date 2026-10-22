@@ -192,21 +192,20 @@ actor GithubAccountSwitchLock {
 }
 
 struct GithubCLIClient: Sendable {
-  var defaultBranch: @Sendable (URL) async throws -> String
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
-  var latestRun: @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
+  var latestRun: @Sendable (GithubRemoteInfo, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
   var batchPullRequests:
     @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
       GithubPullRequest]
   var batchPullRequestsAcrossRepositories:
     @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws -> CrossRepoPullRequestResult
   var mergePullRequest:
-    @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy, GithubAccountOverride?) async throws -> Void
-  var closePullRequest: @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void
-  var markPullRequestReady: @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void
-  var rerunFailedJobs: @Sendable (URL, Int, GithubAccountOverride?) async throws -> Void
-  var failedRunLogs: @Sendable (URL, Int, GithubAccountOverride?) async throws -> String
-  var runLogs: @Sendable (URL, Int, GithubAccountOverride?) async throws -> String
+    @Sendable (GithubRemoteInfo, Int, PullRequestMergeStrategy, GithubAccountOverride?) async throws -> Void
+  var closePullRequest: @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void
+  var markPullRequestReady: @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void
+  var rerunFailedJobs: @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void
+  var failedRunLogs: @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> String
+  var runLogs: @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> String
   var isAvailable: @Sendable () async -> Bool
   var authStatusSnapshot: @Sendable () async throws -> GithubAuthStatusSnapshot
   var authStatus: @Sendable () async throws -> GithubAuthStatus?
@@ -224,7 +223,6 @@ extension GithubCLIClient: DependencyKey {
   ) -> GithubCLIClient {
     let resolver = GithubCLIExecutableResolver(fallbackExecutableURLs: fallbackExecutableURLs)
     return GithubCLIClient(
-      defaultBranch: defaultBranchFetcher(shell: shell, resolver: resolver, gate: gate),
       resolveRemoteInfo: resolveRemoteInfoFetcher(shell: shell, resolver: resolver, gate: gate),
       latestRun: latestRunFetcher(shell: shell, resolver: resolver, gate: gate),
       batchPullRequests: batchPullRequestsFetcher(shell: shell, resolver: resolver, gate: gate),
@@ -245,14 +243,13 @@ extension GithubCLIClient: DependencyKey {
   }
 
   static let testValue = GithubCLIClient(
-    defaultBranch: { _ in "main" },
     resolveRemoteInfo: { _ in nil },
     latestRun: { _, _, _ in nil },
     batchPullRequests: { _, _, _, _, _, _ in [:] },
     batchPullRequestsAcrossRepositories: { _, _, _ in CrossRepoPullRequestResult() },
-    mergePullRequest: { _, _, _, _, _ in },
-    closePullRequest: { _, _, _, _ in },
-    markPullRequestReady: { _, _, _, _ in },
+    mergePullRequest: { _, _, _, _ in },
+    closePullRequest: { _, _, _ in },
+    markPullRequestReady: { _, _, _ in },
     rerunFailedJobs: { _, _, _ in },
     failedRunLogs: { _, _, _ in "" },
     runLogs: { _, _, _ in "" },
@@ -287,26 +284,6 @@ extension DependencyValues {
   }
 }
 
-nonisolated private func defaultBranchFetcher(
-  shell: ShellClient,
-  resolver: GithubCLIExecutableResolver,
-  gate: GithubRateLimitGate
-) -> @Sendable (URL) async throws -> String {
-  { repoRoot in
-    let output = try await runGh(
-      shell: shell,
-      resolver: resolver,
-      gate: gate,
-      arguments: ["repo", "view", "--json", "defaultBranchRef"],
-      repoRoot: repoRoot
-    )
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    let response = try GithubCLIOutput.decode(GithubRepoViewResponse.self, from: output, decoder: decoder)
-    return response.defaultBranchRef.name
-  }
-}
-
 nonisolated private func resolveRemoteInfoFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
@@ -336,12 +313,13 @@ nonisolated private func latestRunFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun? {
-  { repoRoot, branch, accountOverride in
+) -> @Sendable (GithubRemoteInfo, String, GithubAccountOverride?) async throws -> GithubWorkflowRun? {
+  { remoteInfo, branch, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
       gate: gate,
+      host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       let output = try await runGh(
@@ -357,8 +335,8 @@ nonisolated private func latestRunFetcher(
           "1",
           "--json",
           "databaseId,workflowName,name,displayTitle,status,conclusion,createdAt,updatedAt",
-        ],
-        repoRoot: repoRoot
+        ] + repoArgument(remoteInfo),
+        repoRoot: nil
       )
       let decoder = JSONDecoder()
       decoder.dateDecodingStrategy = .iso8601
@@ -767,8 +745,8 @@ nonisolated private func mergePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy, GithubAccountOverride?) async throws -> Void {
-  { repoRoot, remoteInfo, pullRequestNumber, strategy, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, PullRequestMergeStrategy, GithubAccountOverride?) async throws -> Void {
+  { remoteInfo, pullRequestNumber, strategy, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
@@ -786,7 +764,7 @@ nonisolated private func mergePullRequestFetcher(
           "\(pullRequestNumber)",
           "--\(strategy.ghArgument)",
         ] + repoArgument(remoteInfo),
-        repoRoot: repoRoot
+        repoRoot: nil
       )
     }
   }
@@ -796,8 +774,8 @@ nonisolated private func closePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
-  { repoRoot, remoteInfo, pullRequestNumber, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
+  { remoteInfo, pullRequestNumber, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
@@ -814,7 +792,7 @@ nonisolated private func closePullRequestFetcher(
           "close",
           "\(pullRequestNumber)",
         ] + repoArgument(remoteInfo),
-        repoRoot: repoRoot
+        repoRoot: nil
       )
     }
   }
@@ -824,8 +802,8 @@ nonisolated private func markPullRequestReadyFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
-  { repoRoot, remoteInfo, pullRequestNumber, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
+  { remoteInfo, pullRequestNumber, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
@@ -842,12 +820,16 @@ nonisolated private func markPullRequestReadyFetcher(
           "ready",
           "\(pullRequestNumber)",
         ] + repoArgument(remoteInfo),
-        repoRoot: repoRoot
+        repoRoot: nil
       )
     }
   }
 }
 
+/// The `gh run` and pull request commands name their repository with `--repo`
+/// and run without a working directory, so they also work for a repository on
+/// another host (docs-ai 084). Only the remote-info fallback lets `gh` infer the
+/// repository from a cwd.
 nonisolated private func repoArgument(_ remoteInfo: GithubRemoteInfo) -> [String] {
   ["--repo", "\(remoteInfo.host)/\(remoteInfo.owner)/\(remoteInfo.repo)"]
 }
@@ -856,12 +838,13 @@ nonisolated private func rerunFailedJobsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> Void {
-  { repoRoot, runID, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
+  { remoteInfo, runID, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
       gate: gate,
+      host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       _ = try await runGh(
@@ -873,8 +856,8 @@ nonisolated private func rerunFailedJobsFetcher(
           "rerun",
           "\(runID)",
           "--failed",
-        ],
-        repoRoot: repoRoot
+        ] + repoArgument(remoteInfo),
+        repoRoot: nil
       )
     }
   }
@@ -884,12 +867,13 @@ nonisolated private func failedRunLogsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> String {
-  { repoRoot, runID, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> String {
+  { remoteInfo, runID, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
       gate: gate,
+      host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       try await runGh(
@@ -901,8 +885,8 @@ nonisolated private func failedRunLogsFetcher(
           "view",
           "\(runID)",
           "--log-failed",
-        ],
-        repoRoot: repoRoot
+        ] + repoArgument(remoteInfo),
+        repoRoot: nil
       )
     }
   }
@@ -912,12 +896,13 @@ nonisolated private func runLogsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> String {
-  { repoRoot, runID, accountOverride in
+) -> @Sendable (GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> String {
+  { remoteInfo, runID, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
       gate: gate,
+      host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       try await runGh(
@@ -929,8 +914,8 @@ nonisolated private func runLogsFetcher(
           "view",
           "\(runID)",
           "--log",
-        ],
-        repoRoot: repoRoot
+        ] + repoArgument(remoteInfo),
+        repoRoot: nil
       )
     }
   }

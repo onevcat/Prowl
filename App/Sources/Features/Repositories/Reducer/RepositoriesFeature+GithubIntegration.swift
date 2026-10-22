@@ -41,6 +41,30 @@ extension RepositoriesFeature {
     return []
   }
 
+  /// Resolves the repository of a pull request, or dismisses the progress toast
+  /// and explains that the repository is unknown.
+  static func resolveGithubRemoteInfoOrAlert(
+    for pullRequest: GithubPullRequest,
+    repositoryRootURL: URL,
+    githubCLI: GithubCLIClient,
+    gitClient: GitClientDependency,
+    send: Send<Action>
+  ) async -> GithubRemoteInfo? {
+    if let remoteInfo = await resolveGithubRemoteInfo(
+      for: pullRequest, repositoryRootURL: repositoryRootURL, githubCLI: githubCLI, gitClient: gitClient)
+    {
+      return remoteInfo
+    }
+    await send(.dismissToast)
+    await send(
+      .presentAlert(
+        title: String(localized: "GitHub repository not resolved"),
+        message: unresolvedGithubRepositoryMessage
+      )
+    )
+    return nil
+  }
+
   static func resolveGithubRemoteInfo(
     for pullRequest: GithubPullRequest,
     repositoryRootURL: URL,
@@ -351,7 +375,6 @@ extension RepositoriesFeature {
         )
       }
       let repoRoot = worktree.repositoryRootURL
-      let worktreeRoot = worktree.workingDirectory
       let optionalPullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
       if case .openOnCodeHost = action {
         let gitClient = gitClient
@@ -442,24 +465,11 @@ extension RepositoriesFeature {
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             guard
-              let remoteInfo = await Self.resolveGithubRemoteInfo(
-                for: pullRequest,
-                repositoryRootURL: repoRoot,
-                githubCLI: githubCLI,
-                gitClient: gitClient
-              )
-            else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "GitHub repository not resolved"),
-                  message: unresolvedGithubRepositoryMessage
-                )
-              )
-              return
-            }
+              let remoteInfo = await Self.resolveGithubRemoteInfoOrAlert(
+                for: pullRequest, repositoryRootURL: repoRoot, githubCLI: githubCLI, gitClient: gitClient,
+                send: send)
+            else { return }
             try await githubCLI.markPullRequestReady(
-              worktreeRoot,
               remoteInfo,
               pullRequest.number,
               repositorySettings.githubAccountOverride
@@ -497,24 +507,11 @@ extension RepositoriesFeature {
           await send(.showToast(.inProgress(String(localized: "Merging pull request…"))))
           do {
             guard
-              let remoteInfo = await Self.resolveGithubRemoteInfo(
-                for: pullRequest,
-                repositoryRootURL: repoRoot,
-                githubCLI: githubCLI,
-                gitClient: gitClient
-              )
-            else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "GitHub repository not resolved"),
-                  message: unresolvedGithubRepositoryMessage
-                )
-              )
-              return
-            }
+              let remoteInfo = await Self.resolveGithubRemoteInfoOrAlert(
+                for: pullRequest, repositoryRootURL: repoRoot, githubCLI: githubCLI, gitClient: gitClient,
+                send: send)
+            else { return }
             try await githubCLI.mergePullRequest(
-              worktreeRoot,
               remoteInfo,
               pullRequest.number,
               strategy,
@@ -552,24 +549,11 @@ extension RepositoriesFeature {
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             guard
-              let remoteInfo = await Self.resolveGithubRemoteInfo(
-                for: pullRequest,
-                repositoryRootURL: repoRoot,
-                githubCLI: githubCLI,
-                gitClient: gitClient
-              )
-            else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "GitHub repository not resolved"),
-                  message: unresolvedGithubRepositoryMessage
-                )
-              )
-              return
-            }
+              let remoteInfo = await Self.resolveGithubRemoteInfoOrAlert(
+                for: pullRequest, repositoryRootURL: repoRoot, githubCLI: githubCLI, gitClient: gitClient,
+                send: send)
+            else { return }
             try await githubCLI.closePullRequest(
-              worktreeRoot,
               remoteInfo,
               pullRequest.number,
               repositorySettings.githubAccountOverride
@@ -591,6 +575,7 @@ extension RepositoriesFeature {
       case .copyCiFailureLogs:
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
+        let gitClient = gitClient
         return .run { send in
           guard await githubIntegration.isAvailable() else {
             await send(
@@ -614,30 +599,21 @@ extension RepositoriesFeature {
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             let accountOverride = repositorySettings.githubAccountOverride
-            guard let run = try await githubCLI.latestRun(worktreeRoot, branchName, accountOverride) else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "No workflow runs found"),
-                  message: String(localized: "Prowl could not find any workflow runs for this branch.")
-                )
-              )
-              return
-            }
-            guard run.conclusion?.lowercased() == "failure" else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "No failing workflow run"),
-                  message: String(localized: "Prowl could not find a failing workflow run to copy logs from.")
-                )
-              )
-              return
-            }
-            let failedLogs = try await githubCLI.failedRunLogs(worktreeRoot, run.databaseId, accountOverride)
+            guard
+              let remoteInfo = await Self.resolveGithubRemoteInfoOrAlert(
+                for: pullRequest, repositoryRootURL: repoRoot, githubCLI: githubCLI, gitClient: gitClient,
+                send: send)
+            else { return }
+            guard
+              let run = try await githubCLI.latestFailedRun(
+                remoteInfo: remoteInfo, branchName: branchName, accountOverride: accountOverride,
+                noFailureMessage: String(localized: "Prowl could not find a failing workflow run to copy logs from."),
+                send: send)
+            else { return }
+            let failedLogs = try await githubCLI.failedRunLogs(remoteInfo, run.databaseId, accountOverride)
             let logs =
               if failedLogs.isEmpty {
-                try await githubCLI.runLogs(worktreeRoot, run.databaseId, accountOverride)
+                try await githubCLI.runLogs(remoteInfo, run.databaseId, accountOverride)
               } else {
                 failedLogs
               }
@@ -670,6 +646,7 @@ extension RepositoriesFeature {
       case .rerunFailedJobs:
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
+        let gitClient = gitClient
         return .run { send in
           guard await githubIntegration.isAvailable() else {
             await send(
@@ -693,27 +670,18 @@ extension RepositoriesFeature {
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             let accountOverride = repositorySettings.githubAccountOverride
-            guard let run = try await githubCLI.latestRun(worktreeRoot, branchName, accountOverride) else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "No workflow runs found"),
-                  message: String(localized: "Prowl could not find any workflow runs for this branch.")
-                )
-              )
-              return
-            }
-            guard run.conclusion?.lowercased() == "failure" else {
-              await send(.dismissToast)
-              await send(
-                .presentAlert(
-                  title: String(localized: "No failing workflow run"),
-                  message: String(localized: "Prowl could not find a failing workflow run to re-run.")
-                )
-              )
-              return
-            }
-            try await githubCLI.rerunFailedJobs(worktreeRoot, run.databaseId, accountOverride)
+            guard
+              let remoteInfo = await Self.resolveGithubRemoteInfoOrAlert(
+                for: pullRequest, repositoryRootURL: repoRoot, githubCLI: githubCLI, gitClient: gitClient,
+                send: send)
+            else { return }
+            guard
+              let run = try await githubCLI.latestFailedRun(
+                remoteInfo: remoteInfo, branchName: branchName, accountOverride: accountOverride,
+                noFailureMessage: String(localized: "Prowl could not find a failing workflow run to re-run."),
+                send: send)
+            else { return }
+            try await githubCLI.rerunFailedJobs(remoteInfo, run.databaseId, accountOverride)
             await send(.showToast(.success(String(localized: "Failed jobs re-run started"))))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
@@ -1147,5 +1115,34 @@ extension RepositoriesFeature {
       }
       return reduceGithubIntegration(state: &state, action: action)
     }
+  }
+}
+
+extension GithubCLIClient {
+  /// The latest run of `branchName` when it failed. Otherwise dismisses the
+  /// progress toast and explains why.
+  func latestFailedRun(
+    remoteInfo: GithubRemoteInfo,
+    branchName: String,
+    accountOverride: GithubAccountOverride?,
+    noFailureMessage: String,
+    send: Send<RepositoriesFeature.Action>
+  ) async throws -> GithubWorkflowRun? {
+    guard let run = try await latestRun(remoteInfo, branchName, accountOverride) else {
+      await send(.dismissToast)
+      await send(
+        .presentAlert(
+          title: String(localized: "No workflow runs found"),
+          message: String(localized: "Prowl could not find any workflow runs for this branch.")
+        )
+      )
+      return nil
+    }
+    guard run.conclusion?.lowercased() == "failure" else {
+      await send(.dismissToast)
+      await send(.presentAlert(title: String(localized: "No failing workflow run"), message: noFailureMessage))
+      return nil
+    }
+    return run
   }
 }
