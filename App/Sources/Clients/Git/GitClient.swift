@@ -7,18 +7,30 @@ struct GitClient {
     let index: Int
   }
 
-  private let shell: ShellClient
+  private let executor: GitCommandExecutor
 
-  private let resolveGit: @Sendable (Bool) async throws -> GitExecutable
+  /// The client for repositories on this Mac. Code outside the dependency layer
+  /// uses this instance instead of building its own.
+  nonisolated static let local = GitClient(executor: .local)
 
+  nonisolated init(executor: GitCommandExecutor) {
+    self.executor = executor
+  }
+
+  /// A local executor with an injected shell (and `git`), for tests.
   nonisolated init(
-    shell: ShellClient = .live,
-    resolveGit: @escaping @Sendable (Bool) async throws -> GitExecutable = {
-      try await GitExecutableResolver.shared.resolve(revalidate: $0)
-    }
+    shell: ShellClient,
+    resolveGit: @escaping @Sendable (Bool) async throws -> GitExecutable = GitCommandExecutor.local.resolveGit
   ) {
-    self.shell = shell
-    self.resolveGit = resolveGit
+    self.init(
+      executor: GitCommandExecutor(
+        shell: shell, resolveGit: resolveGit, wtScriptURL: GitCommandExecutor.local.wtScriptURL))
+  }
+
+  nonisolated private var shell: ShellClient { executor.shell }
+
+  nonisolated private func resolveGit(_ revalidate: Bool) async throws -> GitExecutable {
+    try await executor.resolveGit(revalidate)
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
@@ -1325,10 +1337,7 @@ struct GitClient {
   }
 
   nonisolated private func wtScriptURL() throws -> URL {
-    guard let url = Bundle.main.url(forResource: "wt", withExtension: nil, subdirectory: "git-wt") else {
-      fatalError("Bundled wt script not found")
-    }
-    return url
+    try executor.wtScriptURL()
   }
 
   nonisolated private func runBundledWtProcess(

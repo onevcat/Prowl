@@ -311,7 +311,7 @@ struct GitOutgoingChangesTests {
       encoding: .utf8
     )
 
-    let client = GitClient()
+    let client = GitClient.local
     let resolution = try await client.outgoingBaseResolution(
       pullRequest: nil,
       configuredBaseRef: "main",
@@ -367,7 +367,7 @@ struct GitOutgoingChangesTests {
     // report an empty outgoing diff.
     try runOutgoingChangesGit(["-C", path, "branch", "upstream/main", featureCommit])
 
-    let client = GitClient()
+    let client = GitClient.local
     let resolution = try await client.outgoingBaseResolution(
       pullRequest: GitPullRequestBase(
         url: "https://github.com/target/project/pull/1",

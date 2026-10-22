@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -319,3 +319,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A3b landed (terminal cwd, cwd matching); A3 ends with two PRs and the forwards are deleted at the end of A6, after git and file reads move to the host — see [006-a3b-cwd-matching-cli.md](006-a3b-cwd-matching-cli.md)
 - Updated 2026-10-23: A4a landed (`RepositoryFeature` availability by location with reasons; enforcement at the reducer and the Profile launch boundary); A4 split into A4a and A4b — see [007-a4a-capability-enforcement.md](007-a4a-capability-enforcement.md)
 - Updated 2026-10-23: A5a landed (`gh run` and pull request commands pass `--repo` and run without a repository cwd; dead `defaultBranch` removed; `gh repo view` remote fallback keeps its cwd); A4b moves to C1; A5 split — see [008-a5a-gh-repository-target.md](008-a5a-gh-repository-target.md)
+- Updated 2026-10-23: A5b landed (`GitCommandExecutor`, `GitClient(executor:)`, shared `GitClient.local`; no default shell) — see [009-a5b-git-executor.md](009-a5b-git-executor.md)
