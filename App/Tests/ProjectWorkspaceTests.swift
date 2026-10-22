@@ -909,7 +909,7 @@ struct ProjectWorkspaceTests {
     )
     var state = RepositoriesFeature.State()
     state.repositories = [repository]
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
 
     let contexts = ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: state)
 

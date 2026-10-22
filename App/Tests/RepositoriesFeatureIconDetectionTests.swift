@@ -41,7 +41,7 @@ struct RepositoriesFeatureIconDetectionTests {
   private func makeState(repositories: [Repository]) -> RepositoriesFeature.State {
     var state = RepositoriesFeature.State()
     state.repositories = IdentifiedArray(uniqueElements: repositories)
-    state.repositoryRoots = repositories.map(\.localURL!)
+    state.repositoryRoots = repositories.map(\.location)
     state.isInitialLoadComplete = true
     state.snapshotPersistencePhase = .active
     return state
@@ -97,7 +97,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [newRepo.localURL!]
+          roots: [newRepo.location]
         )
       )
     )
@@ -130,7 +130,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existing.localURL!]
+          roots: [existing.location]
         )
       )
     )
@@ -163,7 +163,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [newRepo.localURL!]
+          roots: [newRepo.location]
         )
       )
     )
@@ -201,7 +201,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [suppressed.localURL!, iconed.localURL!, fresh.localURL!]
+          roots: [suppressed.location, iconed.location, fresh.location]
         )
       )
     )
@@ -433,7 +433,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [newRepo.localURL!]
+          roots: [newRepo.location]
         )
       )
     )
@@ -472,7 +472,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [newRepo.localURL!]
+          roots: [newRepo.location]
         )
       )
     )
@@ -513,7 +513,7 @@ struct RepositoriesFeatureIconDetectionTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [container.localURL!]
+          roots: [container.location]
         )
       )
     )

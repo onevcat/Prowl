@@ -142,7 +142,7 @@ struct AppFeatureArchivedSelectionTests {
     let healthyState = manager.stateIfExists(for: healthy.id)
     var state = AppFeature.State()
     state.repositories.repositories = IdentifiedArray(uniqueElements: initialRepositories)
-    state.repositories.repositoryRoots = roots
+    state.repositories.repositoryRoots = roots.map(RepositoryLocation.local)
     state.repositories.snapshotPersistencePhase = .active
     let store = TestStore(initialState: state) {
       AppFeature()
@@ -168,7 +168,7 @@ struct AppFeatureArchivedSelectionTests {
           failures: failedRepositories.map {
             .init(rootID: $0.id, message: "Unavailable test Git", isGitUnavailable: true)
           },
-          roots: roots, animated: false)))
+          roots: roots.map(RepositoryLocation.local), animated: false)))
     await store.finish()
     #expect(removedState != nil)
     #expect(manager.stateIfExists(for: removed.id) === removedState)
@@ -187,7 +187,7 @@ struct AppFeatureArchivedSelectionTests {
 
   @Test(.dependencies) func failedRepositoryLoadDoesNotCloseItsTerminals() async {
     var state = AppFeature.State()
-    state.repositories.repositoryRoots = [URL(fileURLWithPath: "/tmp/unavailable")]
+    state.repositories.repositoryRoots = [.local(URL(fileURLWithPath: "/tmp/unavailable"))]
     state.repositories.loadFailuresByID = ["/tmp/unavailable": "Git is unavailable"]
     let commands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: state) {

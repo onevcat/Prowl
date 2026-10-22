@@ -452,7 +452,7 @@ struct ArchivedAutoDeletePeriodAppTests {
     await store.send(
       .repositories(
         .repositoriesLoaded(
-          refreshed, failures: [], roots: refreshed.map(\.localURL!), animated: false
+          refreshed, failures: [], roots: refreshed.map(\.location), animated: false
         )))
     await store.send(.settings(.alert(.presented(.confirmArchivedAutoDeletePeriod(.sevenDays)))))
     await store.receive(\.settings.archivedAutoDeletePeriodChangeEvaluated)
