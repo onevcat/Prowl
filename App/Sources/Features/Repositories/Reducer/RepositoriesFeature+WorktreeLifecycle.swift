@@ -108,7 +108,7 @@ extension RepositoriesFeature {
           .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
         )
       }
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
       let script = repositorySettings.archiveScript
       let commandText = archiveScriptCommand(script)
       let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)

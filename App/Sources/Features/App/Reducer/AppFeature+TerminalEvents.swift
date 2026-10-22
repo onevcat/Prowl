@@ -167,7 +167,7 @@ extension AppFeature {
       // Launch memory is recorded only once a surface actually exists, so a
       // failed provision or surface creation never shifts Recommended.
       guard let worktree = state.repositories.terminalWorktree(for: worktreeID) else { return .none }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userRepositorySettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocation)) var userRepositorySettings
       $userRepositorySettings.withLock { $0.lastLaunchedAgentProfileID = profileID }
       return .none
 

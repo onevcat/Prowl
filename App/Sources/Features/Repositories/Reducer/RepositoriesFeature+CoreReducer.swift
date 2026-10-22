@@ -304,7 +304,7 @@ extension RepositoriesFeature {
       return .run { send in
         var dict: [Repository.ID: String] = [:]
         for repository in repositoriesForTitleRefresh {
-          @Shared(.repositorySettings(repository.rootURL)) var settings
+          @Shared(.repositorySettings(repository.location)) var settings
           let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
           if let trimmed, !trimmed.isEmpty {
             dict[repository.id] = trimmed
@@ -313,13 +313,13 @@ extension RepositoriesFeature {
         await send(.customTitlesLoaded(dict))
       }
 
-    case .refreshCustomTitle(let rootURL):
-      guard let repository = state.repositories.first(where: { $0.rootURL == rootURL }) else {
+    case .refreshCustomTitle(let location):
+      guard let repository = state.repositories.first(where: { $0.location == location }) else {
         return .none
       }
       let repositoryID = repository.id
       return .run { send in
-        @Shared(.repositorySettings(rootURL)) var settings
+        @Shared(.repositorySettings(location)) var settings
         let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
         await send(.customTitleUpdated(repositoryID, normalized))
@@ -965,7 +965,7 @@ extension RepositoriesFeature {
         else {
           return .none
         }
-        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
         guard repositorySettings.observesLineDiffsAutomatically else {
           return .none
         }

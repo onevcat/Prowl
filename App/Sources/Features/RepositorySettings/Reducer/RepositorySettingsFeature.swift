@@ -21,7 +21,10 @@ struct RepositorySettingsFeature {
 
   @ObservableState
   struct State: Equatable {
-    var rootURL: URL
+    /// The repository. Folder-based parts of the pane (worktree folder
+    /// example, icon images, symbol suggestions, workflows) work only for a
+    /// local repository until the remote pane is designed (docs-ai 084 C1).
+    var location: RepositoryLocation
     /// Persistence key for `@Shared(.repositoryAppearances)`. Defaults
     /// to empty so legacy test fixtures that only construct the four
     /// originally-required fields keep compiling — production
@@ -95,8 +98,16 @@ struct RepositorySettingsFeature {
       appearances[repositoryID] ?? .empty
     }
 
+    /// The folder name, for the custom title placeholder.
+    var folderName: String { Repository.name(for: location) }
+
+    /// The root on this Mac. Nil for a remote repository, whose pane skips the
+    /// folder-based parts (docs-ai 084 C1).
+    var localRootURL: URL? { location.localURL }
+
     var exampleWorktreePath: String {
-      ProwlPaths.exampleWorktreePath(
+      guard let rootURL = location.localURL else { return "" }
+      return ProwlPaths.exampleWorktreePath(
         for: rootURL,
         globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: settings.worktreeBaseDirectoryPath
@@ -140,7 +151,7 @@ struct RepositorySettingsFeature {
 
   @CasePathable
   enum Delegate: Equatable {
-    case settingsChanged(URL)
+    case settingsChanged(RepositoryLocation)
     /// The workspace editor lives on the main window; the app surfaces it.
     case editWorkspace(Repository.ID)
   }
@@ -154,11 +165,11 @@ struct RepositorySettingsFeature {
     Reduce { state, action in
       switch action {
       case .task:
-        let rootURL = state.rootURL
+        let location = state.location
         guard state.capabilities.supportsRepositoryGitSettings else {
           return .run { send in
-            @Shared(.repositorySettings(rootURL)) var repositorySettings
-            @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+            @Shared(.repositorySettings(location)) var repositorySettings
+            @Shared(.userRepositorySettings(location)) var userRepositorySettings
             @Shared(.settingsFile) var settingsFile
             let global = settingsFile.global
             await send(
@@ -175,11 +186,11 @@ struct RepositorySettingsFeature {
             )
           }
         }
-        let gitClient = gitClient
+        let repositoryHost = RepositoryHost(local: gitClient)
         return .run { send in
-          let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
-          @Shared(.repositorySettings(rootURL)) var repositorySettings
-          @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+          let isBareRepository = (try? await repositoryHost.isBareRepository(location)) ?? false
+          @Shared(.repositorySettings(location)) var repositorySettings
+          @Shared(.userRepositorySettings(location)) var userRepositorySettings
           @Shared(.settingsFile) var settingsFile
           let global = settingsFile.global
           await send(
@@ -196,24 +207,29 @@ struct RepositorySettingsFeature {
           )
           let branches: [String]
           do {
-            branches = try await gitClient.branchRefs(rootURL)
+            branches = try await repositoryHost.branchRefs(in: location)
+          } catch is RepositoryHostError {
+            // A remote repository has no host connection yet (B3); nothing failed.
+            branches = []
           } catch {
-            let rootPath = rootURL.path(percentEncoded: false)
+            let rootPath = location.id
             ProwlLogger("Settings").warning(
               "Branch refs failed for \(rootPath): \(error.localizedDescription)"
             )
             branches = []
           }
-          let defaultBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+          let defaultBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: location) ?? "HEAD"
           await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
         }
 
       case .workflowsAppeared:
+        // Workflows run only in local repositories (docs-ai 084 A4a).
+        guard let rootURL = state.localRootURL else { return .none }
         state.workflows.settingsScope = .repository(
           WorkflowSettingsRepositoryContext(
             repositoryID: state.repositoryID,
-            name: state.settings.customTitle ?? state.rootURL.lastPathComponent,
-            rootURL: state.rootURL))
+            name: state.settings.customTitle ?? rootURL.lastPathComponent,
+            rootURL: rootURL))
         return .none
 
       case .settingsLoaded(
@@ -227,11 +243,15 @@ struct RepositorySettingsFeature {
         let keybindingUserOverrides
       ):
         var updatedSettings = settings
-        updatedSettings.worktreeBaseDirectoryPath =
-          ProwlPaths.normalizedWorktreeBaseDirectoryPath(
-            updatedSettings.worktreeBaseDirectoryPath,
-            repositoryRootURL: state.rootURL
-          )
+        if let rootURL = state.localRootURL {
+          // A remote path stays as the user wrote it: `~` and relative paths
+          // belong to the remote host, not to this Mac.
+          updatedSettings.worktreeBaseDirectoryPath =
+            ProwlPaths.normalizedWorktreeBaseDirectoryPath(
+              updatedSettings.worktreeBaseDirectoryPath,
+              repositoryRootURL: rootURL
+            )
+        }
         if isBareRepository {
           updatedSettings.copyIgnoredOnWorktreeCreate = nil
           updatedSettings.copyUntrackedOnWorktreeCreate = nil
@@ -246,31 +266,31 @@ struct RepositorySettingsFeature {
         state.isBareRepository = isBareRepository
         state.keybindingUserOverrides = keybindingUserOverrides
         guard updatedSettings != settings else { return .none }
-        let rootURL = state.rootURL
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
+        let location = state.location
+        @Shared(.repositorySettings(location)) var repositorySettings
         $repositorySettings.withLock { $0 = updatedSettings }
-        return .send(.delegate(.settingsChanged(rootURL)))
+        return .send(.delegate(.settingsChanged(location)))
 
       case .setGlobalCommandEnabled(let commandID, let isEnabled):
         guard state.userSettings.isGlobalCommandEnabled(commandID) != isEnabled else {
           return .none
         }
         state.userSettings.setGlobalCommandEnabled(isEnabled, id: commandID)
-        let rootURL = state.rootURL
+        let location = state.location
         // Targeted write: `state.userSettings` is a load-time snapshot, and
         // `lastLaunchedAgentProfileID` is written externally by profile
         // launches — a whole-struct writeback would clobber it.
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.userRepositorySettings(location)) var userRepositorySettings
         $userRepositorySettings.withLock { $0.setGlobalCommandEnabled(isEnabled, id: commandID) }
-        return .send(.delegate(.settingsChanged(rootURL)))
+        return .send(.delegate(.settingsChanged(location)))
 
       case .setDefaultAgentProfileID(let profileID):
         guard state.userSettings.defaultAgentProfileID != profileID else { return .none }
         state.userSettings.defaultAgentProfileID = profileID
-        let rootURL = state.rootURL
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        let location = state.location
+        @Shared(.userRepositorySettings(location)) var userRepositorySettings
         $userRepositorySettings.withLock { $0.defaultAgentProfileID = profileID }
-        return .send(.delegate(.settingsChanged(rootURL)))
+        return .send(.delegate(.settingsChanged(location)))
 
       case .setAppearanceColor(let color):
         guard state.appearance.color != color else { return .none }
@@ -283,10 +303,14 @@ struct RepositorySettingsFeature {
       case .setAppearanceIcon(let newIcon):
         guard state.appearance.icon != newIcon else { return .none }
         let previousIcon = Self.commitIcon(newIcon, to: state.$appearances, repositoryID: state.repositoryID)
-        return removeAbandonedImage(previous: previousIcon, new: newIcon, rootURL: state.rootURL)
+        return removeAbandonedImage(previous: previousIcon, new: newIcon, location: state.location)
 
       case .importUserImage(let sourceURL):
-        let rootURL = state.rootURL
+        // Icon images live under a local repository's settings folder (C1 for remote).
+        guard let rootURL = state.localRootURL else {
+          state.appearanceImportError = String(localized: "Images are not available for remote folders yet.")
+          return .none
+        }
         let repositoryID = state.repositoryID
         let appearances = state.$appearances
         let store = repositoryIconAssetStore
@@ -370,7 +394,7 @@ struct RepositorySettingsFeature {
           }
           return previousIcon
         }
-        return removeAbandonedImage(previous: previousIcon, new: nil, rootURL: state.rootURL)
+        return removeAbandonedImage(previous: previousIcon, new: nil, location: state.location)
 
       case .branchDataLoaded(let branches, let defaultBaseRef):
         state.defaultWorktreeBaseRef = defaultBaseRef
@@ -403,13 +427,15 @@ struct RepositorySettingsFeature {
           state.settings.copyUntrackedOnWorktreeCreate = nil
         }
         state.userSettings = state.userSettings.normalized()
-        let rootURL = state.rootURL
+        let location = state.location
         var normalizedSettings = state.settings
-        normalizedSettings.worktreeBaseDirectoryPath =
-          ProwlPaths.normalizedWorktreeBaseDirectoryPath(
-            normalizedSettings.worktreeBaseDirectoryPath,
-            repositoryRootURL: rootURL
-          )
+        if let rootURL = location.localURL {
+          normalizedSettings.worktreeBaseDirectoryPath =
+            ProwlPaths.normalizedWorktreeBaseDirectoryPath(
+              normalizedSettings.worktreeBaseDirectoryPath,
+              repositoryRootURL: rootURL
+            )
+        }
         let trimmedCustomTitle =
           normalizedSettings.customTitle?
           .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -417,8 +443,8 @@ struct RepositorySettingsFeature {
           (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
         normalizedSettings.githubAccountOverride =
           normalizedSettings.githubAccountOverride?.normalized
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.repositorySettings(location)) var repositorySettings
+        @Shared(.userRepositorySettings(location)) var userRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }
         // `state.userSettings` is a load-time snapshot; preserve the
         // externally-written launch memory instead of clobbering it with the
@@ -426,7 +452,7 @@ struct RepositorySettingsFeature {
         let lastLaunched = userRepositorySettings.lastLaunchedAgentProfileID
         state.userSettings.lastLaunchedAgentProfileID = lastLaunched
         $userRepositorySettings.withLock { $0 = state.userSettings }
-        return .send(.delegate(.settingsChanged(rootURL)))
+        return .send(.delegate(.settingsChanged(location)))
 
       case .workflows:
         return .none
@@ -455,12 +481,16 @@ struct RepositorySettingsFeature {
   /// via `CancelID.symbolSuggestions`.
   private func suggestionsEffect(state: State, forceRegenerate: Bool) -> Effect<Action> {
     let repositoryID = state.repositoryID
-    let rootURL = state.rootURL
+    // Suggestions read the repository's files on this Mac (C1 for remote).
+    guard let rootURL = state.localRootURL else {
+      return .send(
+        .symbolSuggestionsFailed(String(localized: "Suggestions are not available for remote folders yet.")))
+    }
     let displayName: String =
       if let custom = state.settings.customTitle, !custom.isEmpty {
         custom
       } else {
-        state.rootURL.lastPathComponent
+        rootURL.lastPathComponent
       }
     let client = symbolSuggestionClient
     return .run { send in
@@ -531,9 +561,11 @@ struct RepositorySettingsFeature {
   private func removeAbandonedImage(
     previous: RepositoryIconSource?,
     new: RepositoryIconSource?,
-    rootURL: URL
+    location: RepositoryLocation
   ) -> Effect<Action> {
-    guard let oldFilename = Self.abandonedImageFilename(previous: previous, new: new) else {
+    guard let oldFilename = Self.abandonedImageFilename(previous: previous, new: new),
+      let rootURL = location.localURL
+    else {
       return .none
     }
     let store = repositoryIconAssetStore

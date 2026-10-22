@@ -156,6 +156,73 @@ struct RepositoryHostTests {
     )
   }
 
+  @Test(.dependencies) func remoteRepositorySettingsLoadWithoutLocalGit() async {
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        location: remote,
+        repositoryKind: .git,
+        settings: .default,
+        userSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.gitClient = Self.failingGitClient
+    }
+    store.exhaustivity = .off
+
+    await store.send(.task)
+    await store.receive(\.settingsLoaded)
+    await store.receive(\.branchDataLoaded) {
+      $0.defaultWorktreeBaseRef = "HEAD"
+      $0.branchOptions = ["HEAD"]
+      $0.isBranchDataLoaded = true
+    }
+    await store.send(.workflowsAppeared)
+    #expect(store.state.exampleWorktreePath.isEmpty)
+  }
+
+  @Test(.dependencies) func remoteRepositorySettingsKeepRemotePathsAndExplainLocalOnlyParts() async {
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        location: remote,
+        repositoryKind: .git,
+        settings: .default,
+        userSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    }
+    store.exhaustivity = .off
+    var settings = RepositorySettings.default
+    settings.worktreeBaseDirectoryPath = "~/worktrees"
+
+    await store.send(
+      .settingsLoaded(
+        settings,
+        .default,
+        isBareRepository: false,
+        globalDefaultWorktreeBaseDirectoryPath: nil,
+        globalCopyIgnoredOnWorktreeCreate: false,
+        globalCopyUntrackedOnWorktreeCreate: false,
+        globalPullRequestMergeStrategy: .merge,
+        keybindingUserOverrides: .empty
+      )
+    ) {
+      // `~` belongs to the remote host, so the path is not expanded on this Mac.
+      $0.settings.worktreeBaseDirectoryPath = "~/worktrees"
+    }
+    await store.send(.suggestIconTapped)
+    await store.receive(\.symbolSuggestionsFailed) {
+      $0.symbolSuggestions = .failed("Suggestions are not available for remote folders yet.")
+    }
+    await store.send(.importUserImage(URL(fileURLWithPath: "/tmp/icon.png"))) {
+      $0.appearanceImportError = "Images are not available for remote folders yet."
+    }
+  }
+
   @Test(.dependencies) func remoteBranchChangesReadNoLocalHead() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()

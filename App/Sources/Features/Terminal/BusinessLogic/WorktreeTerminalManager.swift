@@ -1125,7 +1125,7 @@ final class WorktreeTerminalManager {
     // Skip setup injection when auto-close is requested so the setup script's
     // own exit code cannot trigger the close before the user's command runs.
     if !autoCloseOnSuccess, state.needsSetupScript() {
-      @SharedReader(.repositorySettings(worktree.repositoryRootURL))
+      @SharedReader(.repositorySettings(worktree.repositoryLocation))
       var settings = RepositorySettings.default
       setupScript = settings.setupScript
     } else {

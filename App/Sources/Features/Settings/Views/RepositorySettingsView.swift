@@ -34,7 +34,7 @@ struct RepositorySettingsView: View {
     )
     let exampleWorktreePath = store.exampleWorktreePath
     // A workspace is named by its metadata title, not its folder.
-    let folderName = store.workspace?.title ?? Repository.name(for: store.rootURL)
+    let folderName = store.workspace?.title ?? store.folderName
     @Bindable var workflowsStore = store.scope(state: \.workflows, action: \.workflows)
 
     NavigationStack(path: $workflowsStore.scope(state: \.path, action: \.path)) {
@@ -55,7 +55,7 @@ struct RepositorySettingsView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
         }
 
-        if let workspace = store.workspace {
+        if let workspace = store.workspace, let workspaceRootURL = store.localRootURL {
           Section {
             VStack(alignment: .leading, spacing: 12) {
               if !workspace.description.isEmpty {
@@ -74,7 +74,7 @@ struct RepositorySettingsView: View {
                   }
                 }
               }
-              WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+              WorkspaceRepositoriesGridView(workspace: workspace, rootURL: workspaceRootURL)
               Button {
                 store.send(.editWorkspaceTapped)
               } label: {
@@ -86,7 +86,7 @@ struct RepositorySettingsView: View {
           } header: {
             Text("Workspace")
           } footer: {
-            let metadataPath = ProjectWorkspace.metadataURL(for: store.rootURL).path(
+            let metadataPath = ProjectWorkspace.metadataURL(for: workspaceRootURL).path(
               percentEncoded: false)
             Text("Stored in \(metadataPath). Edit Workspace opens the editor in the main window.")
               .font(.footnote)
@@ -153,9 +153,11 @@ struct RepositorySettingsView: View {
                 "Set a repository-specific worktree base directory. Leave empty to inherit the global setting."
               )
               .foregroundStyle(.secondary)
-              Text("Example new worktree path: \(exampleWorktreePath)")
-                .foregroundStyle(.secondary)
-                .monospaced()
+              if !exampleWorktreePath.isEmpty {
+                Text("Example new worktree path: \(exampleWorktreePath)")
+                  .foregroundStyle(.secondary)
+                  .monospaced()
+              }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -314,7 +316,8 @@ struct RepositorySettingsView: View {
           }
         }
 
-        if featureFlags.workflowUI {
+        // Workflows run only in local repositories (docs-ai 084 A4a).
+        if featureFlags.workflowUI, store.localRootURL != nil {
           WorkflowSettingsSections(store: workflowsStore, showsIntroduction: false)
         }
 
@@ -325,7 +328,7 @@ struct RepositorySettingsView: View {
           )
           ScriptEnvironmentRow(
             name: "PROWL_ROOT_PATH",
-            value: store.rootURL.path(percentEncoded: false),
+            value: store.location.path,
             description: String(localized: "Path to the repository root.")
           )
         } header: {

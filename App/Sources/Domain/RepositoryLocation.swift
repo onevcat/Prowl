@@ -52,6 +52,17 @@ nonisolated enum RepositoryLocation: Hashable, Sendable {
     return url
   }
 
+  /// The location with a standardized local URL, so that two spellings of one
+  /// local folder name one settings key. A remote path is canonical already.
+  var standardized: RepositoryLocation {
+    switch self {
+    case .local(let url):
+      .local(url.standardizedFileURL)
+    case .remote:
+      self
+    }
+  }
+
   /// The path on the location's own host.
   var path: String {
     switch self {

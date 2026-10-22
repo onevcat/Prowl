@@ -20,7 +20,7 @@ struct RepositorySettingsSuggestionsTests {
   ) -> TestStore<RepositorySettingsFeature.State, RepositorySettingsFeature.Action> {
     TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: URL(fileURLWithPath: "/tmp/repo-1"),
+        location: .local(URL(fileURLWithPath: "/tmp/repo-1")),
         repositoryID: "repo-1",
         repositoryKind: .plain,
         settings: .default,

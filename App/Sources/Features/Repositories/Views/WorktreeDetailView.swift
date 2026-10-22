@@ -462,7 +462,7 @@ struct WorktreeDetailView: View {
     @Shared(.userGlobalSettings) var globalSettings
     let profiles = globalSettings.agentProfiles
     guard let worktree, !profiles.isEmpty else { return [] }
-    @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repositorySettings
+    @Shared(.userRepositorySettings(worktree.repositoryLocation)) var repositorySettings
     let recommendedID =
       AgentProfileRecommendation.recommendedProfile(
         profiles: profiles,

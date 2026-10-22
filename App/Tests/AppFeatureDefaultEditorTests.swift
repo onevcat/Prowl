@@ -251,7 +251,7 @@ struct AppFeatureDefaultEditorTests {
       settings: SettingsFeature.State()
     )
     initialState.settings.repositorySettings = RepositorySettingsFeature.State(
-      rootURL: worktree.repositoryRootURL,
+      location: .local(worktree.repositoryRootURL),
       repositoryKind: .git,
       settings: .default,
       userSettings: .default
@@ -311,7 +311,7 @@ struct AppFeatureDefaultEditorTests {
       initialState.openActionSelection = .terminal
       initialState.openActionIsAutomatic = false
       initialState.settings.repositorySettings = RepositorySettingsFeature.State(
-        rootURL: worktree.repositoryRootURL,
+        location: .local(worktree.repositoryRootURL),
         repositoryKind: .git,
         settings: pinnedSettings,
         userSettings: .default

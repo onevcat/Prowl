@@ -78,7 +78,7 @@ extension RepositoriesFeature {
           )
         )
       }
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let selectedBaseRef = repositorySettings.worktreeBaseRef
       let repositoryHost = repositoryHost
       let repositoryLocation = repository.location
@@ -140,7 +140,7 @@ extension RepositoriesFeature {
         return .none
       }
       @Shared(.settingsFile) var settingsFile
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let defaultWorktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,
         globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
@@ -276,7 +276,7 @@ extension RepositoriesFeature {
       let previousSelection = state.selectedWorktreeID
       let pendingID = "pending:\(uuid().uuidString)"
       @Shared(.settingsFile) var settingsFile
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let globalDefaultWorktreeBaseDirectoryPath = settingsFile.global.defaultWorktreeBaseDirectoryPath
       let worktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,

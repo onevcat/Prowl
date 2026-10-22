@@ -466,7 +466,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case refreshAllCustomTitles
-    case refreshCustomTitle(URL)
+    case refreshCustomTitle(RepositoryLocation)
     case customTitlesLoaded([Repository.ID: String])
     case customTitleUpdated(Repository.ID, String?)
     case codeHostsDetected([Repository.ID: CodeHost])

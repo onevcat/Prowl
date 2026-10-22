@@ -461,7 +461,7 @@ final class WorktreeTerminalState {
     self.tabManager = TerminalTabManager(titleFlushClock: titleFlushClock)
     _repositorySettings = SharedReader(
       wrappedValue: RepositorySettings.default,
-      .repositorySettings(worktree.repositoryRootURL)
+      .repositorySettings(worktree.repositoryLocation)
     )
     self.tabManager.onCoalescedTitlesFlushed = { [weak self] tabIDs in
       for tabID in tabIDs {

@@ -169,7 +169,7 @@ struct RepositoryAppearancePickerView: View {
       if let icon = store.appearance.icon {
         RepositoryIconImage(
           icon: icon,
-          repositoryRootURL: store.rootURL,
+          repositoryRootURL: store.localRootURL,
           tintColor: tintColor,
           size: 22
         )
@@ -431,7 +431,7 @@ struct RepositoryAppearancePickerView: View {
   // to decode falls back to the dashed placeholder at render time.
   private func presentImageImporter() {
     let panel = NSOpenPanel()
-    panel.directoryURL = store.rootURL
+    panel.directoryURL = store.localRootURL
     panel.allowedContentTypes = [.image, .svg]
     panel.canChooseDirectories = false
     panel.canChooseFiles = true
