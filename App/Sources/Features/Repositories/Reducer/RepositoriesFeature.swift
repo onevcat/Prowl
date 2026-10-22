@@ -533,6 +533,18 @@ struct RepositoriesFeature {
     let repositoryID: Repository.ID
   }
 
+  /// Where a repository list for `applyRepositories` comes from. It sets how much
+  /// ID-keyed state the list can prune.
+  enum RepositoryListOrigin: Equatable {
+    /// A live load. `failedRootIDs` are the roots that did not load: their
+    /// worktrees are unknown, so only worktrees that left a loaded repository
+    /// count as removed.
+    case live(failedRootIDs: Set<Repository.ID>)
+    /// The snapshot cache. It is not rewritten while a root fails, so it can be
+    /// out of date; the live load that follows does the pruning.
+    case snapshot
+  }
+
   struct ApplyRepositoriesResult {
     let didPrunePinned: Bool
     let didPruneRepositoryOrder: Bool
