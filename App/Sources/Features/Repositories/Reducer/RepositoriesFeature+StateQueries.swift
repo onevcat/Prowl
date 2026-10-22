@@ -426,35 +426,29 @@ extension RepositoriesFeature.State {
     repositories[id: id]?.name
   }
 
-  func orderedRepositoryRoots() -> [URL] {
-    let rootsByID = Dictionary(
-      repositoryRoots.map {
-        (RepositoryLocation.local($0.standardizedFileURL).id, $0.standardizedFileURL)
-      },
-      uniquingKeysWith: { first, _ in first }
-    )
-    var ordered: [URL] = []
+  /// The repository roots in sidebar order, standardized once each; the loaded
+  /// repositories, in their own order, when no roots are known.
+  func orderedRepositoryRoots() -> [RepositoryLocation] {
+    let roots = repositoryRoots.map(\.standardized)
+    let rootsByID = Dictionary(roots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    var ordered: [RepositoryLocation] = []
     var seen: Set<Repository.ID> = []
     for id in repositoryOrderIDs {
-      if let rootURL = rootsByID[id], seen.insert(id).inserted {
-        ordered.append(rootURL)
+      if let root = rootsByID[id], seen.insert(id).inserted {
+        ordered.append(root)
       }
     }
-    for rootURL in repositoryRoots {
-      let id = RepositoryLocation.local(rootURL.standardizedFileURL).id
-      if seen.insert(id).inserted {
-        ordered.append(rootURL.standardizedFileURL)
-      }
+    for root in roots where seen.insert(root.id).inserted {
+      ordered.append(root)
     }
     if ordered.isEmpty {
-      // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
-      ordered = repositories.compactMap(\.localURL)
+      ordered = repositories.map(\.location.standardized)
     }
     return ordered
   }
 
   func orderedRepositoryIDs() -> [Repository.ID] {
-    orderedRepositoryRoots().map { RepositoryLocation.local($0.standardizedFileURL).id }
+    orderedRepositoryRoots().map(\.id)
   }
 
   func repositoryID(for worktreeID: Worktree.ID?) -> Repository.ID? {

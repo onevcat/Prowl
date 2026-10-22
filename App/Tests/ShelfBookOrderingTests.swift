@@ -27,7 +27,7 @@ struct ShelfBookOrderingTests {
       worktrees: IdentifiedArray(uniqueElements: [main])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     // Empty `openedWorktreeIDs` → no spines even though the worktree
     // exists. The Shelf only shows interactive books.
@@ -57,7 +57,7 @@ struct ShelfBookOrderingTests {
       worktrees: IdentifiedArray(uniqueElements: [main, feature])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [main.id, feature.id]
 
@@ -94,7 +94,7 @@ struct ShelfBookOrderingTests {
       worktrees: IdentifiedArray(uniqueElements: [main, feature])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [feature.id]  // only feature has been opened
 
@@ -113,7 +113,7 @@ struct ShelfBookOrderingTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [repository.id]
 
@@ -149,7 +149,7 @@ struct ShelfBookOrderingTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [gitRepo, plainRepo])
-    state.repositoryRoots = [gitRootURL, plainRootURL]
+    state.repositoryRoots = [.local(gitRootURL), .local(plainRootURL)]
     state.repositoryOrderIDs = [gitRepo.id, plainRepo.id]
     state.openedWorktreeIDs = [gitMain.id, plainRepo.id]
 
@@ -198,7 +198,7 @@ struct ShelfBookOrderingTests {
       worktrees: IdentifiedArray(uniqueElements: [worktree])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.selection = .worktree(worktree.id)
     state.openedWorktreeIDs = []
@@ -240,7 +240,7 @@ struct ShelfBookOrderingTests {
       worktrees: IdentifiedArray(uniqueElements: [main])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [main.id]
 
@@ -263,7 +263,7 @@ struct ShelfBookOrderingTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [repository.id]
 
@@ -285,7 +285,7 @@ struct ShelfBookOrderingTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repository.id]
     state.openedWorktreeIDs = [repository.id]
 

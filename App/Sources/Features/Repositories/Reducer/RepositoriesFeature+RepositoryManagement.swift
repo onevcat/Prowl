@@ -57,7 +57,7 @@ extension RepositoriesFeature {
           }
         }
         let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
-        let mergedRoots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+        let mergedRoots = mergedEntries.map(\.location)
         await repositoryPersistence.saveRepositoryEntries(mergedEntries)
         let (repositories, failures) = await loadRepositoriesData(mergedEntries)
         await send(
@@ -334,7 +334,7 @@ extension RepositoriesFeature {
       state.loadFailuresByID.removeValue(forKey: repositoryID)
       state.gitUnavailableRepositoryIDs.remove(repositoryID)
       state.repositoryRoots.removeAll {
-        isSameRepositoryPath($0.standardizedFileURL.path(percentEncoded: false), repositoryID)
+        isSameRepositoryPath($0.standardized.id, repositoryID)
       }
       let failedIconCleanup = iconDetectionRemovalEffect(
         repositoryID: repositoryID,
@@ -349,7 +349,7 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+          let roots = remainingEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(remainingEntries)
           await send(
             .repositoriesLoaded(
@@ -384,7 +384,7 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+          let roots = remainingEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(remainingEntries)
           await send(
             .repositoriesLoaded(

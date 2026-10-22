@@ -36,7 +36,7 @@ extension RepositoriesFeature {
   }
 
   func loadPersistedRepositoryEntries(
-    fallbackRoots: [URL] = []
+    fallbackRoots: [RepositoryLocation] = []
   ) async -> [PersistedRepositoryEntry] {
     let entries = await repositoryPersistence.loadRepositoryEntries()
     let resolvedEntries: [PersistedRepositoryEntry]
@@ -48,7 +48,7 @@ extension RepositoriesFeature {
         if !loadedPaths.isEmpty {
           loadedPaths
         } else {
-          fallbackRoots.map { $0.path(percentEncoded: false) }
+          fallbackRoots.map(\.id)
         }
       resolvedEntries = RepositoryEntryNormalizer.normalize(
         pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
@@ -64,6 +64,8 @@ extension RepositoriesFeature {
       for (index, entry) in entries.enumerated() {
         let gitClient = self.gitClient
         group.addTask {
+          // A remote entry is not a local path; its host checks it when it loads (docs-ai 084 B3).
+          if RepositoryLocation.hasRemoteForm(entry.path) { return (index, entry) }
           let normalizedPath = URL(fileURLWithPath: entry.path)
             .standardizedFileURL
             .path(percentEncoded: false)
@@ -127,15 +129,15 @@ extension RepositoriesFeature {
   }
 
   func loadRepositories(
-    fallbackRoots: [URL] = [],
+    fallbackRoots: [RepositoryLocation] = [],
     animated: Bool = false
   ) -> Effect<Action> {
     let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
       let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
-      let roots = entries.map { URL(fileURLWithPath: $0.path) }
+      let roots = entries.map(\.location)
       for entry in entries where entry.kind == .git {
-        _ = try? await repositoryHost.pruneWorktrees(in: .local(URL(fileURLWithPath: entry.path)))
+        _ = try? await repositoryHost.pruneWorktrees(in: entry.location)
       }
       let (repositories, failures) = await loadRepositoriesData(entries)
       await send(
@@ -162,6 +164,14 @@ extension RepositoriesFeature {
       for entry in entries {
         let repositoryHost = self.repositoryHost
         group.addTask {
+          // Remote folders load through their host (docs-ai 084 B3); until then they fail.
+          if case .remote = entry.location {
+            return WorktreesFetchResult(
+              entry: entry,
+              repository: nil,
+              errorMessage: RepositoryHostError.remoteUnavailable(entry.location).localizedDescription
+            )
+          }
           let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
           switch entry.kind {
           case .git:
@@ -207,8 +217,7 @@ extension RepositoriesFeature {
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = RepositoryLocation.local(URL(fileURLWithPath: result.entry.path).standardizedFileURL).id
-        resultsByRootID[rootID] = result
+        resultsByRootID[result.entry.location.standardized.id] = result
       }
       return resultsByRootID
     }
@@ -216,8 +225,7 @@ extension RepositoriesFeature {
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
     for entry in entries {
-      let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
-      let rootID = RepositoryLocation.local(normalizedRoot).id
+      let rootID = entry.location.standardized.id
       guard let result = fetchResults[rootID] else { continue }
       if let repository = result.repository {
         loaded.append(repository)
@@ -236,7 +244,7 @@ extension RepositoriesFeature {
 
   func applyRepositories(
     _ repositories: [Repository],
-    roots: [URL],
+    roots: [RepositoryLocation],
     shouldPruneArchivedWorktrees: Bool,
     state: inout State,
     animated: Bool
