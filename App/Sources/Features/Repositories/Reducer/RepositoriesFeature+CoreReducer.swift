@@ -988,10 +988,11 @@ extension RepositoriesFeature {
         }
       case .repositoryWorktreesChanged:
         return .send(.reloadRepositories(animated: true))
-      case .repositoryRemoteConfigurationChanged(let repositoryRootURL):
+      case .repositoryRemoteConfigurationChanged(let location):
         guard
+          let changedRoot = location.localURL?.standardizedFileURL,
           let repository = state.repositories.first(where: {
-            $0.location.localURL?.standardizedFileURL == repositoryRootURL.standardizedFileURL
+            $0.location.localURL?.standardizedFileURL == changedRoot
           })
         else {
           return .none
@@ -1016,7 +1017,9 @@ extension RepositoriesFeature {
           effects.append(effect)
         }
         return effects.isEmpty ? .none : .concatenate(effects)
-      case .repositoryPullRequestRefresh(let repositoryRootURL, let worktreeIDs):
+      case .repositoryPullRequestRefresh(let location, let worktreeIDs):
+        // The pull request refresh still takes a local root (A6c).
+        guard let repositoryRootURL = location.localURL else { return .none }
         return .send(
           .githubIntegration(
             .repositoryPullRequestRefreshRequested(

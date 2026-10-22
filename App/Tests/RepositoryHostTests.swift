@@ -137,7 +137,23 @@ struct RepositoryHostTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryRemoteConfigurationChanged(repositoryRootURL: URL(fileURLWithPath: "/tmp/elsewhere"))))
+        .repositoryRemoteConfigurationChanged(repository: .local(URL(fileURLWithPath: "/tmp/elsewhere")))))
+  }
+
+  @Test(.dependencies) func remotePullRequestRefreshEventsWaitForTheHostPath() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    var state = RepositoriesFeature.State()
+    state.repositories = [remote]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient = Self.failingGitClient
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(repository: remote.location, worktreeIDs: [remote.worktrees[0].id]))
+    )
   }
 
   @Test(.dependencies) func remoteBranchChangesReadNoLocalHead() async {

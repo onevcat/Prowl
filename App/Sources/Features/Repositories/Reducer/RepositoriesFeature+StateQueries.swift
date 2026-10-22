@@ -168,7 +168,7 @@ extension RepositoriesFeature.State {
   func plainRepositoryRootsForInfoWatcher() -> [URL] {
     repositories
       .filter { $0.kind == .plain && !$0.isWorkspace }
-      .map { $0.rootURL }
+      .compactMap { $0.location.localURL }
   }
 
   /// Child repositories materialized inside every workspace, resolved to their

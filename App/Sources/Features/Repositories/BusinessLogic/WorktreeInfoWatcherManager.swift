@@ -5,7 +5,7 @@ import ProwlCLIShared
 @MainActor
 final class WorktreeInfoWatcherManager {
   typealias WorktreePhaseOffset = @Sendable (Worktree.ID, Duration) -> Duration
-  typealias RepositoryPhaseOffset = @Sendable (URL, Duration) -> Duration
+  typealias RepositoryPhaseOffset = @Sendable (RepositoryLocation, Duration) -> Duration
   typealias WorktreeFileEventMonitorFactory =
     @MainActor @Sendable (
       _ worktree: Worktree,
@@ -122,15 +122,15 @@ final class WorktreeInfoWatcherManager {
   private let remoteConfigDebouncer: KeyedDebouncer<URL>
   private let restartDebouncer: KeyedDebouncer<Worktree.ID>
   private let lineChangesRefreshDebouncer: KeyedDebouncer<Worktree.ID>
-  private var pullRequestTasks: [URL: PullRequestRefreshTask] = [:]
+  private var pullRequestTasks: [RepositoryLocation: PullRequestRefreshTask] = [:]
   private var lineChangeSafetyTasks: [Worktree.ID: RefreshTask] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var openedWorktreeIDs: Set<Worktree.ID> = []
   private var hasCompletedInitialWorktreeLoad = false
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
-  private var pullRequestSelectionCooldownTasksByRepo: [URL: PullRequestSelectionCooldownTask] = [:]
-  private var lastSelectedWorktreeIDByRepo: [URL: Worktree.ID] = [:]
+  private var pullRequestSelectionCooldownTasksByRepo: [RepositoryLocation: PullRequestSelectionCooldownTask] = [:]
+  private var lastSelectedWorktreeIDByRepo: [RepositoryLocation: Worktree.ID] = [:]
   private var eventContinuation: AsyncStream<WorktreeInfoWatcherClient.Event>.Continuation?
 
   init<C: Clock<Duration>>(
@@ -226,7 +226,7 @@ final class WorktreeInfoWatcherManager {
     }
     let desiredIDs = Set(worktreesByID.keys)
     let currentIDs = Set(self.worktrees.keys)
-    let previousIDsByRepository = Dictionary(grouping: self.worktrees.values, by: \.repositoryRootURL)
+    let previousIDsByRepository = Dictionary(grouping: self.worktrees.values, by: \.repositoryLocation)
       .mapValues { Set($0.map(\.id)) }
     let removedIDs = currentIDs.subtracting(desiredIDs)
     for id in removedIDs {
@@ -253,34 +253,36 @@ final class WorktreeInfoWatcherManager {
     if isInitialWorktreeLoad {
       hasCompletedInitialWorktreeLoad = true
     }
-    let repositoryRoots = Set(uniqueWorktrees.map(\.repositoryRootURL))
-    let normalizedRoots = Set(repositoryRoots.map { $0.standardizedFileURL })
-    refreshRepositoryTimings(for: normalizedRoots)
-    syncWorktreeRegistryMonitors(repositoryRoots: repositoryRoots)
-    syncRemoteConfigMonitors(repositoryRoots: repositoryRoots)
-    let currentIDsByRepository = Dictionary(grouping: uniqueWorktrees, by: \.repositoryRootURL)
+    let repositories = Set(uniqueWorktrees.map(\.repositoryLocation))
+    // The local monitors watch only repositories on this Mac, keyed by the standardized root.
+    // A remote repository's changes come from its host's refresh (docs-ai 084 B3).
+    let localRoots = Set(repositories.compactMap { $0.localURL?.standardizedFileURL })
+    refreshRepositoryTimings(for: localRoots)
+    syncWorktreeRegistryMonitors(localRoots: localRoots)
+    syncRemoteConfigMonitors(localRoots: localRoots)
+    let currentIDsByRepository = Dictionary(grouping: uniqueWorktrees, by: \.repositoryLocation)
       .mapValues { Set($0.map(\.id)) }
-    for repositoryRootURL in repositoryRoots {
+    for repository in repositories {
       // Only a repository whose worktrees changed needs fresh pull request state now; the others
       // keep their schedule, so adding one worktree does not re-query every repository.
-      let changed = previousIDsByRepository[repositoryRootURL] != currentIDsByRepository[repositoryRootURL]
-      updatePullRequestSchedule(repositoryRootURL: repositoryRootURL, immediate: changed)
+      let changed = previousIDsByRepository[repository] != currentIDsByRepository[repository]
+      updatePullRequestSchedule(repository: repository, immediate: changed)
     }
-    let obsoleteRepositories = pullRequestTasks.keys.filter { !repositoryRoots.contains($0) }
-    for repositoryRootURL in obsoleteRepositories {
-      pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
+    let obsoleteRepositories = pullRequestTasks.keys.filter { !repositories.contains($0) }
+    for repository in obsoleteRepositories {
+      pullRequestTasks.removeValue(forKey: repository)?.task.cancel()
     }
     let obsoleteCooldownRepositories = pullRequestSelectionCooldownTasksByRepo.keys.filter {
-      !repositoryRoots.contains($0)
+      !repositories.contains($0)
     }
-    for repositoryRootURL in obsoleteCooldownRepositories {
-      cancelPullRequestSelectionCooldown(for: repositoryRootURL)
+    for repository in obsoleteCooldownRepositories {
+      cancelPullRequestSelectionCooldown(for: repository)
     }
     let obsoleteSelectionRepositories = lastSelectedWorktreeIDByRepo.keys.filter {
-      !repositoryRoots.contains($0)
+      !repositories.contains($0)
     }
-    for repositoryRootURL in obsoleteSelectionRepositories {
-      lastSelectedWorktreeIDByRepo.removeValue(forKey: repositoryRootURL)
+    for repository in obsoleteSelectionRepositories {
+      lastSelectedWorktreeIDByRepo.removeValue(forKey: repository)
     }
   }
 
@@ -301,9 +303,9 @@ final class WorktreeInfoWatcherManager {
       return
     }
     let previousWorktreeID = selectedWorktreeID
-    let previousRepository = previousWorktreeID.flatMap { worktrees[$0]?.repositoryRootURL }
+    let previousRepository = previousWorktreeID.flatMap { worktrees[$0]?.repositoryLocation }
     selectedWorktreeID = worktreeID
-    let nextRepository = worktreeID.flatMap { worktrees[$0]?.repositoryRootURL }
+    let nextRepository = worktreeID.flatMap { worktrees[$0]?.repositoryLocation }
     if let previousWorktreeID {
       syncLineChangesActivity(for: previousWorktreeID)
     }
@@ -314,21 +316,22 @@ final class WorktreeInfoWatcherManager {
     // When switching to a different worktree, cancel any active cooldown so the PR refresh
     // fires immediately. Re-selecting the same worktree still respects the cooldown.
     if let previousRepository, previousRepository == nextRepository {
-      handlePullRequestRefreshOnSelection(repositoryRootURL: previousRepository, worktreeID: worktreeID)
+      handlePullRequestRefreshOnSelection(repository: previousRepository, worktreeID: worktreeID)
       return
     }
     if let previousRepository {
-      updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: false)
+      updatePullRequestSchedule(repository: previousRepository, immediate: false)
     }
     if let nextRepository {
-      handlePullRequestRefreshOnSelection(repositoryRootURL: nextRepository, worktreeID: worktreeID)
+      handlePullRequestRefreshOnSelection(repository: nextRepository, worktreeID: worktreeID)
     }
   }
 
   private func configureWatcher(for worktree: Worktree) {
     guard
+      let worktreeURL = worktree.location.localURL,
       let headURL = GitWorktreeHeadResolver.headURL(
-        for: worktree.workingDirectory,
+        for: worktreeURL,
         fileManager: .default
       )
     else {
@@ -505,9 +508,9 @@ final class WorktreeInfoWatcherManager {
     }
     pullRequestTrackingEnabled = enabled
     if enabled {
-      let repositoryRoots = Set(worktrees.values.map(\.repositoryRootURL))
-      for repositoryRootURL in repositoryRoots {
-        updatePullRequestSchedule(repositoryRootURL: repositoryRootURL, immediate: true)
+      let repositories = Set(worktrees.values.map(\.repositoryLocation))
+      for repository in repositories {
+        updatePullRequestSchedule(repository: repository, immediate: true)
       }
       return
     }
@@ -518,19 +521,25 @@ final class WorktreeInfoWatcherManager {
     cancelAllPullRequestSelectionCooldownTasks()
   }
 
-  private func updatePullRequestSchedule(repositoryRootURL: URL, immediate: Bool) {
-    guard pullRequestTrackingEnabled else {
-      pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
+  /// Whether the pull request cadence runs for `repository`. The pull request refresh takes a
+  /// local root until A6c, so remote repositories get no timers yet.
+  nonisolated private static func tracksPullRequests(of repository: RepositoryLocation) -> Bool {
+    repository.localURL != nil
+  }
+
+  private func updatePullRequestSchedule(repository: RepositoryLocation, immediate: Bool) {
+    guard pullRequestTrackingEnabled, Self.tracksPullRequests(of: repository) else {
+      pullRequestTasks.removeValue(forKey: repository)?.task.cancel()
       return
     }
-    let worktreeIDs = repositoryWorktreeIDs(for: repositoryRootURL)
+    let worktreeIDs = repositoryWorktreeIDs(for: repository)
     guard !worktreeIDs.isEmpty else {
-      pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
+      pullRequestTasks.removeValue(forKey: repository)?.task.cancel()
       return
     }
     let isFocused = selectedWorktreeID.map { worktreeIDs.contains($0) } ?? false
     let interval = pullRequestInterval(isFocused: isFocused)
-    if let existing = pullRequestTasks[repositoryRootURL], existing.isFocused == isFocused, !immediate {
+    if let existing = pullRequestTasks[repository], existing.isFocused == isFocused, !immediate {
       // A running timer reads the interval again after each refresh, so a longer interval needs no
       // restart; restarting would push an unchanged repository's refresh back every time a
       // worktree appears elsewhere. A shorter one brings the refresh forward to when the shorter
@@ -541,22 +550,22 @@ final class WorktreeInfoWatcherManager {
       }
       let remaining = shortenedFireTime - elapsed()
       if remaining > .zero {
-        startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: remaining)
+        startPullRequestTimer(repository: repository, isFocused: isFocused, firstDelay: remaining)
         return
       }
-      emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
-      startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: interval)
+      emitPullRequestRefresh(repository: repository)
+      startPullRequestTimer(repository: repository, isFocused: isFocused, firstDelay: interval)
       return
     }
     if immediate {
-      emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+      emitPullRequestRefresh(repository: repository)
     }
-    let firstDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
-    startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: firstDelay)
+    let firstDelay = interval + pullRequestPhaseOffset(repository, interval)
+    startPullRequestTimer(repository: repository, isFocused: isFocused, firstDelay: firstDelay)
   }
 
-  private func startPullRequestTimer(repositoryRootURL: URL, isFocused: Bool, firstDelay: Duration) {
-    pullRequestTasks[repositoryRootURL]?.task.cancel()
+  private func startPullRequestTimer(repository: RepositoryLocation, isFocused: Bool, firstDelay: Duration) {
+    pullRequestTasks[repository]?.task.cancel()
     let id = UUID()
     let sleep = self.sleep
     let task = Task { [weak self, sleep] in
@@ -569,12 +578,12 @@ final class WorktreeInfoWatcherManager {
         }
         let nextDelay = await MainActor.run { () -> Duration? in
           // A timer replaced while its sleep was ending must not refresh as well as its successor.
-          guard let self, !Task.isCancelled, self.pullRequestTasks[repositoryRootURL]?.id == id else {
+          guard let self, !Task.isCancelled, self.pullRequestTasks[repository]?.id == id else {
             return nil
           }
-          self.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+          self.emitPullRequestRefresh(repository: repository)
           let next = self.pullRequestInterval(isFocused: isFocused)
-          self.recordPullRequestSleep(repositoryRootURL: repositoryRootURL, id: id, delay: next)
+          self.recordPullRequestSleep(repository: repository, id: id, delay: next)
           return next
         }
         guard let nextDelay else {
@@ -584,7 +593,7 @@ final class WorktreeInfoWatcherManager {
       }
     }
     let now = elapsed()
-    pullRequestTasks[repositoryRootURL] = PullRequestRefreshTask(
+    pullRequestTasks[repository] = PullRequestRefreshTask(
       id: id,
       isFocused: isFocused,
       task: task,
@@ -593,13 +602,13 @@ final class WorktreeInfoWatcherManager {
     )
   }
 
-  private func recordPullRequestSleep(repositoryRootURL: URL, id: UUID, delay: Duration) {
-    guard pullRequestTasks[repositoryRootURL]?.id == id else {
+  private func recordPullRequestSleep(repository: RepositoryLocation, id: UUID, delay: Duration) {
+    guard pullRequestTasks[repository]?.id == id else {
       return
     }
     let now = elapsed()
-    pullRequestTasks[repositoryRootURL]?.sleepStartedAt = now
-    pullRequestTasks[repositoryRootURL]?.fireTime = now + delay
+    pullRequestTasks[repository]?.sleepStartedAt = now
+    pullRequestTasks[repository]?.fireTime = now + delay
   }
 
   // Every repository's background refresh lands in one batched query per host, so its size, and
@@ -609,26 +618,27 @@ final class WorktreeInfoWatcherManager {
     if isFocused {
       return refreshTiming.focused
     }
-    return max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * worktrees.count)
+    let trackedWorktreeCount = worktrees.values.count { Self.tracksPullRequests(of: $0.repositoryLocation) }
+    return max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * trackedWorktreeCount)
   }
 
-  private func repositoryWorktreeIDs(for repositoryRootURL: URL) -> [Worktree.ID] {
+  private func repositoryWorktreeIDs(for repository: RepositoryLocation) -> [Worktree.ID] {
     worktrees
       .values
-      .filter { $0.repositoryRootURL == repositoryRootURL }
+      .filter { $0.repositoryLocation == repository }
       .map(\.id)
       .sorted()
   }
 
-  private func emitPullRequestRefresh(repositoryRootURL: URL) {
+  private func emitPullRequestRefresh(repository: RepositoryLocation) {
     guard pullRequestTrackingEnabled else {
       return
     }
-    let worktreeIDs = repositoryWorktreeIDs(for: repositoryRootURL)
+    let worktreeIDs = repositoryWorktreeIDs(for: repository)
     guard !worktreeIDs.isEmpty else {
       return
     }
-    emit(.repositoryPullRequestRefresh(repositoryRootURL: repositoryRootURL, worktreeIDs: worktreeIDs))
+    emit(.repositoryPullRequestRefresh(repository: repository, worktreeIDs: worktreeIDs))
   }
 
   private func scheduleLineChangesRefreshForAllWorktrees() {
@@ -689,7 +699,7 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func makeLineChangesChangedEvent(worktreeID: Worktree.ID) -> WorktreeInfoWatcherClient.Event? {
-    guard worktrees[worktreeID] != nil else {
+    guard worktrees[worktreeID]?.location.localURL != nil else {
       return nil
     }
     deferredLineChangeIDs.remove(worktreeID)
@@ -706,22 +716,27 @@ final class WorktreeInfoWatcherManager {
     updateLineChangesSafetySchedule(worktreeID: worktreeID)
   }
 
+  /// Line counts are read only for local worktrees: a remote worktree's counts come from
+  /// its host's refresh (B3).
   private func isLineChangesActive(_ worktreeID: Worktree.ID) -> Bool {
-    selectedWorktreeID == worktreeID || openedWorktreeIDs.contains(worktreeID)
+    guard worktrees[worktreeID]?.location.localURL != nil else { return false }
+    return selectedWorktreeID == worktreeID || openedWorktreeIDs.contains(worktreeID)
   }
 
   private func lineChangesTiming(for worktreeID: Worktree.ID) -> LineChangesTiming {
     guard let worktree = worktrees[worktreeID] else { return defaultLineChangesTiming }
-    let repoRoot = worktree.repositoryRootURL.standardizedFileURL
-    return repositoryLineChangesTimings[repoRoot] ?? defaultLineChangesTiming
+    guard let root = worktree.repositoryLocation.localURL?.standardizedFileURL else {
+      return defaultLineChangesTiming
+    }
+    return repositoryLineChangesTimings[root] ?? defaultLineChangesTiming
   }
 
-  private func refreshRepositoryTimings(for repositoryRoots: Set<URL>) {
-    let obsoleteRoots = repositoryLineChangesTimings.keys.filter { !repositoryRoots.contains($0) }
+  private func refreshRepositoryTimings(for localRoots: Set<URL>) {
+    let obsoleteRoots = repositoryLineChangesTimings.keys.filter { !localRoots.contains($0) }
     for root in obsoleteRoots {
       repositoryLineChangesTimings.removeValue(forKey: root)
     }
-    for root in repositoryRoots where repositoryLineChangesTimings[root] == nil {
+    for root in localRoots where repositoryLineChangesTimings[root] == nil {
       if let count = indexEntryCountProvider(root) {
         repositoryLineChangesTimings[root] = LineChangesTiming.tier(forIndexEntryCount: count)
       }
@@ -729,7 +744,7 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func startWorktreeFileEventMonitorIfNeeded(for worktree: Worktree) {
-    guard worktreeFileEventMonitors[worktree.id] == nil else {
+    guard worktreeFileEventMonitors[worktree.id] == nil, worktree.location.localURL != nil else {
       return
     }
     worktreeFileEventMonitors[worktree.id] = worktreeFileEventMonitorFactory(worktree) { [weak self] in
@@ -741,45 +756,41 @@ final class WorktreeInfoWatcherManager {
     worktreeFileEventMonitors.removeValue(forKey: worktreeID)?.cancel()
   }
 
-  private func syncWorktreeRegistryMonitors(repositoryRoots: Set<URL>) {
-    let normalizedRoots = Set(repositoryRoots.map { $0.standardizedFileURL })
-    let obsoleteRoots = worktreeRegistryMonitors.keys.filter { !normalizedRoots.contains($0) }
-    for repositoryRootURL in obsoleteRoots {
-      worktreeRegistryMonitors.removeValue(forKey: repositoryRootURL)?.cancel()
-      repositoryWorktreesDebouncer.cancel(repositoryRootURL)
+  private func syncWorktreeRegistryMonitors(localRoots: Set<URL>) {
+    let obsoleteRoots = worktreeRegistryMonitors.keys.filter { !localRoots.contains($0) }
+    for root in obsoleteRoots {
+      worktreeRegistryMonitors.removeValue(forKey: root)?.cancel()
+      repositoryWorktreesDebouncer.cancel(root)
     }
-    for repositoryRootURL in normalizedRoots where worktreeRegistryMonitors[repositoryRootURL] == nil {
-      worktreeRegistryMonitors[repositoryRootURL] = worktreeRegistryMonitorFactory(repositoryRootURL) { [weak self] in
-        self?.scheduleRepositoryWorktreesChanged(repositoryRootURL: repositoryRootURL)
+    for root in localRoots where worktreeRegistryMonitors[root] == nil {
+      worktreeRegistryMonitors[root] = worktreeRegistryMonitorFactory(root) { [weak self] in
+        self?.scheduleRepositoryWorktreesChanged(root: root)
       }
     }
   }
 
-  private func syncRemoteConfigMonitors(repositoryRoots: Set<URL>) {
-    let normalizedRoots = Set(repositoryRoots.map { $0.standardizedFileURL })
-    let obsoleteRoots = remoteConfigMonitors.keys.filter { !normalizedRoots.contains($0) }
-    for repositoryRootURL in obsoleteRoots {
-      remoteConfigMonitors.removeValue(forKey: repositoryRootURL)?.cancel()
-      remoteConfigDebouncer.cancel(repositoryRootURL)
+  private func syncRemoteConfigMonitors(localRoots: Set<URL>) {
+    let obsoleteRoots = remoteConfigMonitors.keys.filter { !localRoots.contains($0) }
+    for root in obsoleteRoots {
+      remoteConfigMonitors.removeValue(forKey: root)?.cancel()
+      remoteConfigDebouncer.cancel(root)
     }
-    for repositoryRootURL in normalizedRoots where remoteConfigMonitors[repositoryRootURL] == nil {
-      remoteConfigMonitors[repositoryRootURL] = remoteConfigMonitorFactory(repositoryRootURL) { [weak self] in
-        self?.scheduleRepositoryRemoteConfigurationChanged(repositoryRootURL: repositoryRootURL)
+    for root in localRoots where remoteConfigMonitors[root] == nil {
+      remoteConfigMonitors[root] = remoteConfigMonitorFactory(root) { [weak self] in
+        self?.scheduleRepositoryRemoteConfigurationChanged(root: root)
       }
     }
   }
 
-  private func scheduleRepositoryWorktreesChanged(repositoryRootURL: URL) {
-    let normalizedRootURL = repositoryRootURL.standardizedFileURL
-    repositoryWorktreesDebouncer.schedule(normalizedRootURL) { [weak self] in
-      self?.emit(.repositoryWorktreesChanged(repositoryRootURL: normalizedRootURL))
+  private func scheduleRepositoryWorktreesChanged(root: URL) {
+    repositoryWorktreesDebouncer.schedule(root) { [weak self] in
+      self?.emit(.repositoryWorktreesChanged(repository: .local(root)))
     }
   }
 
-  private func scheduleRepositoryRemoteConfigurationChanged(repositoryRootURL: URL) {
-    let normalizedRootURL = repositoryRootURL.standardizedFileURL
-    remoteConfigDebouncer.schedule(normalizedRootURL) { [weak self] in
-      self?.emit(.repositoryRemoteConfigurationChanged(repositoryRootURL: normalizedRootURL))
+  private func scheduleRepositoryRemoteConfigurationChanged(root: URL) {
+    remoteConfigDebouncer.schedule(root) { [weak self] in
+      self?.emit(.repositoryRemoteConfigurationChanged(repository: .local(root)))
     }
   }
 
@@ -834,7 +845,7 @@ final class WorktreeInfoWatcherManager {
   }
 
   nonisolated private static func defaultPullRequestPhaseOffset(
-    repositoryRootURL: URL,
+    repository: RepositoryLocation,
     interval: Duration
   ) -> Duration {
     // PR refresh is now coalesced by PullRequestRefreshCoordinator, so emitting
@@ -848,7 +859,8 @@ final class WorktreeInfoWatcherManager {
     worktree: Worktree,
     onEvent: @escaping @MainActor @Sendable () -> Void
   ) -> WorktreeFileEventMonitoring? {
-    FSEventsWorktreeFileEventMonitor(rootURL: worktree.workingDirectory, onEvent: onEvent)
+    guard let rootURL = worktree.location.localURL else { return nil }
+    return FSEventsWorktreeFileEventMonitor(rootURL: rootURL, onEvent: onEvent)
   }
 
   private static func defaultPlainRepositoryFileEventMonitorFactory(
@@ -915,24 +927,25 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func handlePullRequestRefreshOnSelection(
-    repositoryRootURL: URL,
+    repository: RepositoryLocation,
     worktreeID: Worktree.ID?
   ) {
-    let lastWorktreeForRepo = lastSelectedWorktreeIDByRepo[repositoryRootURL]
+    guard Self.tracksPullRequests(of: repository) else { return }
+    let lastWorktreeForRepo = lastSelectedWorktreeIDByRepo[repository]
     if lastWorktreeForRepo != worktreeID {
-      cancelPullRequestSelectionCooldown(for: repositoryRootURL)
+      cancelPullRequestSelectionCooldown(for: repository)
     }
     updatePullRequestSchedule(
-      repositoryRootURL: repositoryRootURL,
-      immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: repositoryRootURL)
+      repository: repository,
+      immediate: shouldImmediatelyRefreshPullRequests(repository: repository)
     )
     if let worktreeID {
-      lastSelectedWorktreeIDByRepo[repositoryRootURL] = worktreeID
+      lastSelectedWorktreeIDByRepo[repository] = worktreeID
     }
   }
 
-  private func cancelPullRequestSelectionCooldown(for repositoryRootURL: URL) {
-    pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)?.task.cancel()
+  private func cancelPullRequestSelectionCooldown(for repository: RepositoryLocation) {
+    pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repository)?.task.cancel()
   }
 
   private func cancelAllPullRequestSelectionCooldownTasks() {
@@ -942,8 +955,8 @@ final class WorktreeInfoWatcherManager {
     pullRequestSelectionCooldownTasksByRepo.removeAll()
   }
 
-  private func shouldImmediatelyRefreshPullRequests(repositoryRootURL: URL) -> Bool {
-    guard pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] == nil else {
+  private func shouldImmediatelyRefreshPullRequests(repository: RepositoryLocation) -> Bool {
+    guard pullRequestSelectionCooldownTasksByRepo[repository] == nil else {
       return false
     }
     let cooldown = pullRequestSelectionRefreshCooldown
@@ -958,14 +971,14 @@ final class WorktreeInfoWatcherManager {
       await MainActor.run {
         guard
           let self,
-          self.pullRequestSelectionCooldownTasksByRepo[repositoryRootURL]?.id == taskID
+          self.pullRequestSelectionCooldownTasksByRepo[repository]?.id == taskID
         else {
           return
         }
-        self.pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)
+        self.pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repository)
       }
     }
-    pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] = PullRequestSelectionCooldownTask(
+    pullRequestSelectionCooldownTasksByRepo[repository] = PullRequestSelectionCooldownTask(
       id: taskID,
       task: task
     )

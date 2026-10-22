@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -123,7 +123,7 @@ assert the arguments of all six calls, including a non-github.com host. The loca
 the index header that sets watcher timing, local untracked line counts, creation times, and
 the move-then-prune worktree removal. `observeChanges` wraps the five local monitor roles
 (four classes in `WorktreeInfoMonitors.swift`) into one host stream that keeps today's six watcher events;
-cadence logic stays in `WorktreeInfoWatcherManager`.
+cadence logic stays in `WorktreeInfoWatcherManager`. (Amended 2026-10-23: no stream; the manager reads repositories by location, runs the local monitors only for local repositories, and starts the remote pull request cadence in A6c, see [011](011-a6b-watcher-locations.md).)
 
 ### Remote command lane
 
@@ -257,7 +257,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | A3 | Call-site migration by category, two PRs: identity and settings keys with the basename fix and copy migration (A3a); terminal cwd and cwd matching (A3b). CLI output moves with its `host` field in C2; git and file reads move in A5–A6 (amended 2026-10-23) | Settings directory key changes (migrated) |
 | A4 | Capabilities with location and reasons (including Profile launch), two PRs: the model and enforcement at the reducer, launch and admission boundary (A4a); disabled controls with the reason as tooltip, palette filtering, and the view-level Finder and copy-path actions routed through the reducer (A4b, lands with C1, when a remote folder exists for the toolbar visual check) (amended 2026-10-23) | None |
 | A5 | Two or three PRs: `gh` commands name their repository instead of inferring it from a cwd (A5a); `GitClient(executor:)` with the ad-hoc instances and bypasses routed (A5b); git reads move off the forwards (A5c, may join A6) (amended 2026-10-23) | None |
-| A6 | Four PRs: `RepositoryHost` and repository git operations by location, with A5c (A6a); `observeChanges` (A6b); settings keys, the pull request path and URL-keyed actions by ID or location (A6c); remaining forward reads, then delete the forwards (A6d) (amended 2026-10-23) | None |
+| A6 | Four PRs: `RepositoryHost` and repository git operations by location, with A5c (A6a); the watcher keyed by location, with local monitors only for local repositories (A6b, see 011); settings keys, the pull request path and URL-keyed actions by ID or location (A6c); remaining forward reads, then delete the forwards (A6d) (amended 2026-10-23) | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
@@ -321,3 +321,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A5a landed (`gh run` and pull request commands pass `--repo` and run without a repository cwd; dead `defaultBranch` removed; `gh repo view` remote fallback keeps its cwd); A4b moves to C1; A5 split — see [008-a5a-gh-repository-target.md](008-a5a-gh-repository-target.md)
 - Updated 2026-10-23: A5b landed (`GitCommandExecutor`, `GitClient(executor:)`, shared `GitClient.local`; no default shell) — see [009-a5b-git-executor.md](009-a5b-git-executor.md)
 - Updated 2026-10-23: A6 split into A6a–A6d, A5c folded into A6a; A6a landed (`RepositoryHost`) — see [010-a6a-repository-host.md](010-a6a-repository-host.md)
+- Updated 2026-10-23: A6b keys the info watcher by location; there is no `observeChanges` stream, because the monitors have no remote counterpart (remote changes come from the B3 refresh) — see [011-a6b-watcher-locations.md](011-a6b-watcher-locations.md)

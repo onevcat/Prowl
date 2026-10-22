@@ -98,14 +98,14 @@ extension RepositoriesFeature {
       }
       // An action just changed this pull request; its refresh must not wait for the cadence.
       state.pullRequestRefreshForcedWorktreeIDs.insert(worktreeID)
-      let repositoryRootURL = worktree.repositoryRootURL
+      let repositoryLocation = worktree.repositoryLocation
       let worktreeIDs = repository.worktrees.map(\.id)
       return .run { send in
         try? await ContinuousClock().sleep(for: .seconds(2))
         await send(
           .worktreeInfoEvent(
             .repositoryPullRequestRefresh(
-              repositoryRootURL: repositoryRootURL,
+              repository: repositoryLocation,
               worktreeIDs: worktreeIDs
             )
           )
@@ -256,7 +256,7 @@ extension RepositoriesFeature {
             .send(
               .worktreeInfoEvent(
                 .repositoryPullRequestRefresh(
-                  repositoryRootURL: pending.repositoryRootURL,
+                  repository: .local(pending.repositoryRootURL),
                   worktreeIDs: pending.worktreeIDs
                 )
               )
@@ -279,7 +279,7 @@ extension RepositoriesFeature {
       return .send(
         .worktreeInfoEvent(
           .repositoryPullRequestRefresh(
-            repositoryRootURL: pending.repositoryRootURL,
+            repository: .local(pending.repositoryRootURL),
             worktreeIDs: pending.worktreeIDs
           )
         )
@@ -406,7 +406,7 @@ extension RepositoriesFeature {
         )
       }
       let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
-        repositoryRootURL: repoRoot,
+        repository: worktree.repositoryLocation,
         worktreeIDs: repository.worktrees.map(\.id)
       )
       let branchName = pullRequest.headRefName ?? worktree.name
@@ -750,7 +750,7 @@ extension RepositoriesFeature {
         state.pullRequestRefreshForcedWorktreeIDs.insert(worktreeID)
         refresh = .worktreeInfoEvent(
           .repositoryPullRequestRefresh(
-            repositoryRootURL: worktree.repositoryRootURL,
+            repository: worktree.repositoryLocation,
             worktreeIDs: repository.worktrees.map(\.id)
           )
         )

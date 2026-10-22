@@ -474,7 +474,7 @@ struct RepositoriesFeatureTests {
     store.timeout = .realWorkTestStoreTimeout
 
     await store.send(
-      .worktreeInfoEvent(.repositoryWorktreesChanged(repositoryRootURL: repository.rootURL)))
+      .worktreeInfoEvent(.repositoryWorktreesChanged(repository: .local(repository.rootURL))))
     await store.receive(\.reloadRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories[id: repository.id] = makeRepository(
@@ -540,7 +540,7 @@ struct RepositoriesFeatureTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
+        .repositoryRemoteConfigurationChanged(repository: .local(repository.rootURL))
       )
     ) {
       $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
@@ -582,7 +582,7 @@ struct RepositoriesFeatureTests {
     // whatever an answer from the old remote records meanwhile.
     await store.send(
       .worktreeInfoEvent(
-        .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
+        .repositoryRemoteConfigurationChanged(repository: .local(repository.rootURL))
       )
     ) {
       $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
@@ -6200,7 +6200,7 @@ struct RepositoriesFeatureTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repository: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )
@@ -6241,7 +6241,7 @@ struct RepositoriesFeatureTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repository: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )
@@ -6288,7 +6288,7 @@ struct RepositoriesFeatureTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repository: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )

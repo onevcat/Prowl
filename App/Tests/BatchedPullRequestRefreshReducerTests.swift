@@ -37,7 +37,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -84,7 +84,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -125,7 +125,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.finish()
@@ -156,7 +156,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
@@ -189,7 +189,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.finish()
@@ -229,7 +229,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
@@ -264,7 +264,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.finish()
@@ -435,7 +435,7 @@ struct BatchedPullRequestRefreshReducerTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.finish()
@@ -489,7 +489,7 @@ struct BatchedPullRequestRefreshReducerTests {
     store.dependencies.date.now = now.addingTimeInterval(60)
     await store.send(
       .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+        .repositoryPullRequestRefresh(repository: .local(context.repoRootURL), worktreeIDs: context.worktreeIDs)
       )
     )
     await store.finish()
@@ -558,7 +558,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -658,7 +658,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -753,7 +753,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -799,7 +799,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
@@ -1205,7 +1205,7 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.send(
       .worktreeInfoEvent(
         .repositoryPullRequestRefresh(
-          repositoryRootURL: context.repoRootURL,
+          repository: .local(context.repoRootURL),
           worktreeIDs: context.worktreeIDs
         )
       )
