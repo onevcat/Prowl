@@ -58,6 +58,7 @@ actor RemoteConnectionOwner {
   private var commandsInFlight = 0
   private var commandWaiters: [(id: UUID, continuation: CheckedContinuation<Void, Never>)] = []
   private var grantedWaiters: Set<UUID> = []
+  private var activeCommands: [UUID: Task<RemoteCommandOutcome, Never>] = [:]
   private var loginPathTask: Task<String?, Never>?
 
   init(
@@ -111,13 +112,18 @@ actor RemoteConnectionOwner {
     }
   }
 
-  /// Stops the probe in flight, finishes every subscription, and closes the shared
-  /// connection, so no `ssh` process outlives the owner for longer than its own exit.
+  /// Stops the probe and the lane commands in flight, finishes every subscription, and
+  /// closes the shared connection, so no `ssh` process outlives the owner for longer than
+  /// its own exit.
   func shutdown() async {
-    // A lane command after `-O exit` would start a new master that outlives the owner.
+    // A lane command after `-O exit` would start a new master that outlives the owner; so
+    // would one that is still connecting, whose master does not exist yet for `-O exit`.
     isShutDown = true
     for waiter in commandWaiters { waiter.continuation.resume() }
     commandWaiters.removeAll()
+    let commands = Array(activeCommands.values)
+    for command in commands { command.cancel() }
+    for command in commands { _ = await command.value }
     refreshPending = false
     running?.cancel()
     await waitUntilIdle()
@@ -306,9 +312,11 @@ extension RemoteConnectionOwner {
   /// login files (a banner, `echo` in a profile) cannot be mistaken for it. Like the local
   /// `ShellClient.loginShellInvocation`, it also reads the interactive rc file, where tools
   /// such as Homebrew, mise or nvm often extend `PATH`, and it uses zsh for a shell it
-  /// cannot drive.
+  /// cannot drive. zsh finds its rc file after its login files ran, so a `ZDOTDIR` set in
+  /// `.zshenv` applies.
   static let loginPathScript = """
     print_path='printf "\\001%s\\001" "$PATH"'
+    zsh_rc='prowl_rc="${ZDOTDIR:-$HOME}/.zshrc"; [ -f "$prowl_rc" ] && . "$prowl_rc" >/dev/null 2>&1'
     fish_rc='test -f ~/.config/fish/config.fish; and source ~/.config/fish/config.fish >/dev/null 2>&1'
     case "${SHELL##*/}" in
       zsh|bash|fish) prowl_shell=$SHELL ;;
@@ -317,7 +325,7 @@ extension RemoteConnectionOwner {
     case "${prowl_shell##*/}" in
       fish) exec "$prowl_shell" -l -c "$fish_rc; $print_path" ;;
       bash) exec "$prowl_shell" -l -c "[ -f ~/.bashrc ] && . ~/.bashrc >/dev/null 2>&1; $print_path" ;;
-      zsh) exec "$prowl_shell" -l -c "[ -f ~/.zshrc ] && . ~/.zshrc >/dev/null 2>&1; $print_path" ;;
+      zsh) exec "$prowl_shell" -l -c "$zsh_rc; $print_path" ;;
       *) exec "$prowl_shell" -l -c "$print_path" ;;
     esac
 
@@ -334,6 +342,8 @@ extension RemoteConnectionOwner {
   /// The number of lane commands running now; for tests.
   var runningCommandCount: Int { commandsInFlight }
 
+  /// Runs one lane command in a task the owner tracks, so `shutdown` can stop it and wait
+  /// for it; the caller's cancellation reaches it too.
   private func runOnLane(
     remoteCommand: [String], input: String, limits: RemoteCommandLimits,
     onOutput: RemoteCommandRunner.OutputHandler?
@@ -344,13 +354,22 @@ extension RemoteConnectionOwner {
     let arguments = SSHSideChannel.scriptArguments(
       recipe: recipe, controlPath: controlPath, persist: configuration.controlPersistSeconds,
       remoteCommand: remoteCommand)
-    if let onOutput {
-      return await runner.runStreaming(
-        configuration.sshExecutable, arguments, Data(input.utf8), limits, workingDirectory: recipe.workingDirectory,
-        onOutput: onOutput)
+    let (runner, executable, directory) = (runner, configuration.sshExecutable, recipe.workingDirectory)
+    let id = UUID()
+    let command = Task {
+      if let onOutput {
+        return await runner.runStreaming(
+          executable, arguments, Data(input.utf8), limits, workingDirectory: directory, onOutput: onOutput)
+      }
+      return await runner.run(executable, arguments, Data(input.utf8), limits, workingDirectory: directory)
     }
-    return await runner.run(
-      configuration.sshExecutable, arguments, Data(input.utf8), limits, workingDirectory: recipe.workingDirectory)
+    activeCommands[id] = command
+    defer { activeCommands.removeValue(forKey: id) }
+    return await withTaskCancellationHandler {
+      await command.value
+    } onCancel: {
+      command.cancel()
+    }
   }
 
   static let laneClosedReason = "The remote connection was closed or the command was cancelled."
@@ -369,7 +388,13 @@ extension RemoteConnectionOwner {
     } onCancel: {
       Task { await self.cancelWaiter(id) }
     }
-    return grantedWaiters.remove(id) != nil
+    guard grantedWaiters.remove(id) != nil else { return false }
+    // The owner can shut down, or the caller be cancelled, between the grant and this resume.
+    if isShutDown || Task.isCancelled {
+      releaseCommandSlot()
+      return false
+    }
+    return true
   }
 
   private func cancelWaiter(_ id: UUID) {

@@ -30,9 +30,14 @@ the actor. `RemoteScript` and `RemoteOutputLineSplitter` live in `RemoteScript.s
     commands wait in order. `sshd` allows ten sessions per connection by default, and the
     probe needs one.
   - A cancelled waiter leaves the queue at once and fails without connecting.
-- **Shutdown.** `shutdown()` closes the lane before `-O exit`. Queued commands and later
-  commands fail with `launchFailed` and do not start `ssh`; such an `ssh` would create a new
-  master that outlives the owner. Commands in flight end with the shared connection.
+- **Shutdown.** Each admitted lane command runs in a task the owner tracks. `shutdown()`
+  first closes the lane, then cancels the commands in flight and waits for them, and only
+  then sends `-O exit`. Three cases are covered:
+  - queued and later commands fail with `launchFailed` and never start `ssh`;
+  - a waiter that was granted a slot just before the shutdown, or cancelled after its
+    grant, checks again when it resumes and gives the slot back once;
+  - a command that is still connecting cannot create a master after `-O exit`, which
+    would find no socket to close.
 - **`run(_ RemoteShellCommand)`** sends `command.script()` to `sh -s`.
 - **`run(_ RemoteScript)` and `stream(_ RemoteScript, onLine:)`** run a bundled script
   with `bash -s`, such as the bash 3.2 compatible `wt`. The stdin is built like this:
@@ -60,9 +65,11 @@ the actor. `RemoteScript` and `RemoteOutputLineSplitter` live in `RemoteScript.s
   - Only a streaming caller pays for a chunk copy.
 - **Login `PATH`.**
   - `loginPath()` runs the user's shell as a login shell. Like the local
-    `ShellClient.loginShellInvocation`, it also sources the interactive rc file (`~/.zshrc`,
-    `~/.bashrc`, fish `config.fish`), where Homebrew, mise or nvm often extend `PATH`. It
-    uses zsh (or bash) for a shell it cannot drive.
+    `ShellClient.loginShellInvocation`, it also sources the interactive rc file
+    (`~/.bashrc`, fish `config.fish`, and for zsh `${ZDOTDIR:-$HOME}/.zshrc`, resolved
+    inside zsh after its login files ran, so a `ZDOTDIR` from `.zshenv` applies). Homebrew,
+    mise or nvm often extend `PATH` there. It uses zsh (or bash) for a shell it cannot
+    drive.
   - The shell prints `PATH` between two U+0001 markers, so a banner from the login files
     cannot be taken for it. fish colon-joins `$PATH` in quotes.
   - The value is read once per owner, and concurrent callers share that one read. A
@@ -93,7 +100,9 @@ the actor. `RemoteScript` and `RemoteOutputLineSplitter` live in `RemoteScript.s
   - a NUL byte is rejected.
 - **Login `PATH`:**
   - parsing between the markers, with a banner around them;
-  - the script, run by the local `/bin/sh`, yields a `PATH`.
+  - the script, run by the local `/bin/sh`, yields a `PATH`;
+  - with an isolated `HOME` whose `.zshenv` sets `ZDOTDIR`, the `PATH` from
+    `$ZDOTDIR/.zshrc` is read.
 - **The lane on the owner, with a fake runner:**
   - `sh -s` and `bash -s` over `ControlMaster=auto`;
   - the login `PATH` is resolved once and exported first;
@@ -101,6 +110,8 @@ the actor. `RemoteScript` and `RemoteOutputLineSplitter` live in `RemoteScript.s
   - at most two commands run at once with a limit of two, checked with a gate (no sleeps),
     and all slots are released;
   - a cancelled waiter leaves the queue without connecting;
+  - `shutdown` with one command in flight and one queued: the active command is stopped
+    and finished before `-O exit`, and the queued one never connects;
   - after `shutdown`, the lane starts nothing;
   - streamed chunks of both pipes become tagged lines.
 - **The live runner** delivers output chunks before the command exits, and error output
