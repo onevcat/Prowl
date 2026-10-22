@@ -57,9 +57,9 @@ and one for roots.
   - archived worktree IDs (symlink resolution is kept for local paths) and the legacy
     archived list;
   - repository order;
-  - the keys and the values of worktree order. The keys used to go through
-    `URL(fileURLWithPath:)` while the values went through `PathPolicy`, so a `~` key
-    never matched its own repository ID; both now use one rule.
+  - the values of worktree order. The keys of worktree order keep their own local
+    normalization (`URL(fileURLWithPath:).standardizedFileURL`, which keeps a trailing
+    slash and does not expand `~`); only non-local keys are kept as stored.
 - **Roots.** `normalizeRoots(_:)` and `normalizeRoot(_:)` apply to entry paths
   (`RepositoryEntryNormalizer`) and legacy roots. They are paths, so only a remote ID
   (`ssh:` prefix) is kept as stored. Every other string resolves as before, and a
@@ -81,8 +81,8 @@ does not change.
   environment paths;
 - remote `isMain`, and the terminal worktree of a remote plain folder;
 - normalizers that keep remote IDs, order keys and values, and entry paths; IDs that
-  never gain the home directory; relative roots that still do; and one rule for order
-  keys and values.
+  never gain the home directory; relative roots that still do; and local order keys
+  that keep their old normalization (a slash-terminated missing directory).
 
 ## Deviations from the plan
 
@@ -93,8 +93,6 @@ does not change.
   The codec still rejects `~` as an ID.
 - `Repository.id` is still passed in, not derived from `location`. Repository loading
   and snapshot restore mint IDs from paths, and A3 owns those sites.
-- Worktree order keys that start with `~` now expand like every other ID (see
-  Normalizers). Before, such a key resolved against the process working directory.
 
 ## Left for later slices
 

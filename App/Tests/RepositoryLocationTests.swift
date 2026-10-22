@@ -183,13 +183,14 @@ struct RepositoryIDNormalizerTests {
     #expect(RepositoryIDNormalizer.normalizeRoots([remote, "src/app"]) == [remote, home])
   }
 
-  @Test func worktreeOrderKeysAndValuesShareOneRule() {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
-    let key = RepositoryOrderNormalizer.normalizeWorktreeOrderByRepository(["~/src/app": ["~/src/app-feature"]])
-      .keys.first
+  @Test func worktreeOrderKeepsLocalKeyNormalization() {
+    let key = "/tmp/prowl-order-key-\(UUID().uuidString)/"
+    let expected = URL(fileURLWithPath: key).standardizedFileURL.path(percentEncoded: false)
 
-    #expect(key == RepositoryIDNormalizer.normalize("~/src/app"))
-    #expect(key?.hasPrefix(home) == true)
+    let normalized = RepositoryOrderNormalizer.normalizeWorktreeOrderByRepository([key: ["/tmp/wt"]])
+
+    #expect(Array(normalized.keys) == [expected])
+    #expect(expected.hasSuffix("/"))
   }
 
   @Test func repositoryEntriesKeepRemotePaths() {

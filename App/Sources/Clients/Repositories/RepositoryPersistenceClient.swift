@@ -381,7 +381,7 @@ nonisolated enum RepositoryOrderNormalizer {
   ) -> [Repository.ID: [Worktree.ID]] {
     var normalized: [Repository.ID: [Worktree.ID]] = [:]
     for (repoID, worktreeIDs) in order {
-      guard let normalizedRepoID = RepositoryIDNormalizer.normalize(repoID) else { continue }
+      guard let normalizedRepoID = normalizeKey(repoID) else { continue }
       let normalizedWorktreeIDs = RepositoryIDNormalizer.normalize(worktreeIDs)
       guard !normalizedWorktreeIDs.isEmpty else { continue }
       if var existing = normalized[normalizedRepoID] {
@@ -396,4 +396,14 @@ nonisolated enum RepositoryOrderNormalizer {
     return normalized
   }
 
+  /// Local keys keep their own normalization (no tilde expansion, the trailing
+  /// slash kept); other IDs are kept as stored.
+  private static func normalizeKey(_ key: String) -> String? {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    guard RepositoryLocation.isLocalPathForm(key) else { return key }
+    return URL(fileURLWithPath: trimmed)
+      .standardizedFileURL
+      .path(percentEncoded: false)
+  }
 }
