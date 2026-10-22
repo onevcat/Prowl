@@ -102,7 +102,7 @@ nonisolated struct RepositoryRootsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Shared(.repositoryEntries) var repositoryEntries: [PersistedRepositoryEntry]
-    let normalized = RepositoryPathNormalizer.normalize(value)
+    let normalized = RepositoryIDNormalizer.normalizeRoots(value)
     let entries = normalized.map { PersistedRepositoryEntry(path: $0, kind: .git) }
     $repositoryEntries.withLock {
       $0 = entries
@@ -124,7 +124,7 @@ nonisolated struct PinnedWorktreeIDsKey: SharedKey {
   ) {
     @Shared(.settingsFile) var settingsFile: SettingsFile
     let ids = $settingsFile.withLock { settings in
-      let normalized = RepositoryPathNormalizer.normalize(settings.pinnedWorktreeIDs)
+      let normalized = RepositoryIDNormalizer.normalize(settings.pinnedWorktreeIDs)
       if normalized != settings.pinnedWorktreeIDs {
         settings.pinnedWorktreeIDs = normalized
       }
@@ -146,7 +146,7 @@ nonisolated struct PinnedWorktreeIDsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Shared(.settingsFile) var settingsFile: SettingsFile
-    let normalized = RepositoryPathNormalizer.normalize(value)
+    let normalized = RepositoryIDNormalizer.normalize(value)
     $settingsFile.withLock {
       $0.pinnedWorktreeIDs = normalized
     }
@@ -172,13 +172,16 @@ nonisolated extension SharedReaderKey where Self == PinnedWorktreeIDsKey.Default
   }
 }
 
-nonisolated enum RepositoryPathNormalizer {
-  static func normalize(_ paths: [String]) -> [String] {
+/// Normalizes stored repository and worktree IDs (and legacy root paths). A
+/// local path is normalized as a path; a remote ID or a string in neither form
+/// is kept exactly as stored (docs-ai 084 D1).
+nonisolated enum RepositoryIDNormalizer {
+  static func normalize(_ ids: [String]) -> [String] {
     var seen = Set<String>()
     var normalized: [String] = []
-    normalized.reserveCapacity(paths.count)
-    for path in paths {
-      guard let resolved = PathPolicy.normalizePath(path, resolvingSymlinks: false) else { continue }
+    normalized.reserveCapacity(ids.count)
+    for id in ids {
+      guard let resolved = normalize(id) else { continue }
       if seen.insert(resolved).inserted {
         normalized.append(resolved)
       }
@@ -186,6 +189,35 @@ nonisolated enum RepositoryPathNormalizer {
     return normalized
   }
 
+  /// Nil for a blank string.
+  static func normalize(_ id: String, resolvingSymlinks: Bool = false) -> String? {
+    guard RepositoryLocation.isLocalPathForm(id) else {
+      return id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : id
+    }
+    return PathPolicy.normalizePath(id, resolvingSymlinks: resolvingSymlinks)
+  }
+
+  /// Normalizes stored repository roots: entry paths and legacy roots. A
+  /// remote ID is kept as stored; every other string is a local path, resolved
+  /// as before (a relative path against the home directory).
+  static func normalizeRoots(_ roots: [String]) -> [String] {
+    var seen = Set<String>()
+    var normalized: [String] = []
+    normalized.reserveCapacity(roots.count)
+    for root in roots {
+      guard let resolved = normalizeRoot(root) else { continue }
+      if seen.insert(resolved).inserted {
+        normalized.append(resolved)
+      }
+    }
+    return normalized
+  }
+
+  /// Nil for a blank string.
+  static func normalizeRoot(_ root: String) -> String? {
+    guard !RepositoryLocation.hasRemoteForm(root) else { return root }
+    return PathPolicy.normalizePath(root, resolvingSymlinks: false)
+  }
 }
 
 nonisolated enum RepositoryEntryNormalizer {
@@ -194,7 +226,7 @@ nonisolated enum RepositoryEntryNormalizer {
     var kindByPath: [String: Repository.Kind] = [:]
 
     for entry in entries {
-      guard let normalizedPath = normalizePath(entry.path) else { continue }
+      guard let normalizedPath = RepositoryIDNormalizer.normalizeRoot(entry.path) else { continue }
       if let existing = kindByPath[normalizedPath] {
         kindByPath[normalizedPath] = resolvedKind(existing: existing, incoming: entry.kind)
         continue
@@ -205,7 +237,7 @@ nonisolated enum RepositoryEntryNormalizer {
 
     return order.compactMap { path in
       guard let kind = kindByPath[path] else { return nil }
-      if ProjectWorkspace.hasMetadata(at: URL(fileURLWithPath: path)) {
+      if !RepositoryLocation.hasRemoteForm(path), ProjectWorkspace.hasMetadata(at: URL(fileURLWithPath: path)) {
         return PersistedRepositoryEntry(path: path, kind: .plain)
       }
       return PersistedRepositoryEntry(path: path, kind: kind)
@@ -222,7 +254,4 @@ nonisolated enum RepositoryEntryNormalizer {
     return .plain
   }
 
-  private static func normalizePath(_ path: String) -> String? {
-    RepositoryPathNormalizer.normalize([path]).first
-  }
 }

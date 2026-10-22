@@ -41,11 +41,28 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
   }
 
   let id: String
-  let rootURL: URL
+  let location: RepositoryLocation
   let name: String
   let kind: Kind
   let worktrees: IdentifiedArrayOf<Worktree>
   let workspace: ProjectWorkspace?
+
+  init(
+    id: String,
+    location: RepositoryLocation,
+    name: String,
+    kind: Kind = .git,
+    worktrees: IdentifiedArrayOf<Worktree>,
+    workspace: ProjectWorkspace? = nil
+  ) {
+    self.id = id
+    self.location = location
+    self.name = name
+    // A workspace is always a plain runnable folder; git capabilities stay per-repository.
+    self.kind = workspace == nil ? kind : .plain
+    self.worktrees = worktrees
+    self.workspace = workspace
+  }
 
   init(
     id: String,
@@ -55,13 +72,26 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     worktrees: IdentifiedArrayOf<Worktree>,
     workspace: ProjectWorkspace? = nil
   ) {
-    self.id = id
-    self.rootURL = rootURL
-    self.name = name
-    // A workspace is always a plain runnable folder; git capabilities stay per-repository.
-    self.kind = workspace == nil ? kind : .plain
-    self.worktrees = worktrees
-    self.workspace = workspace
+    self.init(
+      id: id,
+      location: .local(rootURL),
+      name: name,
+      kind: kind,
+      worktrees: worktrees,
+      workspace: workspace
+    )
+  }
+
+  /// The root folder on this Mac. Nil for a remote repository.
+  var localURL: URL? {
+    location.localURL
+  }
+
+  /// The local root folder. A forward kept while call sites move to
+  /// `location` or `localURL` (docs-ai 084 A3); it traps for a remote repository.
+  var rootURL: URL {
+    guard let localURL else { preconditionFailure("rootURL read on remote repository \(id)") }
+    return localURL
   }
 
   var initials: String {
@@ -91,9 +121,9 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     return Worktree(
       id: id,
       name: name,
-      detail: rootURL.path(percentEncoded: false),
-      workingDirectory: rootURL,
-      repositoryRootURL: rootURL
+      detail: location.path,
+      location: location,
+      repositoryLocation: location
     )
   }
 
