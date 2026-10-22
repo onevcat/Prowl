@@ -33,16 +33,24 @@ the new path from it; the old file is not deleted. If both exist, the new path w
   `~/.prowl/repo/<repo-name>/`, in this order: `prowl.user.json`,
   `prowl.onevcat.json`, `supacode.onevcat.json`. A file placed in the new
   `<repo-name>-<hash>/` directory under an old name is not read.
-- **Repository settings:** `prowl.json`, then `supacode.json`, in the same per-name
-  directory.
 
-Migration preserves the original JSON bytes. New regular files are owner-only
-(`0600`). A legacy symlink produces a new symlink to the same resolved target,
-so dotfiles-backed settings stay connected. A damaged, unreadable, or dangling
-configuration stops loading and saving; Prowl does not replace it with defaults
-or recover from an older file silently. To recover, quit Prowl, back up the files,
-repair the JSON, permissions, or link target, then restart. Read and migration
-failures are recorded in the Settings log.
+For these two user settings files, migration preserves the original JSON bytes. New
+regular files are owner-only (`0600`). A legacy symlink produces a new symlink to the
+same resolved target, so dotfiles-backed settings stay connected. A damaged,
+unreadable, or dangling configuration stops loading and saving; Prowl does not replace
+it with defaults or recover from an older file silently. To recover, quit Prowl, back
+up the files, repair the JSON, permissions, or link target, then restart. Read and
+migration failures are recorded in the Settings log.
+
+### Repository settings migration
+
+Repository settings (`prowl.json`) follow a looser policy. When
+`~/.prowl/repo/<repo-name>-<hash>/prowl.json` is absent or cannot be decoded, Prowl
+reads `prowl.json`, then `supacode.json`, from the per-name directory of earlier
+versions, then the repository's entry in `settings.json`. A legacy file is re-encoded
+into the new path (a symlink stays a link to the same target), so a damaged new
+`prowl.json` is **replaced** by the older settings when a legacy file exists. Back up
+the new file before you repair it by hand.
 
 Old regular files are migration-time snapshots, not synchronized backups.
 Downgrading to an older Prowl version does **not** carry later changes back to

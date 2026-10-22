@@ -379,6 +379,41 @@ struct RepositorySettingsKeyTests {
     #expect(saved.runScript == "echo edited")
   }
 
+  @Test(.dependencies) func editAfterAFailedCopyGoesToTheRepositoryFile() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let rootURL = URL(fileURLWithPath: "/tmp/work-\(UUID().uuidString)/repo")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
+    let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    var legacy = RepositorySettings.default
+    legacy.runScript = "echo legacy"
+    try localStorage.save(encode(legacy), at: ProwlPaths.legacyRepositorySettingsURLs(for: rootURL)[0])
+    let writesFail = LockIsolated(true)
+    var storage = localStorage.storage
+    storage.save = { data, url in
+      if writesFail.value { throw CocoaError(.fileWriteOutOfSpace) }
+      try localStorage.save(data, at: url)
+    }
+    storage.create = { _, _, _ in throw CocoaError(.fileWriteOutOfSpace) }
+
+    withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = storage
+    } operation: {
+      @Shared(.repositorySettings(rootURL)) var repositorySettings: RepositorySettings
+      #expect(repositorySettings == legacy)
+      writesFail.setValue(false)
+      $repositorySettings.withLock { $0.runScript = "echo edited" }
+      @Shared(.settingsFile) var settingsFile: SettingsFile
+      #expect(settingsFile.repositories[repositoryID] == nil)
+    }
+
+    let saved = try JSONDecoder().decode(RepositorySettings.self, from: #require(localStorage.data(at: localURL)))
+    #expect(saved.runScript == "echo edited")
+  }
+
   @Test(.dependencies) func repositoriesWithOneBasenameSplitAfterTheCopy() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()

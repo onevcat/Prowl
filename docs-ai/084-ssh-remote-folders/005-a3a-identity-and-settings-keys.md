@@ -80,6 +80,7 @@ URL, and B2 rewrites the snapshot.
 - `RepositorySettingsKeyTests`:
   - a copy from the basename directory leaves the source unchanged;
   - a failed link copy still writes the repository file;
+  - an edit after a failed copy goes to the repository file, not the global file;
   - two repositories with one basename split after the copy;
   - the copy goes through `create` with the old file as the source.
 - `UserRepositorySettingsKeyTests`: the user settings copy.
@@ -102,6 +103,7 @@ URL, and B2 rewrites the snapshot.
 - If the link copy fails, the file is written with `save` instead. Otherwise later
   saves would go to the global file, the next load would read the legacy file first,
   and the edits would be lost.
+- Review round 2 found a related case. If both the link copy and the plain copy failed (for example, the disk was full), later edits still went to the global file. `save` now writes the repository file whenever the new file or any legacy source exists. The global file is used only when no repository file exists at all.
 - The basename is truncated to 200 UTF-8 bytes, so `<name>-<hash>` stays under the
   255-byte file name limit.
 - The icon fallback is one helper, `ProwlPaths.iconFileURL(filename:in:fallback:)`,

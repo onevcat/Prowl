@@ -96,7 +96,12 @@ nonisolated struct RepositorySettingsKey: SharedKey {
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
     let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
-    if (try? repositoryLocalSettingsStorage.load(repositorySettingsURL)) != nil {
+    // A legacy source also selects the repository file: load reads it before the
+    // global file, so an edit stored globally would be lost on the next load
+    // (for example, after the first copy failed).
+    let usesRepositoryFile = ([repositorySettingsURL] + ProwlPaths.legacyRepositorySettingsURLs(for: rootURL))
+      .contains { (try? repositoryLocalSettingsStorage.load($0)) != nil }
+    if usesRepositoryFile {
       do {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
