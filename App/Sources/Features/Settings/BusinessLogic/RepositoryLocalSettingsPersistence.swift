@@ -17,7 +17,7 @@ nonisolated enum RepositoryLocalSettingsStorageKey: DependencyKey {
         SymlinkPreservingFileWriter.restrictToOwnerOnly(url)
         return data
       },
-      // Per-repo settings live under `~/.prowl/repo/<name>/` (not inside the
+      // Per-repo settings live under `~/.prowl/repo/<name>-<hash>/` (not inside the
       // cloned repo), so they are user-owned config a dotfiles user may symlink
       // — follow the link on write to preserve it (#478). Upstream keeps a
       // non-following write for its in-repo `supacode.json`; that exception does

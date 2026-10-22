@@ -14,11 +14,14 @@ For the UI grouping of these into tabs, see [`components/settings.md`](../compon
 |-------|------|
 | Global settings | `~/.prowl/settings.json` |
 | Global custom commands + agent profiles + workflows | `~/.prowl/global.user.json` |
-| Per-repository settings | `~/.prowl/repo/<repo-name>/prowl.json` |
-| Per-repository custom commands + agent-profile memory | `~/.prowl/repo/<repo-name>/prowl.user.json` |
+| Per-repository settings | `~/.prowl/repo/<repo-name>-<hash>/prowl.json` |
+| Per-repository custom commands + agent-profile memory | `~/.prowl/repo/<repo-name>-<hash>/prowl.user.json` |
 
-JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
-`~/.prowl` on first launch.
+JSON is pretty-printed with sorted keys. `<hash>` is the first 8 hex digits of the
+SHA-256 of the repository path (trailing slash removed). Files in the per-name
+directory of earlier versions (`~/.prowl/repo/<repo-name>/`) are copied on first
+load and never deleted; icons there are read in place. Legacy `~/.supacode` is
+migrated to `~/.prowl` on first launch.
 
 ### User settings migration
 
@@ -97,7 +100,7 @@ reads have no scheduled removal date.
 
 ## Per-repository settings (`RepositorySettings`)
 
-Stored at `~/.prowl/repo/<repo-name>/prowl.json` (schema v2). For the tri-state
+Stored at `~/.prowl/repo/<repo-name>-<hash>/prowl.json` (schema v2). For the tri-state
 `Bool?` fields, `nil` means "inherit the global setting."
 
 | Field | Type | Default | Effect |

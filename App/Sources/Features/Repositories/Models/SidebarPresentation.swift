@@ -149,7 +149,7 @@ extension RepositoriesFeature.State {
 
     for rootURL in roots {
       let standardizedRootURL = rootURL.standardizedFileURL
-      let repositoryID = standardizedRootURL.path(percentEncoded: false)
+      let repositoryID = RepositoryLocation.local(standardizedRootURL).id
       if let failureMessage = loadFailuresByID[repositoryID] {
         let path = standardizedRootURL.path(percentEncoded: false)
         items.append(

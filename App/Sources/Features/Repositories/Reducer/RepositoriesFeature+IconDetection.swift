@@ -72,7 +72,9 @@ extension RepositoriesFeature {
       appearance.icon == nil,
       !appearance.iconDetectionSuppressed
     else {
-      let rootURL = repository?.rootURL ?? URL(fileURLWithPath: repositoryID, isDirectory: true)
+      guard let rootURL = repository?.rootURL ?? RepositoryLocation(id: repositoryID)?.localURL else {
+        return .none
+      }
       let assetStore = repositoryIconAssetStore
       return .run { _ in
         try? assetStore.remove(filename, rootURL)
@@ -110,8 +112,9 @@ extension RepositoriesFeature {
       }
     }
     let cancel: Effect<Action> = .cancel(id: CancelID.iconDetection(repositoryID))
-    guard let removedFilename else { return cancel }
-    let resolvedRootURL = rootURL ?? URL(fileURLWithPath: repositoryID, isDirectory: true)
+    guard let removedFilename,
+      let resolvedRootURL = rootURL ?? RepositoryLocation(id: repositoryID)?.localURL
+    else { return cancel }
     let assetStore = repositoryIconAssetStore
     return .merge(
       cancel,

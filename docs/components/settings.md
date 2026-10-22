@@ -46,9 +46,16 @@ and opens that section's root.
 - **Global:** `~/.prowl/settings.json`
 - **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.user.json`
 - **Your workflow files:** `~/.prowl/workflows/*.pwlworkflow` (per repository: `<repo root>/.prowl/workflows/*.pwlworkflow`)
-- **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
-- **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.user.json`
+- **Per-repo:** `~/.prowl/repo/<repo-name>-<hash>/prowl.json`
+- **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>-<hash>/prowl.user.json`
 - **Dedicated agent profile homes:** `~/.prowl/agent-profiles/<uuid>/`
+
+`<hash>` is the first 8 hex digits of the SHA-256 of the repository path. Earlier
+versions used `~/.prowl/repo/<repo-name>/`, which two repositories with one name
+shared; Prowl copies those files (and reads those icons in place) on first use and
+never deletes them. A symlinked file (for example, from dotfiles) is copied as a link to
+the same target, so repositories that shared it keep sharing it. Settings follow the
+path: a moved repository loads the copy source again, not edits made at its old path.
 
 Legacy `~/.supacode` is migrated to `~/.prowl` on first launch. Old `.onevcat.json`
 user settings migrate without deleting the source. See the

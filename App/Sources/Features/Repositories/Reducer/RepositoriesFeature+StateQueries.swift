@@ -422,7 +422,7 @@ extension RepositoriesFeature.State {
   func orderedRepositoryRoots() -> [URL] {
     let rootsByID = Dictionary(
       repositoryRoots.map {
-        ($0.standardizedFileURL.path(percentEncoded: false), $0.standardizedFileURL)
+        (RepositoryLocation.local($0.standardizedFileURL).id, $0.standardizedFileURL)
       },
       uniquingKeysWith: { first, _ in first }
     )
@@ -434,7 +434,7 @@ extension RepositoriesFeature.State {
       }
     }
     for rootURL in repositoryRoots {
-      let id = rootURL.standardizedFileURL.path(percentEncoded: false)
+      let id = RepositoryLocation.local(rootURL.standardizedFileURL).id
       if seen.insert(id).inserted {
         ordered.append(rootURL.standardizedFileURL)
       }
@@ -446,7 +446,7 @@ extension RepositoriesFeature.State {
   }
 
   func orderedRepositoryIDs() -> [Repository.ID] {
-    orderedRepositoryRoots().map { $0.standardizedFileURL.path(percentEncoded: false) }
+    orderedRepositoryRoots().map { RepositoryLocation.local($0.standardizedFileURL).id }
   }
 
   func repositoryID(for worktreeID: Worktree.ID?) -> Repository.ID? {

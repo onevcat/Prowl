@@ -468,9 +468,5 @@ nonisolated private func isSameRepositoryPath(_ lhs: String, _ rhs: String) -> B
 }
 
 nonisolated private func comparableRepositoryPath(_ path: String) -> String {
-  var path = path
-  while path.count > 1, path.hasSuffix("/") {
-    path.removeLast()
-  }
-  return path
+  PathPolicy.trimmingTrailingSlashes(path)
 }

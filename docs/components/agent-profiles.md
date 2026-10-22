@@ -307,7 +307,7 @@ still work; `create … --profile <amp-profile> --prompt -` fails without creati
 | What | Where |
 |------|-------|
 | Profiles + seeding flag | `~/.prowl/global.user.json` |
-| Per-repo default + launch memory | `~/.prowl/repo/<name>/prowl.user.json` |
+| Per-repo default + launch memory | `~/.prowl/repo/<name>-<hash>/prowl.user.json` |
 | Dedicated profile homes | `~/.prowl/agent-profiles/<uuid>/` |
 
 ## Gotchas for agents

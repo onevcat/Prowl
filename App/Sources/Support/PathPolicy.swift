@@ -37,6 +37,16 @@ nonisolated enum PathPolicy {
     return normalized
   }
 
+  /// Drops trailing slashes except the one of `/`. Path-based URL APIs append a
+  /// slash only while a directory exists, so comparisons ignore it.
+  static func trimmingTrailingSlashes(_ path: String) -> String {
+    var path = path
+    while path.count > 1, path.hasSuffix("/") {
+      path.removeLast()
+    }
+    return path
+  }
+
   static func contains(_ path: URL, in baseDirectory: URL) -> Bool {
     let normalizedPath = normalizeURL(path).pathComponents
     let normalizedBase = normalizeURL(baseDirectory).pathComponents

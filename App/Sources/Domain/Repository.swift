@@ -64,6 +64,24 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     self.workspace = workspace
   }
 
+  /// The ID is the encoded location (docs-ai 084 D1).
+  init(
+    location: RepositoryLocation,
+    name: String,
+    kind: Kind = .git,
+    worktrees: IdentifiedArrayOf<Worktree>,
+    workspace: ProjectWorkspace? = nil
+  ) {
+    self.init(
+      id: location.id,
+      location: location,
+      name: name,
+      kind: kind,
+      worktrees: worktrees,
+      workspace: workspace
+    )
+  }
+
   init(
     id: String,
     rootURL: URL,

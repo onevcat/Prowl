@@ -43,6 +43,24 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
       }
   }
 
+  /// The ID is the encoded location (docs-ai 084 D1).
+  nonisolated init(
+    name: String,
+    detail: String,
+    location: RepositoryLocation,
+    repositoryLocation: RepositoryLocation,
+    createdAt: Date? = nil
+  ) {
+    self.init(
+      id: location.id,
+      name: name,
+      detail: detail,
+      location: location,
+      repositoryLocation: repositoryLocation,
+      createdAt: createdAt
+    )
+  }
+
   nonisolated init(
     id: String,
     name: String,

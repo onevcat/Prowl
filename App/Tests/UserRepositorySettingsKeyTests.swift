@@ -61,6 +61,28 @@ struct UserRepositorySettingsKeyTests {
     #expect(decoded == customSettings)
   }
 
+  @Test(.dependencies) func loadCopiesUserSettingsFromTheBasenameDirectory() throws {
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let rootURL = URL(fileURLWithPath: "/tmp/work-\(UUID().uuidString)/repo")
+    let localURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
+    let basenameURL = ProwlPaths.legacyUserRepositorySettingsURLs(for: rootURL)[0]
+    let stored = UserRepositorySettings(customCommands: [], disabledGlobalCommandIDs: ["global-build"])
+    let storedData = try JSONEncoder().encode(stored)
+    try localStorage.save(storedData, at: basenameURL)
+
+    let loaded = withDependencies {
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.userRepositorySettings(rootURL)) var settings: UserRepositorySettings
+      return settings
+    }
+
+    #expect(loaded == stored.normalized())
+    let copied = try JSONDecoder().decode(UserRepositorySettings.self, from: #require(localStorage.data(at: localURL)))
+    #expect(copied == stored)
+    #expect(localStorage.data(at: basenameURL) == storedData)
+  }
+
   @Test(.dependencies) func loadMigratesLegacyRepositoryRootUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")

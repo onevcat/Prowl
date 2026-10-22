@@ -100,7 +100,7 @@ func cleanupFailedWorktree(
     )
   }
   let worktreeURL = worktreeDirectory.standardizedFileURL
-  let worktreeID = worktreeURL.path(percentEncoded: false)
+  let worktreeID = RepositoryLocation.local(worktreeURL).id
   let knownWorktree = state.repositories[id: repositoryID]?.worktrees[id: worktreeID]
   // A known worktree on another branch belongs to another creation.
   if let knownWorktree, knownWorktree.name != name {
