@@ -263,7 +263,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
 | B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
 | C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state | Behind the flag |
-| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag |
+| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
 | C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
 | C4 | Tracker cwd accessor, remote splits, remote agent cwd | Behind the flag |
 | C5 | Snapshot origin, reconnect on restore, `docs/` update; flag on | Remote folders ship |

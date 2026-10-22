@@ -63,7 +63,18 @@ in unattended mode.
 | Workspace | `workspaceCreationCandidates` (creation and editing) | Remote folders are not offered |
 
 Each check runs before the first read of a local forward (`rootURL`,
-`workingDirectory`, `repositoryRootURL`) on the same path.
+`workingDirectory`, `repositoryRootURL`) inside the function that owns it. For the
+reducer paths and the Agents menu and palette, that is the whole path.
+
+The CLI and workflow refusals are not reachable from their production entry points
+yet. Before a CLI command or a workflow admission reaches them, the router builds the
+worktree contexts (`ListRuntimeSnapshotBuilder.orderedWorktreeContexts`, also used by
+`TargetResolutionSnapshotBuilder`). That builder reads forwards, and A3b left it to C2
+together with the `host` field. Once C2 makes the contexts safe for remote worktrees,
+these refusals take effect. C2's acceptance includes router-level regressions:
+`create tab --profile` in a remote worktree returns the fixed-English `CREATE_FAILED`
+without a surface, and `workflow run` from a remote worktree returns
+`REMOTE_AGENT_UNSUPPORTED`.
 
 ### Tests
 
