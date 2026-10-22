@@ -80,6 +80,16 @@ nonisolated struct RepositoryHost: Sendable {
     return await local.repositoryWebURL(url)
   }
 
+  func githubRemoteInfos(for repository: RepositoryLocation) async -> [GithubRemoteInfo] {
+    guard let url = repository.localURL else { return [] }
+    return await local.githubRemoteInfos(url)
+  }
+
+  func remoteInfo(for repository: RepositoryLocation) async -> GithubRemoteInfo? {
+    guard let url = repository.localURL else { return nil }
+    return await local.remoteInfo(url)
+  }
+
   func remoteNames(in repository: RepositoryLocation) async throws -> [String] {
     try await local.remoteNames(localURL(repository))
   }

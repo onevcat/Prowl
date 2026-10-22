@@ -70,6 +70,15 @@ extension RepositoryLocation {
   }
 }
 
+nonisolated extension RepositoryLocation {
+  /// Whether pull request status refreshes for a repository at this location. A remote
+  /// repository's GitHub remotes come from its host (docs-ai 084 B3); until then a
+  /// refresh would find none, so the cadence, forced refreshes and the request skip it.
+  var refreshesPullRequests: Bool {
+    localURL != nil
+  }
+}
+
 extension Repository {
   func availability(of feature: RepositoryFeature) -> FeatureAvailability {
     location.availability(of: feature)

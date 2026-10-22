@@ -296,7 +296,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": makePullRequestFixture()],
             confirmedNoPrBranches: []
@@ -333,7 +332,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: [:],
             confirmedNoPrBranches: ["feature"]
@@ -388,7 +386,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": makePullRequestFixture()],
             confirmedNoPrBranches: []
@@ -472,7 +469,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": makePullRequestFixture(mergeable: "UNKNOWN", mergeStateStatus: "UNKNOWN")],
             confirmedNoPrBranches: ["main"]
@@ -518,7 +514,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": merged],
             confirmedNoPrBranches: [],
@@ -582,7 +577,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": githubPullRequest],
             confirmedNoPrBranches: []
@@ -600,7 +594,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: [:],
             confirmedNoPrBranches: []
@@ -682,7 +675,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": enterprisePullRequest],
             confirmedNoPrBranches: []
@@ -700,7 +692,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": originPullRequest],
             confirmedNoPrBranches: []
@@ -830,7 +821,6 @@ struct BatchedPullRequestRefreshReducerTests {
     let pullRequest = makePullRequestFixture()
     let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
       repositoryID: context.repository.id,
-      repositoryRootURL: context.repoRootURL,
       worktreeIDs: context.worktreeIDs,
       prsByBranch: ["feature": pullRequest],
       confirmedNoPrBranches: []
@@ -954,7 +944,6 @@ struct BatchedPullRequestRefreshReducerTests {
 
     let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
       repositoryID: context.repository.id,
-      repositoryRootURL: context.repoRootURL,
       worktreeIDs: context.worktreeIDs,
       prsByBranch: [:],
       confirmedNoPrBranches: ["feature"]
@@ -991,7 +980,6 @@ struct BatchedPullRequestRefreshReducerTests {
 
     let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
       repositoryID: context.repository.id,
-      repositoryRootURL: context.repoRootURL,
       worktreeIDs: context.worktreeIDs,
       prsByBranch: [:],
       confirmedNoPrBranches: []
@@ -1043,7 +1031,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: [:],
             confirmedNoPrBranches: ["feature"]
@@ -1084,7 +1071,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: [:],
             confirmedNoPrBranches: ["feature"]
@@ -1139,7 +1125,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: [:],
             confirmedNoPrBranches: ["feature"]
@@ -1157,7 +1142,6 @@ struct BatchedPullRequestRefreshReducerTests {
         .pullRequestRefreshBatchOutcome(
           .refreshed(
             repositoryID: context.repository.id,
-            repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
             prsByBranch: ["feature": pullRequest],
             confirmedNoPrBranches: []

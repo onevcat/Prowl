@@ -3,7 +3,7 @@ import Foundation
 
 func queuePullRequestRefresh(
   repositoryID: Repository.ID,
-  repositoryRootURL: URL,
+  repositoryLocation: RepositoryLocation,
   worktreeIDs: [Worktree.ID],
   refreshesByRepositoryID: inout [Repository.ID: RepositoriesFeature.PendingPullRequestRefresh]
 ) {
@@ -15,7 +15,7 @@ func queuePullRequestRefresh(
     refreshesByRepositoryID[repositoryID] = pending
   } else {
     refreshesByRepositoryID[repositoryID] = RepositoriesFeature.PendingPullRequestRefresh(
-      repositoryRootURL: repositoryRootURL,
+      repositoryLocation: repositoryLocation,
       worktreeIDs: worktreeIDs
     )
   }

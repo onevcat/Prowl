@@ -521,10 +521,8 @@ final class WorktreeInfoWatcherManager {
     cancelAllPullRequestSelectionCooldownTasks()
   }
 
-  /// Whether the pull request cadence runs for `repository`. The pull request refresh takes a
-  /// local root until A6c, so remote repositories get no timers yet.
   nonisolated private static func tracksPullRequests(of repository: RepositoryLocation) -> Bool {
-    repository.localURL != nil
+    repository.refreshesPullRequests
   }
 
   private func updatePullRequestSchedule(repository: RepositoryLocation, immediate: Bool) {

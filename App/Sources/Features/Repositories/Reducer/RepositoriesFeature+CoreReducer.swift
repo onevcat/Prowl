@@ -1007,7 +1007,7 @@ extension RepositoriesFeature {
             .send(
               .githubIntegration(
                 .repositoryPullRequestRefreshRequested(
-                  repositoryRootURL: repository.rootURL,
+                  repositoryLocation: repository.location,
                   worktreeIDs: worktreeIDs
                 )
               ))
@@ -1018,12 +1018,10 @@ extension RepositoriesFeature {
         }
         return effects.isEmpty ? .none : .concatenate(effects)
       case .repositoryPullRequestRefresh(let location, let worktreeIDs):
-        // The pull request refresh still takes a local root (A6c).
-        guard let repositoryRootURL = location.localURL else { return .none }
         return .send(
           .githubIntegration(
             .repositoryPullRequestRefreshRequested(
-              repositoryRootURL: repositoryRootURL,
+              repositoryLocation: location,
               worktreeIDs: worktreeIDs
             )
           )

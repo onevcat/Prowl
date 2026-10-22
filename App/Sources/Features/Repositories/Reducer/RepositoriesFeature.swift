@@ -217,7 +217,7 @@ struct RepositoriesFeature {
   @CasePathable
   enum GithubIntegrationAction: Equatable {
     case delayedPullRequestRefresh(Worktree.ID)
-    case repositoryPullRequestRefreshRequested(repositoryRootURL: URL, worktreeIDs: [Worktree.ID])
+    case repositoryPullRequestRefreshRequested(repositoryLocation: RepositoryLocation, worktreeIDs: [Worktree.ID])
     case refreshGithubIntegrationAvailability
     case githubIntegrationAvailabilityUpdated(Bool)
     case repositoryPullRequestRefreshCompleted(Repository.ID)
@@ -427,7 +427,7 @@ struct RepositoriesFeature {
   }
 
   struct PendingPullRequestRefresh: Equatable {
-    var repositoryRootURL: URL
+    var repositoryLocation: RepositoryLocation
     var worktreeIDs: [Worktree.ID]
   }
 

@@ -474,7 +474,7 @@ struct RepositoriesFeatureTests {
     store.timeout = .realWorkTestStoreTimeout
 
     await store.send(
-      .worktreeInfoEvent(.repositoryWorktreesChanged(repository: .local(repository.rootURL))))
+      .worktreeInfoEvent(.repositoryWorktreesChanged(repository: repository.location)))
     await store.receive(\.reloadRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories[id: repository.id] = makeRepository(
@@ -540,14 +540,14 @@ struct RepositoriesFeatureTests {
 
     await store.send(
       .worktreeInfoEvent(
-        .repositoryRemoteConfigurationChanged(repository: .local(repository.rootURL))
+        .repositoryRemoteConfigurationChanged(repository: repository.location)
       )
     ) {
       $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
-        repositoryRootURL: repository.rootURL,
+        repositoryLocation: repository.location,
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     }
@@ -582,14 +582,14 @@ struct RepositoriesFeatureTests {
     // whatever an answer from the old remote records meanwhile.
     await store.send(
       .worktreeInfoEvent(
-        .repositoryRemoteConfigurationChanged(repository: .local(repository.rootURL))
+        .repositoryRemoteConfigurationChanged(repository: repository.location)
       )
     ) {
       $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
-        repositoryRootURL: repository.rootURL,
+        repositoryLocation: repository.location,
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     }
@@ -6249,7 +6249,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] =
         RepositoriesFeature.PendingPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
     }
@@ -6296,7 +6296,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] =
         RepositoriesFeature.PendingPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
     }
@@ -6316,7 +6316,7 @@ struct RepositoriesFeatureTests {
     initialState.githubIntegrationAvailability = .unavailable
     initialState.pendingPullRequestRefreshByRepositoryID[repository.id] =
       RepositoriesFeature.PendingPullRequestRefresh(
-        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     let store = TestStore(initialState: initialState) {
@@ -6357,7 +6357,7 @@ struct RepositoriesFeatureTests {
     initialState.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
     initialState.queuedPullRequestRefreshByRepositoryID[repository.id] =
       RepositoriesFeature.PendingPullRequestRefresh(
-        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     let store = TestStore(initialState: initialState) {
@@ -6370,7 +6370,7 @@ struct RepositoriesFeatureTests {
       $0.githubIntegrationAvailability = .unavailable
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] =
         RepositoriesFeature.PendingPullRequestRefresh(
-          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       $0.queuedPullRequestRefreshByRepositoryID = [:]
@@ -6390,7 +6390,7 @@ struct RepositoriesFeatureTests {
     state.githubIntegrationAvailability = .disabled
     state.pendingPullRequestRefreshByRepositoryID["repo"] =
       RepositoriesFeature.PendingPullRequestRefresh(
-        repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"),
+        repositoryLocation: .local(URL(fileURLWithPath: "/tmp/repo")),
         worktreeIDs: []
       )
     let expectedState = state
@@ -6419,7 +6419,7 @@ struct RepositoriesFeatureTests {
     state.queuedPullRequestRefreshByRepositoryID[repository.id] =
       RepositoriesFeature
       .PendingPullRequestRefresh(
-        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        repositoryLocation: .local(URL(fileURLWithPath: repoRoot)),
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     let store = TestStore(initialState: state) {

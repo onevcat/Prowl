@@ -84,6 +84,8 @@ struct RepositoryHostTests {
     #expect(await host.branchName(of: worktree.location) == nil)
     #expect(await host.lineChanges(in: worktree.location) == nil)
     #expect(await host.repositoryWebURL(for: location) == nil)
+    #expect(await host.remoteInfo(for: location) == nil)
+    #expect(await host.githubRemoteInfos(for: location).isEmpty)
   }
 
   @Test func remoteWorktreeCreationFailsBeforeTheLocalStream() async {
@@ -140,7 +142,34 @@ struct RepositoryHostTests {
         .repositoryRemoteConfigurationChanged(repository: .local(URL(fileURLWithPath: "/tmp/elsewhere")))))
   }
 
-  @Test(.dependencies) func remotePullRequestRefreshEventsWaitForTheHostPath() async {
+  @Test(.dependencies) func remotePullRequestRefreshIsSkippedUntilTheHostHasRemotes() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let worktreeID = remote.worktrees[0].id
+    var state = RepositoriesFeature.State()
+    state.repositories = [remote]
+    state.selection = .worktree(worktreeID)
+    state.githubIntegrationAvailability = .unknown
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient = Self.failingGitClient
+      $0.githubCLI.resolveRemoteInfo = { _ in
+        Issue.record("gh repo view must not run for a remote repository")
+        return nil
+      }
+      $0.githubCLI.retryRateLimitedRequests = {}
+    }
+
+    // No availability probe, no pending or in-flight refresh, no forced mark.
+    await store.send(
+      .worktreeInfoEvent(.repositoryPullRequestRefresh(repository: remote.location, worktreeIDs: [worktreeID]))
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
+    await store.send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
+    await store.send(.githubIntegration(.retryRateLimitedRequests))
+  }
+
+  @Test(.dependencies) func openingARemoteRepositoryOnItsCodeHostExplainsTheMissingURL() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
@@ -149,11 +178,10 @@ struct RepositoryHostTests {
     } withDependencies: {
       $0.gitClient = Self.failingGitClient
     }
+    store.exhaustivity = .off
 
-    await store.send(
-      .worktreeInfoEvent(
-        .repositoryPullRequestRefresh(repository: remote.location, worktreeIDs: [remote.worktrees[0].id]))
-    )
+    await store.send(.githubIntegration(.pullRequestAction(remote.worktrees[0].id, .openOnCodeHost)))
+    await store.receive(\.presentAlert)
   }
 
   @Test(.dependencies) func remoteRepositorySettingsLoadWithoutLocalGit() async {
