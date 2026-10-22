@@ -25,10 +25,16 @@ migrated to `~/.prowl` on first launch.
 
 ### User settings migration
 
-When a new user settings path is absent, Prowl reads `global.onevcat.json` or
-`prowl.onevcat.json` from the same directory. Repository settings also retain the
-older legacy-name fallback in that directory. The first successful load creates
-the new path; the old file is not deleted. If both exist, the new path wins.
+When a new user settings path is absent, Prowl reads an earlier file and creates
+the new path from it; the old file is not deleted. If both exist, the new path wins.
+
+- **Global:** `global.onevcat.json` in `~/.prowl/`.
+- **Repository user settings:** from the per-name directory of earlier versions,
+  `~/.prowl/repo/<repo-name>/`, in this order: `prowl.user.json`,
+  `prowl.onevcat.json`, `supacode.onevcat.json`. A file placed in the new
+  `<repo-name>-<hash>/` directory under an old name is not read.
+- **Repository settings:** `prowl.json`, then `supacode.json`, in the same per-name
+  directory.
 
 Migration preserves the original JSON bytes. New regular files are owner-only
 (`0600`). A legacy symlink produces a new symlink to the same resolved target,
