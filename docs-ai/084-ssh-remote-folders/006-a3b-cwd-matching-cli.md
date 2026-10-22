@@ -36,11 +36,14 @@ created in C1, behind `PROWL_REMOTE_FOLDERS`. The slice table is amended. Decide
 - Canvas cards look up the appearance and the custom title by
   `WorktreeTerminalState.repositoryID` (`worktree.repositoryLocation.id`). The name
   fallback uses `Repository.name(for: RepositoryLocation)`. Before, the lookup used
-  `PathPolicy.normalizePath(…, resolvingSymlinks: true)`, which resolves `/tmp` to
-  `/private/tmp`. Live repository IDs keep the path as added, so a repository under a
-  symlinked path never got its title or colour on Canvas. **Behaviour fix.** It stays
-  partial for a terminal state that was created from the snapshot cache, whose restore
-  mints symlink-resolved IDs, until B2 aligns the snapshot IDs.
+  `PathPolicy.normalizePath(…, resolvingSymlinks: true)`. A folder added through a
+  symlink keeps the symlink path in its ID, so its card never got its title or colour.
+  This affects mostly plain folders: a git repository's ID comes from
+  `git rev-parse --show-toplevel`, which already resolves symlinks, and `/tmp` is not
+  affected because `resolvingSymlinksInPath` keeps it. **Behaviour fix**, reproduced in
+  E2E against the release build. It stays partial for a terminal state that was created
+  from the snapshot cache, whose restore mints symlink-resolved IDs, until B2 aligns the
+  snapshot IDs.
 - The terminal prune compares repository IDs without trailing slashes instead of URLs.
   This works for remote IDs too, so a remote repository whose load fails keeps its
   terminals, as P0 requires. It also fixes a local case: the failed ID is built from
@@ -75,7 +78,7 @@ created in C1, behind `PROWL_REMOTE_FOLDERS`. The slice table is amended. Decide
   git and plain repositories are skipped by the index and by the cache. Local matching
   still works. With the old code, this test trapped.
 - `WorktreeTerminalStateRepositoryIDTests`: the terminal state's repository ID equals
-  `Repository.id` and keeps a `/tmp` path unresolved.
+  `Repository.id`.
 - `WorktreeTerminalManagerTests.prunePreservesFailedRepositorySessionsWhenOnlyATrailingSlashDiffers`.
   It was red before the fix.
 - `RepositoryLocationTests.repositoryNameComesFromTheLocationPath`.
