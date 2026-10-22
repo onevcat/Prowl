@@ -81,6 +81,22 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     workspace != nil
   }
 
+  /// The worktree that terminals, scripts and selection use for a repository
+  /// without worktrees of its own (a plain folder or a workspace): the root
+  /// folder, under the repository's ID. Nil for a repository with worktrees.
+  var terminalWorktree: Worktree? {
+    guard capabilities.supportsRunnableFolderActions, !capabilities.supportsWorktrees else {
+      return nil
+    }
+    return Worktree(
+      id: id,
+      name: name,
+      detail: rootURL.path(percentEncoded: false),
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+  }
+
   static func name(for rootURL: URL) -> String {
     let name = rootURL.lastPathComponent
     if name == ".bare" || name == ".git" {

@@ -165,6 +165,7 @@ struct RepositoriesFeature {
       pendingID: Worktree.ID,
       previousSelection: Worktree.ID?,
       repositoryID: Repository.ID,
+      repositoryRootURL: URL,
       name: String?,
       /// The directory this attempt created, if any. Cleanup removes only this directory.
       worktreeDirectory: URL?

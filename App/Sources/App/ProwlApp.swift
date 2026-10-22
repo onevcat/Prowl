@@ -1397,17 +1397,16 @@ struct ProwlApp: App {
           )
         }
       }
-      let repoRoot = repository.rootURL
-        .standardizedFileURL.path(percentEncoded: false)
-      if repoRoot == normalized,
-        !repository.capabilities.supportsWorktrees,
-        repository.capabilities.supportsRunnableFolderActions
-      {
-        return OpenResolverResult(
-          resolution: .exactRoot, worktreeID: repository.id,
-          worktreeName: repository.name, worktreePath: repoRoot,
-          rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
-        )
+      if let terminalWorktree = repository.terminalWorktree {
+        let repoRoot = terminalWorktree.workingDirectory
+          .standardizedFileURL.path(percentEncoded: false)
+        if repoRoot == normalized {
+          return OpenResolverResult(
+            resolution: .exactRoot, worktreeID: terminalWorktree.id,
+            worktreeName: terminalWorktree.name, worktreePath: repoRoot,
+            rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
+          )
+        }
       }
     }
     // Inside-root: path is inside an existing worktree/repo root
@@ -1427,16 +1426,14 @@ struct ProwlApp: App {
           )
         }
       }
-      if !repository.capabilities.supportsWorktrees,
-        repository.capabilities.supportsRunnableFolderActions
-      {
-        let repoRoot = repository.rootURL
+      if let terminalWorktree = repository.terminalWorktree {
+        let repoRoot = terminalWorktree.workingDirectory
           .standardizedFileURL.path(percentEncoded: false)
         let repoSlash = repoRoot.hasSuffix("/") ? repoRoot : repoRoot + "/"
         if normalizedSlash.hasPrefix(repoSlash) {
           return OpenResolverResult(
-            resolution: .insideRoot, worktreeID: repository.id,
-            worktreeName: repository.name, worktreePath: repoRoot,
+            resolution: .insideRoot, worktreeID: terminalWorktree.id,
+            worktreeName: terminalWorktree.name, worktreePath: repoRoot,
             rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
           )
         }
@@ -1477,17 +1474,8 @@ struct ProwlApp: App {
       if let worktree = repository.worktrees[id: id] {
         return worktree
       }
-      if repository.id == id,
-        repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        return Worktree(
-          id: repository.id,
-          name: repository.name,
-          detail: repository.rootURL.path(percentEncoded: false),
-          workingDirectory: repository.rootURL,
-          repositoryRootURL: repository.rootURL
-        )
+      if repository.id == id, let terminalWorktree = repository.terminalWorktree {
+        return terminalWorktree
       }
     }
     return nil

@@ -587,7 +587,7 @@ extension RepositoriesFeature {
 
     case .openWorkspaceChild(let childID):
       guard let child = state.allResolvedWorkspaceChildren().first(where: { $0.id == childID }),
-        let workspaceRepository = state.repositories[id: child.workspaceID]
+        let workspaceWorktree = state.repositories[id: child.workspaceID]?.terminalWorktree
       else {
         return .none
       }
@@ -597,13 +597,6 @@ extension RepositoriesFeature {
       state.sidebarSelectedWorktreeIDs = []
       state.openedWorktreeIDs.insert(child.workspaceID)
       state.pendingTerminalFocusWorktreeIDs.insert(child.workspaceID)
-      let workspaceWorktree = Worktree(
-        id: workspaceRepository.id,
-        name: workspaceRepository.name,
-        detail: workspaceRepository.rootURL.path(percentEncoded: false),
-        workingDirectory: workspaceRepository.rootURL,
-        repositoryRootURL: workspaceRepository.rootURL
-      )
       return .merge(
         .send(.delegate(.selectedWorktreeChanged(workspaceWorktree))),
         .run { _ in

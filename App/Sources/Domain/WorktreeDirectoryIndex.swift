@@ -17,10 +17,8 @@ nonisolated struct WorktreeDirectoryIndex: Equatable {
 
   init(repositories: some Sequence<Repository>) {
     for repository in repositories {
-      if repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        insert(id: repository.id, directory: repository.rootURL)
+      if let terminalWorktree = repository.terminalWorktree {
+        insert(id: terminalWorktree.id, directory: terminalWorktree.workingDirectory)
       }
       for worktree in repository.worktrees {
         insert(id: worktree.id, directory: worktree.workingDirectory)
@@ -185,10 +183,8 @@ enum WorktreeDirectoryIndexCache {
   private static func signature(for repositories: IdentifiedArrayOf<Repository>) -> [Entry] {
     var entries: [Entry] = []
     for repository in repositories {
-      if repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        entries.append(Entry(id: repository.id, directory: repository.rootURL))
+      if let terminalWorktree = repository.terminalWorktree {
+        entries.append(Entry(id: terminalWorktree.id, directory: terminalWorktree.workingDirectory))
       }
       for worktree in repository.worktrees {
         entries.append(Entry(id: worktree.id, directory: worktree.workingDirectory))

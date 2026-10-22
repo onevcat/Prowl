@@ -264,7 +264,7 @@ struct ShelfSpineView: View {
         hasAggregatedNotification: terminalState?.hasUnseenNotification == true,
         icon: appearance.icon,
         iconTint: effectiveTintColor,
-        repositoryRootURL: URL(fileURLWithPath: book.repositoryID)
+        repositoryRootURL: book.repositoryRootURL
       )
       .frame(maxWidth: .infinity)
       .contentShape(.rect)

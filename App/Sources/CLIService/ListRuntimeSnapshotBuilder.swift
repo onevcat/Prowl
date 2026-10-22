@@ -101,14 +101,13 @@ enum ListRuntimeSnapshotBuilder {
         continue
       }
 
-      if repository.capabilities.supportsRunnableFolderActions {
-        let rootPath = repository.rootURL.path(percentEncoded: false)
+      if let terminalWorktree = repository.terminalWorktree {
         contexts.append(
           WorktreeContext(
-            id: repository.id,
-            name: repository.name,
-            path: rootPath,
-            rootPath: rootPath,
+            id: terminalWorktree.id,
+            name: terminalWorktree.name,
+            path: terminalWorktree.workingDirectory.path(percentEncoded: false),
+            rootPath: terminalWorktree.repositoryRootURL.path(percentEncoded: false),
             kind: listCommandKind(for: repository)
           )
         )

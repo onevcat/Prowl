@@ -1,4 +1,5 @@
 import Foundation
+import IdentifiedCollections
 import Testing
 
 @testable import Prowl
@@ -14,6 +15,51 @@ struct RepositoryNameTests {
     let root = URL(fileURLWithPath: "/tmp/work/repo-alpha")
 
     #expect(Repository.name(for: root) == "repo-alpha")
+  }
+}
+
+struct RepositoryTerminalWorktreeTests {
+  @Test func plainFolderIsItsOwnTerminalWorktree() throws {
+    let root = URL(fileURLWithPath: "/tmp/work/notes")
+    let repository = Repository(
+      id: root.path(percentEncoded: false), rootURL: root, name: "notes", kind: .plain, worktrees: [])
+
+    let worktree = try #require(repository.terminalWorktree)
+
+    #expect(worktree.id == repository.id)
+    #expect(worktree.name == "notes")
+    #expect(worktree.detail == "/tmp/work/notes")
+    #expect(worktree.workingDirectory == root)
+    #expect(worktree.repositoryRootURL == root)
+    #expect(worktree.isMain)
+  }
+
+  @Test func workspaceUsesItsRootAsTerminalWorktree() throws {
+    let root = URL(fileURLWithPath: "/tmp/work/feature-space")
+    let repository = Repository(
+      id: root.path(percentEncoded: false),
+      rootURL: root,
+      name: "Feature",
+      kind: .git,
+      worktrees: [],
+      workspace: ProjectWorkspace(title: "Feature")
+    )
+
+    let worktree = try #require(repository.terminalWorktree)
+
+    #expect(worktree.id == repository.id)
+    #expect(worktree.name == "Feature")
+    #expect(worktree.workingDirectory == root)
+  }
+
+  @Test func gitRepositoryHasNoTerminalWorktree() {
+    let root = URL(fileURLWithPath: "/tmp/work/app")
+    let main = Worktree(
+      id: root.path(percentEncoded: false), name: "main", detail: "", workingDirectory: root, repositoryRootURL: root)
+    let repository = Repository(
+      id: root.path(percentEncoded: false), rootURL: root, name: "app", kind: .git, worktrees: [main])
+
+    #expect(repository.terminalWorktree == nil)
   }
 }
 
