@@ -75,7 +75,8 @@ struct SidebarRepositoryContainerModel: Equatable, Identifiable {
 
   var repositoryID: Repository.ID
   var title: String
-  var rootURL: URL
+  /// The root on this Mac. Nil for a remote repository.
+  var rootURL: URL?
   var kind: Repository.Kind
   var isExpanded: Bool
   var isRemoving: Bool
@@ -171,7 +172,7 @@ extension RepositoriesFeature.State {
             SidebarRepositoryContainerModel(
               repositoryID: repository.id,
               title: repository.name,
-              rootURL: repository.rootURL,
+              rootURL: repository.localURL,
               kind: repository.kind,
               isExpanded: isExpanded,
               isRemoving: isRemovingRepository(repository),
@@ -198,7 +199,8 @@ extension RepositoriesFeature.State {
     if !orderedRoots.isEmpty {
       return orderedRoots
     }
-    return repositories.map(\.rootURL)
+    // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
+    return repositories.compactMap(\.localURL)
   }
 }
 

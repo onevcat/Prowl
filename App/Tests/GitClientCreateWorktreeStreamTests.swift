@@ -187,7 +187,7 @@ struct GitClientCreateWorktreeStreamTests {
     }
 
     #expect(finishedWorktree?.id == "/tmp/repo/new-wt")
-    #expect(finishedWorktree?.workingDirectory == URL(fileURLWithPath: "/tmp/repo/new-wt"))
+    #expect(finishedWorktree?.localURL! == URL(fileURLWithPath: "/tmp/repo/new-wt"))
   }
 
   @Test func createWorktreeStreamUsesFinishedOutputWhenNoLineEventsAreEmitted() async throws {
@@ -218,7 +218,7 @@ struct GitClientCreateWorktreeStreamTests {
 
     #expect(outputLines.isEmpty)
     #expect(finishedWorktree?.id == "/tmp/repo/new-wt")
-    #expect(finishedWorktree?.workingDirectory == URL(fileURLWithPath: "/tmp/repo/new-wt"))
+    #expect(finishedWorktree?.localURL! == URL(fileURLWithPath: "/tmp/repo/new-wt"))
   }
 
   @Test func createWorktreeStreamThrowsWhenNoPathLineIsEmitted() async throws {
@@ -325,7 +325,7 @@ struct GitClientCreateWorktreeStreamTests {
 
     #expect(worktree.id == "/tmp/repo/new-wt")
     #expect(worktree.name == "new-wt")
-    #expect(worktree.repositoryRootURL == repoRoot)
+    #expect(worktree.repositoryLocalURL! == repoRoot)
   }
 
   @Test func createWorktreeUsesFinishedOutputWhenNoLineEventsAreEmitted() async throws {
@@ -352,6 +352,6 @@ struct GitClientCreateWorktreeStreamTests {
 
     #expect(worktree.id == "/tmp/repo/new-wt")
     #expect(worktree.name == "new-wt")
-    #expect(worktree.repositoryRootURL == repoRoot)
+    #expect(worktree.repositoryLocalURL! == repoRoot)
   }
 }

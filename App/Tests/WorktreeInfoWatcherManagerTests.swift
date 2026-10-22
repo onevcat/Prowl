@@ -152,8 +152,8 @@ struct WorktreeInfoWatcherManagerTests {
       id: tempWorktree.worktree.id,
       name: "eagle-duplicate",
       detail: "duplicate",
-      workingDirectory: tempWorktree.worktree.workingDirectory,
-      repositoryRootURL: tempWorktree.worktree.repositoryRootURL
+      workingDirectory: tempWorktree.worktree.localURL!,
+      repositoryRootURL: tempWorktree.worktree.repositoryLocalURL!
     )
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .seconds(3_600),

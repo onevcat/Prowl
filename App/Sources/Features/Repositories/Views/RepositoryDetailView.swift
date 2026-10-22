@@ -25,7 +25,7 @@ struct RepositoryDetailView: View {
         customTitle: customTitle
       )
       .font(.title3.weight(.semibold))
-      Text(repository.rootURL.path(percentEncoded: false))
+      Text(repository.location.path)
         .font(.subheadline.monospaced())
         .foregroundStyle(.secondary)
         .textSelection(.enabled)

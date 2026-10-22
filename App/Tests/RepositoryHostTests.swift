@@ -251,6 +251,39 @@ struct RepositoryHostTests {
     }
   }
 
+  @Test(.dependencies) func creatingAWorktreeInARemoteRepositoryExplainsWhy() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    var state = RepositoriesFeature.State()
+    state.repositories = [remote]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient = Self.failingGitClient
+    }
+
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(remote.id))) {
+      $0.alert = RepositoriesFeature().messageAlert(
+        title: "Unable to create worktree",
+        message: "Worktrees cannot be created in remote folders yet."
+      )
+    }
+  }
+
+  @Test(.dependencies) func openingATerminalTabInARemoteWorktreeShowsTheReason() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    var state = RepositoriesFeature.State()
+    state.repositories = [remote]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in Issue.record("no terminal command for a remote worktree") }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.newTerminalTab(remote.worktrees[0].id))
+    await store.receive(\.showToast)
+  }
+
   @Test(.dependencies) func remoteBranchChangesReadNoLocalHead() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()

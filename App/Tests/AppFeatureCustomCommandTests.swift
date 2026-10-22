@@ -621,7 +621,7 @@ struct AppFeatureCustomCommandTests {
     let store = withDependencies {
       $0.defaultFileStorage = .inMemory
     } operation: {
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userRepositorySettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var userRepositorySettings
       $userRepositorySettings.withLock { $0 = settings }
       return TestStore(
         initialState: AppFeature.State(
@@ -672,10 +672,10 @@ struct AppFeatureCustomCommandTests {
     let store = withDependencies {
       $0.defaultFileStorage = .inMemory
     } operation: {
-      @Shared(.repositorySettings(worktreeA.repositoryRootURL)) var repositorySettingsA
-      @Shared(.repositorySettings(worktreeB.repositoryRootURL)) var repositorySettingsB
-      @Shared(.userRepositorySettings(worktreeA.repositoryRootURL)) var userRepositorySettingsA
-      @Shared(.userRepositorySettings(worktreeB.repositoryRootURL)) var userRepositorySettingsB
+      @Shared(.repositorySettings(worktreeA.repositoryLocalURL!)) var repositorySettingsA
+      @Shared(.repositorySettings(worktreeB.repositoryLocalURL!)) var repositorySettingsB
+      @Shared(.userRepositorySettings(worktreeA.repositoryLocalURL!)) var userRepositorySettingsA
+      @Shared(.userRepositorySettings(worktreeB.repositoryLocalURL!)) var userRepositorySettingsB
       $repositorySettingsA.withLock { $0.runScript = "npm run repo-a" }
       $repositorySettingsB.withLock { $0.runScript = "npm run repo-b" }
       $userRepositorySettingsA.withLock { $0.customCommands = [commandA] }
@@ -761,7 +761,7 @@ struct AppFeatureCustomCommandTests {
   private func makeRepositoriesState(worktrees: [Worktree]) -> RepositoriesFeature.State {
     let worktreesByRepository = Dictionary(
       grouping: worktrees,
-      by: { $0.repositoryRootURL.path(percentEncoded: false) }
+      by: { $0.repositoryLocalURL!.path(percentEncoded: false) }
     )
     let repositories =
       worktreesByRepository.keys.sorted().compactMap { rootPath in

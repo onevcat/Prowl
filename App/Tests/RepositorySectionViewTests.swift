@@ -159,9 +159,9 @@ struct RepositorySectionViewTests {
     let plainTarget = Worktree(
       id: plainRepository.id,
       name: plainRepository.name,
-      detail: plainRepository.rootURL.path(percentEncoded: false),
-      workingDirectory: plainRepository.rootURL,
-      repositoryRootURL: plainRepository.rootURL
+      detail: plainRepository.localURL!.path(percentEncoded: false),
+      workingDirectory: plainRepository.localURL!,
+      repositoryRootURL: plainRepository.localURL!
     )
     _ = manager.state(for: plainTarget).tabManager.createTab(title: "folder", icon: nil)
 
@@ -475,9 +475,9 @@ struct RepositorySectionViewTests {
     let terminalTarget = Worktree(
       id: repository.id,
       name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
+      detail: repository.localURL!.path(percentEncoded: false),
+      workingDirectory: repository.localURL!,
+      repositoryRootURL: repository.localURL!
     )
 
     let state = manager.state(for: terminalTarget)

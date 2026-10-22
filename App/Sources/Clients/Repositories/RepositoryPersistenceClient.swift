@@ -237,7 +237,8 @@ nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable 
 
   init(repositories: [Repository]) {
     version = Self.currentVersion
-    self.repositories = repositories.map { SnapshotRepository(repository: $0) }
+    // Snapshot version 2 stores local paths only; remote entries come with version 3 (docs-ai 084 B2).
+    self.repositories = repositories.compactMap { SnapshotRepository(repository: $0) }
   }
 
   func restoreRepositories(
@@ -272,11 +273,12 @@ extension RepositorySnapshotCachePayload {
     let worktrees: [SnapshotWorktree]
     let workspace: ProjectWorkspace?
 
-    init(repository: Repository) {
-      rootPath = repository.rootURL.path(percentEncoded: false)
+    init?(repository: Repository) {
+      guard let rootURL = repository.localURL else { return nil }
+      rootPath = rootURL.path(percentEncoded: false)
       name = repository.name
       kind = repository.kind
-      worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
+      worktrees = repository.worktrees.compactMap { SnapshotWorktree(worktree: $0) }
       workspace = repository.workspace
     }
 
@@ -324,10 +326,11 @@ extension RepositorySnapshotCachePayload {
     let workingDirectoryPath: String
     let createdAt: Date?
 
-    init(worktree: Worktree) {
+    init?(worktree: Worktree) {
+      guard let workingDirectory = worktree.localURL else { return nil }
       name = worktree.name
       detail = worktree.detail
-      workingDirectoryPath = worktree.workingDirectory.path(percentEncoded: false)
+      workingDirectoryPath = workingDirectory.path(percentEncoded: false)
       createdAt = worktree.createdAt
     }
 

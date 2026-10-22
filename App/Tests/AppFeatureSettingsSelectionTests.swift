@@ -29,7 +29,7 @@ struct AppFeatureSettingsSelectionTests {
     await store.send(.settings(.setSelection(.repository(repository.id)))) {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
-        location: .local(repository.rootURL),
+        location: .local(repository.localURL!),
         repositoryID: repository.id,
         repositoryKind: repository.kind,
         settings: .default,
@@ -74,7 +74,7 @@ struct AppFeatureSettingsSelectionTests {
     await store.send(.settings(.setSelection(.repository(repository.id)))) {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
-        location: .local(repository.rootURL),
+        location: .local(repository.localURL!),
         repositoryID: repository.id,
         repositoryKind: .plain,
         settings: .default,
@@ -126,7 +126,7 @@ struct AppFeatureSettingsSelectionTests {
       await store.send(.settings(.setSelection(.repository(repository.id)))) {
         $0.settings.selection = .repository(repository.id)
         $0.settings.repositorySettings = RepositorySettingsFeature.State(
-          location: .local(repository.rootURL),
+          location: .local(repository.localURL!),
           repositoryID: repository.id,
           repositoryKind: repository.kind,
           settings: .default,
@@ -150,7 +150,7 @@ struct AppFeatureSettingsSelectionTests {
     )
     state.settings.selection = .repository(repository.id)
     state.settings.repositorySettings = RepositorySettingsFeature.State(
-      location: .local(repository.rootURL),
+      location: .local(repository.localURL!),
       repositoryKind: repository.kind,
       settings: .default,
       userSettings: .default

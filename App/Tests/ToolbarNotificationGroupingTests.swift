@@ -21,7 +21,7 @@ struct ToolbarNotificationGroupingTests {
     let repoB = makeRepository(id: repoBPath, name: "Repo B", worktrees: [repoBMain, repoBOne])
 
     var state = RepositoriesFeature.State(repositories: [repoA, repoB])
-    state.repositoryRoots = [repoA.rootURL, repoB.rootURL]
+    state.repositoryRoots = [repoA.localURL!, repoB.localURL!]
     state.repositoryOrderIDs = [repoB.id, repoA.id]
     state.worktreeOrderByRepository[repoA.id] = [repoATwo.id, repoAOne.id]
 
@@ -57,7 +57,7 @@ struct ToolbarNotificationGroupingTests {
     let repoB = makeRepository(id: repoBPath, name: "Repo B", worktrees: [repoBMain, repoBEmpty])
 
     var state = RepositoriesFeature.State(repositories: [repoA, repoB])
-    state.repositoryRoots = [repoA.rootURL, repoB.rootURL]
+    state.repositoryRoots = [repoA.localURL!, repoB.localURL!]
     state.archivedWorktrees = [ArchivedWorktree(id: repoAArchived.id, archivedAt: .distantPast)]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
@@ -78,7 +78,7 @@ struct ToolbarNotificationGroupingTests {
 
     let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, readOnly, mixed])
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [repo.rootURL]
+    state.repositoryRoots = [repo.localURL!]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     manager.state(for: readOnly).notifications = [
@@ -103,7 +103,7 @@ struct ToolbarNotificationGroupingTests {
 
     let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, feature])
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [repo.rootURL]
+    state.repositoryRoots = [repo.localURL!]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     manager.state(for: feature).notifications = [
@@ -123,7 +123,7 @@ struct ToolbarNotificationGroupingTests {
     let feature = makeWorktree(id: "\(repoPath)/feature", name: "feature", repoRoot: repoPath)
     let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, feature])
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [repo.rootURL]
+    state.repositoryRoots = [repo.localURL!]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     manager.state(for: feature).notifications = [
@@ -145,7 +145,7 @@ struct ToolbarNotificationGroupingTests {
     let feature = makeWorktree(id: "\(repoPath)/feature", name: "feature", repoRoot: repoPath)
     let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, feature])
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [repo.rootURL]
+    state.repositoryRoots = [repo.localURL!]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     manager.state(for: feature).notifications = [

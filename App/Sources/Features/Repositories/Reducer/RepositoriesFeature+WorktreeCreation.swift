@@ -55,6 +55,10 @@ extension RepositoriesFeature {
         )
         return .none
       }
+      if let reason = repository.availability(of: .worktreeCreation).unavailableReason {
+        state.alert = messageAlert(title: String(localized: "Unable to create worktree"), message: reason.message)
+        return .none
+      }
       if state.removingRepositoryIDs.contains(repository.id) {
         state.alert = messageAlert(
           title: String(localized: "Unable to create worktree"),
@@ -136,13 +140,13 @@ extension RepositoriesFeature {
       let automaticBaseRef,
       let selectedBaseRef
     ):
-      guard let repository = state.repositories[id: repositoryID] else {
+      guard let repository = state.repositories[id: repositoryID], let rootURL = repository.localURL else {
         return .none
       }
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.location)) var repositorySettings
       let defaultWorktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-        for: repository.rootURL,
+        for: rootURL,
         globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
       )
@@ -154,7 +158,7 @@ extension RepositoriesFeature {
         ?? "new-worktree"
       state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
-        repositoryRootURL: repository.rootURL,
+        repositoryRootURL: rootURL,
         repositoryName: repository.name,
         automaticBaseRef: automaticBaseRef,
         baseRefOptions: baseRefOptions,
@@ -168,7 +172,7 @@ extension RepositoriesFeature {
       )
       let branchNameSuggestionClient = branchNameSuggestionClient
       let repositoryName = repository.name
-      let repositoryRootURL = repository.rootURL
+      let repositoryRootURL = rootURL
       let repositoryLocation = repository.location
       let repositoryHost = repositoryHost
       return .run { send in
@@ -273,13 +277,19 @@ extension RepositoriesFeature {
         )
         return .none
       }
+      // Worktree creation is local until the remote host creates worktrees (docs-ai 084 B3).
+      guard let rootURL = repository.localURL else {
+        let reason = FeatureUnavailableReason.remoteFolder(.worktreeCreation)
+        state.alert = messageAlert(title: String(localized: "Unable to create worktree"), message: reason.message)
+        return .none
+      }
       let previousSelection = state.selectedWorktreeID
       let pendingID = "pending:\(uuid().uuidString)"
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.location)) var repositorySettings
       let globalDefaultWorktreeBaseDirectoryPath = settingsFile.global.defaultWorktreeBaseDirectoryPath
       let worktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-        for: repository.rootURL,
+        for: rootURL,
         globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
       )
@@ -347,7 +357,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: repository.rootURL,
+                    repositoryRootURL: rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -367,7 +377,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: repository.rootURL,
+                    repositoryRootURL: rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -384,7 +394,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: repository.rootURL,
+                    repositoryRootURL: rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -401,7 +411,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: repository.rootURL,
+                    repositoryRootURL: rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -418,7 +428,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: repository.rootURL,
+                    repositoryRootURL: rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -499,7 +509,7 @@ extension RepositoriesFeature {
           // overrides; nil keeps `wt`'s default `base/<branch>` placement.
           let directoryOverride = ProwlPaths.resolvedWorktreeDirectory(
             defaultBaseDirectory: worktreeBaseDirectory,
-            repositoryRootURL: repository.rootURL,
+            repositoryRootURL: rootURL,
             nameOverride: placement.name,
             pathOverride: placement.path,
             branchName: name
@@ -531,7 +541,7 @@ extension RepositoriesFeature {
             in: repositoryLocation,
             GitWorktreeCreateRequest(
               name: name,
-              repoRoot: repository.rootURL,
+              repoRoot: rootURL,
               baseDirectory: worktreeBaseDirectory,
               copyFiles: GitWorktreeCreateRequest.CopyFiles(ignored: copyIgnored, untracked: copyUntracked),
               baseRef: resolvedBaseRef,
@@ -602,7 +612,7 @@ extension RepositoriesFeature {
                 pendingID: pendingID,
                 previousSelection: previousSelection,
                 repositoryID: repository.id,
-                repositoryRootURL: repository.rootURL,
+                repositoryRootURL: rootURL,
                 name: newWorktreeName,
                 worktreeDirectory: createdWorktreeDirectory
               )
@@ -691,9 +701,10 @@ extension RepositoriesFeature {
           }
         )
       }
-      if let cleanupWorktree = cleanup.worktree {
+      // Creation is local only, so the worktree that failed to finish is local too.
+      if let cleanupWorktree = cleanup.worktree, let cleanupDirectory = cleanupWorktree.localURL {
         let repositoryLocation = cleanupWorktree.repositoryLocation
-        let destination = comparableWorktreePath(cleanupWorktree.workingDirectory)
+        let destination = comparableWorktreePath(cleanupDirectory)
         let branch = cleanupWorktree.name
         let repositoryHost = repositoryHost
         effects.append(
@@ -701,7 +712,9 @@ extension RepositoriesFeature {
             // Another creation can register this destination first; its worktree is not ours.
             let registered = (try? await repositoryHost.worktrees(in: repositoryLocation)) ?? []
             let ownsDestination = await MainActor.run {
-              registered.contains { comparableWorktreePath($0.workingDirectory) == destination && $0.name == branch }
+              registered.contains { worktree in
+                worktree.localURL.map(comparableWorktreePath) == destination && worktree.name == branch
+              }
             }
             if ownsDestination {
               _ = try? await repositoryHost.removeWorktree(cleanupWorktree, deleteBranch: false)

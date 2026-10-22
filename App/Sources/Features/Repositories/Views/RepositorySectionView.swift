@@ -57,7 +57,7 @@ struct RepositorySectionView: View {
           isRemoving: isRemovingRepository,
           icon: appearance.icon ?? (repository.isWorkspace ? .sfSymbol("folder") : nil),
           iconTint: appearance.color?.color ?? .accentColor,
-          repositoryRootURL: repository.rootURL,
+          repositoryRootURL: repository.localURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? String(localized: "Collapse") : String(localized: "Expand"))
             : (repository.isWorkspace
@@ -303,10 +303,13 @@ struct RepositorySectionView: View {
     } else {
       Button("Copy Path") {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(repository.rootURL.path, forType: .string)
+        NSPasteboard.general.setString(repository.location.displayPath, forType: .string)
       }
-      Button("Reveal in Finder") {
-        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repository.rootURL.path)
+      // Finder shows folders on this Mac; the remote gates come with docs-ai 084 A4b.
+      if let rootURL = repository.localURL {
+        Button("Reveal in Finder") {
+          NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: rootURL.path)
+        }
       }
     }
     Divider()

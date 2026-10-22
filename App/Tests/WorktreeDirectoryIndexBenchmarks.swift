@@ -87,8 +87,8 @@ extension PerformanceBenchmarks {
     /// containment test normalizes both sides again via `PathPolicy`.
     private static func referenceResolve(_ query: URL, in worktrees: [Worktree]) -> Worktree.ID? {
       var best: (id: Worktree.ID, depth: Int)?
-      for worktree in worktrees where PathPolicy.contains(query, in: worktree.workingDirectory) {
-        let depth = PathPolicy.normalizeURL(worktree.workingDirectory).pathComponents.count
+      for worktree in worktrees where PathPolicy.contains(query, in: worktree.localURL!) {
+        let depth = PathPolicy.normalizeURL(worktree.localURL!).pathComponents.count
         if depth > (best?.depth ?? -1) {
           best = (worktree.id, depth)
         }

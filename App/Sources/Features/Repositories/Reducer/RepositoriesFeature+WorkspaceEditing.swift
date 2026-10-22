@@ -13,11 +13,12 @@ extension RepositoriesFeature {
       guard let repository = state.repositories[id: repositoryID],
         let snapshot = repository.workspace,
         !state.removingRepositoryIDs.contains(repositoryID),
-        state.workspaceEditor == nil
+        state.workspaceEditor == nil,
+        // Workspaces are local folders (docs-ai 084 A4a).
+        let rootURL = repository.localURL
       else {
         return .none
       }
-      let rootURL = repository.rootURL
       return .run { send in
         // Re-read the file so edits made outside Prowl since the last reload
         // are what the editor shows; the loaded snapshot is the fallback.
@@ -28,19 +29,20 @@ extension RepositoriesFeature {
       }
 
     case .promptLoaded(let repositoryID, let workspace, let removingChildID):
-      guard let repository = state.repositories[id: repositoryID], state.workspaceEditor == nil
+      guard let repository = state.repositories[id: repositoryID], state.workspaceEditor == nil,
+        let rootURL = repository.localURL
       else {
         return .none
       }
       var editor = WorkspaceEditorFeature.State(
         editing: workspace,
-        rootURL: repository.rootURL,
+        rootURL: rootURL,
         repositoryID: repositoryID,
         openedRepositoryCandidates: state.workspaceCreationCandidates
       )
       if let removingChildID,
         let entry = workspace.repositories.first(where: { entry in
-          entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+          entry.resolvedURL(relativeTo: rootURL).path(percentEncoded: false)
             == removingChildID
         })
       {

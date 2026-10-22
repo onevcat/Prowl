@@ -73,7 +73,7 @@ struct ExternalDiffToolTests {
     } operation: {
       await ExternalDiffToolClient.liveValue.open(
         ExternalDiffSettings(toolID: ExternalDiffTool.hunk.settingsID, customCommand: ""),
-        DiffTarget(worktree: worktree),
+        DiffTarget(worktree: worktree)!,
         .appDefaults
       ) { _ in }
     }
@@ -166,7 +166,7 @@ struct ExternalDiffToolTests {
           toolID: ExternalDiffTool.custom.settingsID,
           customCommand: "my-diff {leftPath} {rightPath} --repo {repoPath}"
         ),
-        DiffTarget(worktree: worktree),
+        DiffTarget(worktree: worktree)!,
         .appDefaults
       ) { _ in }
     }
@@ -174,7 +174,7 @@ struct ExternalDiffToolTests {
     let run = try #require(runs.value.first)
     #expect(run.executable.path(percentEncoded: false) == "/bin/zsh")
     #expect(run.arguments == ["-lc", "my-diff '/tmp/left' '/tmp/right' --repo '/tmp/root'"])
-    #expect(run.currentDirectoryURL == worktree.workingDirectory)
+    #expect(run.currentDirectoryURL == worktree.localURL!)
   }
 
   @Test func snapshotPairIncludesModifiedAndUntrackedFiles() async throws {
