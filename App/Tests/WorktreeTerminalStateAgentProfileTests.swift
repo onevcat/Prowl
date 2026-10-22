@@ -424,7 +424,7 @@ struct WorktreeTerminalStateAgentProfileTests {
       profileName: "Codex · Bound",
       runtime: runtime,
       invocation: AgentInvocation(executable: runtime.agent.iconLookupToken, arguments: []),
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: placement,
       splitDirection: .right,
       surfaceEnvironment: [:],

@@ -312,3 +312,5 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Rebind UI for a changed `HostName`, and the behaviour of the folder lane while paused.
 
 ## Amendments
+
+- Updated 2026-10-23: A7 types the Profile launch environment (`AgentLaunchEnvironmentAssignment`) — see [015-a7-typed-launch-environment.md](015-a7-typed-launch-environment.md)

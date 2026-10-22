@@ -222,7 +222,7 @@ struct WorkflowRunsFeatureTests {
         profileID: WorkflowRunsFeatureTests.reviewerProfile.id, profileName: "Pi Reviewer",
         runtime: .pi,
         invocation: AgentInvocation(executable: "pi", arguments: ["placeholder"]),
-        commandEnvironmentTokens: [], placement: .split, splitDirection: .right,
+        commandEnvironment: [], placement: .split, splitDirection: .right,
         surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: "placeholder"],
         dedicatedHome: nil)
       let session = WorkflowRunSession(

@@ -23,6 +23,36 @@ nonisolated struct AgentHookLaunchRegistration: Equatable, Sendable {
   let forwardingRecord: CodexForwardingRecord?
 }
 
+/// One `env(1)` assignment typed ahead of a Profile launch. The plan keeps the meaning
+/// of each assignment so that a launcher other than the local shell (a remote host,
+/// docs-ai 082 L1f) can render the same environment its own way (docs-ai 084 A7).
+nonisolated enum AgentLaunchEnvironmentAssignment: Equatable, Sendable {
+  /// A value typed into the command. Only for values that are not secret, such as the
+  /// UUID-derived dedicated home.
+  case literal(name: String, value: String)
+  /// A value that rides in the surface environment variable `carrier`. The typed
+  /// command names only the carrier, so the value never reaches shell history or
+  /// scrollback.
+  case carrier(name: String, carrier: String)
+
+  var name: String {
+    switch self {
+    case .literal(let name, _), .carrier(let name, _):
+      name
+    }
+  }
+
+  /// The local shell token: `NAME='value'` or `NAME="$CARRIER"`.
+  var token: String {
+    switch self {
+    case .literal(let name, let value):
+      "\(name)=\(AgentInvocation.shellQuote(value))"
+    case .carrier(let name, let carrier):
+      "\(name)=\"$\(carrier)\""
+    }
+  }
+}
+
 /// The compiled result of resolving a profile for one launch (docs-ai 053):
 /// every decision is already made, downstream layers only execute. The same
 /// plan feeds the settings editor's launch preview and the actual launch.
@@ -35,19 +65,19 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
   /// prompted-start carrier to large native hook settings/config arguments.
   let argumentCarriers: [Int: String]
   /// Carriers behind launch-scoped hook environment variables (OpenCode's
-  /// `OPENCODE_CONFIG_CONTENT`): referenced by a `commandEnvironmentTokens`
-  /// assignment and removed from the child like every other carrier.
+  /// `OPENCODE_CONFIG_CONTENT`): referenced by a `.carrier` assignment in
+  /// `commandEnvironment` and removed from the child with `env -u`.
   let environmentCarriers: [String]
   /// Present only on the execution copy immediately before surface creation.
   let hookRegistration: AgentHookLaunchRegistration?
-  /// `env(1)` assignment tokens typed ahead of the invocation. The whole
+  /// `env(1)` assignments typed ahead of the invocation. The whole
   /// environment patch is launch-scoped (docs-ai 053/006): it exists for the
   /// launched agent process only — the pane's shell keeps the user's normal
   /// environment, so a manual `codex`/`claude` after the agent exits runs
   /// with the user's own account. Home paths are inlined (not secret);
   /// override values are referenced as `"$PROWL_ENV_<NAME>"` so no user
   /// value ever appears in the typed command, shell history, or scrollback.
-  let commandEnvironmentTokens: [String]
+  let commandEnvironment: [AgentLaunchEnvironmentAssignment]
   let placement: AgentProfilePlacement
   let splitDirection: UserCustomSplitDirection
   /// Carrier variables for the reference tokens, injected at surface spawn:
@@ -72,7 +102,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
     argumentCarriers: [Int: String] = [:],
     environmentCarriers: [String] = [],
     hookRegistration: AgentHookLaunchRegistration? = nil,
-    commandEnvironmentTokens: [String],
+    commandEnvironment: [AgentLaunchEnvironmentAssignment],
     placement: AgentProfilePlacement,
     splitDirection: UserCustomSplitDirection,
     surfaceEnvironment: [String: String],
@@ -87,7 +117,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
     self.argumentCarriers = argumentCarriers
     self.environmentCarriers = environmentCarriers
     self.hookRegistration = hookRegistration
-    self.commandEnvironmentTokens = commandEnvironmentTokens
+    self.commandEnvironment = commandEnvironment
     self.placement = placement
     self.splitDirection = splitDirection
     self.surfaceEnvironment = surfaceEnvironment
@@ -132,6 +162,11 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
 
   var previewText: String { terminalInput }
 
+  /// The assignments as local shell tokens, in order.
+  var commandEnvironmentTokens: [String] {
+    commandEnvironment.map(\.token)
+  }
+
   func applyingManagedHook(
     _ prepared: AgentHookPreparedInvocation,
     resources: AgentHookResources,
@@ -151,10 +186,11 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
     }
     environment[AgentProfileLaunchPlanner.hookTokenCarrierName] = token
     environment[AgentProfileLaunchPlanner.hookSocketCarrierName] = resources.socketPath
-    var commandTokens =
-      commandEnvironmentTokens + [
-        "\(AgentNativeHookInput.tokenEnvironmentKey)=\"$\(AgentProfileLaunchPlanner.hookTokenCarrierName)\"",
-        "\(ProwlSocket.environmentKey)=\"$\(AgentProfileLaunchPlanner.hookSocketCarrierName)\"",
+    var commandAssignments =
+      commandEnvironment + [
+        .carrier(
+          name: AgentNativeHookInput.tokenEnvironmentKey, carrier: AgentProfileLaunchPlanner.hookTokenCarrierName),
+        .carrier(name: ProwlSocket.environmentKey, carrier: AgentProfileLaunchPlanner.hookSocketCarrierName),
       ]
     // Hook environment variables ride the same way as hook argv values: the child sees the real
     // variable, the typed command only ever names the carrier.
@@ -163,7 +199,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       let carrier = "PROWL_LAUNCH_HOOK_ENV_\(offset)"
       environmentCarriers.append(carrier)
       environment[carrier] = entry.value
-      commandTokens.append("\(entry.key)=\"$\(carrier)\"")
+      commandAssignments.append(.carrier(name: entry.key, carrier: carrier))
     }
     // Only Codex's bridge reads a private file out of the environment; Droid's settings file
     // is named directly in its own argv, so its locator must not reach the child process.
@@ -171,8 +207,11 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       environment[AgentProfileLaunchPlanner.hookForwardCarrierName] = forwardingRecord.locator.path(
         percentEncoded: false
       )
-      commandTokens.append(
-        "\(AgentNativeHookInput.forwardRecordEnvironmentKey)=\"$\(AgentProfileLaunchPlanner.hookForwardCarrierName)\""
+      commandAssignments.append(
+        .carrier(
+          name: AgentNativeHookInput.forwardRecordEnvironmentKey,
+          carrier: AgentProfileLaunchPlanner.hookForwardCarrierName
+        )
       )
     }
     return AgentProfileLaunchPlan(
@@ -190,7 +229,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
         coveredEvents: coveredEvents,
         forwardingRecord: forwardingRecord
       ),
-      commandEnvironmentTokens: commandTokens,
+      commandEnvironment: commandAssignments,
       placement: placement,
       splitDirection: splitDirection,
       surfaceEnvironment: environment,
@@ -213,7 +252,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       argumentCarriers: argumentCarriers,
       environmentCarriers: environmentCarriers,
       hookRegistration: hookRegistration,
-      commandEnvironmentTokens: commandEnvironmentTokens,
+      commandEnvironment: commandEnvironment,
       placement: placement,
       splitDirection: splitDirection,
       surfaceEnvironment: surfaceEnvironment,
@@ -241,13 +280,13 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
     arguments[arguments.index(before: arguments.endIndex)] = prompt
     var environment = surfaceEnvironment
     environment[AgentProfileLaunchPlanner.promptCarrierName] = prompt
-    var commandTokens = commandEnvironmentTokens
+    var commandAssignments = commandEnvironment
     var carriers = environmentCarriers
     for (offset, entry) in values.sorted(by: { $0.key < $1.key }).enumerated() {
       let carrier = "\(AgentProfileLaunchPlanner.workflowCarrierPrefix)\(offset)"
       carriers.append(carrier)
       environment[carrier] = entry.value
-      commandTokens.append("\(entry.key)=\"$\(carrier)\"")
+      commandAssignments.append(.carrier(name: entry.key, carrier: carrier))
     }
     return AgentProfileLaunchPlan(
       profileID: profileID,
@@ -257,7 +296,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       argumentCarriers: argumentCarriers,
       environmentCarriers: carriers,
       hookRegistration: hookRegistration,
-      commandEnvironmentTokens: commandTokens,
+      commandEnvironment: commandAssignments,
       placement: placement,
       splitDirection: splitDirection,
       surfaceEnvironment: environment,
@@ -280,9 +319,9 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
     var environment = surfaceEnvironment
     environment[AgentProfileLaunchPlanner.promptCarrierName] = renderedPrompt
     environment[AgentProfileLaunchPlanner.dispatchCarrierName] = id
-    var commandTokens = commandEnvironmentTokens
-    commandTokens.append(
-      "\(DispatchCompleteInput.environmentKey)=\"$\(AgentProfileLaunchPlanner.dispatchCarrierName)\""
+    var commandAssignments = commandEnvironment
+    commandAssignments.append(
+      .carrier(name: DispatchCompleteInput.environmentKey, carrier: AgentProfileLaunchPlanner.dispatchCarrierName)
     )
     return AgentProfileLaunchPlan(
       profileID: profileID,
@@ -292,7 +331,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       argumentCarriers: argumentCarriers,
       environmentCarriers: environmentCarriers,
       hookRegistration: hookRegistration,
-      commandEnvironmentTokens: commandTokens,
+      commandEnvironment: commandAssignments,
       placement: placement,
       splitDirection: splitDirection,
       surfaceEnvironment: environment,
@@ -568,7 +607,7 @@ nonisolated enum AgentProfileLaunchPlanner {
     // 053/006). The home token leads: it is the launch's identity, and the
     // reserved-name policy already guarantees no user row can carry the same
     // name — the account isolation reasoning stays provable.
-    var tokens: [String] = []
+    var assignments: [AgentLaunchEnvironmentAssignment] = []
     var surfaceEnvironment: [String: String] = [:]
     var dedicatedHome: URL?
     var sessionConfigRoot: URL?
@@ -583,7 +622,7 @@ nonisolated enum AgentProfileLaunchPlanner {
       if let variable = relocation.environmentVariable {
         // Inlined literal: the UUID-derived path is not a secret, and seeing
         // it in the preview documents which home the launch binds.
-        tokens.append("\(variable)=\(AgentInvocation.shellQuote(pathString(home)))")
+        assignments.append(.literal(name: variable, value: pathString(home)))
       }
       dedicatedHome = home
       sessionConfigRoot = relocation.sessionConfigRoot(for: home)
@@ -619,12 +658,12 @@ nonisolated enum AgentProfileLaunchPlanner {
     }
     if let dispatchID {
       surfaceEnvironment[dispatchCarrierName] = dispatchID
-      tokens.append("\(DispatchCompleteInput.environmentKey)=\"$\(dispatchCarrierName)\"")
+      assignments.append(.carrier(name: DispatchCompleteInput.environmentKey, carrier: dispatchCarrierName))
     }
     let overrides = AgentProfileEnvironmentPolicy.effectiveOverrides(profile.environmentOverrides)
     for name in overrides.keys.sorted() {
       let carrier = AgentProfileEnvironmentPolicy.carrierName(for: name)
-      tokens.append("\(name)=\"$\(carrier)\"")
+      assignments.append(.carrier(name: name, carrier: carrier))
       surfaceEnvironment[carrier] = overrides[name]
     }
 
@@ -633,7 +672,7 @@ nonisolated enum AgentProfileLaunchPlanner {
       profileName: profile.name,
       runtime: profile.runtime,
       invocation: invocation,
-      commandEnvironmentTokens: tokens,
+      commandEnvironment: assignments,
       placement: profile.placement,
       splitDirection: profile.splitDirection,
       surfaceEnvironment: surfaceEnvironment,

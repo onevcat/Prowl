@@ -497,7 +497,7 @@ struct WorktreeTerminalUndoCloseTests {
       runtime: .codex,
       invocation: AgentInvocation(executable: "codex", arguments: []),
       hookRegistration: registration,
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: .tab,
       splitDirection: .right,
       surfaceEnvironment: [:],
