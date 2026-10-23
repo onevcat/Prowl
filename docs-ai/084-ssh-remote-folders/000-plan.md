@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #TBD |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -349,3 +349,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: B3f polls remote repositories on a cadence with backoff, applies branch, line and remote changes, holds a connection lease per loaded remote repository, and refreshes their pull requests; B3 ends here — see [024-b3f-refresh-cadence.md](024-b3f-refresh-cadence.md)
 - Updated 2026-10-23: C1 split into three PRs; C1a adds the flag, the Add Remote Folder sheet with validation on the host, and the stored host profile and entry — see [025-c1a-add-remote-folder.md](025-c1a-add-remote-folder.md)
 - Updated 2026-10-23: C1b shows unreachable and changed hosts in the sidebar, adds the rebind prompt that stores the new target and connects again, and states what removing a remote folder does to its data — see [026-c1b-unreachable-and-rebind.md](026-c1b-unreachable-and-rebind.md)
+- Updated 2026-10-23: C1c lands the A4b UI gates (disabled controls with reasons, palette filtering, terminal commands refused and hidden), keeps Finder and Copy Path checks in the views, and shows the folder connection in the toolbar status — see [027-c1c-ui-gates.md](027-c1c-ui-gates.md)

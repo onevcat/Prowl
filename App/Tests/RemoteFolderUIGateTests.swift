@@ -1,0 +1,147 @@
+import ComposableArchitecture
+import DependenciesTestSupport
+import Foundation
+import ProwlCLIShared
+import Sharing
+import Testing
+
+@testable import Prowl
+
+/// The UI gates of remote folders and the toolbar status of their connection
+/// (docs-ai 084 A4b, C1c).
+@MainActor
+struct RemoteFolderUIGateTests {
+  private static let profile = HostProfile(
+    id: RemoteRepositoryFixtures.hostProfileID, alias: "mini", recipe: SSHConnectionRecipe(destination: "mini"),
+    connectionKey: ConnectionKey(user: "dev", hostname: "mini.local"))
+
+  private static let workflow = WorkflowStartCatalogItem(
+    key: "user/review", scope: .user, fileURL: URL(filePath: "/tmp/review.pwlworkflow"), workflowID: "review",
+    name: "Review", workflowDescription: nil, icon: nil, validationFailure: nil)
+
+  private static func localState() -> RepositoriesFeature.State {
+    let root = RepositoryLocation.local(URL(filePath: "/tmp/prowl-gate/"))
+    let main = Worktree(name: "main", detail: "", location: root, repositoryLocation: root)
+    var state = RepositoriesFeature.State()
+    state.repositories = [Repository(location: root, name: "app", worktrees: [main])]
+    state.repositoryRoots = [root]
+    state.selection = .worktree(main.id)
+    return state
+  }
+
+  private static func remoteState() -> RepositoriesFeature.State {
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    state.repositoryRoots = [repository.location]
+    state.selection = .worktree(repository.worktrees[0].id)
+    return state
+  }
+
+  @Test func openActionsNeedFinderOrAnApp() {
+    #expect(OpenWorktreeAction.finder.repositoryFeature == .finder)
+    #expect(OpenWorktreeAction.editor.repositoryFeature == .openInEditor)
+  }
+
+  /// The selected remote folder shows its host and how it answers, after the focused
+  /// pane's side channel and before the pull request.
+  @Test(.dependencies) func theToolbarShowsTheConnectionOfTheSelectedRemoteFolder() throws {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    $hostProfiles.withLock { $0 = [Self.profile] }
+    var state = Self.remoteState()
+    let worktree = try #require(state.repositories.first?.worktrees.first)
+
+    let connected = try #require(RemoteFolderToolbarStatus(worktree: worktree, repositories: state))
+    #expect(connected == RemoteFolderToolbarStatus(hostProfileID: Self.profile.id, alias: "mini", hostStatus: nil))
+    state.pollUnreachableRepositoryIDs = [worktree.repositoryLocation.id]
+    #expect(RemoteFolderToolbarStatus(worktree: worktree, repositories: state)?.hostStatus == .unreachable)
+    state.rebindHostProfileIDs = [Self.profile.id]
+    #expect(
+      RemoteFolderToolbarStatus(worktree: worktree, repositories: state)?.hostStatus == .needsRebind(Self.profile.id))
+
+    let local = Worktree(
+      name: "main", detail: "", location: .local(URL(filePath: "/tmp/app/")),
+      repositoryLocation: .local(URL(filePath: "/tmp/app/")))
+    #expect(RemoteFolderToolbarStatus(worktree: local, repositories: state) == nil)
+
+    let workflow = WorkflowStatusCenterPresentation(state: .init(), selectedWorktreeID: nil, now: .distantPast)
+    #expect(
+      ToolbarStatusSelection(toast: nil, workflow: workflow, pullRequest: nil, remoteFolder: connected)
+        == .remoteFolder(connected))
+    let unreachable = RemoteFolderToolbarStatus(hostProfileID: Self.profile.id, alias: "mini", hostStatus: .unreachable)
+    #expect(
+      ToolbarStatusSelection(toast: nil, workflow: workflow, pullRequest: nil, remoteFolder: unreachable)
+        == .remoteFolder(unreachable))
+    // A plain remote folder holds no connection, and shows no status.
+    var plainState = state
+    let plain = RemoteRepositoryFixtures.plainFolder()
+    plainState.repositories.append(plain)
+    let plainWorktree = Worktree(
+      name: "notes", detail: "", location: plain.location, repositoryLocation: plain.location)
+    #expect(RemoteFolderToolbarStatus(worktree: plainWorktree, repositories: plainState) == nil)
+    // A folder whose host profile is missing cannot connect, and shows no status.
+    $hostProfiles.withLock { $0 = [] }
+    #expect(RemoteFolderToolbarStatus(worktree: worktree, repositories: state) == nil)
+    let channel = try #require(
+      RemoteChannelToolbarStatus(
+        .connected(host: "mini", ssh: LocalProcessGeneration(pid: 1, startedAt: Date(timeIntervalSince1970: 1)))))
+    #expect(
+      ToolbarStatusSelection(
+        toast: nil, workflow: workflow, pullRequest: nil, remoteChannel: channel, remoteFolder: connected)
+        == .remoteChannel(channel))
+  }
+
+  /// The palette leaves out what a remote folder cannot do: Finder, scripts, custom
+  /// commands, Agent Profiles and workflows. Copy Path stays.
+  @Test(.dependencies) func thePaletteLeavesOutWhatARemoteFolderCannotDo() {
+    let state = Self.remoteState()
+    let command = EffectiveCustomCommand(
+      source: .global,
+      command: UserCustomCommand(
+        id: "build", title: "Build", systemImage: "hammer", command: "make", execution: .shellScript, shortcut: nil))
+    let items = CommandPaletteFeature.commandPaletteItems(from: state, customCommands: [command])
+    let kinds = items.map(\.kind)
+
+    #expect(kinds.contains(.copyPath))
+    #expect(!kinds.contains(.revealInFinder))
+    #expect(!kinds.contains(.runScript))
+    #expect(!kinds.contains { if case .runCustomCommand = $0 { true } else { false } })
+    @Shared(.userGlobalSettings) var globalSettings
+    $globalSettings.withLock {
+      $0.agentProfiles = [AgentProfile(id: UUID(), name: "Codex", runtime: .codex)]
+    }
+    #expect(!agentProfileLaunchItems(Self.localState()).isEmpty)
+    #expect(agentProfileLaunchItems(state).isEmpty)
+    #expect(
+      workflowCommandItems(
+        [Self.workflow], repositories: state, actionTargetWorktreeID: state.selectedWorktreeID
+      ).isEmpty)
+  }
+
+  /// A script or a custom command in a remote folder shows the reason and runs nothing:
+  /// it would run in a local shell.
+  @Test(.dependencies) func scriptsAndCustomCommandsInARemoteFolderShowTheReason() async {
+    var state = AppFeature.State(repositories: Self.remoteState(), settings: SettingsFeature.State())
+    state.selectedRunScript = "make dev"
+    state.selectedCustomCommands = [
+      EffectiveCustomCommand(
+        source: .global,
+        command: UserCustomCommand(
+          id: "build", title: "Build", systemImage: "hammer", command: "make", execution: .shellScript, shortcut: nil))
+    ]
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+    }
+    store.exhaustivity = .off
+    let message = "Terminals cannot open in remote folders yet."
+
+    await store.send(.runScript)
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning(message))
+    await store.send(.runCustomCommand(state.selectedCustomCommands[0].id))
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning(message))
+  }
+}

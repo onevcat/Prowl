@@ -26,6 +26,8 @@ struct WorktreeRow: View {
   let isSelected: Bool
   let archiveAction: (() -> Void)?
   let onDiffTap: (() -> Void)?
+  /// Why the change counts open no diff (a remote folder, docs-ai 084 A4b).
+  let diffUnavailableReason: String?
   let onStopRunScript: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
@@ -53,6 +55,7 @@ struct WorktreeRow: View {
     isSelected: Bool,
     archiveAction: (() -> Void)?,
     onDiffTap: (() -> Void)?,
+    diffUnavailableReason: String? = nil,
     onStopRunScript: (() -> Void)?
   ) {
     self.name = name
@@ -77,6 +80,7 @@ struct WorktreeRow: View {
     self.isSelected = isSelected
     self.archiveAction = archiveAction
     self.onDiffTap = onDiffTap
+    self.diffUnavailableReason = diffUnavailableReason
     self.onStopRunScript = onStopRunScript
   }
 
@@ -214,7 +218,10 @@ struct WorktreeRow: View {
               presentation: lineChangePresentation,
               isSelected: isSelected,
             )
-            .help(lineChangePresentation.incompleteCountDescription ?? "")
+            .help(
+              [diffUnavailableReason, lineChangePresentation.incompleteCountDescription]
+                .compactMap { $0 }
+                .joined(separator: "\n"))
           }
         }
       }

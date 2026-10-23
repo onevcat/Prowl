@@ -18,6 +18,8 @@ nonisolated enum RepositoryFeature: CaseIterable, Hashable, Sendable {
   case worktreeCreation
   /// Opening a terminal tab from the sidebar (remote tabs come with C3).
   case terminalTab
+  /// Running a workflow: its history and role launches are rooted in a local worktree (A4a, C2).
+  case workflow
 }
 
 nonisolated enum FeatureAvailability: Equatable, Sendable {
@@ -60,8 +62,18 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
         String(localized: "Worktrees cannot be created in remote folders yet.")
       case .terminalTab:
         String(localized: "Terminals cannot open in remote folders yet.")
+      case .workflow:
+        String(localized: "Workflows cannot run in remote folders yet.")
       }
     }
+  }
+}
+
+extension OpenWorktreeAction {
+  /// The feature that this action needs: Finder, or another app.
+  var repositoryFeature: RepositoryFeature {
+    if case .finder = self { return .finder }
+    return .openInEditor
   }
 }
 
