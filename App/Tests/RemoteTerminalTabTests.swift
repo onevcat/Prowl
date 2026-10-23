@@ -524,17 +524,23 @@ struct RemoteTerminalTabTests {
 
   /// A remote script tab closed and brought back by Undo waits for no marker any more: the
   /// marker found no origin while the pane was closed, so a later finish completes as usual.
-  @Test func undoBringsBackAScriptPaneThatWaitsForNoMarker() async throws {
+  /// A CLI waiter for the script gets no status, never a later command's.
+  @Test(.timeLimit(.minutes(1))) func undoBringsBackAScriptPaneThatWaitsForNoMarker() async throws {
     let manager = WorktreeTerminalManager(
       runtime: GhosttyRuntime(), undoCloseClock: TestClock(), skipsSurfaceCreationForTesting: true)
     let state = manager.state(for: RemoteRepositoryFixtures.gitRepository().worktrees[0])
     state.remoteTerminalStagerForTesting = Staging().stager(profile: Self.profile)
     let (surface, _) = try await startedRemotePane(state, hasFirstCommand: true)
     let tabID = try #require(state.tabID(containing: surface.id))
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
 
     #expect(state.closeTab(tabID, confirmation: .skip))
     #expect(manager.undoClose())
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
 
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [nil])
     #expect(state.surfaceView(for: surface.id) === surface)
     #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == true)
     #expect(!state.remoteLaunchHoldsWaiters(surfaceID: surface.id))
