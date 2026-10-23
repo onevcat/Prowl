@@ -526,10 +526,15 @@ final class WorktreeTerminalManager {
     case .prunePreservingRepositories(let ids, let repositoryIDs):
       prune(keeping: ids, preservingRepositoryIDs: repositoryIDs)
     case .discardSavedLayout(let repositoryID):
-      // The repository's own worktree (a plain folder, or a git repository's main worktree)
-      // has its ID; a linked worktree of a repository that never loaded is not known here.
-      pendingRemoteLayouts.removeValue(forKey: repositoryID)
-      states[repositoryID]?.pendingLayoutSnapshot = nil
+      // The repository's own worktree has its ID. A linked worktree is found by the
+      // repository that its saved layout names.
+      let discarded = pendingRemoteLayouts.filter { id, layout in
+        id == repositoryID || layout.repositoryID == repositoryID
+      }.keys
+      for id in discarded {
+        pendingRemoteLayouts.removeValue(forKey: id)
+        states[id]?.pendingLayoutSnapshot = nil
+      }
     case .setCanvasMode(let enabled):
       if enabled {
         terminalLogger.info(

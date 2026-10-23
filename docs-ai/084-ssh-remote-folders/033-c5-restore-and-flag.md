@@ -63,8 +63,10 @@ The saved layout outlives a session in which the folder did not restore.
   a prune keeps its layout.
 - Removing a folder that never loaded, from its failed row, sends
   `TerminalClient.Command.discardSavedLayout(repositoryID:)`. This drops the saved layout
-  of the repository's own worktree: a plain folder, or a git repository's main worktree.
-  A merely unreachable or hidden folder sends nothing and keeps its layout. So a remote folder keeps its layout when:
+  of the repository's own worktree, and those of its linked worktrees: a remote
+  worktree's saved layout names its repository (`SnapshotWorktree.repositoryID`, optional,
+  nil for local worktrees and older files). A merely unreachable or hidden folder sends
+  nothing and keeps its layout. So a remote folder keeps its layout when:
 
 - its host is unreachable for a whole session;
 - remote folders are off (`PROWL_REMOTE_FOLDERS=0`);
@@ -111,6 +113,9 @@ stay stored but hidden (C1a).
   - A removed unloaded folder (`discardSavedLayout`) drops its layout while another
     unloaded one keeps its own. `RemoteHostRebindTests` checks that the failed-row removal
     sends the command (checked red).
+  - A removed unloaded git repository also drops its linked worktrees' layouts, and
+    another repository on the same host keeps its own. A remote layout names its
+    repository; a local one names none (checked red).
 - `AddRemoteFolderFeatureTests`: the flag is on by default, and off with `0`, `false` or
   `off`.
 - `CommandPaletteFeatureTests`: the global items include Add Remote Folder.
@@ -119,7 +124,7 @@ stay stored but hidden (C1a).
 
 - When a folder opens on an unreachable host, each of its restored panes shows its own
   "did not start" toast. The saved layout stays.
-- A linked worktree of a git repository that never loaded and was then removed keeps its
-  saved layout. Its ID is not known without the loaded repository.
+- A linked worktree's layout saved before this change names no repository, so removing a
+  repository that never loaded keeps it until that worktree's layout is saved again.
 - A restored pane's directory is the one its session showed when the layout was saved. On a
   macOS host's plain shell, which is never mapped, the pane opens in the folder.
