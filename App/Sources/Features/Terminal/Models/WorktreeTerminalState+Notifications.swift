@@ -63,13 +63,11 @@ extension WorktreeTerminalState {
   }
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
-    // A remote pane's own commands finish on the host: the local shell's finish is its
-    // `ssh` (or a remote shell's OSC 133), which completes nothing (docs-ai 084 C3b).
-    let completesCommand = remoteLaunchTakesCommandFinished(surfaceID: surfaceId)
     // Notify CLI waiters unconditionally before applying notification filters.
-    if completesCommand {
-      resumeCommandFinishedWaiter(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
-    }
+    resumeCommandFinishedWaiter(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
+    // A remote pane's commands finish on the host: the local shell's finish is its `ssh`
+    // (or a remote shell's OSC 133), which completes no script (docs-ai 084 C3b).
+    let completesCommand = remoteLaunchTakesCommandFinished(surfaceID: surfaceId)
 
     surfaceRunningStartedAtById.removeValue(forKey: surfaceId)
     noteCommandFinishedForCommandDetection(surfaceId: surfaceId)

@@ -100,6 +100,11 @@ extension ProcessRef: CustomStringConvertible {
 nonisolated struct LocalProcessGeneration: Equatable, Hashable, Sendable {
   let pid: pid_t
   let startedAt: Date
+
+  /// The process still runs: its pid has the same start time (a reused pid has another).
+  var isRunning: Bool {
+    ProcessDetection.processStartDate(pid: pid) == startedAt
+  }
 }
 
 /// The process generation that agent evidence is bound to. Local generations compare

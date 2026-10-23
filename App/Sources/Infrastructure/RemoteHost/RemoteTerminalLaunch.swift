@@ -13,10 +13,17 @@ nonisolated struct RemoteLaunchOrigin: Equatable, Sendable {
   /// Whether the launch has a first command, so a marker is expected.
   let hasFirstCommand: Bool
   let launchedAt: Date
-  /// The pane's `ssh`, once a probe saw it in the foreground.
+  /// The pane's `ssh`, once a probe saw it in the foreground: the `ssh` whose arguments
+  /// carry the launch's nonce (the launcher path), never one the user typed later.
   var ssh: LocalProcessGeneration?
   /// The `ssh` ended: the pane is a local shell again, and its later commands are local.
   var sessionEnded = false
+  /// A local "command finished" came before any probe saw the `ssh`: the next probe tells
+  /// whether it was the `ssh` ending (no `ssh` in front) or a remote shell's OSC 133.
+  var unboundFinishSeen = false
+  /// A probe saw the `ssh` exit before the local shell reported its finish: that finish is
+  /// still to come and completes nothing.
+  var swallowsNextFinish = false
   /// The completion marker arrived (it counts once).
   var completed = false
 }

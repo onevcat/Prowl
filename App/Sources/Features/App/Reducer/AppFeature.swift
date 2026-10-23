@@ -292,10 +292,12 @@ struct AppFeature {
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
         guard worktree.location.availability(of: .terminalTab).isAvailable else { return .none }
-        // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
-        let shouldRunSetupScript =
-          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-          && worktree.location.availability(of: .terminalScript).isAvailable
+        // Scripts do not run in a remote folder yet (docs-ai 084 C3c): its setup script is
+        // not kept pending for a later tab.
+        if !worktree.location.availability(of: .terminalScript).isAvailable {
+          state.repositories.pendingSetupScriptWorktreeIDs.remove(worktree.id)
+        }
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
           await terminalClient.send(
             .ensureInitialTab(

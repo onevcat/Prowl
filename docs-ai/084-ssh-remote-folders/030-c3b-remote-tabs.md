@@ -34,18 +34,22 @@ refuses (the C1c backstop). It branches to the remote tab:
    `PROWL_WORKTREE_PATH`, `PROWL_ROOT_PATH` and `LC_PROWL_PANE` (the pane id), and no first
    command.
 4. When staging returns, the pane gets its input (`GhosttySurfaceView.setInitialInput`,
-   which works only before the surface exists), and the surface is created. A failure
+   which works only before the surface exists), and the surface is created. The pane took
+   focus while it had no surface, so Ghostty gets the focus then. A failure
    closes the tab without an undo record, because nothing ran in it. The user then gets a
    toast through the `remoteTerminalFailed` event: "The terminal on <alias> did not start:
    <reason>."
 
 A tab closed while its launcher is staged never starts. The staging task is cancelled, and
-a late result finds no surface. Undo does not keep a pane that has no surface yet
-(`surfaceCreationArmed`).
+a late result finds no surface. Undo does not keep a pane whose launcher is still staged
+(`isAwaitingRemoteLaunch`). A launch directory that staging wrote for such a tab is removed
+by a later staging, after a day (C3a).
 
 A creation with a first command (a script) is refused, so a script never runs in a local
 shell. The setup script is dropped for a remote folder: in `createTab`, in `ensureInitialTab`,
-and in the reducer's `newTerminal` and `worktreeCreated`.
+and in the reducer's `newTerminal` and `worktreeCreated`. `worktreeCreated` also removes the
+remote worktree from `pendingSetupScriptWorktreeIDs`, so a much later tab does not run the
+setup script once remote scripts exist.
 
 ### The typed line (`RemoteTerminalLine.typed`)
 
@@ -67,13 +71,18 @@ Each remote pane keeps `hostProfileID`, `alias`, `recipe`, `nonce`, whether the 
 first command, the launch time, and the pane's `ssh` once a probe saw it. Undo keeps it
 with the pane (`TerminalRetainedSurfaceContext`).
 
-- **Agent tracking.** The first foreground `ssh` that a probe sees is the pane's own. While
-  it is in front:
+- **Agent tracking.** The pane's own `ssh` is the foreground `ssh` whose arguments carry
+  the launch's nonce (the launcher path). An `ssh` that the user typed is never bound,
+  even when the pane's own one ended before any probe saw it. While the pane's `ssh` is in
+  front:
   - no consent is asked, because adding the folder was the consent (D2);
   - `PROWL_REMOTE_AGENT_DETECTION=0` still turns detection off;
   - the tracker uses the stored recipe, not the parsed command line;
   - the pane label and `RemoteAgentContext.hostLabel` (CLI `agents` `remote.host`, Active
     Agents) show the alias.
+
+  The detection mode for a pane is one function, `remoteAgentDetectionMode(consent:)`. A
+  remote folder's pane passes `.enabled`.
 - **The end of the session.** When that `ssh` leaves the foreground, the session has
   ended. A later `ssh` in the same pane is the user's own and follows L0 (consent, parsed
   command line, `user@hostname`).
@@ -91,12 +100,22 @@ with the pane (`TerminalRetainedSurfaceContext`).
   `handleCommandFinished` is split into `resumeCommandFinishedWaiter` and `completeCommand`
   for this. C3b launches have no first command, so the path waits for C3c. It is tested
   with an origin that has one.
-- **The local finish.** In a remote pane, a local "command finished" (OSC 133) completes
-  nothing while the session lasts. It is the `ssh` ending, or a remote shell's own OSC 133
-  passing through. The detection hooks still see it. The first finish after the pane's
-  `ssh` exited (`kill(pid)` start-time check) ends the session. So does the first finish
-  of a pane whose `ssh` no probe saw, such as an authentication failure at once. After
-  that, the pane is a local shell, and its commands complete as in any pane.
+- **The local finish.** A CLI waiter resumes on every local "command finished" (OSC 133),
+  as before: a command typed into the host shell finishes there, when the host's shell
+  sends OSC 133. The other reactions (the custom command toast, Close on Success, the
+  long-command notification) skip it while the session lasts. During the session, a
+  finish is either the `ssh` ending or a remote shell's own OSC 133 passing through. The
+  detection hooks still see it. The session ends:
+  - with a finish when the pane's `ssh` has exited (start-time check,
+    `LocalProcessGeneration.isRunning`);
+  - when a probe sees the pane's `ssh` leave the foreground. When it exited, the shell's
+    finish for it is still to come, and that finish completes nothing
+    (`swallowsNextFinish`);
+  - with a finish that came before any probe saw the `ssh` (`unboundFinishSeen`), once the
+    next probe sees no `ssh` in front. When that probe sees the pane's own `ssh`, the finish
+    came from the host, and the session goes on.
+
+  After the session, the pane is a local shell, and its commands complete as in any pane.
 
 ### What else changes
 
@@ -106,11 +125,15 @@ with the pane (`TerminalRetainedSurfaceContext`).
   script.
 - The sidebar's New Terminal Tab sends `createTab` for a remote folder; the tab starts in
   the remote folder.
-- **Splits** in a remote folder fail with `SplitCreationError.remoteFolder` (C4). This covers
-  the Ghostty binding, the CLI and Agent Profile splits.
+- **Splits** in a remote folder fail with `SplitCreationError.remoteFolder`, through a new
+  `terminalSplit` feature ("Panes cannot split in remote folders yet.", C4). This covers the
+  Ghostty binding, the CLI and Agent Profile splits. The split buttons stay enabled and do
+  nothing until C4.
 - **Layout.** A remote folder's tabs are not saved, and a saved layout is not applied to a
   remote folder. Saving skips remote states, because a nil worktree snapshot would drop the
-  whole layout. A restored leaf would be a local shell until C5.
+  whole layout. When a remote folder is selected, the payload names no selection: a
+  selection that is not a saved worktree fails validation, and the local layout would be
+  lost. A restored leaf would be a local shell until C5.
 - **CLI.**
   - `create tab` keeps refusing a remote folder until C3c, with "The CLI cannot open tabs in
     remote folders yet.".
@@ -128,8 +151,11 @@ with the pane (`TerminalRetainedSurfaceContext`).
   - A script and a split are refused.
   - The marker completes once (CLI waiter and custom command). Other markers are ignored, and
     no marker reaches the program status store (checked red without the consumption).
-  - The `ssh` finish completes nothing, and later local commands do (checked red). An unseen
-    `ssh` takes the first finish.
+  - The `ssh` finish completes nothing, and later local commands do (checked red). A CLI
+    waiter resumes in a remote pane. A finish before the first probe waits for it: the
+    pane's own `ssh` keeps the session, no `ssh` ends it. A finish after a probe saw the
+    `ssh` exit completes nothing.
+  - An `ssh` without the launch's nonce is not bound (checked red).
   - No layout is applied to a remote folder.
   - The typed line quotes options and refuses backslashes, control characters and unsafe
     launcher paths.
@@ -139,6 +165,8 @@ with the pane (`TerminalRetainedSurfaceContext`).
   - The kill switch still applies.
 - Reducer: New Terminal and the sidebar open a remote tab without the setup script. Scripts
   and custom commands give the new reason.
+- `WorktreeTerminalManagerTests/aSelectedRemoteFolderLeavesTheLocalLayoutValid`: the saved
+  layout holds only the local worktree and names no selection (checked red).
 
 ## E2E (isolated Debug instance, remote folder on mini)
 
@@ -166,5 +194,8 @@ All PASS:
 - **No progress indicator.** A tab shows an empty pane while its launcher is staged.
 - **Suspending `ssh`.** Suspending the `ssh` (`~^Z`) ends the session for Prowl: when it
   comes back to the foreground, it is treated as the user's own `ssh`.
-- **Remote OSC 133 before the first probe.** A remote shell's OSC 133 that arrives before
-  the first probe sees the `ssh` is taken for its finish.
+- **No answer to a wait on some hosts.** A CLI wait in a remote pane resumes only when the
+  host's shell sends OSC 133. Otherwise, it times out: use `--no-wait`. Marker-based waits
+  come with C3c.
+- **Split buttons.** In a remote folder, the split buttons and menu items stay enabled and
+  do nothing (C4).
