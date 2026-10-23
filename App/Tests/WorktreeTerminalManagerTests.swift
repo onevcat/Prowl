@@ -1129,6 +1129,111 @@ struct WorktreeTerminalManagerTests {
     #expect(saved.value.map { Set($0.worktrees.map(\.worktreeID)) } == [local.id, remote.id, missing.id])
   }
 
+  private static let remoteProfile = HostProfile(
+    id: RemoteRepositoryFixtures.hostProfileID, alias: "mini", recipe: SSHConnectionRecipe(destination: "mini"),
+    connectionKey: ConnectionKey(user: "dev", hostname: "mini"))
+
+  private func remoteLayout(_ worktree: Worktree, cwd: String) -> TerminalLayoutSnapshotPayload.SnapshotWorktree {
+    let tabID = UUID().uuidString
+    return .init(
+      worktreeID: worktree.id, selectedTabID: tabID,
+      tabs: [
+        .init(
+          tabID: tabID, title: "app 1", customTitle: nil, icon: nil,
+          splitRoot: .leaf(
+            surfaceID: UUID().uuidString,
+            remote: .init(hostProfileID: RemoteRepositoryFixtures.hostProfileID.uuidString, cwdPath: cwd)))
+      ])
+  }
+
+  /// A restored remote layout whose panes still stage is saved as it was, not as its
+  /// unstarted tabs, and its directories on the host stay (docs-ai 084 C5).
+  @Test(.timeLimit(.minutes(1))) func aRemoteLayoutStagingAtQuitIsSavedAsItWas() async throws {
+    let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let layout = remoteLayout(remote, cwd: "/home/dev/app/api")
+    let saved = LockIsolated<TerminalLayoutSnapshotPayload?>(nil)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { TerminalLayoutSnapshotPayload(worktrees: [layout]) },
+        saveSnapshot: {
+          saved.setValue($0)
+          return true
+        }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true)
+    let (gate, _) = AsyncStream<Void>.makeStream()
+    let state = manager.state(for: remote)
+    state.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in Self.remoteProfile },
+      stage: { _, _ in
+        for await _ in gate {}
+        return ""
+      })
+    await manager.restoreLayoutSnapshot(from: [remote])
+    state.ensureInitialTab(focusing: false)
+    #expect(state.tabManager.tabs.count == 1)
+
+    await manager.persistLayoutSnapshot()
+
+    #expect(saved.value?.worktrees == [layout])
+  }
+
+  /// A remote pane that starts replaces the folder's saved layout, also for the folder's next
+  /// empty open (docs-ai 084 C5).
+  @Test(.timeLimit(.minutes(1))) func aStartedRemotePaneReplacesTheSavedLayout() async throws {
+    let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let layout = remoteLayout(remote, cwd: "/home/dev/app")
+    let saved = LockIsolated<TerminalLayoutSnapshotPayload?>(nil)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { TerminalLayoutSnapshotPayload(worktrees: [layout]) },
+        saveSnapshot: {
+          saved.setValue($0)
+          return true
+        }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true)
+    let state = manager.state(for: remote)
+    state.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in Self.remoteProfile },
+      stage: { _, launch in "/home/dev/.cache/prowl/launch/\(launch.nonce)/launch.sh" })
+    await manager.restoreLayoutSnapshot(from: [remote])
+
+    let tabID = try #require(state.createTab())
+    let surface = try #require(state.trees[tabID]?.root?.leftmostLeaf())
+    await waitUntil { surface.surfaceCreationArmed }
+
+    #expect(state.pendingLayoutSnapshot == nil)
+    await manager.persistLayoutSnapshot()
+    #expect(saved.value?.worktrees.first?.tabs.map(\.tabID) == [tabID.rawValue.uuidString])
+  }
+
+  /// A removed remote folder's saved layout goes with it; one that never loaded stays
+  /// (docs-ai 084 C5).
+  @Test func aRemovedRemoteFolderDropsItsSavedLayout() async throws {
+    let local = makeWorktree()
+    let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let unloaded = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/later").worktrees[0]
+    let payload = TerminalLayoutSnapshotPayload(
+      worktrees: [remoteLayout(remote, cwd: "/home/dev/app"), remoteLayout(unloaded, cwd: "/home/dev/later")])
+    let saved = LockIsolated<TerminalLayoutSnapshotPayload?>(nil)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { payload },
+        saveSnapshot: {
+          saved.setValue($0)
+          return true
+        }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true)
+    await manager.restoreLayoutSnapshot(from: [local, remote])
+
+    manager.prune(keeping: [local.id])
+    await manager.persistLayoutSnapshot()
+
+    #expect(saved.value?.worktrees.map(\.worktreeID) == [unloaded.id])
+  }
+
   private func makeWorktree(
     id: Worktree.ID = "/tmp/repo/wt-1",
     name: String = "wt-1"
