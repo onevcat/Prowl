@@ -11,7 +11,8 @@ extension RepositoriesFeature {
     case .repositoriesMoved(let source, let destination):
       var orderedRepositoryIDs = state.orderedRepositoryIDs()
       orderedRepositoryIDs.move(fromOffsets: source, toOffset: destination)
-      state.repositoryOrderIDs = orderedRepositoryIDs
+      state.repositoryOrderIDs = Self.mergingHiddenRepositoryIDs(
+        orderedRepositoryIDs, into: state.repositoryOrderIDs, isHidden: keepsHiddenRemoteID)
       let repositoryOrderIDs = state.repositoryOrderIDs
       return .run { _ in
         await repositoryPersistence.saveRepositoryOrderIDs(repositoryOrderIDs)

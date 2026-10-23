@@ -49,6 +49,25 @@ extension RepositoriesFeature {
     return { hidesRemoteFolders && RepositoryLocation.hasRemoteForm($0) }
   }
 
+  /// The IDs that the prunes keep although they are not loaded.
+  private func keptIDs(keepsRemoteIDs: Bool) -> @Sendable (String) -> Bool {
+    let keepsHidden = keepsHiddenRemoteID
+    return { keepsRemoteIDs ? RepositoryLocation.hasRemoteForm($0) : keepsHidden($0) }
+  }
+
+  /// `visibleOrder` with the hidden IDs of `storedOrder` put back at their places, so a
+  /// reorder while remote folders are off keeps the hidden folders' places.
+  nonisolated static func mergingHiddenRepositoryIDs(
+    _ visibleOrder: [Repository.ID], into storedOrder: [Repository.ID], isHidden: (Repository.ID) -> Bool
+  ) -> [Repository.ID] {
+    let visible = Set(visibleOrder)
+    var merged = visibleOrder
+    for (index, id) in storedOrder.enumerated() where isHidden(id) && !visible.contains(id) {
+      merged.insert(id, at: min(index, merged.count))
+    }
+    return merged
+  }
+
   func loadPersistedRepositoryEntries(
     fallbackRoots: [RepositoryLocation] = []
   ) async -> [PersistedRepositoryEntry] {
@@ -321,10 +340,14 @@ extension RepositoriesFeature {
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
   }
 
+  /// `keepsRemoteIDs` keeps every remote-form ID through the prunes. The snapshot sets it:
+  /// a snapshot that a session without the flag wrote has no remote repositories, and the
+  /// live load that follows decides for them.
   func applyRepositories(
     _ repositories: [Repository],
     roots: [RepositoryLocation],
     shouldPruneArchivedWorktrees: Bool,
+    keepsRemoteIDs: Bool = false,
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
@@ -367,7 +390,7 @@ extension RepositoriesFeature {
       availableWorktreeIDs.contains($0.key)
     }
     state.forgetPullRequestRefreshHistory(keeping: availableWorktreeIDs)
-    let isKept = keepsHiddenRemoteID
+    let isKept = keptIDs(keepsRemoteIDs: keepsRemoteIDs)
     state.$prowlCreatedWorktreeIDs.withLock {
       $0.removeAll { !availableWorktreeIDs.contains($0) && !isKept($0) }
     }

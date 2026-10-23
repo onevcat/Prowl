@@ -35,7 +35,13 @@ show or connect to a remote folder. While the flag is off:
 - the prunes keep every ID with the remote form (`keepsHiddenRemoteID`): pins, the
   repository order, the worktree order, archived worktrees and `prowlCreatedWorktreeIDs`.
 
-With the flag on again, the folders come back with their pins and orders.
+- a reorder of the shown repositories puts the hidden IDs back at their places in the
+  stored order (`mergingHiddenRepositoryIDs`).
+
+A session without the flag writes a snapshot without remote repositories. The snapshot
+restore therefore keeps every remote-form ID through its prunes, also with the flag on,
+and the live load that follows decides for them. With the flag on again, the folders come
+back with their pins and orders.
 
 ### Entry points
 
@@ -127,6 +133,9 @@ connects again. Both are one-time costs of adding a folder.
   - while the flag is off, a stored remote folder stays stored and hidden: only the local
     folder loads, no host is asked, and pins and orders are kept (checked red without the
     gate).
+  - a reorder while the flag is off keeps the hidden folders' places;
+  - a snapshot without remote repositories keeps the remote pins, orders and
+    created-worktree marks with the flag on (both checked red).
 - `RemoteRepositoryHostTests`: on a real repository through the local lane, a main path, a
   subfolder and a linked worktree all find the main worktree. A worktree of a bare
   repository finds the bare repository. A plain folder is plain, a missing path is
