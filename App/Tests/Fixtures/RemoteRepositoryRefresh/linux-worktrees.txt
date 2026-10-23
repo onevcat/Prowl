@@ -1,0 +1,9 @@
+PROWL_REFRESH	1
+ROOT	/tmp/prowl-b3-fx/app
+BARE	false
+REMOTES	4202737975-105
+WORKTREE	ok	9eb4807247537f2e4052de2bc84a7114765b448f	main	1792715927	2	1	2	/tmp/prowl-b3-fx/app
+WORKTREE	ok	9eb4807247537f2e4052de2bc84a7114765b448f	feature/login	1792715927	1	0	0	/tmp/prowl-b3-fx/app feature
+WORKTREE	ok	9eb4807247537f2e4052de2bc84a7114765b448f		1792715927	0	0	0	/tmp/prowl-b3-fx/app-detached
+WORKTREE	missing	9eb4807247537f2e4052de2bc84a7114765b448f	gone					/tmp/prowl-b3-fx/app-gone
+END
