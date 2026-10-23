@@ -360,8 +360,18 @@ nonisolated struct RemoteRepositoryHost: Sendable {
 nonisolated struct RemoteRepositoryHostClient: Sendable {
   /// Nil when remote folders cannot run here (tests, and builds before C1 adds them).
   var host: @Sendable (_ hostProfileID: UUID) async throws -> RemoteRepositoryHost?
+  /// Holds the host's connection open until `release`, so that polls and commands share
+  /// it (B3f). Nil when there is no connection to hold.
+  var holdConnection: @Sendable (_ hostProfileID: UUID) async throws -> RemoteConnectionHold? = { _ in nil }
+  /// False for `.unavailable`: no remote repository can be refreshed.
+  var isAvailable = true
 
-  static let unavailable = RemoteRepositoryHostClient(host: { _ in nil })
+  static let unavailable = RemoteRepositoryHostClient(host: { _ in nil }, isAvailable: false)
+}
+
+/// A lease on a host's connection; `release` ends it once.
+nonisolated struct RemoteConnectionHold: Sendable {
+  let release: @Sendable () async -> Void
 }
 
 extension RemoteRepositoryHostClient: DependencyKey {
@@ -369,19 +379,45 @@ extension RemoteRepositoryHostClient: DependencyKey {
     // One host per profile, so its resolved `git` is kept across operations. An edited
     // profile gets a new host.
     let hosts = LockIsolated<[UUID: (profile: HostProfile, host: RemoteRepositoryHost)]>([:])
-    return RemoteRepositoryHostClient(host: { hostProfileID in
-      @Shared(.hostProfiles) var hostProfiles: [HostProfile]
-      guard let profile = hostProfiles.first(where: { $0.id == hostProfileID }) else {
-        throw RepositoryHostError.hostProfileMissing(hostProfileID)
-      }
-      return hosts.withValue { hosts in
-        if let cached = hosts[hostProfileID], cached.profile == profile { return cached.host }
-        let host = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: .leased(profile))
-        hosts[hostProfileID] = (profile, host)
-        return host
-      }
-    })
+    return RemoteRepositoryHostClient(
+      host: { hostProfileID in
+        let profile = try Self.profile(hostProfileID)
+        return hosts.withValue { hosts in
+          if let cached = hosts[hostProfileID], cached.profile == profile { return cached.host }
+          let host = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: .leased(profile))
+          hosts[hostProfileID] = (profile, host)
+          return host
+        }
+      },
+      holdConnection: { hostProfileID in
+        let profile = try Self.profile(hostProfileID)
+        let registry = RemoteConnectionRegistry.shared
+        // The same authority check as each leased command (RemoteCommandLane.leased).
+        guard let key = await registry.resolve(profile.recipe), !profile.authorityChanged(to: key) else {
+          return nil
+        }
+        _ = await registry.acquire(key, recipe: profile.recipe)
+        let released = LockIsolated(false)
+        return RemoteConnectionHold(release: {
+          guard
+            released.withValue({ value in
+              defer { value = true }
+              return !value
+            })
+          else { return }
+          await registry.release(key)
+        })
+      })
   }()
+
+  nonisolated private static func profile(_ hostProfileID: UUID) throws -> HostProfile {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    guard let profile = hostProfiles.first(where: { $0.id == hostProfileID }) else {
+      throw RepositoryHostError.hostProfileMissing(hostProfileID)
+    }
+    return profile
+  }
+
   static let testValue = RemoteRepositoryHostClient.unavailable
 }
 

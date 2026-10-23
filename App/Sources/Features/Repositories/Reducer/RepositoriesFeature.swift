@@ -115,6 +115,15 @@ struct RepositoriesFeature {
       "repositories.delayedPRRefresh.\(worktreeID)"
     }
     static let branchNameSuggestion = "repositories.branchNameSuggestion"
+    static func remoteRefreshTimer(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteRefreshTimer.\(repositoryID)"
+    }
+    static func remoteRefreshRun(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteRefreshRun.\(repositoryID)"
+    }
+    static func remoteConnectionHold(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteConnectionHold.\(repositoryID)"
+    }
     static func iconDetection(_ repositoryID: Repository.ID) -> String {
       "repositories.iconDetection.\(repositoryID)"
     }
@@ -305,8 +314,18 @@ struct RepositoriesFeature {
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
-    /// Remote folders whose host could not be reached at the last load (docs-ai 084 B3e).
+    /// Remote folders whose host could not be reached at the last load or poll (docs-ai 084
+    /// B3e, B3f).
     var unreachableRepositoryIDs: Set<Repository.ID> = []
+    /// The remote git repositories that the refresh cadence polls (B3f).
+    var remoteRefreshRepositoryIDs: Set<Repository.ID> = []
+    var remoteRefreshInFlightIDs: Set<Repository.ID> = []
+    /// Failed polls in a row, for the backoff.
+    var remoteRefreshFailureCounts: [Repository.ID: Int] = [:]
+    /// The remote URL fingerprint of the last poll; a change refreshes pull requests.
+    var remoteRefreshFingerprints: [Repository.ID: String] = [:]
+    /// True while the app is inactive or in the background.
+    var isRemoteRefreshPaused = false
     /// User-defined display titles indexed by `Repository.ID`. Resolved
     /// once on repo discovery (and refreshed when settings change) so
     /// hot-path display sites — sidebar, shelf spine, canvas card,
@@ -516,6 +535,11 @@ struct RepositoriesFeature {
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, changes: GitLineChanges)
+    /// A remote repository's next poll is due, or its worktree was selected (B3f).
+    case remoteRepositoryRefreshDue(Repository.ID)
+    case remoteRepositoryRefreshed(Repository.ID, RemoteRefreshResult)
+    /// The app became active (true) or inactive (false).
+    case setRemoteRefreshActive(Bool)
     case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
     case showToast(StatusToast)
     case dismissToast

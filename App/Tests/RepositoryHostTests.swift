@@ -142,13 +142,15 @@ struct RepositoryHostTests {
         .repositoryRemoteConfigurationChanged(repository: .local(URL(fileURLWithPath: "/tmp/elsewhere")))))
   }
 
-  @Test(.dependencies) func remotePullRequestRefreshIsSkippedUntilTheHostHasRemotes() async {
+  /// A remote repository's pull requests refresh with the GitHub remotes that its host
+  /// reads (docs-ai 084 B3f). `gh repo view` reads a working directory on this Mac, so its
+  /// fallback never runs for a remote repository; without a host there is nothing to read.
+  @Test(.dependencies) func remotePullRequestRefreshNeverRunsTheLocalGhFallback() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     let worktreeID = remote.worktrees[0].id
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
     state.selection = .worktree(worktreeID)
-    state.githubIntegrationAvailability = .unknown
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -159,14 +161,13 @@ struct RepositoryHostTests {
       }
       $0.githubCLI.retryRateLimitedRequests = {}
     }
+    store.exhaustivity = .off
 
-    // No availability probe, no pending or in-flight refresh, no forced mark.
     await store.send(
       .worktreeInfoEvent(.repositoryPullRequestRefresh(repository: remote.location, worktreeIDs: [worktreeID]))
     )
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
-    await store.send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
-    await store.send(.githubIntegration(.retryRateLimitedRequests))
+    await store.finish(timeout: .seconds(10))
   }
 
   @Test(.dependencies) func openingARemoteRepositoryOnItsCodeHostExplainsTheMissingURL() async {

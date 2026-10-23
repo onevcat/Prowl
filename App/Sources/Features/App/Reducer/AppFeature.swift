@@ -182,6 +182,7 @@ struct AppFeature {
         switch phase {
         case .active:
           return .merge(
+            .send(.repositories(.setRemoteRefreshActive(true))),
             .send(.repositories(.refreshWorktrees)),
             .run { _ in
               await worktreeInfoWatcher.send(.refreshLineChanges)
@@ -196,7 +197,9 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
+          var effects: [Effect<Action>] = [
+            .cancel(id: CancelID.periodicRefresh), .send(.repositories(.setRemoteRefreshActive(false))),
+          ]
           if state.settings.restoreTerminalLayoutOnLaunch,
             !state.suppressLayoutSaveUntilRelaunch,
             state.launchRestoreMode != .restoreLayout
@@ -269,6 +272,10 @@ struct AppFeature {
               await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
             }
           )
+        }
+        // A selected remote worktree refreshes its repository now, not at its next poll.
+        if worktree.location.localURL == nil {
+          effects.append(.send(.repositories(.remoteRepositoryRefreshDue(worktree.repositoryLocation.standardized.id))))
         }
         effects.append(
           .run { _ in

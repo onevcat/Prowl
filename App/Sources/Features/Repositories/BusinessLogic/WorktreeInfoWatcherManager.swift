@@ -521,12 +521,8 @@ final class WorktreeInfoWatcherManager {
     cancelAllPullRequestSelectionCooldownTasks()
   }
 
-  nonisolated private static func tracksPullRequests(of repository: RepositoryLocation) -> Bool {
-    repository.refreshesPullRequests
-  }
-
   private func updatePullRequestSchedule(repository: RepositoryLocation, immediate: Bool) {
-    guard pullRequestTrackingEnabled, Self.tracksPullRequests(of: repository) else {
+    guard pullRequestTrackingEnabled else {
       pullRequestTasks.removeValue(forKey: repository)?.task.cancel()
       return
     }
@@ -616,7 +612,7 @@ final class WorktreeInfoWatcherManager {
     if isFocused {
       return refreshTiming.focused
     }
-    let trackedWorktreeCount = worktrees.values.count { Self.tracksPullRequests(of: $0.repositoryLocation) }
+    let trackedWorktreeCount = worktrees.count
     return max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * trackedWorktreeCount)
   }
 
@@ -928,7 +924,6 @@ final class WorktreeInfoWatcherManager {
     repository: RepositoryLocation,
     worktreeID: Worktree.ID?
   ) {
-    guard Self.tracksPullRequests(of: repository) else { return }
     let lastWorktreeForRepo = lastSelectedWorktreeIDByRepo[repository]
     if lastWorktreeForRepo != worktreeID {
       cancelPullRequestSelectionCooldown(for: repository)

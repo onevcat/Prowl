@@ -67,25 +67,18 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
 
 extension RepositoryLocation {
   /// Whether `feature` works for a repository at this location. Every feature
-  /// is available locally; on a remote host, only worktree creation is so far
-  /// (docs-ai 084 B3d).
+  /// is available locally; on a remote host, worktree creation (docs-ai 084 B3d) and line
+  /// counts, which the refresh reads (B3f), are so far.
   func availability(of feature: RepositoryFeature) -> FeatureAvailability {
     switch self {
     case .local:
       .available
     case .remote:
-      feature == .worktreeCreation ? .available : .unavailable(.remoteFolder(feature))
+      Self.remoteFeatures.contains(feature) ? .available : .unavailable(.remoteFolder(feature))
     }
   }
-}
 
-nonisolated extension RepositoryLocation {
-  /// Whether pull request status refreshes for a repository at this location. A remote
-  /// repository's GitHub remotes come from its host (docs-ai 084 B3); until then a
-  /// refresh would find none, so the cadence, forced refreshes and the request skip it.
-  var refreshesPullRequests: Bool {
-    localURL != nil
-  }
+  private static let remoteFeatures: Set<RepositoryFeature> = [.worktreeCreation, .lineCounts]
 }
 
 extension Repository {

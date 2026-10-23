@@ -207,7 +207,11 @@ extension RepositoriesFeature {
         state.isRefreshingWorktrees = false
         return .none
       }
-      return loadRepositories(fallbackRoots: roots, animated: animated)
+      // Loaded remote repositories stay as they are; their refresh cadence keeps them current.
+      let knownRemoteRepositories =
+        state.isInitialLoadComplete ? Array(state.repositories.filter { $0.location.localURL == nil }) : []
+      return loadRepositories(
+        fallbackRoots: roots, animated: animated, knownRemoteRepositories: knownRemoteRepositories)
 
     case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
       state.isRefreshingWorktrees = false
@@ -288,7 +292,17 @@ extension RepositoriesFeature {
         allEffects.append(effect)
       }
       allEffects.append(refreshWorkspaceChildrenEffect(state: state))
+      allEffects.append(syncRemoteRefreshSchedules(state: &state))
       return .merge(allEffects)
+
+    case .remoteRepositoryRefreshDue(let repositoryID):
+      return reduceRemoteRefreshDue(repositoryID, state: &state)
+
+    case .remoteRepositoryRefreshed(let repositoryID, let result):
+      return reduceRemoteRefreshed(repositoryID, result, state: &state)
+
+    case .setRemoteRefreshActive(let isActive):
+      return setRemoteRefreshActive(isActive, state: &state)
 
     case .refreshAllCustomTitles:
       // Fan out across the current repository list, reading each
@@ -998,26 +1012,7 @@ extension RepositoriesFeature {
         else {
           return .none
         }
-        let repositories = IdentifiedArrayOf(uniqueElements: [repository])
-        var effects: [Effect<Action>] = []
-        let worktreeIDs = repository.worktrees.map(\.id)
-        // A changed remote can point every branch at different pull requests.
-        state.pullRequestRefreshForcedWorktreeIDs.formUnion(worktreeIDs)
-        if repository.capabilities.supportsPullRequests, !worktreeIDs.isEmpty {
-          effects.append(
-            .send(
-              .githubIntegration(
-                .repositoryPullRequestRefreshRequested(
-                  repositoryLocation: repository.location,
-                  worktreeIDs: worktreeIDs
-                )
-              ))
-          )
-        }
-        if let effect = detectCodeHostsEffect(for: repositories, includeUnknown: true) {
-          effects.append(effect)
-        }
-        return effects.isEmpty ? .none : .concatenate(effects)
+        return remoteConfigurationChanged(repository, state: &state)
       case .repositoryPullRequestRefresh(let location, let worktreeIDs):
         return .send(
           .githubIntegration(

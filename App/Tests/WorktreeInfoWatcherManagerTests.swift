@@ -66,21 +66,25 @@ struct WorktreeInfoWatcherManagerTests {
     await drainAsyncEvents(120)
 
     #expect(localCalls.value.isEmpty)
-    // No pull request cadence (A6c) and no line counts (B3) for a remote repository yet.
-    #expect(collector.pullRequestRefreshCount(repository: remote.location) == 0)
+    // The batched refresh carries a remote repository's line counts (B3f); its pull
+    // requests follow the same cadence as a local repository's.
     #expect(collector.filesChangedCount(worktreeID: remoteWorktree.id) == 0)
+    #expect(collector.pullRequestRefreshCount(repository: remote.location) >= 1)
+    let refreshesBefore = collector.pullRequestRefreshCount(repository: remote.location)
 
     await clock.advance(by: .seconds(400))
     await drainAsyncEvents(120)
     #expect(localCalls.value.isEmpty)
-    #expect(collector.pullRequestRefreshCount(repository: remote.location) == 0)
     #expect(collector.filesChangedCount(worktreeID: remoteWorktree.id) == 0)
+    #expect(collector.pullRequestRefreshCount(repository: remote.location) > refreshesBefore)
 
     manager.handleCommand(.stop)
     await task.value
   }
 
-  @Test func remoteWorktreesDoNotSlowTheLocalPullRequestCadence() async throws {
+  /// A remote repository's pull requests count against the same request budget, so its
+  /// worktree slows the unfocused sweep as a local one does (docs-ai 084 B3f).
+  @Test func remoteWorktreesShareTheUnfocusedPullRequestBudget() async throws {
     let clock = TestClock()
     let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
     let remote = RemoteRepositoryFixtures.gitRepository()
@@ -96,7 +100,10 @@ struct WorktreeInfoWatcherManagerTests {
     await drainAsyncEvents(120)
     #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 1)
 
-    // One tracked worktree at 100 ms: the sweep runs every 100 ms, as without the remote one.
+    // Two tracked worktrees at 100 ms each: the sweep runs every 200 ms.
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncEvents(120)
+    #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 1)
     await clock.advance(by: .milliseconds(100))
     await drainAsyncEvents(120)
     #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 2)
