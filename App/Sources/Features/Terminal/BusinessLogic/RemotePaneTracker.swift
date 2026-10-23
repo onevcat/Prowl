@@ -157,8 +157,12 @@ final class RemotePaneTracker {
   /// remote shell.
   private var boundFromTmux = false
   private var consumedSequence: (epoch: UInt64, sequence: UInt64)?
-  /// Callers of `refreshedWorkingDirectory` that wait for the next snapshot.
-  private var snapshotWaiters: [CheckedContinuation<Void, Never>] = []
+  /// Callers of `refreshedWorkingDirectory` that wait for a snapshot started after their
+  /// request (`uptime`), each with its own timeout.
+  private var snapshotWaiters: [UUID: (requestedAt: TimeInterval, continuation: CheckedContinuation<Void, Never>)] =
+    [:]
+  /// The last directory a snapshot showed, kept through a failed or unmapped one.
+  private var lastKnownWorkingDirectory: String?
 
   /// The remote session's anchor, learned from a snapshot that carried this pane's id. On
   /// macOS the id is readable only from non-platform foreground processes, so the session
@@ -233,7 +237,8 @@ final class RemotePaneTracker {
       for await snapshot in lease.snapshots {
         guard !self.retired, !Task.isCancelled else { break }
         self.latest = snapshot
-        self.resumeSnapshotWaiters()
+        if let directory = self.currentForegroundWorkingDirectory { self.lastKnownWorkingDirectory = directory }
+        self.resumeSnapshotWaiters(startedAt: snapshot.startedAt)
         self.onSnapshot()
       }
     }
@@ -243,7 +248,7 @@ final class RemotePaneTracker {
   func retire() {
     guard !retired else { return }
     retired = true
-    resumeSnapshotWaiters()
+    resumeSnapshotWaiters(startedAt: .infinity)
     connectTask?.cancel()
     if let lease {
       Task { await lease.close() }
@@ -288,11 +293,17 @@ final class RemotePaneTracker {
       programStatusFence: boundRecordFence, confirmedAt: confirmedAt)
   }
 
-  /// The working directory of the foreground process of the pane's session in the latest
-  /// snapshot (inside tmux, of the client's active pane): nil when the session is not
-  /// mapped or the host did not read it (docs-ai 084 C4).
+  /// The working directory of the foreground process of the pane's session (inside tmux, of
+  /// the client's active pane): from the latest snapshot, else the last one that showed it.
+  /// nil when no snapshot mapped the session or the host did not read it (docs-ai 084 C4).
   var foregroundWorkingDirectory: String? {
-    guard let session = mappedSession() else { return nil }
+    currentForegroundWorkingDirectory ?? lastKnownWorkingDirectory
+  }
+
+  /// The latest snapshot's directory. A tmux client whose server Prowl cannot read hides
+  /// where the user works, so it has none.
+  private var currentForegroundWorkingDirectory: String? {
+    guard let session = mappedSession(), !session.hasUnreadTmuxPane else { return nil }
     let processes = session.tmux?.processes ?? session.processes
     let group = session.tmux?.foregroundProcessGroupID ?? session.foregroundProcessGroupID
     let members = processes.filter { $0.processGroupID == group }
@@ -317,21 +328,26 @@ final class RemotePaneTracker {
   /// none arrives within `timeout` (a split opens where the pane is, docs-ai 084 C4).
   func refreshedWorkingDirectory(timeout: Duration, clock: any Clock<Duration>) async -> String? {
     guard let lease, !retired else { return foregroundWorkingDirectory }
+    let id = UUID()
+    let requestedAt = uptime()
     await withCheckedContinuation { continuation in
-      snapshotWaiters.append(continuation)
+      snapshotWaiters[id] = (requestedAt, continuation)
       Task { await lease.refresh() }
       Task { [weak self] in
         try? await clock.sleep(for: timeout)
-        self?.resumeSnapshotWaiters()
+        self?.snapshotWaiters.removeValue(forKey: id)?.continuation.resume()
       }
     }
     return foregroundWorkingDirectory
   }
 
-  private func resumeSnapshotWaiters() {
-    let waiters = snapshotWaiters
-    snapshotWaiters.removeAll()
-    for waiter in waiters { waiter.resume() }
+  /// Resumes the waiters whose request came before `startedAt`: a snapshot that started
+  /// earlier (a cadence probe already running) may predate the user's last `cd`.
+  private func resumeSnapshotWaiters(startedAt: TimeInterval) {
+    for (id, waiter) in snapshotWaiters where waiter.requestedAt <= startedAt {
+      snapshotWaiters.removeValue(forKey: id)
+      waiter.continuation.resume()
+    }
   }
 
   /// The pane's own session in the latest snapshot.

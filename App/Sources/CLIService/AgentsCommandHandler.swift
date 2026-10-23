@@ -222,11 +222,11 @@ final class AgentsCommandHandler: CommandHandler {
     repositoriesState: RepositoriesFeature.State,
     worktreeContexts: [Worktree.ID: ListRuntimeSnapshotBuilder.WorktreeContext]
   ) -> String {
-    if let workingDirectory = entry.workingDirectory,
-      let key = SidebarListView.resolveWorktreeID(
-        forWorkingDirectory: workingDirectory,
-        in: repositoriesState.repositories
-      ),
+    // A remote agent's directory is on its host: only its own remote folder can hold it.
+    if let key = entry.remoteWorktreeID
+      ?? entry.localWorkingDirectory.flatMap({
+        SidebarListView.resolveWorktreeID(forWorkingDirectory: $0, in: repositoriesState.repositories)
+      }),
       let context = worktreeContexts[key]
     {
       return context.path

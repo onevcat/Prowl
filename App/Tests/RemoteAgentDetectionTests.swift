@@ -1858,6 +1858,13 @@ struct RemoteAgentDetectionTests {
       fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/b")))
     #expect(await fresh.value == "/srv/b")
 
+    // A failed snapshot keeps the last known directory.
+    await deliver(
+      fixture,
+      RemoteProbeSnapshot(
+        connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: 3,
+        startedAt: Self.uptime, finishedAt: Self.uptime, outcome: .failed(.unreachable), report: nil))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == "/srv/b")
     let stale = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
     await settle { fixture.source.refreshes > refreshes + 1 }
     await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)

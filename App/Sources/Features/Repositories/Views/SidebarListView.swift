@@ -603,12 +603,12 @@ struct SidebarListView: View {
     // changes, so re-resolving unchanged directories put N `stat`s plus N symlink walks on the
     // main thread per frame.
     let resolvedWorktreeIDs = WorktreeDirectoryIndexCache.worktreeIDs(
-      forWorkingDirectories: entries.compactMap(\.workingDirectory),
+      forWorkingDirectories: entries.compactMap(\.localWorkingDirectory),
       in: repositories
     )
     var displays: [ActiveAgentEntry.ID: ActiveAgentRowDisplay] = [:]
     for entry in entries {
-      let resolvedWorktreeID = entry.workingDirectory.flatMap { resolvedWorktreeIDs[$0] }
+      let resolvedWorktreeID = entry.remoteWorktreeID ?? entry.localWorkingDirectory.flatMap { resolvedWorktreeIDs[$0] }
       displays[entry.id] = activeAgentRowDisplay(
         for: entry,
         repositories: repositories,
@@ -634,10 +634,13 @@ struct SidebarListView: View {
     metadata: ActiveAgentWorktreeMetadata,
     directoryIndex: WorktreeDirectoryIndex? = nil
   ) -> ActiveAgentRowDisplay {
-    let resolvedWorktreeID = entry.workingDirectory.flatMap { workingDirectory in
-      (directoryIndex ?? WorktreeDirectoryIndex(repositories: repositories))
-        .worktreeID(forWorkingDirectory: workingDirectory)
-    }
+    // A remote agent's directory is on its host: only its own remote folder can hold it.
+    let resolvedWorktreeID =
+      entry.remoteWorktreeID
+      ?? entry.localWorkingDirectory.flatMap { workingDirectory in
+        (directoryIndex ?? WorktreeDirectoryIndex(repositories: repositories))
+          .worktreeID(forWorkingDirectory: workingDirectory)
+      }
     return activeAgentRowDisplay(
       for: entry,
       repositories: repositories,
