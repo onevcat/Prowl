@@ -79,11 +79,12 @@ struct AddRemoteFolderFeatureTests {
     await store.receive(\.delegate.cancel)
   }
 
-  /// The sheet opens only while remote folders are on (`PROWL_REMOTE_FOLDERS=1`), with the
-  /// newest host profile selected.
+  /// The sheet opens only while remote folders are on (on unless `PROWL_REMOTE_FOLDERS=0`
+  /// since docs-ai 084 C5), with the newest host profile selected.
   @Test(.dependencies) func theSheetOpensOnlyWhileRemoteFoldersAreOn() async {
-    #expect(!RemoteFolders.isEnabled(environment: [:]))
+    #expect(RemoteFolders.isEnabled(environment: [:]))
     #expect(RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": "1"]))
+    #expect(!RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": "0"]))
     let older = HostProfile(
       id: UUID(), alias: "old", recipe: SSHConnectionRecipe(destination: "old"),
       connectionKey: ConnectionKey(user: "dev", hostname: "old.local"))

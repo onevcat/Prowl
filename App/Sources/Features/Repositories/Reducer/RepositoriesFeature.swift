@@ -460,7 +460,7 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
-    /// The Add Remote Folder sheet (docs-ai 084 C1), only while `PROWL_REMOTE_FOLDERS=1`.
+    /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
     @Presents var addRemoteFolder: AddRemoteFolderFeature.State?
     @Presents var alert: AlertState<Alert>?
   }

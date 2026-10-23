@@ -69,6 +69,9 @@ alert after the load. Repositories added after the initial app load are selected
 automatically. If a repository was added through a symbolic link, Prowl resolves
 and stores its actual git root so branches and worktrees continue to load.
 
+To add a folder on another machine over SSH, use **Add Remote Folder...** (or **Remote…**
+in the Add popover). See [remote folders](remote-folders.md).
+
 ## Creating a worktree
 
 - **Shortcut:** `⌘N` (`new_worktree`)

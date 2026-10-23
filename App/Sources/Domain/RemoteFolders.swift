@@ -1,13 +1,13 @@
 import Dependencies
 import Foundation
 
-/// The switch for remote folders (docs-ai 084 D7). They stay hidden until remote tabs,
-/// splits and restore all work; C5 turns them on.
+/// The switch for remote folders (docs-ai 084 D7): on since C5, when remote tabs, splits
+/// and restore all work. `PROWL_REMOTE_FOLDERS=0` turns them off and hides stored ones.
 nonisolated enum RemoteFolders {
   static let environmentKey = "PROWL_REMOTE_FOLDERS"
 
   static func isEnabled(environment: [String: String]) -> Bool {
-    environment[environmentKey] == "1"
+    environment[environmentKey] != "0"
   }
 
   /// Read once: the environment does not change while the app runs.

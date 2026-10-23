@@ -49,7 +49,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case checkForUpdates
     case openRepository
     case newWorkspace
-    /// Behind `PROWL_REMOTE_FOLDERS=1` (docs-ai 084 C1).
+    /// Off with `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C1, C5).
     case addRemoteFolder
     case worktreeSelect(Worktree.ID)
     case openSettings

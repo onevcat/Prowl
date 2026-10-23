@@ -1028,10 +1028,9 @@ struct WorktreeTerminalManagerTests {
     #expect(clearCount.value == 1)
   }
 
-  /// A remote folder's tabs are not saved (docs-ai 084 C3b, restore comes with C5), and a
-  /// selected remote folder is not named as the payload's selection, which must be a saved
-  /// worktree: the local layout stays valid.
-  @Test func aSelectedRemoteFolderLeavesTheLocalLayoutValid() async throws {
+  /// A remote folder's tabs are saved with their host (docs-ai 084 C5), and a selected remote
+  /// folder is the payload's selection.
+  @Test func aRemoteFolderIsSavedWithItsHost() async throws {
     let saved = LockIsolated<[TerminalLayoutSnapshotPayload]>([])
     let manager = WorktreeTerminalManager(
       runtime: GhosttyRuntime(),
@@ -1062,8 +1061,55 @@ struct WorktreeTerminalManagerTests {
     await manager.persistLayoutSnapshot()
 
     let payload = try #require(saved.value.last)
-    #expect(payload.worktrees.map(\.worktreeID) == [local.id])
-    #expect(payload.selectedWorktreeID == nil)
+    #expect(Set(payload.worktrees.map(\.worktreeID)) == [local.id, remote.id])
+    #expect(payload.selectedWorktreeID == remote.id)
+    #expect(payload.isValid)
+    let remoteLeaf = try #require(payload.worktrees.first { $0.worktreeID == remote.id }?.tabs.first?.splitRoot)
+    #expect(remoteLeaf.remote?.hostProfileID == RemoteRepositoryFixtures.hostProfileID.uuidString.lowercased())
+    #expect(remoteLeaf.cwdPath == nil)
+    let localLeaf = try #require(payload.worktrees.first { $0.worktreeID == local.id }?.tabs.first?.splitRoot)
+    #expect(localLeaf.remote == nil)
+  }
+
+  /// A remote folder that does not load (its host is unreachable) or whose panes cannot be
+  /// restored (its host profile is gone) is skipped: the local layout is still restored
+  /// (docs-ai 084 C5).
+  @Test(.timeLimit(.minutes(1))) func aRemoteFolderThatCannotRestoreIsSkipped() async throws {
+    let local = makeWorktree()
+    let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let missing = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/gone").worktrees[0]
+    func snapshot(_ worktree: Worktree, remote: Bool) -> TerminalLayoutSnapshotPayload.SnapshotWorktree {
+      let tabID = UUID().uuidString
+      return .init(
+        worktreeID: worktree.id, selectedTabID: tabID,
+        tabs: [
+          .init(
+            tabID: tabID, title: nil, customTitle: nil, icon: nil,
+            splitRoot: .leaf(
+              surfaceID: UUID().uuidString,
+              remote: remote
+                ? .init(hostProfileID: RemoteRepositoryFixtures.hostProfileID.uuidString, cwdPath: nil) : nil))
+        ])
+    }
+    let payload = TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: local.id,
+      worktrees: [snapshot(local, remote: false), snapshot(remote, remote: true), snapshot(missing, remote: true)])
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { payload }, saveSnapshot: { _ in true }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true
+    )
+    manager.state(for: remote).remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in nil }, stage: { _, _ in "" })
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [local, remote])
+
+    let event = await nextEvent(stream) { if case .layoutRestored = $0 { true } else { false } }
+    #expect(event == .layoutRestored(selectedWorktreeID: local.id))
+    #expect(manager.state(for: local).tabManager.tabs.count == 1)
+    #expect(manager.state(for: remote).tabManager.tabs.isEmpty)
   }
 
   private func makeWorktree(
