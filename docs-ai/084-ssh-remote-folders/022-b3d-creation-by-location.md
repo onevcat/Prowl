@@ -62,9 +62,18 @@ This answers the plan's open question.
   - The flow resolves the placement inside its effect, right after it chose the name and
     before the fetch and the file counts. For a remote repository, that reads the host's
     home; a failure there fails the creation with its error before any long work.
-  - The destination check goes through `RepositoryHost.pathExists`: `FileManager`
-    locally, `test -e` on the host. A remote check that cannot reach the host says that
-    the path exists. Cleanup then never takes over a folder that it did not create.
+  - **Which worktree this attempt owns.** Locally, the destination check stays as it
+    was: a destination that did not exist before the attempt is the attempt's to clean
+    up. A remote attempt does not use a destination check. Another client or agent on the
+    host can create the same branch at the same destination between the check and this
+    attempt's `git worktree add`. This attempt then fails, and cleanup would remove the
+    winner's worktree, with its uncommitted files (`git worktree remove --force`).
+    - Instead, the creation script reports each `git worktree add` that succeeds (B3c's
+      `git` function, `PROWL_WORKTREE_ADDED`).
+    - A failed remote creation throws `RemoteWorktreeCreationError` with that path, and
+      only that path becomes the attempt's worktree to clean up.
+    - Without the report, nothing is cleaned up. This includes a connection that dropped
+      before the report arrived.
 - **Failure and cleanup.**
   - `createRandomWorktreeFailed` carries `repositoryLocation` and `worktreeLocation`.
   - `cleanupFailedWorktree` builds the placeholder worktree from locations.
@@ -74,8 +83,13 @@ This answers the plan's open question.
     git lists worktrees by their physical paths, and a base directory setting can go
     through a link. Cleanup then removes the worktree that git lists, when its branch is
     the one that this attempt created.
-- **A new remote worktree** opens no local tab. `AppFeature` sends `ensureInitialTab` only
-  where terminal tabs are available. Remote terminals and setup scripts come with C3.
+- **A new remote worktree** opens no local tab and runs no setup script here. Remote
+  terminals and setup scripts come with C3. Three places enforce it:
+  - `AppFeature` sends `ensureInitialTab` only where terminal tabs are available;
+  - the detail view shows the reason ("Terminals cannot open in remote folders yet.")
+    instead of the terminal tabs;
+  - `WorktreeTerminalState.ensureInitialTab` refuses a remote worktree. This is the
+    automatic boundary that the view's `onAppear` reaches.
 
 ## Tests
 
@@ -91,6 +105,13 @@ This answers the plan's open question.
   - after a failed creation, cleanup removes the worktree that this attempt registered,
     through a destination placed by a link, and leaves a worktree of another branch at
     its destination;
+  - a race: another creator adds the same branch at the same destination just before
+    this attempt's `git worktree add`, through a `git` wrapper on the lane's `PATH`. This
+    attempt fails, and the winner's worktree and its uncommitted file stay. With a
+    destination check as ownership (the old rule), this test fails;
+  - the connection drops after this attempt's `git worktree add`: the reported worktree
+    is removed;
+  - a remote worktree's terminal state creates no automatic tab;
   - the reducer's creation flow for a remote repository whose setting is `../worktrees`.
     The lane runs on this Mac, with the real `wt`. The worktree is created at the host
     path, and the repository lists it. The local git client is never asked (the test

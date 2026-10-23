@@ -477,9 +477,13 @@ extension RepositoriesFeature {
           // Failure cleanup deletes the directory outright, so it only takes one this attempt creates.
           let worktreeDirectory =
             directoryOverride ?? worktreeBaseDirectory.appending(path: name, directoryHint: .isDirectory)
-          let worktreeLocation = Self.location(of: worktreeDirectory, in: repositoryLocation)
-          if await !repositoryHost.pathExists(worktreeLocation) {
-            createdWorktreeLocation = worktreeLocation
+          // A remote attempt owns only the worktree that its own `git worktree add`
+          // registered, which the host reports with the failure; a free destination now
+          // does not prove that another creation does not take it first.
+          if case .local = repositoryLocation,
+            !FileManager.default.fileExists(atPath: worktreeDirectory.path(percentEncoded: false))
+          {
+            createdWorktreeLocation = Self.location(of: worktreeDirectory, in: repositoryLocation)
           }
           progress.stage = .checkingRepositoryMode
           await send(
@@ -620,6 +624,11 @@ extension RepositoriesFeature {
             message: String(localized: "Worktree creation finished without a result.")
           )
         } catch {
+          // A remote creation reports the worktree that it registered before it failed.
+          if let failure = error as? RemoteWorktreeCreationError, let addedPath = failure.addedPath {
+            createdWorktreeLocation = Self.location(
+              of: URL(filePath: addedPath, directoryHint: .isDirectory), in: repositoryLocation)
+          }
           if progressUpdateThrottle.flush() {
             await send(
               .worktreeCreation(
