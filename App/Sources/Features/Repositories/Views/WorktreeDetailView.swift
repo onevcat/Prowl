@@ -66,10 +66,7 @@ struct WorktreeDetailView: View {
     let runScriptEnabled = hasActiveTerminalTarget && opensTerminals
     let runScriptIsRunning =
       actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
-    // A split command would be a local shell in a remote folder (docs-ai 084 C4).
-    let splits = actionTargetWorktree?.location.availability(of: .terminalSplit).isAvailable != false
-    let customCommands =
-      opensTerminals ? state.selectedCustomCommands.filter { splits || $0.command.execution != .split } : []
+    let customCommands = opensTerminals ? state.selectedCustomCommands : []
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
       customTitles: repositories.repositoryCustomTitles

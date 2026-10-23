@@ -282,9 +282,12 @@ struct CommandPaletteFeature {
       )
     }
     if opensTerminals {
-      // A split command would be a local shell in a remote folder (docs-ai 084 C4).
-      let splits = targetLocation?.availability(of: .terminalSplit).isAvailable != false
-      items.append(contentsOf: customCommandItems(customCommands.filter { splits || $0.command.execution != .split }))
+      // A command that cannot run in the target is left out (docs-ai 084 C3c).
+      items.append(
+        contentsOf: customCommandItems(
+          customCommands.filter {
+            targetLocation?.availability(of: $0.command.execution.repositoryFeature).isAvailable != false
+          }))
     }
     items.append(
       contentsOf: workflowCommandItems(

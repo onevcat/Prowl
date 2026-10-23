@@ -233,11 +233,14 @@ extension AppFeature {
     globalSettings: UserGlobalSettings,
     into state: inout State
   ) -> Effect<Action> {
+    // A command that cannot run in the target (a split or In Place command in a remote
+    // folder, docs-ai 084 C3c) is left out of every surface: toolbar, palette, menu, hotkeys.
+    let location = actionTargetWorktree(repositories: state.repositories)?.location
     state.selectedCustomCommands = EffectiveCustomCommand.resolve(
       repositoryCommands: settings.customCommands,
       globalCommands: globalSettings.customCommands,
       disabledGlobalCommandIDs: settings.disabledGlobalCommandIDs
-    )
+    ).filter { location?.availability(of: $0.command.execution.repositoryFeature).isAvailable != false }
     state.resolvedKeybindings = resolvedKeybindings(
       settings: state.settings,
       customCommands: state.selectedCustomCommands

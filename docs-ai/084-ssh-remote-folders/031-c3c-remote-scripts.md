@@ -31,13 +31,25 @@ plus a newline. The setup script and the command are joined in that order, as lo
 - **Custom commands**:
   - **New Tab** runs in a new remote tab, with Close on Success and the success toast from
     the launch marker.
-  - **In Place** types into the focused pane, which is the host shell in a remote pane. It
-    gets no completion, as before.
-  - **New Split** is refused with the `terminalSplit` reason (C4). The toolbar and the
-    palette leave it out for a remote folder.
+  - **In Place** is refused in a remote folder (new feature `inPlaceCommand`, "In Place
+    commands do not run in remote folders yet."). The focused pane can be the local shell
+    after the `ssh` ended, or a password prompt while it connects, and the command text
+    would reach it.
+  - **New Split** is refused with the `terminalSplit` reason (C4).
+
+  `UserCustomCommandExecution.repositoryFeature` maps each execution to its feature.
+  `applyWorktreeUserSettings` leaves out the commands that the action target cannot run, so
+  the toolbar, the palette, the menu and the hotkeys never offer them. The reducer still
+  refuses them.
 - **Setup script.** A new remote worktree's setup script runs in its first tab. The
   `terminalScript` feature is removed, and so are its gates in AppFeature, the detail view,
-  the palette and the terminal state.
+  the palette and the terminal state. A remote tab consumes the setup script
+  (`onSetupScriptConsumed`) only once its launcher is staged. A staging failure, or a tab
+  closed while staging, keeps it pending for the next tab.
+- **A folder that is gone.** The launcher no longer falls back to the home folder for a
+  first command. When `cd` to the working directory fails, it prints "prowl: <dir> is not
+  available on this host", and the first command reports `error/1` without running. The
+  shell then opens in the home folder.
 
 The launcher sources the script (C3a), so a `cd`, an export or an activated environment
 stays at the prompt, in the user's login shell.
@@ -55,7 +67,8 @@ stays at the prompt, in the user's login shell.
 
   The marker counts even after a probe saw the `ssh` exit: a script that ends with
   `exit` prints its marker just before the `ssh` ends, and the probe can see the exit
-  before the main thread handles the marker.
+  before the main thread handles the marker. Its duration counts from the moment the pane
+  started its `ssh`, after staging.
 - **No marker.** A first command that sent no marker before its `ssh`'s finish did not run
   to its end. The launcher reports every command that started (C3a), so this means the
   startup files replaced the shell, or the connection dropped. It completes nothing:
@@ -63,18 +76,25 @@ stays at the prompt, in the user's login shell.
   - no notification;
   - the CLI waiter resumes with no status.
 
-  The decision is taken at the `ssh`'s finish, which comes in the terminal stream after any
-  marker. A probe never takes it. When no probe saw the `ssh`, the decision comes at the
-  next probe after the finish.
+  The decision starts at the `ssh`'s finish, which comes in the terminal stream after any
+  marker, and waits `remoteMarkerGrace` (1 s, `remoteLaunchClock`). A remote shell's own
+  OSC 133 can arrive after the `ssh` exited and just before the marker, and the marker must
+  still count. A probe never starts the decision. When no probe saw the `ssh`, the decision
+  starts at the next probe after the finish.
+- **A suspended `ssh`.** When the `ssh` is suspended (still running) and no longer in the
+  foreground, its first command completes nothing at once. A later local command then does
+  not take its toast or its Close on Success, and a waiter does not wait forever.
 - **Later finishes.** As in C3b, the outer `ssh`'s finish never completes anything. So a
   later `ssh` exit after a failed script reports no success.
 
 ### CLI
 
 - `create tab` and the legacy `tab create` open remote tabs. The `--path` of a remote folder
-  is a host path. It is normalized by its text only (`normalizedHostPath`: `.`, `..`, repeated
-  slashes), because a local normalization could resolve `/private` or a symlink on this Mac.
-  It must stay inside the folder.
+  is a host path. It is normalized by its text only (`RemotePaths.canonicalPath`: `.`, `..`,
+  repeated slashes), because a local normalization could resolve `/private` or a symlink on
+  this Mac. It must stay inside the folder. Both handlers share one check, `allowedTabPath`.
+- The `prowl` client sends an absolute `--path` as typed, without its trailing slash. It
+  resolves only a relative one against its directory. The app normalizes a local path.
 - The remote tab's working directory is that host path (`createRemoteTab` reads the
   override as a host path); without one, it is the folder.
 - `prowl send` with a wait into a remote pane resumes on the host shell's OSC 133. During a
@@ -91,12 +111,19 @@ stays at the prompt, in the user's login shell.
   - A waiter in a script pane waits for the marker (checked red).
   - A script without a marker completes nothing, and its waiter gets no status (checked red).
   - A marker after the probe saw the `ssh` exit still counts.
+  - A marker right after a remote finish with the `ssh` gone still counts within the grace
+    (checked red without it).
+  - A suspended `ssh` abandons its script (checked red).
+  - The setup script is consumed only once staged (checked red).
   - A split is refused.
+- `RemoteLauncherTests/aMissingFolderRunsNoScript`, in each local shell: `error/1`, the
+  script does not run, the message, the shell in the home folder (checked red).
 - CLI: `create tab` and `tab create` check the host path by its text, and a path outside the
-  folder is refused. `normalizedHostPath` is tested on its own.
+  folder is refused. `allowedTabPath` is tested on its own. The client sends an absolute
+  path as typed (`ProwlCLIIntegrationTests`).
 - Reducer:
-  - Run Script and a tab custom command run in a remote folder; a split custom command shows
-    the split reason and sends nothing.
+  - Run Script and a tab custom command run in a remote folder. A split and an In Place
+    custom command each show their reason and send nothing.
   - A created remote worktree runs its setup script.
   - The palette keeps Run Script and tab custom commands, and leaves split ones out.
 
@@ -105,5 +132,7 @@ stays at the prompt, in the user's login shell.
 - A first command in a split comes with C4.
 - An In Place custom command in a remote pane has no completion, because the host shell gets
   it as typed text.
-- A suspended `ssh` ends the session for Prowl (C3b). A script still running in it is never
-  completed.
+- A suspended `ssh` ends the session for Prowl (C3b). A script still running in it
+  completes nothing.
+- A relative `--path` resolves against the local directory, so for a remote folder only an
+  absolute host path is useful.

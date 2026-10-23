@@ -152,9 +152,11 @@ struct CLIRemoteFolderTests {
     #expect(paths == [nil, "/srv/app/sub/dir"])
   }
 
-  @Test func aHostPathIsNormalizedByItsTextOnly() {
-    #expect(normalizedHostPath("/private/tmp/x/../y/./z//") == "/private/tmp/y/z")
-    #expect(normalizedHostPath("/../a") == "/a")
-    #expect(normalizedHostPath("/") == "/")
+  @Test func aHostPathIsCheckedByItsTextOnly() {
+    #expect(
+      allowedTabPath("/private/tmp/x/../x/./z//", worktreePath: "/private/tmp/x", isRemote: true) == "/private/tmp/x/z")
+    #expect(allowedTabPath("/private/tmp/x", worktreePath: "/private/tmp/x/", isRemote: true) == "/private/tmp/x")
+    #expect(allowedTabPath("/private/tmp/xy", worktreePath: "/private/tmp/x", isRemote: true) == nil)
+    #expect(allowedTabPath(nil, worktreePath: "/private/tmp/x", isRemote: true) == nil)
   }
 }

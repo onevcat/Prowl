@@ -252,7 +252,7 @@ final class LifecycleCommandHandler: CommandHandler {
     }
     // A remote folder's path is on its host: it is checked by its text, not on this Mac
     // (docs-ai 084 C3c). An Agent Profile launch refuses a remote folder with its own reason.
-    let path = normalizedAllowedPath(
+    let path = allowedTabPath(
       input.path, worktreePath: target.worktreePath, isRemote: RepositoryLocation.hasRemoteForm(target.worktreeID))
     guard input.path == nil || path != nil else {
       return errorResponse(
@@ -522,24 +522,6 @@ final class LifecycleCommandHandler: CommandHandler {
     return success(command: "close", resource: resolved.resource, target: resolved.target)
   }
 
-  private func normalizedAllowedPath(_ path: String?, worktreePath: String, isRemote: Bool) -> String? {
-    guard let path else { return nil }
-    let normalized: (String) -> String = isRemote ? normalizedHostPath : { self.normalize($0) }
-    let normalizedPath = normalized(path)
-    let normalizedWorktree = normalized(worktreePath)
-    guard normalizedPath == normalizedWorktree || normalizedPath.hasPrefix(normalizedWorktree + "/") else {
-      return nil
-    }
-    return normalizedPath
-  }
-
-  private func normalize(_ path: String) -> String {
-    URL(fileURLWithPath: path, isDirectory: true)
-      .standardizedFileURL
-      .path(percentEncoded: false)
-      .trimmingTrailingSlash()
-  }
-
   private func success(
     command: String,
     resource: LifecycleResource,
@@ -594,15 +576,5 @@ extension CreatePaneDirection {
     case .upward: .top
     case .down: .down
     }
-  }
-}
-
-extension String {
-  fileprivate func trimmingTrailingSlash() -> String {
-    var value = self
-    while value.count > 1, value.hasSuffix("/") {
-      value.removeLast()
-    }
-    return value
   }
 }
