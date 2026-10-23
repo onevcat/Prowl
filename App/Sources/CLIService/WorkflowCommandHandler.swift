@@ -118,6 +118,13 @@ final class WorkflowCommandHandler: CommandHandler {
       guard case .success(let focused) = resolver.resolve(.none),
         let worktree = snapshot.resolution.worktrees.first(where: { $0.id == focused.worktreeID })
       else {
+        // A focused remote folder has no pane, but it is the source the user chose.
+        if let focusedID = snapshot.resolution.focusedWorktreeID,
+          snapshot.resolution.remoteFolders.contains(where: { $0.id == focusedID })
+        {
+          return .failure(
+            refusal(code: CLIErrorCode.remoteAgentUnsupported, message: WorkflowRunAdmission.remoteFolderMessage))
+        }
         return .failure(
           refusal(
             code: CLIErrorCode.sourceRequired,

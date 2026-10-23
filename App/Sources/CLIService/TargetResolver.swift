@@ -229,10 +229,15 @@ final class TargetResolver {
       }
     }
     // Fall back to worktree (id / name / path)
-    if case .success(let target) = resolveWorktree(value, snapshot) {
+    switch resolveWorktree(value, snapshot) {
+    case .success(let target):
       return .success(target)
+    case .failure(.notFound(let message)) where snapshot.remoteFolders.contains(where: { $0.matchesExactly(value) }):
+      // Keep the remote folder's reason (docs-ai 084 C2).
+      return .failure(.notFound(message))
+    case .failure:
+      return .failure(.notFound("Target '\(value)' not found as pane, tab, or worktree."))
     }
-    return .failure(.notFound("Target '\(value)' not found as pane, tab, or worktree."))
   }
 
   // MARK: - Helpers

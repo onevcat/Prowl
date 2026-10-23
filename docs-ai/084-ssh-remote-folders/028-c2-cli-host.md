@@ -53,11 +53,13 @@ does not list it. `TargetResolutionSnapshot.remoteFolders` keeps the remote cont
 - A selector that names a remote folder by its ID or `label:path` (`matchesExactly`) gets
   "Worktree '…' is a remote folder: terminals cannot open in remote folders yet." instead
   of "not found". A name gets "not found", because it could mean a local worktree that has
-  no tab.
+  no tab. `-t` keeps the same reason (`resolveAuto`).
 - `workflow run` with `--worktree` or `-t` naming a remote folder returns
   `REMOTE_AGENT_UNSUPPORTED`, "Workflows cannot run in a remote folder yet."
   (`WorkflowCommandHandler.resolveSource`, only after the resolver found nothing, so a
-  local worktree with the same name still runs). `WorkflowRunAdmission` now refuses a
+  local worktree with the same name still runs). With no selector and no attributed
+  caller, a focused remote folder is the chosen source and gets the same refusal, not
+  `SOURCE_REQUIRED`. `WorkflowRunAdmission` now refuses a
   remote source before its path reaches the local catalog or the preference key.
 - `create tab` in a remote folder returns `CREATE_FAILED`, "Terminals cannot open in
   remote folders yet.", before the `--path` check (a host path this Mac cannot check) and
@@ -95,13 +97,14 @@ directory stays the host path: remote panes exist only after C3.
 - the `host` field is additive and round-trips;
 - a bare path matches the local worktree only, `label:path` matches the remote one, and a
   shared name means the local worktree (checked red);
-- a remote folder selector gets its reason by ID or `label:path`, and a name gets "not
-  found" (checked red);
+- a remote folder selector gets its reason by ID or `label:path`, with `--worktree` and
+  `-t`, and a name gets "not found" (checked red);
 - `create tab` in a remote folder fails with the reason before the path check and creates
   nothing (checked red).
 
-`WorkflowCommandHandlerTests/aRemoteFolderSourceIsRefusedWithTheRemoteCode`: `--worktree`
-and `-t` are refused, and a shared name resolves the local worktree (checked red).
+`WorkflowCommandHandlerTests/aRemoteFolderSourceIsRefusedWithTheRemoteCode`: `--worktree`,
+`-t` and a focused remote folder without a selector are refused, and a shared name
+resolves the local worktree (checked red).
 
 ## Not in this slice
 
