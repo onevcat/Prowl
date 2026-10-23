@@ -81,6 +81,11 @@ struct RemoteAgentPresentationTests {
     #expect(entry.remoteWorktreeID == nil)
     entry.remote = RemoteAgentContext(connection: key, correlation: .correlated, confirmedAt: now, now: now)
     #expect(entry.localWorkingDirectory == nil)
+    // A later `ssh` from the same pane to another host: the same path is not this folder's.
+    #expect(entry.remoteWorktreeID == nil)
+    entry.remote?.hostProfileID = UUID()
+    #expect(entry.remoteWorktreeID == nil)
+    entry.remote?.hostProfileID = RemoteRepositoryFixtures.hostProfileID
     #expect(entry.remoteWorktreeID == folder.worktrees[0].id)
     var outside = ActiveAgentEntry(
       id: entry.id, worktreeID: entry.worktreeID, worktreeName: "main",

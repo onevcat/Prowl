@@ -50,11 +50,12 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
     remote == nil ? workingDirectory : nil
   }
 
-  /// A remote agent's own worktree: its pane's remote folder, when the agent's directory on
-  /// the host lies inside it.
+  /// A remote agent's own worktree: its pane's remote folder, when the agent runs on that
+  /// folder's host (the pane's own session, not a later `ssh` to another host) and its
+  /// directory there lies inside the folder.
   var remoteWorktreeID: Worktree.ID? {
-    guard remote != nil, let directory = workingDirectory?.path(percentEncoded: false),
-      case .remote(_, let folder)? = RepositoryLocation(id: worktreeID)
+    guard let hostProfileID = remote?.hostProfileID, let directory = workingDirectory?.path(percentEncoded: false),
+      case .remote(let folderHost, let folder)? = RepositoryLocation(id: worktreeID), folderHost == hostProfileID
     else { return nil }
     let path = directory.count > 1 && directory.hasSuffix("/") ? String(directory.dropLast()) : directory
     return path == folder || path.hasPrefix(folder == "/" ? "/" : folder + "/") ? worktreeID : nil

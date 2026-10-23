@@ -267,7 +267,9 @@ extension WorktreeTerminalState {
     guard origin != .local else { return nil }
     let known = stabilized != .unknown && remotePaneTrackers[surfaceID]?.tmuxScreen() != .unavailable
     var context = remote?.context(now: now, stateKnown: known)
-    context?.hostAlias = remoteHostAlias(surfaceID: surfaceID)
+    let alias = remoteHostAlias(surfaceID: surfaceID)
+    context?.hostAlias = alias
+    context?.hostProfileID = alias == nil ? nil : remoteLaunchOriginBySurface[surfaceID]?.hostProfileID
     return context
   }
 

@@ -79,8 +79,11 @@ so the row falls back to the pane's worktree.
 
 That directory is a path on the host, so it never resolves against this Mac's worktrees.
 `ActiveAgentEntry.localWorkingDirectory` is nil for a remote agent. `remoteWorktreeID`
-resolves the agent only to its own pane's remote folder, when the directory lies inside
-it; otherwise the row names the directory's last component. A host with the same layout as
+resolves the agent only to its own pane's remote folder, and only when the agent runs on
+that folder's host (`RemoteAgentContext.hostProfileID`, set while the pane's own session is
+in front) and its directory lies inside the folder. A later `ssh` to another host from the
+same pane never matches, even with the same path. Otherwise the row names the directory's
+last component. A host with the same layout as
 this Mac (such as mini with `/Users/onevcat/…`) would otherwise show the local repository.
 
 Shared helpers: `remoteLaunch(surfaceID:workingDirectory:firstCommand:)`,
@@ -104,6 +107,8 @@ resolves the directory in the staging task.
   kept for Undo (checked red). A failed snapshot keeps the last known directory (checked
   red). A remote agent's directory resolves only to its remote folder
   (`RemoteAgentPresentationTests`, checked red).
+- A remote agent on another host than its pane's folder does not resolve to that folder
+  (checked red).
 - An unreadable tmux server hides the directory (checked red). An unprobed remote agent with
   a local OSC 7 directory has no directory (checked red).
 
