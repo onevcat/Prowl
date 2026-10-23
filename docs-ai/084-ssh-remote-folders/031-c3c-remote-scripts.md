@@ -86,7 +86,8 @@ stays at the prompt, in the user's login shell.
   abandonment.
 - **Undo.** A remote pane brought back by Undo waits for no marker any more. While the pane
   was closed, its marker found no origin and was dropped, and its reactions went with the
-  close, so the restored origin counts as completed.
+  close, so the restored origin counts as completed. A CLI waiter for that first command
+  resumes then with no status, so it never takes a later command's status.
 - **A suspended `ssh`.** When the `ssh` is suspended (still running) and no longer in the
   foreground, its first command completes nothing at once. A later local command then does
   not take its toast or its Close on Success, and a waiter does not wait forever.
@@ -120,7 +121,8 @@ stays at the prompt, in the user's login shell.
   - A marker right after a remote finish with the `ssh` gone still counts within the grace
     (checked red without it).
   - A local finish within the grace takes none of the script's reactions (checked red).
-  - Undo brings back a script pane that waits for no marker (checked red).
+  - Undo brings back a script pane that waits for no marker, and the waiter for its script
+    gets no status (checked red).
   - A suspended `ssh` abandons its script (checked red).
   - The setup script is consumed only once staged (checked red).
   - A split is refused.
