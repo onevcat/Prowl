@@ -85,6 +85,8 @@ struct AddRemoteFolderFeatureTests {
     #expect(RemoteFolders.isEnabled(environment: [:]))
     #expect(RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": "1"]))
     #expect(!RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": "0"]))
+    #expect(!RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": " False "]))
+    #expect(!RemoteFolders.isEnabled(environment: ["PROWL_REMOTE_FOLDERS": "off"]))
     let older = HostProfile(
       id: UUID(), alias: "old", recipe: SSHConnectionRecipe(destination: "old"),
       connectionKey: ConnectionKey(user: "dev", hostname: "old.local"))

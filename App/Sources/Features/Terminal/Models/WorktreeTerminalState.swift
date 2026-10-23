@@ -268,6 +268,10 @@ final class WorktreeTerminalState {
   @ObservationIgnored var remoteTerminalStagerForTesting: RemoteTerminalStager?
   /// A remote pane could not start: the message for the user.
   @ObservationIgnored var onRemoteTerminalFailed: ((String) -> Void)?
+  /// A remote pane started its `ssh`.
+  @ObservationIgnored var onRemoteLaunchStarted: (() -> Void)?
+  /// A remote folder's saved layout, restored when its terminals first open (docs-ai 084 C5).
+  @ObservationIgnored var pendingLayoutSnapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree?
   @ObservationIgnored var accessibilityPosterForTesting: (@MainActor (Any, NSAccessibility.Notification) -> Void)?
   var remoteAgentDetectionMode: RemoteAgentDetection.Mode {
     remoteAgentDetectionMode(consent: remoteAgentDetectionConsent)
@@ -610,6 +614,11 @@ final class WorktreeTerminalState {
   func ensureInitialTab(focusing: Bool) {
     guard worktree.location.availability(of: .terminalTab).isAvailable else { return }
     guard tabManager.tabs.isEmpty else { return }
+    // A remote folder's saved layout, once: a failed restore opens a plain first tab.
+    if let snapshot = pendingLayoutSnapshot {
+      pendingLayoutSnapshot = nil
+      if applyLayoutSnapshot(snapshot) { return }
+    }
     guard !isEnsuringInitialTab else { return }
     isEnsuringInitialTab = true
     Task {

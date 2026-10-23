@@ -294,9 +294,10 @@ extension WorktreeTerminalState {
     tabID: TerminalTabID, context: ghostty_surface_context_e
   ) -> SplitTree<GhosttySurfaceView>.Node? {
     guard let profile = remoteTerminalStager.profile(hostProfileID) else { return nil }
-    let saved = origin?.cwdPath.map(RemotePaths.canonicalPath)
-    let directory =
-      saved.flatMap { $0 == folder || $0.hasPrefix(folder == "/" ? "/" : folder + "/") ? $0 : nil } ?? folder
+    // A directory saved for another host is not this folder's.
+    let sameHost = origin.flatMap { UUID(uuidString: $0.hostProfileID) } == hostProfileID
+    let saved = sameHost ? origin?.cwdPath.map(RemotePaths.canonicalPath) : nil
+    let directory = saved.flatMap { RemotePaths.contains($0, in: folder) ? $0 : nil } ?? folder
     let view = createSurface(
       tabId: tabID, initialInput: nil, inheritingFromSurfaceId: nil,
       workingDirectoryOverride: Self.localDirectory(for: profile), context: context, defersSurfaceCreation: true)

@@ -1071,9 +1071,9 @@ struct WorktreeTerminalManagerTests {
     #expect(localLeaf.remote == nil)
   }
 
-  /// A remote folder that does not load (its host is unreachable) or whose panes cannot be
-  /// restored (its host profile is gone) is skipped: the local layout is still restored
-  /// (docs-ai 084 C5).
+  /// A remote folder's saved layout waits until its terminals open (docs-ai 084 C5): a folder
+  /// that does not load (its host is unreachable) or cannot restore yet never drops the local
+  /// layout, and its saved layout stays in the next save.
   @Test(.timeLimit(.minutes(1))) func aRemoteFolderThatCannotRestoreIsSkipped() async throws {
     let local = makeWorktree()
     let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
@@ -1110,6 +1110,23 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .layoutRestored(selectedWorktreeID: local.id))
     #expect(manager.state(for: local).tabManager.tabs.count == 1)
     #expect(manager.state(for: remote).tabManager.tabs.isEmpty)
+    #expect(manager.state(for: remote).pendingLayoutSnapshot == payload.worktrees[1])
+    // Opening it fails without its host profile; its layout is still kept.
+    manager.state(for: remote).ensureInitialTab(focusing: false)
+    #expect(manager.state(for: remote).pendingLayoutSnapshot == nil)
+    let saved = LockIsolated<TerminalLayoutSnapshotPayload?>(nil)
+    let saving = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { payload },
+        saveSnapshot: {
+          saved.setValue($0)
+          return true
+        }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true)
+    await saving.restoreLayoutSnapshot(from: [local])
+    await saving.persistLayoutSnapshot()
+    #expect(saved.value.map { Set($0.worktrees.map(\.worktreeID)) } == [local.id, remote.id, missing.id])
   }
 
   private func makeWorktree(

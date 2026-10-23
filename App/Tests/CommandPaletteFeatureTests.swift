@@ -15,6 +15,8 @@ struct CommandPaletteFeatureTests {
       "global.open-settings",
       "global.open-repository",
       "global.new-workspace",
+      // Remote folders are on unless `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C5).
+      "global.add-remote-folder",
       "global.new-worktree",
       "global.refresh-worktrees",
       "global.jump-to-latest-unread",
@@ -25,6 +27,7 @@ struct CommandPaletteFeatureTests {
       "global.toggle-canvas",
       "global.toggle-shelf",
     ]
+    if !RemoteFolders.isEnabledInThisProcess { expectedIDs.removeAll { $0 == "global.add-remote-folder" } }
     #if DEBUG
       expectedIDs.append(contentsOf: [
         "debug.toast.inProgress",
