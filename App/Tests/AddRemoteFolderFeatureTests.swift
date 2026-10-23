@@ -92,13 +92,13 @@ struct AddRemoteFolderFeatureTests {
 
     let disabled = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteFoldersEnabledKey.self] = false
     }
     await disabled.send(.addRemoteFolderRequested)
 
     let enabled = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
-    } withDependencies: {
-      $0[RemoteFoldersEnabledKey.self] = true
     }
     await enabled.send(.addRemoteFolderRequested) {
       $0.addRemoteFolder = AddRemoteFolderFeature.State(hostProfiles: [older, Self.profile])
@@ -131,6 +131,63 @@ struct AddRemoteFolderFeatureTests {
     #expect(throws: Never.self) {
       try RemoteCommandLane.requireSideChannel(environment: ["PROWL_REMOTE_AGENT_DETECTION": "1"])
     }
+  }
+
+  /// While remote folders are off, a stored remote folder stays stored but does not load,
+  /// show or connect, and the prunes keep its pins, orders and archived worktrees.
+  @Test(.dependencies) func aStoredRemoteFolderStaysHiddenAndKeptWhileTheFlagIsOff() async throws {
+    let local = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "prowl-hidden-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: local, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: local) }
+    // The stored form of a local folder ends in a slash.
+    let localPath = PathPolicy.trimmingTrailingSlashes(local.path(percentEncoded: false)) + "/"
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let remoteWorktreeID = RemoteRepositoryFixtures.location("/home/dev/app-side").id
+    let entries = [
+      PersistedRepositoryEntry(path: localPath, kind: .plain),
+      PersistedRepositoryEntry(path: remote.id, kind: .git),
+    ]
+    let saved = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    let hostCalls = LockIsolated(0)
+    let snapshotRepository = Repository(
+      location: remote, name: "app", kind: .git,
+      worktrees: [
+        Worktree(
+          name: "side", detail: "",
+          location: .remote(hostProfileID: RemoteRepositoryFixtures.hostProfileID, path: "/home/dev/app-side"),
+          repositoryLocation: remote)
+      ])
+    var state = RepositoriesFeature.State()
+    state.pinnedWorktreeIDs = [remoteWorktreeID]
+    state.repositoryOrderIDs = [remote.id, localPath]
+    state.worktreeOrderByRepository = [remote.id: [remoteWorktreeID]]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteFoldersEnabledKey.self] = false
+      $0.repositoryPersistence.loadRepositoryEntries = { entries }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in saved.withValue { $0.append(entries) } }
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { _ in
+        hostCalls.withValue { $0 += 1 }
+        return nil
+      })
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositorySnapshotLoaded([snapshotRepository]))
+    #expect(store.state.repositories.isEmpty)
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded, timeout: .seconds(10))
+
+    #expect(store.state.repositories.map(\.id) == [localPath])
+    #expect(store.state.repositoryRoots.map(\.id) == [localPath])
+    #expect(store.state.loadFailuresByID.isEmpty)
+    #expect(hostCalls.value == 0)
+    #expect(store.state.pinnedWorktreeIDs == [remoteWorktreeID])
+    #expect(store.state.repositoryOrderIDs == [remote.id, localPath])
+    #expect(store.state.worktreeOrderByRepository == [remote.id: [remoteWorktreeID]])
+    #expect(saved.value.allSatisfy { $0 == entries })
   }
 
   /// A checked folder is added as an entry and loaded through its host.

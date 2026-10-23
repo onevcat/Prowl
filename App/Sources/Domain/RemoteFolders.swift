@@ -14,8 +14,8 @@ nonisolated enum RemoteFolders {
   static let isEnabledInThisProcess = isEnabled(environment: ProcessInfo.processInfo.environment)
 }
 
-/// The flag as reducers read it, so tests can turn remote folders on.
+/// The flag as reducers read it. Tests load remote folders unless they turn it off.
 nonisolated enum RemoteFoldersEnabledKey: DependencyKey {
   static let liveValue = RemoteFolders.isEnabledInThisProcess
-  static let testValue = false
+  static let testValue = true
 }

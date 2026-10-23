@@ -81,7 +81,10 @@ extension RepositoriesFeature {
         }
       )
 
-    case .repositorySnapshotLoaded(let repositories):
+    case .repositorySnapshotLoaded(let snapshot):
+      let repositories = snapshot.map { snapshot in
+        remoteFoldersEnabled ? snapshot : snapshot.filter { !RepositoryLocation.hasRemoteForm($0.id) }
+      }
       guard let repositories, !repositories.isEmpty else {
         return .none
       }
@@ -184,7 +187,7 @@ extension RepositoriesFeature {
       state.isRefreshingWorktrees = false
       let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
-        let entries = await loadPersistedRepositoryEntries()
+        let entries = await shownEntries(await loadPersistedRepositoryEntries())
         let roots = entries.map(\.location)
         let (repositories, failures) = await loadRepositoriesData(
           entries, knownRemoteRepositories: knownRemoteRepositories)

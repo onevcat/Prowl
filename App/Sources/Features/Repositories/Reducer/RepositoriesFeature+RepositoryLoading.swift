@@ -35,6 +35,20 @@ extension RepositoriesFeature {
     }
   }
 
+  /// The entries that load and show. While remote folders are off (`PROWL_REMOTE_FOLDERS`),
+  /// a stored remote folder stays stored but does not load, show or connect (docs-ai 084
+  /// D7); the prunes keep its pins and orders (`keepsHiddenRemoteID`).
+  func shownEntries(_ entries: [PersistedRepositoryEntry]) -> [PersistedRepositoryEntry] {
+    remoteFoldersEnabled ? entries : entries.filter { !RepositoryLocation.hasRemoteForm($0.path) }
+  }
+
+  /// Whether a prune keeps `id` although it is not loaded: the ID of a remote folder, or
+  /// of its worktree, while remote folders are off.
+  var keepsHiddenRemoteID: @Sendable (String) -> Bool {
+    let hidesRemoteFolders = !remoteFoldersEnabled
+    return { hidesRemoteFolders && RepositoryLocation.hasRemoteForm($0) }
+  }
+
   func loadPersistedRepositoryEntries(
     fallbackRoots: [RepositoryLocation] = []
   ) async -> [PersistedRepositoryEntry] {
@@ -138,7 +152,7 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
-      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+      let entries = await shownEntries(await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots))
       let roots = entries.map(\.location)
       // A remote prune would add a connection per entry to every reload; the refresh lists
       // a worktree whose folder is gone, so remote entries skip it (docs-ai 084 B3e).
@@ -353,8 +367,9 @@ extension RepositoriesFeature {
       availableWorktreeIDs.contains($0.key)
     }
     state.forgetPullRequestRefreshHistory(keeping: availableWorktreeIDs)
+    let isKept = keepsHiddenRemoteID
     state.$prowlCreatedWorktreeIDs.withLock {
-      $0.removeAll { !availableWorktreeIDs.contains($0) }
+      $0.removeAll { !availableWorktreeIDs.contains($0) && !isKept($0) }
     }
     let identifiedRepositories = IdentifiedArray(uniqueElements: repositories)
     if animated {
@@ -378,12 +393,12 @@ extension RepositoriesFeature {
       state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
       state.worktreeInfoByID = filteredWorktreeInfo
     }
-    let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
-    let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state)
-    let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state)
+    let didPrunePinned = prunePinnedWorktreeIDs(state: &state, keeping: isKept)
+    let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state, keeping: isKept)
+    let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state, keeping: isKept)
     let didPruneArchivedWorktrees =
       shouldPruneArchivedWorktrees
-      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
+      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state, keeping: isKept)
       : false
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSidebarSelectionValid(state.selection, state: state)

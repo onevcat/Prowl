@@ -283,7 +283,9 @@ func repositoryForWorktreeCreation(
   return nil
 }
 
-func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> Bool {
+func prunePinnedWorktreeIDs(
+  state: inout RepositoriesFeature.State, keeping isKept: (Worktree.ID) -> Bool = { _ in false }
+) -> Bool {
   let availableIDs = Set(state.repositories.flatMap { $0.worktrees.map(\.id) })
   let mainIDs = Set(
     state.repositories.compactMap { repository in
@@ -292,9 +294,10 @@ func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> Bool {
   )
   let archivedSet = state.archivedWorktreeIDSet
   let pruned = state.pinnedWorktreeIDs.filter {
-    availableIDs.contains($0)
-      && !mainIDs.contains($0)
-      && !archivedSet.contains($0)
+    isKept($0)
+      || (availableIDs.contains($0)
+        && !mainIDs.contains($0)
+        && !archivedSet.contains($0))
   }
   if pruned != state.pinnedWorktreeIDs {
     state.pinnedWorktreeIDs = pruned
@@ -305,11 +308,12 @@ func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> Bool {
 
 func pruneRepositoryOrderIDs(
   roots: [RepositoryLocation],
-  state: inout RepositoriesFeature.State
+  state: inout RepositoriesFeature.State,
+  keeping isKept: (Repository.ID) -> Bool = { _ in false }
 ) -> Bool {
   let rootIDs = roots.map { $0.standardized.id }
   let availableIDs = Set(rootIDs + state.repositories.map(\.id))
-  let pruned = state.repositoryOrderIDs.filter { availableIDs.contains($0) }
+  let pruned = state.repositoryOrderIDs.filter { availableIDs.contains($0) || isKept($0) }
   if pruned != state.repositoryOrderIDs {
     state.repositoryOrderIDs = pruned
     return true
@@ -319,7 +323,8 @@ func pruneRepositoryOrderIDs(
 
 func pruneWorktreeOrderByRepository(
   roots: [RepositoryLocation],
-  state: inout RepositoriesFeature.State
+  state: inout RepositoriesFeature.State,
+  keeping isKept: (Repository.ID) -> Bool = { _ in false }
 ) -> Bool {
   let rootIDs = Set(roots.map { $0.standardized.id })
   let repositoriesByID = Dictionary(
@@ -331,7 +336,7 @@ func pruneWorktreeOrderByRepository(
   var pruned: [Repository.ID: [Worktree.ID]] = [:]
   for (repoID, order) in state.worktreeOrderByRepository {
     guard let repository = repositoriesByID[repoID] else {
-      if rootIDs.contains(repoID), !order.isEmpty {
+      if rootIDs.contains(repoID) || isKept(repoID), !order.isEmpty {
         pruned[repoID] = order
       }
       continue
@@ -363,9 +368,10 @@ func pruneWorktreeOrderByRepository(
 
 func pruneArchivedWorktrees(
   availableWorktreeIDs: Set<Worktree.ID>,
-  state: inout RepositoriesFeature.State
+  state: inout RepositoriesFeature.State,
+  keeping isKept: (Worktree.ID) -> Bool = { _ in false }
 ) -> Bool {
-  let pruned = state.archivedWorktrees.filter { availableWorktreeIDs.contains($0.id) }
+  let pruned = state.archivedWorktrees.filter { availableWorktreeIDs.contains($0.id) || isKept($0.id) }
   if pruned != state.archivedWorktrees {
     state.archivedWorktrees = pruned
     return true
