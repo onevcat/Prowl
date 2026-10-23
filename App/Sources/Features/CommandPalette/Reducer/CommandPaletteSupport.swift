@@ -7,6 +7,7 @@ enum CommandPaletteItemID {
   static let globalOpenSettings = "global.open-settings"
   static let globalOpenRepository = "global.open-repository"
   static let globalNewWorkspace = "global.new-workspace"
+  static let globalAddRemoteFolder = "global.add-remote-folder"
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
   static let globalJumpToLatestUnread = "global.jump-to-latest-unread"
@@ -58,6 +59,7 @@ enum CommandPaletteItemID {
       globalOpenSettings,
       globalOpenRepository,
       globalNewWorkspace,
+      globalAddRemoteFolder,
       globalNewWorktree,
       globalRefreshWorktrees,
       globalJumpToLatestUnread,
@@ -199,6 +201,7 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .newWorktree,
     .openRepository,
     .newWorkspace,
+    .addRemoteFolder,
     .editWorkspace,
     .viewArchivedWorktrees,
     .refreshWorktrees,
@@ -278,10 +281,13 @@ func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeatu
   }
 }
 
+/// Actions that add a project: a workspace, or a remote folder (docs-ai 084 C1).
 func workspaceDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
   switch kind {
   case .newWorkspace:
     return .newWorkspace
+  case .addRemoteFolder:
+    return .addRemoteFolder
   case .editWorkspace(let repositoryID):
     return .editWorkspace(repositoryID)
   default:
@@ -358,6 +364,7 @@ func pullRequestDelegateAction(
     .newWorktree,
     .openRepository,
     .newWorkspace,
+    .addRemoteFolder,
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .jumpToLatestUnread,

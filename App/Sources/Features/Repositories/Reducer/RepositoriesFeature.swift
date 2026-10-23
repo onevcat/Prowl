@@ -255,6 +255,8 @@ struct RepositoriesFeature {
   @CasePathable
   enum RepositoryManagementAction: Equatable {
     case openRepositories([URL])
+    /// Adds a remote folder that the Add Remote Folder sheet checked (docs-ai 084 C1).
+    case openRemoteRepository(RepositoryLocation, kind: Repository.Kind)
     case openRepositoriesFinished(
       [Repository],
       failures: [LoadFailure],
@@ -449,6 +451,8 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
+    /// The Add Remote Folder sheet (docs-ai 084 C1), only while `PROWL_REMOTE_FOLDERS=1`.
+    @Presents var addRemoteFolder: AddRemoteFolderFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -557,6 +561,9 @@ struct RepositoriesFeature {
     case showToast(StatusToast)
     case dismissToast
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
+    case addRemoteFolder(PresentationAction<AddRemoteFolderFeature.Action>)
+    /// Opens the Add Remote Folder sheet; nothing happens while remote folders are off.
+    case addRemoteFolderRequested
     case workspaceEditor(PresentationAction<WorkspaceEditorFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -655,6 +662,7 @@ struct RepositoriesFeature {
   /// `gitClient` stays for local URLs that are not a repository's location.
   var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient, remote: remoteRepositoryHosts) }
   @Dependency(RemoteRepositoryHostClient.self) var remoteRepositoryHosts
+  @Dependency(RemoteFoldersEnabledKey.self) var remoteFoldersEnabled
   @Dependency(PullRequestRefreshCoordinatorClient.self) var pullRequestRefreshCoordinator
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(OpenURLClient.self) var openURLClient
@@ -700,6 +708,9 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+    .ifLet(\.$addRemoteFolder, action: \.addRemoteFolder) {
+      AddRemoteFolderFeature()
     }
     .ifLet(\.$workspaceEditor, action: \.workspaceEditor) {
       WorkspaceEditorFeature()
