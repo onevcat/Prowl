@@ -37,6 +37,9 @@ show or connect to a remote folder. While the flag is off:
 
 - a reorder of the shown repositories puts the hidden IDs back at their places in the
   stored order (`mergingHiddenRepositoryIDs`).
+- the sidebar's stored collapse state keeps the remote folders that are not loaded
+  (`SidebarView.storedCollapsedIDs`): hidden, unreachable, or before the live load. A
+  removed remote folder can leave its ID in that list; it is never shown.
 
 A session without the flag writes a snapshot without remote repositories. The snapshot
 restore therefore keeps every remote-form ID through its prunes, also with the flag on,
@@ -136,6 +139,8 @@ connects again. Both are one-time costs of adding a folder.
   - a reorder while the flag is off keeps the hidden folders' places;
   - a snapshot without remote repositories keeps the remote pins, orders and
     created-worktree marks with the flag on (both checked red).
+  - the sidebar keeps the collapse state of remote folders that are not loaded (checked
+    red).
 - `RemoteRepositoryHostTests`: on a real repository through the local lane, a main path, a
   subfolder and a linked worktree all find the main worktree. A worktree of a bare
   repository finds the bare repository. A plain folder is plain, a missing path is
