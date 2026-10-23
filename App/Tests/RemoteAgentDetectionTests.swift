@@ -1,4 +1,5 @@
 import AppKit
+import Clocks
 import Foundation
 import GhosttyKit
 import ProwlCLIShared
@@ -149,10 +150,12 @@ struct RemoteAgentDetectionTests {
       ])
   }
 
-  private func remoteProcess(_ pid: Int32, name: String, start: String = "t1") -> RemoteProbeProcess {
+  private func remoteProcess(
+    _ pid: Int32, name: String, start: String = "t1", directory: String = "/home/dev"
+  ) -> RemoteProbeProcess {
     RemoteProbeProcess(
       pid: pid, parentPID: 100, processGroupID: pid, startToken: start, elapsedSeconds: 1, name: name,
-      arguments: [name], commandLine: name, workingDirectory: "/home/dev")
+      arguments: [name], commandLine: name, workingDirectory: directory)
   }
 
   private func snapshot(
@@ -1814,6 +1817,51 @@ struct RemoteAgentDetectionTests {
     probe.job = sshJob
     await detect(fixture)
     #expect(asked == ["mini"])
+  }
+
+  /// A remote agent's entry and directory are the host's (docs-ai 084 C4), not the pane's
+  /// local one.
+  @Test func aRemoteAgentWorksInItsHostDirectory() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture,
+      snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude", directory: "/srv/app/api")))
+    await detect(fixture)
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.agentWorkingDirectory == "/srv/app/api")
+    #expect(fixture.state.activeAgentWorkingDirectory(surfaceID: fixture.surfaceID)?.path == "/srv/app/api")
+  }
+
+  /// A remote split starts where its anchor pane is on the host: after a fresh snapshot,
+  /// else the last known directory when none comes in time (docs-ai 084 C4).
+  @Test func aRemoteSplitStartsWhereItsAnchorIs() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    let clock = TestClock()
+    fixture.state.remoteLaunchClock = clock
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/a")))
+    let refreshes = fixture.source.refreshes
+
+    let fresh = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes }
+    await deliver(
+      fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/b")))
+    #expect(await fresh.value == "/srv/b")
+
+    let stale = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes + 1 }
+    await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)
+    #expect(await stale.value == "/srv/b")
   }
 
   /// The kill switch still turns detection off for a remote folder's pane.

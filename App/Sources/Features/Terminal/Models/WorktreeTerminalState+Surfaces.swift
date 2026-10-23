@@ -7,7 +7,7 @@ import ProwlCLIShared
 enum SplitCreationError: Error, Equatable, Sendable {
   case anchorNotFound(UUID)
   case insertionFailed
-  /// Splits in a remote folder come with docs-ai 084 C4.
+  /// The remote folder's host profile is missing (docs-ai 084 C4).
   case remoteFolder
 }
 
@@ -215,23 +215,31 @@ extension WorktreeTerminalState {
     focusing: Bool = true,
     defersSurfaceCreation: Bool = false
   ) -> Result<UUID, SplitCreationError> {
-    // A split of a remote pane would be a local shell: remote splits come with docs-ai 084 C4.
-    guard worktree.location.availability(of: .terminalSplit).isAvailable else { return .failure(.remoteFolder) }
     guard let tabID = tabId(containing: anchorSurfaceID),
       let tree = trees[tabID],
       let anchorSurface = surfaces[anchorSurfaceID]
     else {
       return .failure(.anchorNotFound(anchorSurfaceID))
     }
+    // In a remote folder, a split is a new remote pane: the input is its launch's first
+    // command on the host, never typed into a local shell (docs-ai 084 C4).
+    var remoteProfile: HostProfile?
+    if case .remote(let hostProfileID, _) = worktree.location {
+      guard let profile = remoteTerminalStager.profile(hostProfileID) else {
+        onRemoteTerminalFailed?(RepositoryHostError.hostProfileMissing(hostProfileID).localizedDescription)
+        return .failure(.remoteFolder)
+      }
+      remoteProfile = profile
+    }
 
     let newSurface = createSurface(
       tabId: tabID,
-      initialInput: initialInput.flatMap { runScriptInput($0) },
+      initialInput: remoteProfile == nil ? initialInput.flatMap { runScriptInput($0) } : nil,
       inheritingFromSurfaceId: anchorSurfaceID,
-      workingDirectoryOverride: workingDirectoryOverride,
+      workingDirectoryOverride: remoteProfile.map(Self.localDirectory(for:)) ?? workingDirectoryOverride,
       context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
       additionalEnvironment: additionalEnvironment,
-      defersSurfaceCreation: defersSurfaceCreation
+      defersSurfaceCreation: defersSurfaceCreation || remoteProfile != nil
     )
     do {
       let newTree = try tree.inserting(
@@ -247,6 +255,18 @@ extension WorktreeTerminalState {
         focusSurface(newSurface, in: tabID)
       }
       _ = registerTargetHandle(for: newSurface.id)
+      if let remoteProfile {
+        let folder = worktree.location.path
+        startRemoteLaunch(
+          remoteLaunch(
+            surfaceID: newSurface.id, workingDirectory: folder,
+            firstCommand: initialInput.flatMap { runScriptInput($0) }),
+          profile: remoteProfile, surfaceID: newSurface.id, tabID: tabID, consumesSetupScript: false
+        ) { [weak self] in
+          await self?.remoteSplitDirectory(anchorSurfaceID: anchorSurfaceID, override: workingDirectoryOverride)
+            ?? folder
+        }
+      }
       return .success(newSurface.id)
     } catch {
       newSurface.closeSurface()
