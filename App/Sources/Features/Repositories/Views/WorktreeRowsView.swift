@@ -494,10 +494,12 @@ struct WorktreeRowsView: View {
       ? String(localized: "Delete Selected Worktrees (\(deleteShortcut))")
       : String(localized: "Delete Worktree (\(deleteShortcut))")
     let tabCount = terminalManager.stateIfExists(for: row.id)?.tabManager.tabs.count ?? 0
+    let terminalReason = worktree.availability(of: .terminalTab).unavailableReason?.message
     Button("New Terminal Tab") {
       newTerminalTab(for: row)
     }
-    .help("Open a new terminal tab at this worktree's root")
+    .disabled(terminalReason != nil)
+    .help(terminalReason ?? String(localized: "Open a new terminal tab at this worktree's root"))
     if let stopRunScript = stopRunScriptHandler(for: row.id) {
       Button("Stop Running Script") {
         stopRunScript()
