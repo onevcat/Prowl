@@ -1605,10 +1605,7 @@ final class WorktreeTerminalManager {
   }
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    // A restored remote leaf would be a plain local shell: remote restore comes with
-    // docs-ai 084 C5, so a remote folder's tabs are not saved.
-    let activeStates = activeWorktreeStates.filter { $0.worktree.location.localURL != nil }
-      .sorted { $0.worktreeID < $1.worktreeID }
+    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count)"
@@ -1628,7 +1625,7 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
-    // A selected remote folder is not in the payload, which must name a saved worktree.
+    // The selection must name a saved worktree.
     return TerminalLayoutSnapshotPayload(
       selectedWorktreeID: snapshotWorktrees.contains { $0.worktreeID == selectedWorktreeID } ? selectedWorktreeID : nil,
       worktrees: snapshotWorktrees
@@ -1651,11 +1648,14 @@ final class WorktreeTerminalManager {
     var skippedWorktreeIDs: Set<Worktree.ID> = []
 
     for snapshot in payload.worktrees {
+      // A remote folder may not load at launch (its host is unreachable), and its panes may
+      // not reconnect: it is skipped, never a reason to drop the local layout (docs-ai 084 C5).
+      let isRemote = RepositoryLocation.hasRemoteForm(snapshot.worktreeID)
       guard let worktree = worktreeByID[snapshot.worktreeID] else {
         terminalLogger.warning(
           "[LayoutRestore] apply: worktreeID \(snapshot.worktreeID) not found in available worktrees"
         )
-        if allowsMissingWorktrees {
+        if allowsMissingWorktrees || isRemote {
           skippedWorktreeIDs.insert(snapshot.worktreeID)
           continue
         }
@@ -1670,6 +1670,10 @@ final class WorktreeTerminalManager {
         terminalLogger.warning(
           "[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
         state.closeAllSurfaces()
+        if isRemote {
+          skippedWorktreeIDs.insert(snapshot.worktreeID)
+          continue
+        }
         for restored in restoredStates {
           restored.closeAllSurfaces()
         }

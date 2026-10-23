@@ -625,15 +625,61 @@ struct RemoteTerminalTabTests {
     #expect(!state.remoteLaunchHoldsWaiters(surfaceID: surface.id))
   }
 
-  /// A remote folder's tabs are not saved in the layout, and a saved layout is not applied
-  /// to one: a restored leaf would be a local shell until C5.
-  @Test func aRemoteFolderHasNoSavedLayout() throws {
-    let state = makeState(Staging())
-    _ = try #require(state.createTab())
+  /// A restored remote leaf reconnects with a plain shell, never a script, where its session
+  /// was on the host when that lies inside the folder, else in the folder (C5, R-9).
+  @Test(.timeLimit(.minutes(1))) func aRestoredRemoteLeafReconnectsWithAPlainShell() async throws {
+    let staging = Staging()
+    let state = makeState(staging)
+    func leaf(_ cwd: String?) -> TerminalLayoutSnapshotPayload.SnapshotSplitNode {
+      .leaf(
+        surfaceID: UUID().uuidString,
+        remote: .init(hostProfileID: RemoteRepositoryFixtures.hostProfileID.uuidString, cwdPath: cwd))
+    }
+    let tabs = [leaf("/home/dev/app/api/../web"), leaf("/home/dev/other"), leaf(nil)].map { node in
+      TerminalLayoutSnapshotPayload.SnapshotTab(
+        tabID: UUID().uuidString, title: "app 1", customTitle: nil, icon: nil, splitRoot: node)
+    }
     let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
-      worktreeID: state.worktree.id, selectedTabID: nil, tabs: [])
+      worktreeID: state.worktree.id, selectedTabID: nil, tabs: tabs)
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+    await waitUntil { staging.launches.value.count == 3 }
+
+    let launches = staging.launches.value
+    #expect(Set(launches.map(\.workingDirectory)) == ["/home/dev/app/web", "/home/dev/app"])
+    #expect(launches.filter { $0.workingDirectory == "/home/dev/app" }.count == 2)
+    #expect(launches.allSatisfy { $0.firstCommand == nil })
+    for surface in state.surfaces.values {
+      await waitUntil { surface.surfaceCreationArmed }
+      #expect(surface.initialInputForTesting?.hasPrefix(" /usr/bin/ssh -t ") == true)
+      #expect(state.remoteLaunchOriginBySurface[surface.id] != nil)
+    }
+  }
+
+  /// A remote folder whose host profile is gone is not restored.
+  @Test func aRemoteFolderWithoutItsHostProfileIsNotRestored() {
+    let state = makeState(Staging(), profile: nil)
+    let tabID = UUID().uuidString
+    let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: state.worktree.id, selectedTabID: tabID,
+      tabs: [
+        .init(
+          tabID: tabID, title: nil, customTitle: nil, icon: nil,
+          splitRoot: .leaf(
+            surfaceID: UUID().uuidString,
+            remote: .init(hostProfileID: RemoteRepositoryFixtures.hostProfileID.uuidString, cwdPath: nil)))
+      ])
 
     #expect(!state.applyLayoutSnapshot(snapshot))
+    #expect(state.tabManager.tabs.isEmpty)
+  }
+
+  /// A snapshot written before remote leaves decodes with no remote origin.
+  @Test func anOlderLayoutLeafDecodesWithoutARemoteOrigin() throws {
+    let json = #"{"kind":"leaf","surfaceID":"A","cwdPath":"/tmp"}"#
+    let node = try JSONDecoder().decode(TerminalLayoutSnapshotPayload.SnapshotSplitNode.self, from: Data(json.utf8))
+    #expect(node.remote == nil)
+    #expect(node.cwdPath == "/tmp")
   }
 
   // MARK: - The typed line
