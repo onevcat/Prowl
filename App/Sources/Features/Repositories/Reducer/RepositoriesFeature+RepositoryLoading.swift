@@ -129,11 +129,12 @@ extension RepositoriesFeature {
   }
 
   /// `knownRemoteRepositories` are loaded remote repositories that the load keeps as they
-  /// are instead of asking their hosts (docs-ai 084 B3f).
+  /// are instead of asking their hosts (docs-ai 084 B3f). Every caller passes
+  /// `State.retainedRemoteRepositories`, so no load can evict them or roll them back.
   func loadRepositories(
     fallbackRoots: [RepositoryLocation] = [],
     animated: Bool = false,
-    knownRemoteRepositories: [Repository] = []
+    knownRemoteRepositories: [Repository]
   ) -> Effect<Action> {
     let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in

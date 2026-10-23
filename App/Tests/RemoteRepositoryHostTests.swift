@@ -859,10 +859,13 @@ struct RemoteRepositoryHostTests {
 
   @Test func theRefreshCadencePollsTheFocusedRepositoryFasterAndBacksOff() {
     #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 0) == .seconds(10))
-    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 0) == .seconds(60))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 0) == .seconds(45))
     #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 1) == .seconds(20))
-    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 2) == .seconds(240))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 2) == .seconds(180))
     #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 3) == .seconds(300))
+    // A held connection stays open between background polls only within ControlPersist.
+    let controlPersist = Duration.seconds(RemoteConnectionOwner.Configuration().controlPersistSeconds)
+    #expect(RepositoriesFeature.remoteRefreshBackgroundInterval < controlPersist)
     #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 40) == .seconds(300))
   }
 
@@ -934,7 +937,7 @@ struct RemoteRepositoryHostTests {
     store.exhaustivity = .off
 
     await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshDue)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
 
@@ -944,10 +947,10 @@ struct RemoteRepositoryHostTests {
 
     // The next poll waits twice as long.
     reachable.setValue(true)
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await Task.megaYield()
     #expect(store.state.remoteRefreshInFlightIDs.isEmpty)
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshDue)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
     #expect(store.state.unreachableRepositoryIDs.isEmpty)
@@ -975,16 +978,16 @@ struct RemoteRepositoryHostTests {
     store.exhaustivity = .off
 
     await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
 
     try await fixture.git(["remote", "add", "origin", "git@github.com:example/app.git"])
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested, timeout: .seconds(10))
 
     _ = try await fixture.addWorktree("added", branch: "added")
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
     await store.receive(\.repositoriesLoaded, timeout: .seconds(10))
     #expect(Set(store.state.repositories[id: repository.id]?.worktrees.map(\.name) ?? []) == ["trunk", "added"])
@@ -1048,7 +1051,7 @@ struct RemoteRepositoryHostTests {
 
     // The host answers, but the folder is gone: reachable, and still a failure.
     try FileManager.default.removeItem(at: fixture.main)
-    await clock.advance(by: .seconds(60))
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
 
     #expect(store.state.unreachableRepositoryIDs.isEmpty)
@@ -1168,6 +1171,46 @@ struct RemoteRepositoryHostTests {
     var beforeLoad = state
     beforeLoad.isInitialLoadComplete = false
     #expect(beforeLoad.retainedRemoteRepositories.isEmpty)
+  }
+
+  /// A reload in the reducer keeps a loaded remote repository and never asks its host. Every
+  /// load entry point, such as saving a workspace, passes the retained repositories: the
+  /// parameter has no default.
+  @Test(.dependencies) func aReloadInTheReducerKeepsALoadedRemoteRepository() async {
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    let asked = LockIsolated(0)
+    let hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    let counting = RemoteRepositoryHost(
+      hostProfileID: hostProfileID,
+      lane: RemoteCommandLane(
+        run: { _, _ in
+          asked.withValue { $0 += 1 }
+          return .timedOut
+        },
+        runScript: { _, _ in
+          asked.withValue { $0 += 1 }
+          return .timedOut
+        }))
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    state.repositoryRoots = [repository.location]
+    state.isInitialLoadComplete = true
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { $0 == hostProfileID ? counting : nil })
+      $0.continuousClock = TestClock()
+      $0.repositoryPersistence.loadRepositoryEntries = { [PersistedRepositoryEntry(path: repository.id, kind: .git)] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.reloadRepositories(animated: true))
+    await store.receive(\.repositoriesLoaded, timeout: .seconds(10))
+
+    #expect(store.state.repositories.map(\.id) == [repository.id])
+    #expect(asked.value == 0)
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
   }
 
   // MARK: - A real host (opt-in)

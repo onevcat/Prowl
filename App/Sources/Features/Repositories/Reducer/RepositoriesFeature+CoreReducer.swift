@@ -182,16 +182,19 @@ extension RepositoriesFeature {
     case .loadPersistedRepositories:
       state.alert = nil
       state.isRefreshingWorktrees = false
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
         let entries = await loadPersistedRepositoryEntries()
         let roots = entries.map(\.location)
-        let (repositories, failures) = await loadRepositoriesData(entries)
+        let (repositories, failures) = await loadRepositoriesData(
+          entries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
           .repositoriesLoaded(
             repositories,
             failures: failures,
             roots: roots,
-            animated: false
+            animated: false,
+            reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
           )
         )
       }
