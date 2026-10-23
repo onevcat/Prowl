@@ -63,8 +63,13 @@ before C1. Exposure: none.
 - **The new worktree.** Its creation time is the time it was created on this Mac. The
   host's time arrives with the next refresh.
 
-`wt` already runs on bash 3.2, and it branches on `uname` for copies. It is a function body
-under `bash -s`, so its `set -euo pipefail` and its `exit` behave as in a script.
+`wt` already runs on bash 3.2, and it branches on `uname` for copies. It runs as a function
+in a command substitution, which is a subshell, so its `set -euo pipefail` and its `exit`
+stay inside it. The substitution must not be part of a condition (`… || exit`, `if`):
+bash 5 then ignores `set -e` inside it, and `wt` would go on after a failed
+`git worktree add`, copy files into a folder that git did not register, and exit 0. The
+script reads the substitution's status on the next line instead. Bash 3.2 does not have
+this problem, so the test runs under both.
 
 ### The host's home directory
 
@@ -101,6 +106,9 @@ When the app bundle lacks `git-wt/wt`, a remote creation fails with
   greeting from a startup file and the result records are not progress lines. The refresh
   lists the worktree under the same ID;
 - a directory override places the worktree;
+- a `git worktree add` that fails (a destination folder that is not empty) stops the
+  creation under bash 3.2 and bash 5 (Homebrew): no copy into that folder, no finished
+  event, and nothing registered. With the old `… || exit $?` line, the bash 5 case fails;
 - a base ref that does not exist fails with `wt`'s message (`commandFailed`, `wt …`);
 - the host's home directory: two concurrent first callers share one read, a later call
   reads nothing, and a local repository has none;
