@@ -938,8 +938,8 @@ struct AppFeature {
         guard customCommand.hasRunnableCommand else {
           return .none
         }
-        // A split command would open a local shell in a remote folder (docs-ai 084 C4).
-        if customCommand.execution == .split, let reason = worktree.availability(of: .terminalSplit).unavailableReason {
+        // A split or In Place command cannot run in a remote folder yet (docs-ai 084 C3c).
+        if let reason = worktree.availability(of: customCommand.execution.repositoryFeature).unavailableReason {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         let command = customCommand.command

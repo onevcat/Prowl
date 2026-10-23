@@ -193,8 +193,8 @@ struct RemoteFolderUIGateTests {
   }
 
   /// A script or a custom command in a remote folder runs there (docs-ai 084 C3c), except a
-  /// split command, which would be a local shell until C4: it shows the reason and sends
-  /// nothing.
+  /// split command (a local shell until C4) and an In Place command (the focused pane may be
+  /// the local shell or a password prompt): each shows its reason and sends nothing.
   @Test(.dependencies) func scriptsAndCustomCommandsRunInARemoteFolderButASplitDoesNot() async {
     var state = AppFeature.State(repositories: Self.remoteState(), settings: SettingsFeature.State())
     state.selectedRunScript = "make dev"
@@ -207,6 +207,10 @@ struct RemoteFolderUIGateTests {
         source: .global,
         command: UserCustomCommand(
           id: "watch", title: "Watch", systemImage: "eye", command: "make watch", execution: .split, shortcut: nil)),
+      EffectiveCustomCommand(
+        source: .global,
+        command: UserCustomCommand(
+          id: "type", title: "Type", systemImage: "keyboard", command: "ls", execution: .terminalInput, shortcut: nil)),
     ]
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: state) {
@@ -233,6 +237,9 @@ struct RemoteFolderUIGateTests {
     await store.send(.runCustomCommand(state.selectedCustomCommands[1].id))
     await store.receive(\.repositories.showToast)
     #expect(store.state.repositories.statusToast == .warning("Panes cannot split in remote folders yet."))
+    await store.send(.runCustomCommand(state.selectedCustomCommands[2].id))
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote folders yet."))
     await store.finish()
     #expect(sent.value.count == count)
   }

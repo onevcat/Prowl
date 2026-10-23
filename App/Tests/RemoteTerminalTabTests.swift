@@ -1,3 +1,4 @@
+import Clocks
 import ConcurrencyExtras
 import Foundation
 import GhosttyKit
@@ -392,9 +393,11 @@ struct RemoteTerminalTabTests {
 
   /// A script that sent no marker before its `ssh` ended did not run to its end: no success
   /// toast, no Close on Success, no notification, and the CLI waiter gets no status. The
-  /// decision waits for the `ssh`'s finish, which comes after any marker in the stream.
+  /// decision waits for the `ssh`'s finish, then for the marker grace.
   @Test(.timeLimit(.minutes(1))) func aScriptWithoutAMarkerCompletesNothing() async throws {
     let state = makeState(Staging())
+    let clock = TestClock()
+    state.remoteLaunchClock = clock
     let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
     let ssh = Self.ssh(4_242, nonce: nonce)
     _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh)
@@ -408,6 +411,8 @@ struct RemoteTerminalTabTests {
     #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
     #expect(state.commandFinishedWaiters[surface.id] != nil)
     state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surface.id)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == false)
+    await clock.advance(by: WorktreeTerminalState.remoteMarkerGrace)
 
     var results: [Int?] = []
     for await result in waiter { results.append(result.exitCode) }
@@ -416,6 +421,80 @@ struct RemoteTerminalTabTests {
     #expect(!state.isMarkedForAutoClose(surface.id))
     #expect(state.notifications.isEmpty)
     #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == true)
+  }
+
+  /// A remote shell's own OSC 133 can arrive after the `ssh` exited and just before the
+  /// marker: the marker still counts within the grace.
+  @Test(.timeLimit(.minutes(1))) func aMarkerRightAfterARemoteFinishStillCounts() async throws {
+    let state = makeState(Staging())
+    let clock = TestClock()
+    state.remoteLaunchClock = clock
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in false }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+    // The main thread runs other work before the marker's action.
+    for _ in 0..<20 { await Task.yield() }
+    state.handleProgramStatus(marker("prowl-launch/\(nonce)/0"), surfaceID: surface.id)
+    await clock.advance(by: WorktreeTerminalState.remoteMarkerGrace)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [0])
+    #expect(succeeded == ["Build"])
+  }
+
+  /// A suspended `ssh` ends the session for Prowl: its script completes nothing, so a later
+  /// local command does not take its toast or its Close on Success.
+  @Test(.timeLimit(.minutes(1))) func aSuspendedSSHAbandonsItsScript() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in true }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    state.markSurfaceForAutoClose(surface.id)
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+
+    #expect(results == [nil])
+    #expect(succeeded.isEmpty)
+    #expect(!state.isMarkedForAutoClose(surface.id))
+  }
+
+  /// A remote tab that carries the pending setup script consumes it once its launcher is
+  /// staged; a staging failure keeps it pending for the next tab.
+  @Test func theSetupScriptIsConsumedOnlyOnceStaged() async throws {
+    let failing = makeState(Staging(failure: RemoteRepositoryHostError.timedOut))
+    var consumed = 0
+    failing.onSetupScriptConsumed = { consumed += 1 }
+    var messages: [String] = []
+    failing.onRemoteTerminalFailed = { messages.append($0) }
+    failing.pendingSetupScript = true
+    _ = try #require(failing.createTab(setupScript: "make setup"))
+    await waitUntil { !messages.isEmpty }
+    #expect(consumed == 0)
+    #expect(failing.pendingSetupScript)
+
+    let state = makeState(Staging())
+    state.onSetupScriptConsumed = { consumed += 1 }
+    state.pendingSetupScript = true
+    let tabID = try #require(state.createTab(setupScript: "make setup"))
+    let surface = try onlySurface(state, tabID)
+    #expect(consumed == 0)
+    await waitUntil { surface.surfaceCreationArmed }
+    #expect(consumed == 1)
+    #expect(!state.pendingSetupScript)
   }
 
   /// A marker that arrives after a probe saw the `ssh` exit (the script ended with `exit`)

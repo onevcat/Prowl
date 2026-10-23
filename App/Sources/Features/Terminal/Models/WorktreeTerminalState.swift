@@ -279,6 +279,8 @@ final class WorktreeTerminalState {
     return RemoteAgentDetection.mode(
       environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: consent)
   }
+  /// Times the grace before a remote first command without a marker completes nothing.
+  @ObservationIgnored var remoteLaunchClock: any Clock<Duration> = ContinuousClock()
   /// Whether a local process still runs, for the `ssh` of a remote pane.
   @ObservationIgnored var processIsAliveForTesting: ((LocalProcessGeneration) -> Bool)?
   /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
@@ -666,10 +668,12 @@ final class WorktreeTerminalState {
         selecting: selecting,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
-        workingDirectoryOverride: workingDirectoryOverride
+        workingDirectoryOverride: workingDirectoryOverride,
+        consumesSetupScript: shouldConsumeSetupScript
       )
     )
-    if shouldConsumeSetupScript, tabId != nil {
+    // A remote tab consumes it once its launcher is staged (`finishRemoteLaunch`).
+    if shouldConsumeSetupScript, tabId != nil, worktree.location.localURL != nil {
       onSetupScriptConsumed?()
     }
     return tabId
@@ -991,6 +995,8 @@ final class WorktreeTerminalState {
     var workingDirectoryOverride: URL?
     var additionalEnvironment: [String: String] = [:]
     var defersSurfaceCreation = false
+    /// The input carries the pending setup script.
+    var consumesSetupScript = false
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
@@ -1033,7 +1039,8 @@ final class WorktreeTerminalState {
           RemoteLaunchVariable(name: GhosttySurfaceView.remotePaneIdentityEnvironmentKey, value: surfaceID.uuidString),
         ],
         firstCommand: creation.initialInput),
-      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID)
+      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID,
+      consumesSetupScript: creation.consumesSetupScript)
     return inserted.tabID
   }
 

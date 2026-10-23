@@ -12,7 +12,8 @@ nonisolated struct RemoteLaunchOrigin: Equatable, Sendable {
   let nonce: String
   /// Whether the launch has a first command, so a marker is expected.
   let hasFirstCommand: Bool
-  let launchedAt: Date
+  /// When the pane started its `ssh` (staging is not part of the command's duration).
+  var launchedAt: Date
   /// The pane's `ssh`, once a probe saw it in the foreground: the `ssh` whose arguments
   /// carry the launch's nonce (the launcher path), never one the user typed later.
   var ssh: LocalProcessGeneration?
