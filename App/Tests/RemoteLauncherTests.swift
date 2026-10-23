@@ -389,6 +389,42 @@ nonisolated struct RemoteLauncherTests {
     #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
   }
 
+  /// A first command that composes `PROMPT_COMMAND` (a `direnv hook bash` style prepend)
+  /// still loses Prowl's hook, and the user's prompt hook sees the real exit status after.
+  @Test(arguments: shells.filter { $0.hasSuffix("bash") })
+  func bashRemovesItsPromptHookAfterAPrepend(_ shell: String) throws {
+    let hook = #"_hook() { return $?; }; "#
+    var cases = [
+      (
+        profile: #"PROMPT_COMMAND='printf "USER_STATUS:%s\n" "$?"'"#,
+        command: hook + #"PROMPT_COMMAND="_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}""#
+      )
+    ]
+    if shell.hasPrefix("/opt/homebrew") {
+      cases.append(
+        (
+          profile: #"PROMPT_COMMAND=('printf "USER_STATUS:%s\n" "$?"')"#,
+          command: hook + #"PROMPT_COMMAND=(_hook "${PROMPT_COMMAND[@]}")"#
+        ))
+    }
+    for item in cases {
+      let home = try Home()
+      defer { home.remove() }
+      try Data((item.profile + "\n").utf8).write(to: home.root.appending(path: ".bash_profile"))
+      let launch = RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+        firstCommand: item.command)
+
+      let (output, _) = try Self.launch(
+        launch, shell: shell, home: home, input: "false\necho \"PC:${PROMPT_COMMAND[*]}\"\nexit\n")
+
+      #expect(output.contains(Self.marker(launch.nonce, state: "done", status: 0)), "\(item.command): \(output)")
+      #expect(output.contains("USER_STATUS:1"), "\(item.command): \(output)")
+      #expect(output.contains("PC:_hook"), "\(item.command): \(output)")
+      #expect(!output.contains("prowl_interrupted"), "\(item.command): \(output)")
+    }
+  }
+
   /// A first command that never started, because the startup files ended or replaced the
   /// shell, did not run: no marker reports it, and the launch directory is gone.
   @Test func aFirstCommandThatNeverStartedReportsNothing() throws {

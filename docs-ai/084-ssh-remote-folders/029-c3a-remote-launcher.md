@@ -91,7 +91,11 @@ hands over per shell:
   - a command that finished, with its status;
   - a command that an interrupt (Ctrl-C) stopped, with status 130, when the prompt comes
     back. zsh uses an `always` block (`TRY_BLOCK_INTERRUPT`); bash uses a `PROMPT_COMMAND`
-    hook that it adds before the command and removes after it; fish uses a one-time
+    hook that it adds before the command and removes after it. A command that composes
+    `PROMPT_COMMAND`, such as `eval "$(direnv hook bash)"` or `mise activate bash`, can move
+    the hook (`_direnv_hook;prowl_interrupted; …`, or into an array element), so the
+    removal looks in every element. A hook that still stays keeps the incoming exit status
+    and does nothing after the launch; fish uses a one-time
     `fish_prompt` handler. The status is fixed at 130, because bash 3.2 gives 128 or 130
     for the same Ctrl-C;
   - a command that ended the shell (`exit`, or an `errexit` failure such as `set -e` with a
@@ -205,6 +209,9 @@ The format was chosen over framed OSC 133 for two reasons:
   does not run, and the later `exit 4` reports nothing more. This runs in zsh, bash 3.2 and
   bash 5 on this Mac, and in fish, bash, zsh and dash in the container (checked red with
   the previous launcher).
+- **Composed prompt hook**: in bash, a first command that puts its own hook before
+  Prowl's in `PROMPT_COMMAND` (string, and array in bash 5) leaves no Prowl hook, and the
+  user's prompt hook sees status 1 after `false` (checked red with the previous launcher).
 - **Never started**: a `.bash_profile` that exits 0, and a zsh `.zlogin` that `exec`s
   bash, send no marker and leave no directory (checked red with the previous launcher).
 - **Strict parsing**: the nonce and the marker id are checked strictly (a signed, hex or
