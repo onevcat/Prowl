@@ -248,6 +248,13 @@ final class LifecycleCommandHandler: CommandHandler {
     case .failure(let error):
       return error.commandResponse(command: "create")
     }
+    // A remote folder opens no terminal until its launcher exists (docs-ai 084 C3); this
+    // comes before the path, a host path that this Mac cannot check. An Agent Profile
+    // launch refuses with its own reason.
+    if input.launch == nil, RepositoryLocation.hasRemoteForm(target.worktreeID) {
+      return errorResponse(
+        command: "create", code: CLIErrorCode.createFailed, message: "Terminals cannot open in remote folders yet.")
+    }
 
     let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
     guard input.path == nil || path != nil else {

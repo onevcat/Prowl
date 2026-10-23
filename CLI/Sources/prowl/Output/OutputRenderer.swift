@@ -252,7 +252,7 @@ enum OutputRenderer {
       lines.append(
         "\(projectName.cyan.bold)\(":".dim)\(first.worktree.name) (\(statusText))  \(first.worktree.id.dim)"
       )
-      lines.append("  \("path:".dim) \(first.worktree.path)")
+      lines.append("  \("path:".dim) \(first.worktree.displayPath)")
 
       // Group panes by tab within this worktree.
       var tabOrder: [String] = []
