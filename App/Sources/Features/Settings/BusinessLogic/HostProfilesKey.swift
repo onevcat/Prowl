@@ -41,7 +41,9 @@ nonisolated struct HostProfilesKey: SharedKey {
   func load(context _: LoadContext<[HostProfile]>, continuation: LoadContinuation<[HostProfile]>) {
     @Dependency(\.settingsFileStorage) var storage
     @Dependency(\.hostProfilesFileURL) var url
-    switch Self.storedFile(storage: storage, url: url) {
+    let stored = Self.storedFile(storage: storage, url: url)
+    Self.loadedStates.set(stored, for: url)
+    switch stored {
     case .missing:
       continuation.resume(returning: [])
     case .readable(let file):
@@ -58,24 +60,46 @@ nonisolated struct HostProfilesKey: SharedKey {
     SharedSubscription {}
   }
 
-  /// Refuses to replace a file it cannot read. The shared value keeps the change in memory,
-  /// so a caller that must not proceed without a saved host (C1's Add Remote Folder) checks
-  /// the save error first.
+  /// Writes only over the file the shared value was loaded from (compare and swap). It
+  /// refuses a file it cannot read, and a file that changed since the last load: a file
+  /// that became readable again after a failed load, a link target that appeared, or an
+  /// edit from another Prowl. Otherwise an edit of the empty fallback list would erase the
+  /// hosts that the file holds. The caller reloads (`$hostProfiles.load()`) and edits again.
+  /// The shared value keeps a refused change in memory, so a caller that must not proceed
+  /// without a saved host (C1's Add Remote Folder) checks the save error first.
   func save(_ value: [HostProfile], context _: SaveContext, continuation: SaveContinuation) {
     @Dependency(\.settingsFileStorage) var storage
     @Dependency(\.hostProfilesFileURL) var url
-    if case .unreadable = Self.storedFile(storage: storage, url: url) {
+    let current = Self.storedFile(storage: storage, url: url)
+    if case .unreadable = current {
       continuation.resume(throwing: HostProfilesFileError.unreadableFile)
+      return
+    }
+    guard Self.loadedStates.state(for: url) == current else {
+      continuation.resume(throwing: HostProfilesFileError.changedSinceLoad)
       return
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     do {
-      try storage.save(try encoder.encode(HostProfilesFile(hosts: value)), url)
+      let file = HostProfilesFile(hosts: value)
+      try storage.save(try encoder.encode(file), url)
+      Self.loadedStates.set(.readable(file), for: url)
       continuation.resume()
     } catch {
       continuation.resume(throwing: error)
     }
+  }
+
+  /// What each hosts file held when it was last loaded or saved by this process.
+  private static let loadedStates = LoadedStates()
+
+  private final class LoadedStates: @unchecked Sendable {
+    private let lock = NSLock()
+    private var states: [URL: StoredFile] = [:]
+
+    func state(for url: URL) -> StoredFile? { lock.withLock { states[url] } }
+    func set(_ state: StoredFile, for url: URL) { lock.withLock { states[url] = state } }
   }
 
   enum StoredFile: Equatable {
@@ -112,6 +136,8 @@ nonisolated struct HostProfilesKey: SharedKey {
 nonisolated enum HostProfilesFileError: Error, Equatable {
   /// `hosts.json` exists but this build cannot read it, so it is not overwritten.
   case unreadableFile
+  /// `hosts.json` is not what the shared value was loaded from; reload before editing.
+  case changedSinceLoad
 }
 
 nonisolated extension SharedReaderKey where Self == HostProfilesKey.Default {
