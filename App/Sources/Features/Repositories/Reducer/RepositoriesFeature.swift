@@ -267,6 +267,7 @@ struct RepositoriesFeature {
       reusedRemoteRepositoryIDs: Set<Repository.ID> = []
     )
     case requestRemoveRepository(Repository.ID)
+    case requestRemoveFailedRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
     case removeWorkspaceDeleteFilesChanged(Bool)
     case removeWorkspaceDeleteBranchChanged(String, Bool)
@@ -639,6 +640,7 @@ struct RepositoriesFeature {
     case confirmForceDeleteBranch(ForceDeleteBranchRequest)
     case confirmRemoveRepository(Repository.ID)
     case rebindRemoteHost(HostProfile.ID, ConnectionKey)
+    case confirmRemoveFailedRepository(Repository.ID)
     case confirmWorkspaceRootDeletion(
       repositoryID: Repository.ID, rootPath: String, selectionWasRemoved: Bool)
     case keepWorkspaceFolderAfterCleanupFailure(

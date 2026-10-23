@@ -103,7 +103,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      recordLoadFailures(failures, state: &state)
+      let markedHosts = recordLoadFailures(failures, state: &state)
       let invalidRootMessages = invalidRoots.map { String(localized: "\($0) is not a Git repository.") }
       let openFailureMessages = invalidRootMessages + openFailures
       if !openFailureMessages.isEmpty {
@@ -120,7 +120,8 @@ extension RepositoriesFeature {
         selectedWorktree: selectedWorktree
       )
       var allEffects: [Effect<Action>] = [
-        .send(.delegate(.repositoriesChanged(state.repositories)))
+        .send(.delegate(.repositoriesChanged(state.repositories))),
+        releaseConnectionHolds(on: markedHosts, state: state),
       ]
       if selectionChanged {
         allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
@@ -329,6 +330,25 @@ extension RepositoriesFeature {
         failedRepositoryNames: failedRepositoryNames,
         selectionWasRemoved: selectionWasRemoved
       )
+      return .none
+
+    case .requestRemoveFailedRepository(let repositoryID):
+      // A remote folder says first what happens to its data (docs-ai 084 C1).
+      guard let location = RepositoryLocation(id: repositoryID), location.hostProfileID != nil else {
+        return .send(.repositoryManagement(.removeFailedRepository(repositoryID)))
+      }
+      state.alert = AlertState {
+        TextState(String(localized: "Remove folder?"))
+      } actions: {
+        ButtonState(role: .destructive, action: .confirmRemoveFailedRepository(repositoryID)) {
+          TextState(String(localized: "Remove folder"))
+        }
+        ButtonState(role: .cancel) {
+          TextState(String(localized: "Cancel"))
+        }
+      } message: {
+        TextState(Self.removalMessage(for: location))
+      }
       return .none
 
     case .removeFailedRepository(let repositoryID):

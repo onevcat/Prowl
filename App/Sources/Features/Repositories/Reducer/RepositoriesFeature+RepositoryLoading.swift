@@ -334,7 +334,9 @@ extension RepositoriesFeature {
 
   /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
   /// host. `State.currentLoadFailures` reads them back.
-  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) {
+  /// Returns the host profiles that this load marked for a rebind; their holds end.
+  @discardableResult
+  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) -> Set<HostProfile.ID> {
     state.loadFailuresByID = Dictionary(
       failures.map { ($0.rootID, $0.message) },
       uniquingKeysWith: { first, _ in first }
@@ -342,14 +344,16 @@ extension RepositoriesFeature {
     state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
     // A remote failure for another reason passed the authority check.
+    var marked: Set<HostProfile.ID> = []
     for failure in failures {
       guard let hostProfileID = RepositoryLocation(id: failure.rootID)?.hostProfileID else { continue }
       if failure.needsRebind {
-        state.rebindHostProfileIDs.insert(hostProfileID)
+        if state.rebindHostProfileIDs.insert(hostProfileID).inserted { marked.insert(hostProfileID) }
       } else {
         state.rebindHostProfileIDs.remove(hostProfileID)
       }
     }
+    return marked
   }
 
   /// `keepsRemoteIDs` keeps every remote-form ID through the prunes. The snapshot sets it:
