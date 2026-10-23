@@ -166,6 +166,55 @@ struct RemoteTerminalTabTests {
     #expect(state.remoteLaunchOriginBySurface[splitID]?.hasFirstCommand == true)
   }
 
+  /// A split that cannot stage closes alone: the tab and its other panes stay.
+  @Test func aSplitThatCannotStageClosesAlone() async throws {
+    let launches = LockIsolated(0)
+    let state = makeState(Staging())
+    state.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in Self.profile },
+      stage: { _, launch in
+        let count = launches.withValue {
+          $0 += 1
+          return $0
+        }
+        if count > 1 { throw RemoteRepositoryHostError.timedOut }
+        return "/home/dev/.cache/prowl/launch/\(launch.nonce)/launch.sh"
+      })
+    var messages: [String] = []
+    state.onRemoteTerminalFailed = { messages.append($0) }
+    let tabID = try #require(state.createTab())
+    let anchor = try onlySurface(state, tabID)
+    await waitUntil { anchor.surfaceCreationArmed }
+
+    _ = try state.createSplit(of: anchor.id, direction: .right, initialInput: nil).get()
+    await waitUntil { !messages.isEmpty }
+
+    #expect(state.tabManager.tabs.map(\.id) == [tabID])
+    #expect(state.trees[tabID]?.leaves().map(\.id) == [anchor.id])
+  }
+
+  /// A split closed while it waits for its launcher has nothing for Undo to bring back.
+  @Test func aSplitClosedWhileStagingIsNotKeptForUndo() async throws {
+    let (gate, release) = AsyncStream<Void>.makeStream()
+    let staging = Staging()
+    let state = makeState(staging)
+    let tabID = try #require(state.createTab())
+    let anchor = try onlySurface(state, tabID)
+    await waitUntil { anchor.surfaceCreationArmed }
+    state.remoteTerminalStagerForTesting = Staging(gate: gate).stager(profile: Self.profile)
+    state.undoCloseTimeout = .seconds(5)
+    var recorded = false
+    state.onCloseRecorded = { _ in recorded = true }
+
+    let splitID = try state.createSplit(of: anchor.id, direction: .right, initialInput: nil).get()
+    #expect(state.isAwaitingRemoteLaunch(splitID))
+    #expect(state.closeSurface(id: splitID, confirmation: .skip))
+    release.finish()
+
+    #expect(!recorded)
+    #expect(state.surfaceView(for: splitID) == nil)
+  }
+
   /// A split whose host profile is gone opens no pane and tells the user.
   @Test func aRemoteSplitWithoutItsHostProfileTellsTheUser() throws {
     let staging = Staging()

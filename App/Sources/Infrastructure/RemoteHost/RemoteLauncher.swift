@@ -10,7 +10,7 @@ nonisolated struct RemoteLaunch: Equatable, Sendable {
   /// 16 lowercase hex digits; names the launch directory and the completion marker.
   let nonce: String
   /// The path on the host where the shell starts.
-  let workingDirectory: String
+  var workingDirectory: String
   /// Exported before the shell starts, in order.
   let environment: [RemoteLaunchVariable]
   /// The script that the user's shell runs as its first command; nil for a plain shell.

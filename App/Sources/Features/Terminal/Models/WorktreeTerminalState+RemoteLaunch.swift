@@ -62,9 +62,9 @@ extension WorktreeTerminalState {
     remoteLaunchTasksBySurface[surfaceID] = Task { [weak self] in
       var launch = launch
       if let resolveWorkingDirectory {
-        launch = RemoteLaunch(
-          nonce: launch.nonce, workingDirectory: await resolveWorkingDirectory(), environment: launch.environment,
-          firstCommand: launch.firstCommand)
+        launch.workingDirectory = await resolveWorkingDirectory()
+        // The pane was closed while its directory was resolved: stage nothing on the host.
+        guard !Task.isCancelled else { return }
       }
       let staged: Result<String, any Error>
       do {
@@ -111,9 +111,14 @@ extension WorktreeTerminalState {
     } catch {
       failure = error
     }
-    terminalStateLogger.warning("Remote tab on \(profile.alias) did not start: \(failure.localizedDescription)")
+    terminalStateLogger.warning("Remote pane on \(profile.alias) did not start: \(failure.localizedDescription)")
     if consumesSetupScript { pendingSetupScript = true }
-    _ = closeTab(tabID, confirmation: .skip, retainForUndo: false)
+    // Nothing ran in the pane: a split goes alone, a tab with its only pane.
+    if (trees[tabID]?.leaves().count ?? 0) > 1 {
+      _ = closeSurface(id: surfaceID, confirmation: .skip, retainForUndo: false)
+    } else {
+      _ = closeTab(tabID, confirmation: .skip, retainForUndo: false)
+    }
     onRemoteTerminalFailed?(
       String(localized: "The terminal on \(profile.alias) did not start: \(failure.localizedDescription)"))
   }

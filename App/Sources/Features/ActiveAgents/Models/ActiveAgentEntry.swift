@@ -44,6 +44,22 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
     launchProfileName ?? Self.displayName(iconLookupToken: iconLookupToken, agent: agent)
   }
 
+  /// The directory to resolve against this Mac's worktrees: nil for a remote agent, whose
+  /// directory is a path on its host (docs-ai 084 C4).
+  var localWorkingDirectory: URL? {
+    remote == nil ? workingDirectory : nil
+  }
+
+  /// A remote agent's own worktree: its pane's remote folder, when the agent's directory on
+  /// the host lies inside it.
+  var remoteWorktreeID: Worktree.ID? {
+    guard remote != nil, let directory = workingDirectory?.path(percentEncoded: false),
+      case .remote(_, let folder)? = RepositoryLocation(id: worktreeID)
+    else { return nil }
+    let path = directory.count > 1 && directory.hasSuffix("/") ? String(directory.dropLast()) : directory
+    return path == folder || path.hasPrefix(folder == "/" ? "/" : folder + "/") ? worktreeID : nil
+  }
+
   /// Equality for emission purposes, excluding raw state and diagnostic reasons. `rawState` oscillates
   /// on every 300 ms poll while an agent animates its spinner; if it gated
   /// emission, each flicker would push a new entry into `ActiveAgentsFeature`
