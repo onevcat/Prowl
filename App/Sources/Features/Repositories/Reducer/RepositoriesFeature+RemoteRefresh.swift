@@ -6,7 +6,7 @@ private nonisolated let remoteRefreshLogger = ProwlLogger("RemoteRefresh")
 /// The result of one batched refresh of a remote repository (docs-ai 084 B3f).
 nonisolated enum RemoteRefreshResult: Equatable, Sendable {
   case refreshed(RemoteRepositoryRefresh)
-  case failed(message: String, isHostUnreachable: Bool, needsRebind: Bool = false)
+  case failed(message: String, isHostUnreachable: Bool, authority: RemoteAuthorityCheck = .passed)
 }
 
 /// The refresh cadence of remote repositories (docs-ai 084 B3f, D4). The local monitors
@@ -71,12 +71,18 @@ extension RepositoriesFeature {
   }
 
   /// Sets or clears the rebind mark of a host, and reports whether it changed.
-  func markRebind(_ hostProfileID: HostProfile.ID, needsRebind: Bool, state: inout State) -> RebindMarkChange {
-    if needsRebind {
-      return state.rebindHostProfileIDs.insert(hostProfileID).inserted
-        ? RebindMarkChange(marked: [hostProfileID]) : .none
+  func markRebind(
+    _ hostProfileID: HostProfile.ID, _ authority: RemoteAuthorityCheck, state: inout State
+  ) -> RebindMarkChange {
+    switch authority {
+    case .changed:
+      state.rebindHostProfileIDs.insert(hostProfileID).inserted ? RebindMarkChange(marked: [hostProfileID]) : .none
+    case .passed:
+      state.rebindHostProfileIDs.remove(hostProfileID) != nil ? RebindMarkChange(cleared: [hostProfileID]) : .none
+    case .unknown:
+      // The failure came before the authority check, so the mark stays as it is.
+      .none
     }
-    return state.rebindHostProfileIDs.remove(hostProfileID) != nil ? RebindMarkChange(cleared: [hostProfileID]) : .none
   }
 
   /// A host that now needs a rebind ends its folders' holds: they hold a connection to the
@@ -138,7 +144,7 @@ extension RepositoriesFeature {
         } catch {
           result = .failed(
             message: error.localizedDescription, isHostUnreachable: isRemoteHostUnreachable(error),
-            needsRebind: error as? RemoteRepositoryHostError == .authorityChanged)
+            authority: RemoteAuthorityCheck(error))
         }
         await send(.remoteRepositoryRefreshed(repositoryID, result))
       }
@@ -155,7 +161,7 @@ extension RepositoriesFeature {
     else { return .none }
     var effects: [Effect<Action>] = []
     switch result {
-    case .failed(let message, let isHostUnreachable, let needsRebind):
+    case .failed(let message, let isHostUnreachable, let authority):
       // The last state stays; only the host's reachability changes. A host that answered
       // with another error is reachable.
       state.remoteRefreshFailureCounts[repositoryID, default: 0] += 1
@@ -165,8 +171,7 @@ extension RepositoriesFeature {
         state.pollUnreachableRepositoryIDs.remove(repositoryID)
       }
       if let hostProfileID = repository.location.hostProfileID {
-        // Another failure passed the authority check.
-        let change = markRebind(hostProfileID, needsRebind: needsRebind, state: &state)
+        let change = markRebind(hostProfileID, authority, state: &state)
         effects.append(connectionHoldEffects(for: change, state: state))
       }
       remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
@@ -174,7 +179,7 @@ extension RepositoriesFeature {
       state.remoteRefreshFailureCounts[repositoryID] = nil
       state.pollUnreachableRepositoryIDs.remove(repositoryID)
       if let hostProfileID = repository.location.hostProfileID {
-        let change = markRebind(hostProfileID, needsRebind: false, state: &state)
+        let change = markRebind(hostProfileID, .passed, state: &state)
         effects.append(connectionHoldEffects(for: change, state: state))
       }
       effects.append(contentsOf: applyRemoteRefresh(refresh, to: repository, state: &state))
@@ -370,6 +375,30 @@ extension RepositoriesFeature {
     }
     // The old poll ends before the new one starts; a hold never ends, so the rest merge.
     return .concatenate(.merge(cancellations), .merge(effects))
+  }
+}
+
+/// What a remote failure says about the host profile's target (docs-ai 084 C1).
+nonisolated enum RemoteAuthorityCheck: Equatable, Sendable {
+  /// The SSH configuration reaches another user, host or port.
+  case changed
+  /// The command passed the authority check, so the bound target is the right one.
+  case passed
+  /// The command failed before the authority check, such as `ssh -G` rejecting the
+  /// configuration; it says nothing about the target.
+  case unknown
+
+  init(_ error: any Error) {
+    switch error {
+    case RemoteRepositoryHostError.authorityChanged:
+      self = .changed
+    case RemoteRepositoryHostError.configurationRejected, RemoteRepositoryHostError.sideChannelDisabled,
+      RemoteRepositoryHostError.bundledScriptMissing, RemoteRepositoryHostError.unsupported,
+      RepositoryHostError.hostProfileMissing:
+      self = .unknown
+    default:
+      self = .passed
+    }
   }
 }
 

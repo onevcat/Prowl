@@ -42,7 +42,7 @@ struct RemoteHostRebindTests {
 
     #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
     #expect(store.state.remoteHostStatus(for: repository.id) == .needsRebind(Self.hostProfileID))
-    #expect(store.state.currentLoadFailures.map(\.needsRebind) == [true])
+    #expect(store.state.currentLoadFailures.map(\.authority) == [.changed])
     let row = store.state.sidebarPresentation(expandedRepositoryIDs: []).items.compactMap { item in
       if case .failedRepository(let model) = item { return model }
       return nil
@@ -52,7 +52,7 @@ struct RemoteHostRebindTests {
     // A failure for another reason passed the authority check, so the host is clear.
     await store.send(
       .repositoriesLoaded(
-        [], failures: [.init(rootID: repository.id, message: "No answer", isHostUnreachable: true)],
+        [], failures: [.init(rootID: repository.id, message: "No answer", isHostUnreachable: true, authority: .passed)],
         roots: [repository.location], animated: false))
     #expect(store.state.rebindHostProfileIDs.isEmpty)
     #expect(store.state.remoteHostStatus(for: repository.id) == .unreachable)
@@ -94,7 +94,7 @@ struct RemoteHostRebindTests {
 
     await store.send(
       .remoteRepositoryRefreshed(
-        repository.id, .failed(message: "changed", isHostUnreachable: false, needsRebind: true)))
+        repository.id, .failed(message: "changed", isHostUnreachable: false, authority: .changed)))
     #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
     #expect(store.state.remoteHostStatus(for: repository.id) == .needsRebind(Self.hostProfileID))
 
@@ -274,10 +274,20 @@ struct RemoteHostRebindTests {
     for _ in 0..<3 { _ = await heldIterator.next() }
 
     await store.send(
-      .remoteRepositoryRefreshed(first.id, .failed(message: "changed", isHostUnreachable: false, needsRebind: true)))
+      .remoteRepositoryRefreshed(first.id, .failed(message: "changed", isHostUnreachable: false, authority: .changed)))
     var releasedIterator = releases.makeAsyncIterator()
     let ended = [await releasedIterator.next(), await releasedIterator.next()]
     #expect(ended == [Self.hostProfileID, Self.hostProfileID])
+    #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
+
+    // A configuration that `ssh -G` rejects says nothing about the target: the mark stays.
+    await store.send(
+      .remoteRepositoryRefreshed(
+        first.id,
+        .failed(
+          message: "rejected", isHostUnreachable: false,
+          authority: RemoteAuthorityCheck(
+            RemoteRepositoryHostError.configurationRejected))))
     #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
 
     // The configuration reaches the bound target again: a good poll clears the mark and
@@ -291,7 +301,7 @@ struct RemoteHostRebindTests {
     // A load that finds a changed target ends the holds of that host too.
     await store.send(
       .repositoriesLoaded(
-        [other], failures: [.init(rootID: other.id, message: "changed", needsRebind: true)],
+        [other], failures: [.init(rootID: other.id, message: "changed", authority: .changed)],
         roots: [otherRoot], animated: false))
     // The two folders that left end their holds too, in any order.
     var rest: [UUID?] = []
@@ -322,6 +332,18 @@ struct RemoteHostRebindTests {
 
     await store.send(.repositoryManagement(.requestRemoveFailedRepository("/tmp/local/")))
     await store.receive(\.repositoryManagement.removeFailedRepository)
+  }
+
+  @Test func aFailureBeforeTheAuthorityCheckSaysNothingAboutTheTarget() {
+    #expect(RemoteAuthorityCheck(RemoteRepositoryHostError.authorityChanged) == .changed)
+    for error: any Error in [
+      RemoteRepositoryHostError.configurationRejected, RemoteRepositoryHostError.sideChannelDisabled,
+      RemoteRepositoryHostError.bundledScriptMissing, RepositoryHostError.hostProfileMissing(UUID()),
+    ] {
+      #expect(RemoteAuthorityCheck(error) == .unknown, "\(error)")
+    }
+    #expect(RemoteAuthorityCheck(RemoteRepositoryHostError.timedOut) == .passed)
+    #expect(RemoteAuthorityCheck(RemoteRepositoryHostError.gitMissing) == .passed)
   }
 
   @Test func theRebindPromptNamesBothTargets() {
