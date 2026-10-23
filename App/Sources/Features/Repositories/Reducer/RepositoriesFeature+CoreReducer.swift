@@ -98,6 +98,7 @@ extension RepositoriesFeature {
         repositories,
         roots: roots,
         shouldPruneArchivedWorktrees: true,
+        keepsRemoteIDs: true,
         state: &state,
         animated: false
       )
