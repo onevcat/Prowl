@@ -13,8 +13,9 @@ nonisolated enum RemoteRefreshResult: Equatable, Sendable {
 /// of `WorktreeInfoWatcherManager` have no remote counterpart, so each loaded remote git
 /// repository is polled with the batched refresh:
 ///
-/// - the repository of the selected worktree every `focusedInterval`, the others every
-///   `backgroundInterval`; selecting a remote worktree refreshes its repository at once;
+/// - the repository of the selected worktree every 10 s, the others every 45 s, which is
+///   within the 60 s `ControlPersist` of the shared connection; selecting a remote
+///   worktree refreshes its repository at once;
 /// - after a failed poll, the interval doubles up to `maximumBackoff`, and the last state
 ///   stays as it was;
 /// - each loaded remote repository holds a lease on its host's connection, so the polls
@@ -27,7 +28,9 @@ nonisolated enum RemoteRefreshResult: Equatable, Sendable {
 /// down never empties the list.
 extension RepositoriesFeature {
   static let remoteRefreshFocusedInterval: Duration = .seconds(10)
-  static let remoteRefreshBackgroundInterval: Duration = .seconds(60)
+  /// Shorter than the connection's `ControlPersist` (60 s, `RemoteConnectionOwner`), so the
+  /// next poll starts before an idle SSH master expires and reuses it.
+  static let remoteRefreshBackgroundInterval: Duration = .seconds(45)
   static let remoteRefreshMaximumBackoff: Duration = .seconds(300)
 
   /// The delay before the next poll of `repositoryID`.

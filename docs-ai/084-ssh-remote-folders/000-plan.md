@@ -306,8 +306,9 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 ## Open questions
 
 - Polling intervals for focused and background remote worktrees, and backoff while the host
-  is unreachable. (Answered 2026-10-23 in B3f: 10 s for the selected worktree's repository, 60 s for the
-  others, doubling up to 300 s while polls fail. See 024.)
+  is unreachable. (Answered 2026-10-23 in B3f: 10 s for the selected worktree's repository, 45 s for the
+  others (within the 60 s `ControlPersist`), doubling up to 300 s while polls fail. See
+  024.)
 - Close confirmation: Ghostty reports a live process while `ssh` runs, so every remote pane
   asks before it closes.
 - Launcher location (`$TMPDIR` or `~/.cache/prowl`) and cleanup when ssh never runs it.

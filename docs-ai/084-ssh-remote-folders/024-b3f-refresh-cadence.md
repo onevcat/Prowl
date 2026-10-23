@@ -31,12 +31,16 @@ returns data that the reducer applies, and `TestClock` drives it in tests.
 
 - **Intervals.**
   - The repository of the selected worktree polls every 10 s.
-  - Every other remote repository polls every 60 s.
+  - Every other remote repository polls every 45 s. This is shorter than the 60 s
+    `ControlPersist` of the shared connection (`RemoteConnectionOwner.Configuration`), so
+    the next poll starts before an idle SSH master expires. A lease keeps the owner, not
+    the master; with a 60 s interval, every background poll would connect again.
   - Selecting a remote worktree refreshes its repository at once (`AppFeature` sends
     `remoteRepositoryRefreshDue`).
 - **Backoff.** After a failed poll, the interval doubles for each failure in a row, up to
-  300 s. Examples: 10 s → 20 s → 40 s for the focused repository; 60 s → 120 s → 240 s →
-  300 s for the others. The first good poll resets it.
+  300 s. Examples: 10 s → 20 s → 40 s for the focused repository; 45 s → 90 s → 180 s →
+  300 s for the others. The first good poll resets it. While polls fail, the master may
+  expire; the host does not answer then anyway.
 - **Schedules.** `syncRemoteRefreshSchedules` runs after every load:
   - It starts the cadence of new remote git repositories.
   - It cancels the timer, the poll and the connection hold of the repositories that left.
@@ -60,9 +64,13 @@ and drop that repository from the list, against "a failed poll keeps the last st
 So after the first live load, every load passes the loaded remote repositories
 (`State.retainedRemoteRepositories`), and the load keeps them as they are. The cadence keeps
 them current. Every entry point does this:
-- the reload;
+- the reload, and the launch load (`loadPersistedRepositories`);
 - adding repositories (`openRepositories`);
-- removing a repository or a failed one.
+- removing a repository or a failed one;
+- saving a workspace.
+
+`loadRepositories` has no default for `knownRemoteRepositories`, so a new entry point
+cannot leave it out.
 
 A remote entry that is not loaded yet still loads through its host, for example an entry
 that a failed load left out, or one that was just added. The first live load after launch,
@@ -141,7 +149,8 @@ for a local repository, because it reads a working directory on this Mac.
 
 ### Answered open questions
 
-- **Polling intervals:** 10 s for the selected worktree's repository, 60 s for the others.
+- **Polling intervals:** 10 s for the selected worktree's repository, 45 s for the others
+  (within `ControlPersist`).
 - **Backoff:** doubling up to 300 s while polls fail.
 
 ## Tests
@@ -149,7 +158,9 @@ for a local repository, because it reads a working directory on this Mac.
 `RemoteRepositoryHostTests` drives the reducer with `TestClock`, through a lane that runs on
 this Mac with real git:
 
-- the delays for focused and background polls, and the backoff with its cap;
+- the delays for focused and background polls, and the backoff with its cap; the
+  background interval stays within the connection's `ControlPersist`;
+- a reload in the reducer keeps a loaded remote repository without asking its host;
 - a poll applies a renamed branch and edited lines from the host. The repository holds
   one connection. When it leaves the list, the polls stop and the hold is released;
 - a failed poll keeps the repository as it was and marks it unreachable. The next poll
