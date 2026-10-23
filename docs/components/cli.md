@@ -55,6 +55,10 @@ Most commands accept one selector (mutually exclusive):
 - `--worktree <id|name|path>` — a worktree (its selected/first tab → focused/first
   pane). For a Git worktree, `name` is the checked-out branch and stops matching after a
   checkout; automation should pass `id` (the worktree path).
+  A folder on another machine over SSH is `label:path` (its `host.label` and `path`); a
+  bare path matches worktrees on this Mac only, and a name shared with such a folder
+  means the local worktree. Such a folder has no terminals yet, so `create tab` and
+  `workflow run` refuse it with the reason.
 - `-t, --target <value>` — auto-resolve: `pN` as a pane, `tN` as a tab, then
   pane UUID, tab UUID, or worktree id/name/path.
 - **No selector** → the *current* focus (focused worktree → selected tab → focused
@@ -153,7 +157,10 @@ Snapshot of all worktrees → tabs → panes. No selectors.
 prowl list --json
 ```
 Each item contains:
-- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`|`workspace`)
+- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`|`workspace`), and
+  `host` (`profile_id`, `label`) for a folder on another machine over SSH. A remote
+  folder's `path` and `root_path` are paths on that host, not on this Mac. Text output
+  shows them as `label:path`.
 - `tab`: `id`, `title`, `selected`
 - `pane`: `id`, `title`, `cwd`, `focused`, `visible`, `agent`
 - `task`: `status` (`running` | `idle` | null)

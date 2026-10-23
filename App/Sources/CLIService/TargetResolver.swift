@@ -138,10 +138,14 @@ final class TargetResolver {
     _ value: String,
     _ snapshot: TargetResolutionSnapshot
   ) -> Result<ResolvedTarget, TargetResolverError> {
-    let matches = snapshot.worktrees.filter { worktree in
-      worktree.id == value || worktree.name == value || worktree.path == value
-    }
+    let matches = snapshot.worktrees.filter { $0.matches(value) }
     guard !matches.isEmpty else {
+      // Only a selector that names the remote folder itself; a name could mean a local
+      // worktree without tabs.
+      if snapshot.remoteFolders.contains(where: { $0.matchesExactly(value) }) {
+        return .failure(
+          .notFound("Worktree '\(value)' is a remote folder: terminals cannot open in remote folders yet."))
+      }
       return .failure(.notFound("Worktree '\(value)' not found."))
     }
     guard matches.count == 1 else {
@@ -305,6 +309,13 @@ struct TargetResolutionSnapshot: Sendable {
     let rootPath: String
     let kind: ListCommandWorktree.Kind
     let tabs: [Tab]
+    /// The host of a remote folder (docs-ai 084 C2); nil for a local worktree.
+    var host: ListCommandHost?
+
+    /// Whether `selector` names this worktree; see `WorktreeContext.matches`.
+    func matches(_ selector: String) -> Bool {
+      id == selector || name == selector || ListCommandHost.displayPath(path, host: host) == selector
+    }
   }
 
   struct Tab: Sendable {
@@ -364,6 +375,9 @@ struct TargetResolutionSnapshot: Sendable {
 
   let worktrees: [Worktree]
   let focusedWorktreeID: String?
+  /// Remote folders, which have no terminals until C3 (docs-ai 084), so that a selector
+  /// that names one gets its reason instead of "not found".
+  var remoteFolders: [ListRuntimeSnapshotBuilder.WorktreeContext] = []
 }
 
 // MARK: - Snapshot builder
@@ -405,10 +419,13 @@ enum TargetResolutionSnapshotBuilder {
         path: context.path,
         rootPath: context.rootPath,
         kind: context.kind,
-        tabs: tabs
+        tabs: tabs,
+        host: context.host
       )
     }
 
-    return TargetResolutionSnapshot(worktrees: worktrees, focusedWorktreeID: focusedWorktreeID)
+    return TargetResolutionSnapshot(
+      worktrees: worktrees, focusedWorktreeID: focusedWorktreeID,
+      remoteFolders: orderedContexts.filter { $0.host != nil })
   }
 }

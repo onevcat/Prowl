@@ -8,6 +8,7 @@ struct ListRuntimeSnapshot: Sendable {
     let path: String
     let rootPath: String
     let kind: ListCommandWorktree.Kind
+    var host: ListCommandHost?
     let taskStatus: ListCommandTask.Status?
     let tabs: [Tab]
   }
@@ -133,7 +134,8 @@ final class ListCommandHandler: CommandHandler {
                 name: worktree.name,
                 path: worktree.path,
                 rootPath: worktree.rootPath,
-                kind: worktree.kind
+                kind: worktree.kind,
+                host: worktree.host
               ),
               tab: ListCommandTab(
                 id: tab.id.uuidString,

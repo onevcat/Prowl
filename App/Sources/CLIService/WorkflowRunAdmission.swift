@@ -120,6 +120,14 @@ enum WorkflowRunAdmission {
       return .failure(
         .init(code: CLIErrorCode.invalidArgument, message: "A workflow id or name is required."))
     }
+    // A remote source is refused before its host path reaches the local catalog or a local key (docs-ai 084 C2).
+    guard let worktree = environment.worktree(source.worktree.id) else {
+      return .failure(
+        .init(
+          code: CLIErrorCode.targetNotFound, message: "The source worktree is no longer available.")
+      )
+    }
+    if let failure = remoteFolderFailure(worktree) { return .failure(failure) }
     let entry: WorkflowCatalogEntry
     switch effectiveEntry(named: name, worktree: source.worktree, snapshot: snapshot) {
     case .failure(let failure): return .failure(failure)
@@ -159,13 +167,6 @@ enum WorkflowRunAdmission {
           code: CLIErrorCode.workflowDisabled,
           message: "Workflow '\(definition.id)' is disabled in Settings."))
     }
-    guard let worktree = environment.worktree(source.worktree.id) else {
-      return .failure(
-        .init(
-          code: CLIErrorCode.targetNotFound, message: "The source worktree is no longer available.")
-      )
-    }
-    if let failure = remoteFolderFailure(worktree) { return .failure(failure) }
     let arguments: Arguments
     switch parseArguments(input, definition: definition) {
     case .failure(let failure): return .failure(failure)
@@ -205,10 +206,12 @@ enum WorkflowRunAdmission {
     let environment: WorkflowAdmissionEnvironment
   }
 
+  static let remoteFolderMessage = "Workflows cannot run in a remote folder yet."
+
   /// Run history and role launches are rooted in the local worktree directory (docs-ai 084 C2).
   private static func remoteFolderFailure(_ worktree: Worktree) -> WorkflowAdmissionFailure? {
     guard worktree.localURL == nil else { return nil }
-    return .init(code: CLIErrorCode.remoteAgentUnsupported, message: "Workflows cannot run in a remote folder yet.")
+    return .init(code: CLIErrorCode.remoteAgentUnsupported, message: remoteFolderMessage)
   }
 
   private static func start(_ admission: Admission) -> Result<
