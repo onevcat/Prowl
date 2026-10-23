@@ -53,9 +53,14 @@ setup script once remote scripts exist.
 
 ### The typed line (`RemoteTerminalLine.typed`)
 
-The line is ` /usr/bin/ssh -t <options> -- <destination> exec sh <launcher>` plus a
-newline:
+The line is ` /usr/bin/ssh -t <session overrides> <options> -- <destination> exec sh
+<launcher>` plus a newline:
 
+- The session overrides (`RemoteCommand=none`, `SessionType=default`,
+  `ForkAfterAuthentication=no`, `StdinNull=no`) come before the recipe, because `ssh` keeps
+  the first value. A configured `RemoteCommand` (such as `tmux attach`) would otherwise make
+  `ssh` refuse the command ("Cannot execute command-line and remote command"). Forwardings,
+  the agent and the other options stay as the user's configuration sets them.
 - `/usr/bin/ssh` is the binary that the side channel resolves with. It also bypasses an
   `ssh` alias or function.
 - The leading space keeps the line out of the history in shells that ignore such lines
@@ -159,6 +164,9 @@ with the pane (`TerminalRetainedSurfaceContext`).
   - No layout is applied to a remote folder.
   - The typed line quotes options and refuses backslashes, control characters and unsafe
     launcher paths.
+  - A configuration with `RemoteCommand` and `SessionType none` does not refuse the typed
+    line. This is checked with real `ssh`, with no network, through a failing `ProxyCommand`
+    (checked red without the overrides).
 - `RemoteAgentDetectionTests`:
   - A remote folder pane uses the stored recipe without consent and shows the alias. A later
     `ssh` asks (checked red with the consent path).

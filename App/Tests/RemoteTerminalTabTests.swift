@@ -80,7 +80,7 @@ struct RemoteTerminalTabTests {
       ])
     #expect(
       surface.initialInputForTesting
-        == " /usr/bin/ssh -t -p 2222 -o 'ProxyJump=jump host' -- dev@mini exec sh"
+        == " /usr/bin/ssh -t \(Self.overrides) -p 2222 -o 'ProxyJump=jump host' -- dev@mini exec sh"
         + " /home/dev/.cache/prowl/launch/\(launch.nonce)/launch.sh\n")
     #expect(surface.launchWorkingDirectory?.path(percentEncoded: false) == "/Users/dev/ssh/")
     #expect(surface.launchEnvironment["PROWL_WORKTREE_PATH"] == nil)
@@ -332,16 +332,57 @@ struct RemoteTerminalTabTests {
 
   // MARK: - The typed line
 
+  private static let overrides =
+    "-o RemoteCommand=none -o SessionType=default -o ForkAfterAuthentication=no -o StdinNull=no"
+
+  /// A host whose SSH configuration sets a `RemoteCommand` (such as `tmux attach`) still runs
+  /// the launcher: the typed line overrides it, so `ssh` does not refuse the command. No
+  /// network: the `ProxyCommand` fails at once.
+  @Test func theTypedLineOverridesAConfiguredRemoteCommand() throws {
+    let home = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "prowl-ssh-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let config = home.appending(path: "config").path(percentEncoded: false)
+    try Data(
+      """
+      Host target
+        RemoteCommand tmux attach
+        SessionType none
+        ProxyCommand /usr/bin/false
+
+      """.utf8
+    ).write(to: URL(filePath: config))
+    let line = try RemoteTerminalLine.typed(
+      recipe: SSHConnectionRecipe(destination: "target", options: ["-F", config, "-o", "BatchMode=yes"]),
+      launcherPath: "/home/dev/.cache/prowl/launch/0123456789abcdef/launch.sh")
+    let process = Process()
+    process.executableURL = URL(filePath: "/bin/sh")
+    process.arguments = ["-c", line + "\n"]
+    process.environment = ["HOME": home.path(percentEncoded: false), "PATH": "/usr/bin:/bin"]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = output
+    process.standardInput = FileHandle.nullDevice
+    try process.run()
+    process.waitUntilExit()
+    let text = String(bytes: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+    #expect(!text.contains("Cannot execute command-line and remote command"), "\(text)")
+    #expect(!text.lowercased().contains("bad configuration option"), "\(text)")
+    #expect(process.terminationStatus == 255, "\(text)")
+  }
+
   @Test func theTypedLineQuotesWhatIsNotSafeAndRefusesWhatNoShellTypesTheSame() throws {
     let path = "/home/dev/.cache/prowl/launch/0123456789abcdef/launch.sh"
     #expect(
       try RemoteTerminalLine.typed(recipe: SSHConnectionRecipe(destination: "mini"), launcherPath: path)
-        == " /usr/bin/ssh -t -- mini exec sh \(path)\n")
+        == " /usr/bin/ssh -t \(Self.overrides) -- mini exec sh \(path)\n")
     #expect(
       try RemoteTerminalLine.typed(
         recipe: SSHConnectionRecipe(destination: "dev@mini", options: ["-F", "it's config", "-o", "SendEnv=A*"]),
         launcherPath: path)
-        == " /usr/bin/ssh -t -F 'it'\\''s config' -o 'SendEnv=A*' -- dev@mini exec sh \(path)\n")
+        == " /usr/bin/ssh -t \(Self.overrides) -F 'it'\\''s config' -o 'SendEnv=A*' -- dev@mini exec sh \(path)\n")
     for options in [["-F", #"C:\config"#], ["-o", "User=a\nb"], ["-o", "User=a\u{7f}"]] {
       #expect(throws: RemoteTerminalLine.LineError.untypeable) {
         try RemoteTerminalLine.typed(
