@@ -28,7 +28,9 @@ All of it is behind `PROWL_REMOTE_FOLDERS=1`, like C1a.
 - When a load or poll newly marks a host, the connection holds of its folders end
   (`releaseConnectionHolds`): they hold a connection to the old target. Other hosts keep
   theirs, and so do other users of the connection (L0 panes hold their own leases). The
-  rebind starts the holds again.
+  rebind starts the holds again, and so does a load or poll that clears the mark (the
+  configuration reaches the bound target again), so the polls share one connection again
+  (`markRebind`, `connectionHoldEffects`).
 - `State.remoteHostStatus(for:)` gives the sidebar state of a remote folder:
   `.needsRebind(hostProfileID)` before `.unreachable`, and nil for a host that answers or
   a local repository.
@@ -107,8 +109,8 @@ targets and shows **Use the New Target**. It stores the new target (the same
   it is the same as the add flow's;
 - the prompt names both targets; `ConnectionKey.displayName` shows a port other than 22;
 - the add sheet rebinds a changed known host, stores the new target and adds the folder;
-- a changed target found by a poll or a load ends the holds on that host, and another
-  host keeps its hold (checked red; a one-minute time limit turns a hold that never ends
+- a changed target found by a poll or a load ends the holds on that host, another host
+  keeps its hold, and a poll that clears the mark holds the connection again (checked red; a one-minute time limit turns a hold that never ends
   into a failure);
 - a failed remote row asks before removal, and a failed local row is removed at once
   (checked red);

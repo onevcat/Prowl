@@ -280,12 +280,23 @@ struct RemoteHostRebindTests {
     #expect(ended == [Self.hostProfileID, Self.hostProfileID])
     #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
 
+    // The configuration reaches the bound target again: a good poll clears the mark and
+    // holds the host's connection again, without a rebind.
+    await store.send(
+      .remoteRepositoryRefreshed(first.id, .failed(message: "no answer", isHostUnreachable: true)))
+    #expect(store.state.rebindHostProfileIDs.isEmpty)
+    let again = [await heldIterator.next(), await heldIterator.next()]
+    #expect(again == [Self.hostProfileID, Self.hostProfileID])
+
     // A load that finds a changed target ends the holds of that host too.
     await store.send(
       .repositoriesLoaded(
         [other], failures: [.init(rootID: other.id, message: "changed", needsRebind: true)],
         roots: [otherRoot], animated: false))
-    #expect(await releasedIterator.next() == otherHost)
+    // The two folders that left end their holds too, in any order.
+    var rest: [UUID?] = []
+    for _ in 0..<3 { rest.append(await releasedIterator.next()) }
+    #expect(rest.filter { $0 == otherHost }.count == 1)
     await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
     await store.finish(timeout: .seconds(10))
   }

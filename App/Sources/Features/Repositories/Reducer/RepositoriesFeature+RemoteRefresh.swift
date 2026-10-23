@@ -70,13 +70,30 @@ extension RepositoriesFeature {
     return effects.isEmpty ? .none : .merge(effects)
   }
 
-  /// Ends the folder holds on hosts that now need a rebind: they hold a connection to the
-  /// old target. The rebind starts them again (`reduceRemoteHostRebound`).
-  func releaseConnectionHolds(on hostProfileIDs: Set<HostProfile.ID>, state: State) -> Effect<Action> {
-    let held = state.remoteRefreshRepositoryIDs.filter {
-      RepositoryLocation(id: $0)?.hostProfileID.map(hostProfileIDs.contains) == true
+  /// Sets or clears the rebind mark of a host, and reports whether it changed.
+  func markRebind(_ hostProfileID: HostProfile.ID, needsRebind: Bool, state: inout State) -> RebindMarkChange {
+    if needsRebind {
+      return state.rebindHostProfileIDs.insert(hostProfileID).inserted
+        ? RebindMarkChange(marked: [hostProfileID]) : .none
     }
-    return held.isEmpty ? .none : .merge(held.map { .cancel(id: CancelID.remoteConnectionHold($0)) })
+    return state.rebindHostProfileIDs.remove(hostProfileID) != nil ? RebindMarkChange(cleared: [hostProfileID]) : .none
+  }
+
+  /// A host that now needs a rebind ends its folders' holds: they hold a connection to the
+  /// old target. A host whose mark clears (the configuration reaches the bound target
+  /// again) holds its folders' connection again, as the rebind does.
+  func connectionHoldEffects(for change: RebindMarkChange, state: State) -> Effect<Action> {
+    func polled(on hostProfileIDs: Set<HostProfile.ID>) -> [(Repository.ID, HostProfile.ID)] {
+      state.remoteRefreshRepositoryIDs.sorted().compactMap { id in
+        guard let hostProfileID = RepositoryLocation(id: id)?.hostProfileID, hostProfileIDs.contains(hostProfileID)
+        else { return nil }
+        return (id, hostProfileID)
+      }
+    }
+    let effects =
+      polled(on: change.marked).map { Effect<Action>.cancel(id: CancelID.remoteConnectionHold($0.0)) }
+      + polled(on: change.cleared).map { connectionHold($0.0, hostProfileID: $0.1) }
+    return effects.isEmpty ? .none : .merge(effects)
   }
 
   /// Holds the connection of `repositoryID`'s host until the repository leaves. A host
@@ -149,20 +166,16 @@ extension RepositoriesFeature {
       }
       if let hostProfileID = repository.location.hostProfileID {
         // Another failure passed the authority check.
-        if needsRebind {
-          if state.rebindHostProfileIDs.insert(hostProfileID).inserted {
-            effects.append(releaseConnectionHolds(on: [hostProfileID], state: state))
-          }
-        } else {
-          state.rebindHostProfileIDs.remove(hostProfileID)
-        }
+        let change = markRebind(hostProfileID, needsRebind: needsRebind, state: &state)
+        effects.append(connectionHoldEffects(for: change, state: state))
       }
       remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
     case .refreshed(let refresh):
       state.remoteRefreshFailureCounts[repositoryID] = nil
       state.pollUnreachableRepositoryIDs.remove(repositoryID)
       if let hostProfileID = repository.location.hostProfileID {
-        state.rebindHostProfileIDs.remove(hostProfileID)
+        let change = markRebind(hostProfileID, needsRebind: false, state: &state)
+        effects.append(connectionHoldEffects(for: change, state: state))
       }
       effects.append(contentsOf: applyRemoteRefresh(refresh, to: repository, state: &state))
     }
@@ -358,6 +371,14 @@ extension RepositoriesFeature {
     // The old poll ends before the new one starts; a hold never ends, so the rest merge.
     return .concatenate(.merge(cancellations), .merge(effects))
   }
+}
+
+/// The hosts whose rebind mark a load or a poll set or cleared.
+nonisolated struct RebindMarkChange: Equatable, Sendable {
+  var marked: Set<HostProfile.ID> = []
+  var cleared: Set<HostProfile.ID> = []
+
+  static let none = RebindMarkChange()
 }
 
 /// A host profile and the target its SSH configuration resolves to now.

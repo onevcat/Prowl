@@ -235,7 +235,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      let markedHosts = recordLoadFailures(failures, state: &state)
+      let rebindChange = recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,
@@ -243,7 +243,7 @@ extension RepositoriesFeature {
         selectedWorktreeID: state.selectedWorktreeID,
         selectedWorktree: selectedWorktree
       )
-      var allEffects: [Effect<Action>] = [releaseConnectionHolds(on: markedHosts, state: state)]
+      var allEffects: [Effect<Action>] = [connectionHoldEffects(for: rebindChange, state: state)]
       if repositoriesChanged || wasRestoringSnapshot {
         allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
       }

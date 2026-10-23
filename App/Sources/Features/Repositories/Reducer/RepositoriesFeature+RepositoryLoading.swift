@@ -328,9 +328,9 @@ extension RepositoriesFeature {
 
   /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
   /// host. `State.currentLoadFailures` reads them back.
-  /// Returns the host profiles that this load marked for a rebind; their holds end.
+  /// Returns the hosts whose rebind mark this load set or cleared, for their holds.
   @discardableResult
-  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) -> Set<HostProfile.ID> {
+  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) -> RebindMarkChange {
     state.loadFailuresByID = Dictionary(
       failures.map { ($0.rootID, $0.message) },
       uniquingKeysWith: { first, _ in first }
@@ -338,16 +338,17 @@ extension RepositoriesFeature {
     state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
     // A remote failure for another reason passed the authority check.
-    var marked: Set<HostProfile.ID> = []
+    var change = RebindMarkChange.none
     for failure in failures {
       guard let hostProfileID = RepositoryLocation(id: failure.rootID)?.hostProfileID else { continue }
-      if failure.needsRebind {
-        if state.rebindHostProfileIDs.insert(hostProfileID).inserted { marked.insert(hostProfileID) }
-      } else {
-        state.rebindHostProfileIDs.remove(hostProfileID)
-      }
+      let step = markRebind(hostProfileID, needsRebind: failure.needsRebind, state: &state)
+      change.marked.formUnion(step.marked)
+      change.cleared.formUnion(step.cleared)
     }
-    return marked
+    // A host marked and cleared by the same load ends as its last failure left it.
+    change.marked.formIntersection(state.rebindHostProfileIDs)
+    change.cleared.subtract(state.rebindHostProfileIDs)
+    return change
   }
 
   /// While remote folders are off, the prunes keep the hidden remote-form IDs
