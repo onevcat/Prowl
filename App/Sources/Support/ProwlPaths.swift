@@ -280,6 +280,10 @@ nonisolated enum ProwlPaths {
     cacheDirectory.appending(path: "terminal-layout-snapshot.json", directoryHint: .notDirectory)
   }
 
+  static var hostProfilesURL: URL {
+    baseDirectory.appending(path: "hosts.json", directoryHint: .notDirectory)
+  }
+
   static var repositoryEntriesURL: URL {
     baseDirectory.appending(path: "repository-entries.json", directoryHint: .notDirectory)
   }
