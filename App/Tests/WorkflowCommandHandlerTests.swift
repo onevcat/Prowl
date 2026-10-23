@@ -165,6 +165,16 @@ struct WorkflowCommandHandlerTests {
       return
     }
     #expect(local.worktree.id == "wt-1")
+    // With no selector and no caller, a focused remote folder is the chosen source.
+    let focusedRemote = WorkflowRuntimeSnapshot(
+      resolution: TargetResolutionSnapshot(worktrees: [], focusedWorktreeID: remote.id, remoteFolders: [remote]),
+      paneByShellPID: [:], bundleWorkflowsURL: nil, userWorkflowsURL: snapshot.userWorkflowsURL,
+      disabledWorkflowIDs: [], bundledSkillIDs: [], knownAgents: [], installedAgents: nil, enabledProfiles: [])
+    guard case .failure(let focused) = handler.resolveSource(.none, snapshot: focusedRemote, callerPane: nil) else {
+      Issue.record("A focused remote folder must be refused")
+      return
+    }
+    #expect(focused.response.error?.code == CLIErrorCode.remoteAgentUnsupported)
   }
 
   @Test func withoutACallerTheFocusedWorktreeIsUsed() async throws {

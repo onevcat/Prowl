@@ -105,6 +105,19 @@ struct CLIRemoteFolderTests {
       return
     }
     #expect(named == "Worktree 'main' not found.")
+    // `-t` keeps the reason for an exact name of the folder.
+    for selector in ["mini:/srv/app", "ssh:x:/srv/app"] {
+      guard case .failure(.notFound(let auto)) = resolver.resolve(.auto(selector)) else {
+        Issue.record("Expected a not-found failure")
+        return
+      }
+      #expect(auto.contains("remote folder"), "\(selector)")
+    }
+    guard case .failure(.notFound(let autoName)) = resolver.resolve(.auto("main")) else {
+      Issue.record("Expected a not-found failure")
+      return
+    }
+    #expect(autoName == "Target 'main' not found as pane, tab, or worktree.")
   }
 
   /// `create tab` in a remote folder fails with the reason and creates nothing.
