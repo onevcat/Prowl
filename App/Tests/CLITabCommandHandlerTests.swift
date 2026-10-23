@@ -69,6 +69,34 @@ struct CLITabCommandHandlerTests {
     #expect(didCreate == false)
   }
 
+  /// The legacy `tab create` refuses a remote folder like `create tab`, with or without a
+  /// path, and creates nothing (docs-ai 084 C3b).
+  @Test func createRefusesARemoteFolder() async throws {
+    for path in [nil, "/srv/app/subdir"] {
+      var didCreate = false
+      let handler = TabCommandHandler(
+        resolveProvider: { _ in
+          .success(
+            makeTarget(worktreeID: "ssh:5c1f0a8e-7d1b-4c63-9a3e-2f1b6c9d0e42:/srv/app", worktreePath: "/srv/app"))
+        },
+        createTab: { _, _ in
+          didCreate = true
+          return nil
+        },
+        closeTab: { _, _ in true }
+      )
+
+      let response = await handler.handle(
+        envelope: CommandEnvelope(
+          output: .json, command: .tab(TabInput(action: .create, selector: .pane("p17"), path: path))))
+
+      #expect(response.ok == false)
+      #expect(response.error?.code == CLIErrorCode.tabFailed)
+      #expect(response.error?.message == "The CLI cannot open tabs in remote folders yet.")
+      #expect(didCreate == false)
+    }
+  }
+
   @Test func createAllowsOmittedPath() async throws {
     var createPath: String?
     let handler = TabCommandHandler(

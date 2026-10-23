@@ -110,6 +110,11 @@ final class TabCommandHandler: CommandHandler {
   }
 
   private func handleCreate(input: TabInput, target: TabResolvedTarget) -> CommandResponse {
+    // As `create tab`: the CLI opens no tab in a remote folder until docs-ai 084 C3c, and a
+    // host path is not checked here.
+    if RepositoryLocation.hasRemoteForm(target.worktreeID) {
+      return errorResponse(code: CLIErrorCode.tabFailed, message: "The CLI cannot open tabs in remote folders yet.")
+    }
     let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
     guard input.path == nil || path != nil else {
       return errorResponse(

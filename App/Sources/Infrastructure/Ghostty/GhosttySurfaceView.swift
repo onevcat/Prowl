@@ -52,6 +52,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
       desired = nil
       applied = nil
     }
+
+    /// A new native surface starts visible and has had nothing applied; the value asked for
+    /// before it existed (a deferred remote pane, docs-ai 084 C3b) is what it must get.
+    mutating func resetForNewSurface() -> Bool? {
+      let pending = desired
+      reset()
+      return pending
+    }
   }
 
   private struct ScrollbarState {
@@ -788,7 +796,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
-    occlusionState.reset()
+    let pendingOcclusion = occlusionState.resetForNewSurface()
     lastSurfaceFocus = nil
     // A freshly created Ghostty surface defaults to focused (blinking cursor).
     // Sync it to our Swift-side `focused` flag so background/restored surfaces
@@ -796,6 +804,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // would no-op here (self.focused already false), so push the state directly.
     setSurfaceFocus(focused)
     updateSurfaceSize()
+    if let pendingOcclusion { setOcclusion(pendingOcclusion) }
   }
 
   private func updateContentScale() {
@@ -816,7 +825,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else {
-      guard skipsSurfaceCreationForTesting else { return }
+      // A deferred surface keeps the request for when it exists (`createSurface`).
+      guard skipsSurfaceCreationForTesting else {
+        occlusionState.setDesired(visible)
+        return
+      }
       // Occluding (pausing render) is always safe, even without a view
       // hierarchy. This handles restored surfaces that haven't been attached
       // to a window yet.
@@ -892,6 +905,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func handleAttachmentChangeForTesting() {
     handleAttachmentChange()
   }
+
+  var desiredOcclusionForTesting: Bool? { occlusionState.desired }
 
   func resumeDeferredOcclusionIfNeededForTesting() {
     resumeDeferredOcclusionIfNeeded()
