@@ -118,7 +118,10 @@ struct AddRemoteFolderFeatureTests {
       try RemoteFolderValidatorClient.knownProfile(
         for: SSHConnectionRecipe(destination: "other"), resolvedTo: Self.profile.connectionKey, in: [Self.profile])
         == nil)
-    #expect(throws: RemoteFolderValidationError.authorityChanged(alias: "mini")) {
+    #expect(
+      throws: RemoteFolderValidationError.authorityChanged(
+        Self.profile, resolved: ConnectionKey(user: "dev", hostname: "elsewhere.local"))
+    ) {
       _ = try RemoteFolderValidatorClient.knownProfile(
         for: recipe, resolvedTo: ConnectionKey(user: "dev", hostname: "elsewhere.local"), in: [Self.profile])
     }

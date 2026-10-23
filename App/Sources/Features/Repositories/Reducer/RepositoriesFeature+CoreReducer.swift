@@ -235,7 +235,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      recordLoadFailures(failures, state: &state)
+      let markedHosts = recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,
@@ -243,7 +243,7 @@ extension RepositoriesFeature {
         selectedWorktreeID: state.selectedWorktreeID,
         selectedWorktree: selectedWorktree
       )
-      var allEffects: [Effect<Action>] = []
+      var allEffects: [Effect<Action>] = [releaseConnectionHolds(on: markedHosts, state: state)]
       if repositoriesChanged || wasRestoringSnapshot {
         allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
       }
@@ -833,6 +833,9 @@ extension RepositoriesFeature {
       state.alert = nil
       return reduceRebindRemoteHost(hostProfileID, to: key)
 
+    case .alert(.presented(.confirmRemoveFailedRepository(let repositoryID))):
+      return .send(.repositoryManagement(.removeFailedRepository(repositoryID)))
+
     case .remoteHostRebound(let hostProfileID):
       return reduceRemoteHostRebound(hostProfileID, state: &state)
 
@@ -841,6 +844,9 @@ extension RepositoriesFeature {
       @Shared(.hostProfiles) var hostProfiles: [HostProfile]
       state.addRemoteFolder = AddRemoteFolderFeature.State(hostProfiles: hostProfiles)
       return .none
+
+    case .addRemoteFolder(.presented(.delegate(.hostRebound(let hostProfileID)))):
+      return .send(.remoteHostRebound(hostProfileID))
 
     case .addRemoteFolder(.presented(.delegate(.cancel))):
       state.addRemoteFolder = nil

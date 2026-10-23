@@ -195,6 +195,124 @@ struct RemoteHostRebindTests {
     #expect(try storage.storage.load(hostsURL) == Data("{\"version\": 99}".utf8))
   }
 
+  /// The add sheet offers the rebind when a known host's target changed: it stores the new
+  /// target, tells the sidebar, and adds the folder.
+  @Test(.dependencies) func theAddSheetRebindsAChangedHostAndAddsTheFolder() async throws {
+    let hostsURL = URL(fileURLWithPath: "/tmp/prowl-rebind-\(UUID().uuidString).json")
+    let storage = SettingsTestStorage()
+    try storage.storage.save(JSONEncoder().encode(HostProfilesFile(hosts: [Self.profile])), hostsURL)
+    let moved = Self.moved
+    let store = TestStore(initialState: AddRemoteFolderFeature.State(hostProfiles: [Self.profile])) {
+      AddRemoteFolderFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = storage.storage
+      $0.hostProfilesFileURL = hostsURL
+      $0[RemoteFolderValidatorClient.self] = RemoteFolderValidatorClient(validate: { existing, _, _, _ in
+        let existing = try #require(existing)
+        guard existing.connectionKey == moved else {
+          throw RemoteFolderValidationError.authorityChanged(existing, resolved: moved)
+        }
+        return ValidatedRemoteFolder(profile: existing, isNewProfile: false, rootPath: "/home/dev/app", kind: .git)
+      })
+    }
+    let target = RemoteHostTarget(profile: Self.profile, resolved: Self.moved)
+
+    await store.send(\.binding.path, "~/app") { $0.path = "~/app" }
+    await store.send(.addButtonTapped) { $0.isValidating = true }
+    await store.receive(\.validationNeedsRebind) {
+      $0.isValidating = false
+      $0.pendingRebind = target
+      $0.errorMessage = RemoteFolderValidationError.authorityChanged(Self.profile, resolved: moved).localizedDescription
+    }
+    await store.send(.rebindButtonTapped) { $0.isValidating = true }
+    await store.receive(\.rebound) {
+      $0.isValidating = false
+      $0.pendingRebind = nil
+      $0.hostProfiles[0].connectionKey = moved
+    }
+    await store.receive(\.delegate.hostRebound)
+    await store.receive(\.addButtonTapped) {
+      $0.isValidating = true
+      $0.errorMessage = nil
+    }
+    await store.receive(\.validationFinished) { $0.isValidating = false }
+    await store.receive(\.delegate.added)
+    let file = try JSONDecoder().decode(HostProfilesFile.self, from: storage.storage.load(hostsURL))
+    #expect(file.hosts.map(\.connectionKey) == [moved])
+  }
+
+  /// A poll or a load that finds a changed target ends the holds on that host, which hold
+  /// a connection to the old target; another host keeps its hold. The time limit turns a
+  /// hold that never ends into a failure instead of a hang.
+  @Test(.dependencies, .timeLimit(.minutes(1))) func aChangedTargetEndsTheHoldsOnItsHost() async {
+    let first = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/a", name: "a")
+    let second = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/b", name: "b")
+    let otherHost = UUID()
+    let otherRoot = RepositoryLocation.remote(hostProfileID: otherHost, path: "/srv/c")
+    let other = Repository(
+      location: otherRoot, name: "c",
+      worktrees: [Worktree(name: "main", detail: "", location: otherRoot, repositoryLocation: otherRoot)])
+    let (holds, held) = AsyncStream<UUID>.makeStream()
+    let (releases, released) = AsyncStream<UUID>.makeStream()
+    var client = RemoteRepositoryHostClient(host: { _ in nil })
+    client.holdConnection = { hostProfileID in
+      held.yield(hostProfileID)
+      return RemoteConnectionHold(release: { released.yield(hostProfileID) })
+    }
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = client
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+
+    let repositories = [first, second, other]
+    await store.send(
+      .repositoriesLoaded(repositories, failures: [], roots: repositories.map(\.location), animated: false))
+    var heldIterator = holds.makeAsyncIterator()
+    for _ in 0..<3 { _ = await heldIterator.next() }
+
+    await store.send(
+      .remoteRepositoryRefreshed(first.id, .failed(message: "changed", isHostUnreachable: false, needsRebind: true)))
+    var releasedIterator = releases.makeAsyncIterator()
+    let ended = [await releasedIterator.next(), await releasedIterator.next()]
+    #expect(ended == [Self.hostProfileID, Self.hostProfileID])
+    #expect(store.state.rebindHostProfileIDs == [Self.hostProfileID])
+
+    // A load that finds a changed target ends the holds of that host too.
+    await store.send(
+      .repositoriesLoaded(
+        [other], failures: [.init(rootID: other.id, message: "changed", needsRebind: true)],
+        roots: [otherRoot], animated: false))
+    #expect(await releasedIterator.next() == otherHost)
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
+  /// Removing a remote folder from its failed row says first what happens to its data; a
+  /// local failed repository is removed at once.
+  @Test(.dependencies) func aFailedRemoteFolderAsksBeforeItIsRemoved() async {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    $hostProfiles.withLock { $0 = [Self.profile] }
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositoryManagement(.requestRemoveFailedRepository(remote.id)))
+    let message = store.state.alert.map { String(describing: $0.message) } ?? ""
+    #expect(message.contains("files on mini stay as they are"))
+    await store.send(.alert(.presented(.confirmRemoveFailedRepository(remote.id))))
+    await store.receive(\.repositoryManagement.removeFailedRepository)
+
+    await store.send(.repositoryManagement(.requestRemoveFailedRepository("/tmp/local/")))
+    await store.receive(\.repositoryManagement.removeFailedRepository)
+  }
+
   @Test func theRebindPromptNamesBothTargets() {
     let alert = RepositoriesFeature().rebindAlert(
       for: RemoteHostTarget(profile: Self.profile, resolved: Self.moved))

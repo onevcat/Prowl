@@ -392,7 +392,7 @@ struct SidebarListView: View {
           retry: { store.send(.refreshWorktrees) },
           showFailure: { store.send(.showRepositoryLoadFailure(model.id)) },
           removeRepository: {
-            store.send(.repositoryManagement(.removeFailedRepository(model.id)))
+            store.send(.repositoryManagement(.requestRemoveFailedRepository(model.id)))
           }
         )
         .padding(.horizontal, 12)

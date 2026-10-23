@@ -25,6 +25,10 @@ All of it is behind `PROWL_REMOTE_FOLDERS=1`, like C1a.
   Removing a folder needs no cleanup. A remote plain folder is not polled: when the SSH
   configuration is put back, its row clears through Rebind Host, which then offers Connect
   Again.
+- When a load or poll newly marks a host, the connection holds of its folders end
+  (`releaseConnectionHolds`): they hold a connection to the old target. Other hosts keep
+  theirs, and so do other users of the connection (L0 panes hold their own leases). The
+  rebind starts the holds again.
 - `State.remoteHostStatus(for:)` gives the sidebar state of a remote folder:
   `.needsRebind(hostProfileID)` before `.unreachable`, and nil for a host that answers or
   a local repository.
@@ -64,12 +68,24 @@ keep their backoff. There is no "keep the old target": the recipe resolves throu
 `~/.ssh/config`, so the old target cannot be reached without editing that file.
 Cancel leaves the folders paused.
 
+### Rebind in the add sheet
+
+A host can need a rebind with no folder to show it: its last folder was removed, or it
+has only plain folders, which are not polled. The add sheet therefore offers the rebind
+too. When the check finds that a known host now reaches another target
+(`RemoteFolderValidationError.authorityChanged(profile, resolved:)`), the sheet names both
+targets and shows **Use the New Target**. It stores the new target (the same
+`storeHostTarget` as the sidebar's rebind), tells the sidebar (`.hostRebound`, which runs
+`remoteHostRebound` for the host's other folders), and checks the folder again.
+
 ### Removal
 
-- Removing a remote folder says: "This removes the folder from Prowl. Its worktrees and
+- Removing a remote folder, from its section or from its failed row, says: "This removes
+  the folder from Prowl. Its worktrees and
   files on mini stay as they are, and Prowl stops connecting to mini for it. mini stays
-  in the host list." (`RepositoriesFeature.removalMessage(for:)`). A local repository
-  keeps its message.
+  in the host list." (`RepositoriesFeature.removalMessage(for:)`). A failed remote row asks
+  first (`requestRemoveFailedRepository`); a failed local row is removed at once, as before.
+  A local repository keeps its message.
 - The host profile stays in `hosts.json` after its last folder goes. The add sheet offers
   it again, and with no folder there is no connection. There is no UI that removes a host
   profile yet, so there is nothing else to state.
@@ -90,6 +106,12 @@ Cancel leaves the folders paused.
   the changed file before the save, so the reload-and-retry branch itself does not run;
   it is the same as the add flow's;
 - the prompt names both targets; `ConnectionKey.displayName` shows a port other than 22;
+- the add sheet rebinds a changed known host, stores the new target and adds the folder;
+- a changed target found by a poll or a load ends the holds on that host, and another
+  host keeps its hold (checked red; a one-minute time limit turns a hold that never ends
+  into a failure);
+- a failed remote row asks before removal, and a failed local row is removed at once
+  (checked red);
 - the removal message of a remote folder says that its files and its host stay, and does
   not name a host profile that is missing.
 

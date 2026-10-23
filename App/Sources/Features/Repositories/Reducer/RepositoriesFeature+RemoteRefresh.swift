@@ -70,6 +70,15 @@ extension RepositoriesFeature {
     return effects.isEmpty ? .none : .merge(effects)
   }
 
+  /// Ends the folder holds on hosts that now need a rebind: they hold a connection to the
+  /// old target. The rebind starts them again (`reduceRemoteHostRebound`).
+  func releaseConnectionHolds(on hostProfileIDs: Set<HostProfile.ID>, state: State) -> Effect<Action> {
+    let held = state.remoteRefreshRepositoryIDs.filter {
+      RepositoryLocation(id: $0)?.hostProfileID.map(hostProfileIDs.contains) == true
+    }
+    return held.isEmpty ? .none : .merge(held.map { .cancel(id: CancelID.remoteConnectionHold($0)) })
+  }
+
   /// Holds the connection of `repositoryID`'s host until the repository leaves. A host
   /// profile that needs a rebind holds nothing; the rebind starts it again.
   func connectionHold(_ repositoryID: Repository.ID, hostProfileID: HostProfile.ID) -> Effect<Action> {
@@ -141,7 +150,9 @@ extension RepositoriesFeature {
       if let hostProfileID = repository.location.hostProfileID {
         // Another failure passed the authority check.
         if needsRebind {
-          state.rebindHostProfileIDs.insert(hostProfileID)
+          if state.rebindHostProfileIDs.insert(hostProfileID).inserted {
+            effects.append(releaseConnectionHolds(on: [hostProfileID], state: state))
+          }
         } else {
           state.rebindHostProfileIDs.remove(hostProfileID)
         }
@@ -294,7 +305,7 @@ extension RepositoriesFeature {
   func reduceRebindRemoteHost(_ hostProfileID: HostProfile.ID, to key: ConnectionKey) -> Effect<Action> {
     .run { send in
       do {
-        try await Self.storeTarget(key, for: hostProfileID)
+        try await Self.storeHostTarget(key, for: hostProfileID)
         await send(.remoteHostRebound(hostProfileID))
       } catch {
         await send(.remoteHostRebindFailed(error.localizedDescription))
@@ -302,7 +313,9 @@ extension RepositoriesFeature {
     }
   }
 
-  private static func storeTarget(_ key: ConnectionKey, for hostProfileID: HostProfile.ID) async throws {
+  /// Stores `key` as the host profile's target in `hosts.json`; the add sheet's rebind
+  /// uses it too.
+  static func storeHostTarget(_ key: ConnectionKey, for hostProfileID: HostProfile.ID) async throws {
     @Shared(.hostProfiles) var hostProfiles: [HostProfile]
     func bind() -> ConnectionKey? {
       $hostProfiles.withLock { profiles in

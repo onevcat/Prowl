@@ -18,6 +18,9 @@ struct AddRemoteFolderFeature {
     var path = ""
     var isValidating = false
     var errorMessage: String?
+    /// A known host whose SSH configuration now reaches another target; the sheet offers to
+    /// rebind it and add the folder (C1b).
+    var pendingRebind: RemoteHostTarget?
 
     init(hostProfiles: [HostProfile]) {
       self.hostProfiles = hostProfiles
@@ -40,12 +43,17 @@ struct AddRemoteFolderFeature {
     case cancelButtonTapped
     case validationFinished(ValidatedRemoteFolder)
     case validationFailed(String)
+    case validationNeedsRebind(RemoteHostTarget, message: String)
+    case rebindButtonTapped
+    case rebound(RemoteHostTarget)
     case delegate(Delegate)
   }
 
   @CasePathable
   enum Delegate: Equatable {
     case added(RepositoryLocation, kind: Repository.Kind)
+    /// The host profile has a new target; its other folders connect again.
+    case hostRebound(HostProfile.ID)
     case cancel
   }
 
@@ -57,12 +65,14 @@ struct AddRemoteFolderFeature {
       switch action {
       case .binding:
         state.errorMessage = nil
+        state.pendingRebind = nil
         return .none
 
       case .addButtonTapped:
         guard state.canAdd else { return .none }
         state.isValidating = true
         state.errorMessage = nil
+        state.pendingRebind = nil
         let (existing, destination, path, known) = (
           state.selectedProfile, state.destination, state.path, state.hostProfiles
         )
@@ -72,10 +82,41 @@ struct AddRemoteFolderFeature {
             let folder = try await validator.validate(existing, destination, path, known)
             if folder.isNewProfile { try await Self.save(folder.profile) }
             await send(.validationFinished(folder))
+          } catch RemoteFolderValidationError.authorityChanged(let profile, let resolved) {
+            let error = RemoteFolderValidationError.authorityChanged(profile, resolved: resolved)
+            await send(
+              .validationNeedsRebind(
+                RemoteHostTarget(profile: profile, resolved: resolved), message: error.localizedDescription))
           } catch {
             await send(.validationFailed(error.localizedDescription))
           }
         }
+
+      case .validationNeedsRebind(let target, let message):
+        state.isValidating = false
+        state.errorMessage = message
+        state.pendingRebind = target
+        return .none
+
+      case .rebindButtonTapped:
+        guard let target = state.pendingRebind, !state.isValidating else { return .none }
+        state.isValidating = true
+        return .run { send in
+          do {
+            try await RepositoriesFeature.storeHostTarget(target.resolved, for: target.profile.id)
+            await send(.rebound(target))
+          } catch {
+            await send(.validationFailed(error.localizedDescription))
+          }
+        }
+
+      case .rebound(let target):
+        state.isValidating = false
+        state.pendingRebind = nil
+        if let index = state.hostProfiles.firstIndex(where: { $0.id == target.profile.id }) {
+          state.hostProfiles[index].connectionKey = target.resolved
+        }
+        return .merge(.send(.delegate(.hostRebound(target.profile.id))), .send(.addButtonTapped))
 
       case .cancelButtonTapped:
         // The check stores a new host profile before it ends; closing in between would
