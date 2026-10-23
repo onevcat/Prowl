@@ -272,6 +272,10 @@ nonisolated struct RemoteRepositoryHost: Sendable {
   /// `wt` runs inside a function, so its standard output can be read: the script prints
   /// it after the marker, then the repository's and the new worktree's physical paths as
   /// the last two lines. Git's C locale applies, as `GitClient` sets it locally.
+  ///
+  /// The command substitution must not be part of a condition (`|| exit`, `if`): bash 5
+  /// then ignores `set -e` inside it, and `wt` would go on after a failed
+  /// `git worktree add`. Its status is read on the next line instead.
   private static func creationScriptText() throws -> String {
     guard let wtScript = bundledWtScript else { throw RemoteRepositoryHostError.bundledScriptMissing }
     return """
@@ -283,7 +287,9 @@ nonisolated struct RemoteRepositoryHost: Sendable {
       \(RemoteGitShell.printMarker)
       printf '\\n'
       prowl_root=$(pwd -P)
-      prowl_output=$(prowl_wt "$@") || exit $?
+      prowl_output=$(prowl_wt "$@")
+      prowl_status=$?
+      [ "$prowl_status" -eq 0 ] || exit "$prowl_status"
       printf '%s\\n' "$prowl_output"
       prowl_path=$(printf '%s\\n' "$prowl_output" | awk 'NF { line = $0 } END { print line }')
       if [ -n "$prowl_path" ] && cd -- "$prowl_path" 2>/dev/null; then prowl_path=$(pwd -P); fi

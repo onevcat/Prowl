@@ -388,6 +388,40 @@ struct RemoteRepositoryHostTests {
     }
   }
 
+  /// A failed `git worktree add` must stop `wt` under bash 3.2 (macOS) and bash 5 (most
+  /// Linux hosts): nothing is copied, no result is reported, and the creation fails.
+  /// Bash 5 comes from Homebrew; the case is skipped where it is not installed.
+  @Test(arguments: ["/bin/bash", "/opt/homebrew/bin/bash"])
+  func aFailedWorktreeAddStopsWtUnderEveryBash(bash: String) async throws {
+    guard FileManager.default.isExecutableFile(atPath: bash) else { return }
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    try Data("note\n".utf8).write(to: fixture.main.appending(path: "notes.txt"))
+    // A folder that is not empty: `git worktree add` refuses it.
+    let occupied = fixture.root.appending(path: "occupied", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: false)
+    try Data("mine\n".utf8).write(to: occupied.appending(path: "keep.txt"))
+    let host = RepositoryHost(local: .testValue, remote: fixture.remoteClient(lane: GitFixture.lane(bash: bash)))
+    let request = GitWorktreeCreateRequest(
+      name: "blocked", repoRoot: URL(filePath: fixture.remoteLocation.path),
+      baseDirectory: fixture.root.appending(path: "worktrees", directoryHint: .isDirectory),
+      copyFiles: .init(ignored: false, untracked: true), baseRef: "trunk", directoryOverride: occupied)
+
+    var finished = false
+    do {
+      for try await event in host.createWorktreeStream(in: fixture.remoteLocation, request) {
+        if case .finished = event { finished = true }
+      }
+      Issue.record("A failed git worktree add must fail the creation under \(bash)")
+    } catch let GitClientError.commandFailed(command, _) {
+      #expect(command.hasPrefix("wt "))
+    }
+
+    #expect(!finished)
+    #expect(!FileManager.default.fileExists(atPath: occupied.appending(path: "notes.txt").path))
+    #expect(try await host.worktrees(in: fixture.remoteLocation).map(\.name) == ["trunk"])
+  }
+
   @Test func theHostHomeDirectoryIsReadOnce() async throws {
     let fixture = try await GitFixture()
     defer { fixture.remove() }
@@ -511,34 +545,39 @@ private struct GitFixture {
 
   /// `sh -s` and `bash -s` with this process's `PATH`, as the owner's lane runs them with
   /// the login `PATH`.
-  static let localLane = RemoteCommandLane(
-    run: { command, limits in
-      var command = command
-      command.environment.insert((name: "PATH", value: ProcessInfo.processInfo.environment["PATH"] ?? ""), at: 0)
-      return await RemoteCommandRunner.live.execute(
-        URL(fileURLWithPath: "/bin/sh"), ["-s"], Data(try command.script().utf8), limits, nil)
-    },
-    runScript: { script, limits in
-      let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
-      return await RemoteCommandRunner.live.execute(
-        URL(fileURLWithPath: "/bin/bash"), ["-s"], Data(input.utf8), limits, nil)
-    },
-    stream: { script, limits, onLine in
-      let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
-      let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
-      let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
-      let outcome = await RemoteCommandRunner.live.executeStreaming(
-        URL(fileURLWithPath: "/bin/bash"), ["-s"], Data(input.utf8), limits, nil
-      ) { stream, chunk in
-        switch stream {
-        case .standardOutput: output.append(chunk)
-        case .standardError: errorOutput.append(chunk)
+  static let localLane = lane(bash: "/bin/bash")
+
+  /// Scripts run with `bash`, so a test can pick bash 3.2 or bash 5.
+  static func lane(bash: String) -> RemoteCommandLane {
+    RemoteCommandLane(
+      run: { command, limits in
+        var command = command
+        command.environment.insert((name: "PATH", value: ProcessInfo.processInfo.environment["PATH"] ?? ""), at: 0)
+        return await RemoteCommandRunner.live.execute(
+          URL(fileURLWithPath: "/bin/sh"), ["-s"], Data(try command.script().utf8), limits, nil)
+      },
+      runScript: { script, limits in
+        let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
+        return await RemoteCommandRunner.live.execute(
+          URL(fileURLWithPath: bash), ["-s"], Data(input.utf8), limits, nil)
+      },
+      stream: { script, limits, onLine in
+        let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
+        let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
+        let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
+        let outcome = await RemoteCommandRunner.live.executeStreaming(
+          URL(fileURLWithPath: bash), ["-s"], Data(input.utf8), limits, nil
+        ) { stream, chunk in
+          switch stream {
+          case .standardOutput: output.append(chunk)
+          case .standardError: errorOutput.append(chunk)
+          }
         }
-      }
-      output.finish()
-      errorOutput.finish()
-      return outcome
-    })
+        output.finish()
+        errorOutput.finish()
+        return outcome
+      })
+  }
 
   init() async throws {
     // `realpath`, so the stored path is the one git lists for the main worktree.
