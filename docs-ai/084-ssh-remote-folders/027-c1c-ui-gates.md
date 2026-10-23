@@ -35,13 +35,19 @@ A remote folder opens no terminal until C3. Before this change, Run Script and a
 command created a local shell tab and ran the script there. That is a real risk: the
 user's script ran on this Mac in another directory.
 
-- The reducer now refuses both with the reason (`.runScript`, `.runCustomCommand`).
+- The reducer now refuses both with the reason (`.runScript`, `.runCustomCommand`), and
+  New Terminal from the menu bar or its shortcut too (`.newTerminal`); the menu item is
+  disabled.
 - The toolbar shows no Run button or custom commands for a remote folder. The detail
   pane already says "Terminals cannot open in remote folders yet." (B3d).
+- A backstop in `WorktreeTerminalState.createTab(_:)`, which every tab passes, creates no
+  tab for a remote worktree. So an entry point that misses its check still opens no local
+  shell. C3 adds the remote launcher there.
 
 ### Command palette
 
-For a remote target, the palette leaves out the items below. Reveal in Finder follows the
+For a remote target, the palette leaves out the items below. A selected plain folder has
+no worktree ID, so its terminal target stands in, as for the actions. Reveal in Finder follows the
 selected worktree, as its action does; the others follow the action target.
 
 - Reveal in Finder;
@@ -56,8 +62,15 @@ Copy Path, navigation, Rename Branch and the pull request items stay.
 
 `RemoteFolderToolbarStatus` shows the selected worktree's host:
 
-- the alias, with "Connected", "Not answering" or "SSH configuration changed";
+- the alias, with "Connected", "Not answering", "Not connected" or "SSH configuration
+  changed";
 - an orange symbol when the host does not answer as it should.
+
+"Not connected" is a poll that reached no usable connection for a reason the user must
+fix: a refused login, a changed host key, rejected options or the kill switch
+(`isRemoteConnectionFailure`, `pollConnectionFailures`). The reason shows in the panel and
+on the sidebar badge, until a poll gets through. A host that does not answer stays "Not
+answering" (B3e).
 
 Only a remote git folder with a known host profile shows it. A plain folder is not polled
 and holds no connection (B3f), and a folder without its profile cannot connect.
@@ -97,7 +110,14 @@ Tests (`RemoteFolderUIGateTests`):
   profile, so the profile gate is what removes them) and workflows for a remote target
   (checked red);
 - Run Script and a custom command in a remote folder show the reason and send nothing
-  (checked red).
+  (checked red);
+- New Terminal in a remote git folder with a pending setup script, and in a remote plain
+  folder, shows the reason and sends nothing (checked red);
+- a remote worktree gets no tab from `createTab` or `runScript` (the backstop, checked red);
+- a selected remote plain folder has no custom commands in the palette, and a local one
+  has (checked red);
+- a refused login shows the folder as not connected until another result (checked red),
+  and the classification of connection failures.
 
 The disabled controls are view code. Their visual check needs an unlocked screen with a
 real remote folder. That check is part of the C1 row and is still open: the screen was

@@ -6,7 +6,9 @@ private nonisolated let remoteRefreshLogger = ProwlLogger("RemoteRefresh")
 /// The result of one batched refresh of a remote repository (docs-ai 084 B3f).
 nonisolated enum RemoteRefreshResult: Equatable, Sendable {
   case refreshed(RemoteRepositoryRefresh)
-  case failed(message: String, isHostUnreachable: Bool, authority: RemoteAuthorityCheck = .passed)
+  case failed(
+    message: String, isHostUnreachable: Bool, authority: RemoteAuthorityCheck = .passed,
+    isConnectionFailure: Bool = false)
 }
 
 /// The refresh cadence of remote repositories (docs-ai 084 B3f, D4). The local monitors
@@ -53,6 +55,7 @@ extension RepositoriesFeature {
     for id in removed {
       // A load that failed it keeps its own mark (`loadUnreachableRepositoryIDs`).
       state.pollUnreachableRepositoryIDs.remove(id)
+      state.pollConnectionFailures[id] = nil
       state.remoteRefreshFailureCounts[id] = nil
       state.remoteRefreshFingerprints[id] = nil
       state.remoteRefreshInFlightIDs.remove(id)
@@ -144,7 +147,7 @@ extension RepositoriesFeature {
         } catch {
           result = .failed(
             message: error.localizedDescription, isHostUnreachable: isRemoteHostUnreachable(error),
-            authority: RemoteAuthorityCheck(error))
+            authority: RemoteAuthorityCheck(error), isConnectionFailure: isRemoteConnectionFailure(error))
         }
         await send(.remoteRepositoryRefreshed(repositoryID, result))
       }
@@ -161,7 +164,9 @@ extension RepositoriesFeature {
     else { return .none }
     var effects: [Effect<Action>] = []
     switch result {
-    case .failed(let message, let isHostUnreachable, let authority):
+    case .failed(let message, let isHostUnreachable, let authority, let isConnectionFailure):
+      // A login or host key problem is not "connected" either; the user must act.
+      state.pollConnectionFailures[repositoryID] = isConnectionFailure ? message : nil
       // The last state stays; only the host's reachability changes. A host that answered
       // with another error is reachable.
       state.remoteRefreshFailureCounts[repositoryID, default: 0] += 1
@@ -178,6 +183,7 @@ extension RepositoriesFeature {
     case .refreshed(let refresh):
       state.remoteRefreshFailureCounts[repositoryID] = nil
       state.pollUnreachableRepositoryIDs.remove(repositoryID)
+      state.pollConnectionFailures[repositoryID] = nil
       if let hostProfileID = repository.location.hostProfileID {
         let change = markRebind(hostProfileID, .passed, state: &state)
         effects.append(connectionHoldEffects(for: change, state: state))

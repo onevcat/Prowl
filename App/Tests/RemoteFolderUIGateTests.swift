@@ -118,6 +118,69 @@ struct RemoteFolderUIGateTests {
       ).isEmpty)
   }
 
+  /// A selected remote plain folder has no worktree ID; the palette filters by its terminal
+  /// target, as the actions do. A local plain folder keeps its custom commands.
+  @Test(.dependencies) func thePaletteFiltersASelectedRemotePlainFolder() {
+    let command = EffectiveCustomCommand(
+      source: .global,
+      command: UserCustomCommand(
+        id: "build", title: "Build", systemImage: "hammer", command: "make", execution: .shellScript, shortcut: nil))
+    func hasCustomCommand(_ folder: Repository) -> Bool {
+      var state = RepositoriesFeature.State()
+      state.repositories = [folder]
+      state.repositoryRoots = [folder.location]
+      state.selection = .repository(folder.id)
+      return CommandPaletteFeature.commandPaletteItems(from: state, customCommands: [command]).contains {
+        if case .runCustomCommand = $0.kind { true } else { false }
+      }
+    }
+    let local = Repository(
+      location: .local(URL(filePath: "/tmp/prowl-plain/")), name: "plain", kind: .plain, worktrees: [])
+
+    #expect(!hasCustomCommand(RemoteRepositoryFixtures.plainFolder()))
+    #expect(hasCustomCommand(local))
+  }
+
+  /// A refused login or a changed host key is not "connected": the toolbar and the sidebar
+  /// show the reason until a poll succeeds.
+  @Test(.dependencies) func aFailedLoginShowsTheFolderAsNotConnected() async throws {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    $hostProfiles.withLock { $0 = [Self.profile] }
+    var state = Self.remoteState()
+    let repository = try #require(state.repositories.first)
+    state.remoteRefreshRepositoryIDs = [repository.id]
+    state.remoteRefreshInFlightIDs = [repository.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+    let reason = "The remote host refused the SSH login."
+
+    await store.send(
+      .remoteRepositoryRefreshed(
+        repository.id, .failed(message: reason, isHostUnreachable: false, isConnectionFailure: true)))
+    #expect(store.state.remoteHostStatus(for: repository.id) == .connectionFailed(reason))
+    let worktree = repository.worktrees[0]
+    #expect(
+      RemoteFolderToolbarStatus(worktree: worktree, repositories: store.state)?.hostStatus == .connectionFailed(reason))
+
+    await store.send(
+      .remoteRepositoryRefreshed(repository.id, .failed(message: "git failed", isHostUnreachable: false)))
+    #expect(store.state.remoteHostStatus(for: repository.id) == nil)
+  }
+
+  @Test func connectionFailuresAreThoseTheUserMustFix() {
+    #expect(isRemoteConnectionFailure(RemoteRepositoryHostError.connection(.authentication)))
+    #expect(isRemoteConnectionFailure(RemoteRepositoryRefreshError.connection(.hostKey)))
+    #expect(isRemoteConnectionFailure(RemoteRepositoryHostError.sideChannelDisabled))
+    #expect(isRemoteConnectionFailure(RemoteRepositoryHostError.configurationRejected))
+    #expect(!isRemoteConnectionFailure(RemoteRepositoryHostError.connection(.unreachable)))
+    #expect(!isRemoteConnectionFailure(RemoteRepositoryHostError.authorityChanged))
+    #expect(!isRemoteConnectionFailure(RemoteRepositoryHostError.gitMissing))
+  }
+
   /// A script or a custom command in a remote folder shows the reason and runs nothing:
   /// it would run in a local shell.
   @Test(.dependencies) func scriptsAndCustomCommandsInARemoteFolderShowTheReason() async {
@@ -143,5 +206,30 @@ struct RemoteFolderUIGateTests {
     await store.send(.runCustomCommand(state.selectedCustomCommands[0].id))
     await store.receive(\.repositories.showToast)
     #expect(store.state.repositories.statusToast == .warning(message))
+  }
+
+  /// New Terminal (menu bar and shortcut) in a remote folder shows the reason and sends
+  /// nothing, also with a setup script pending; a remote plain folder too.
+  @Test(.dependencies) func newTerminalInARemoteFolderShowsTheReason() async {
+    var repositories = Self.remoteState()
+    repositories.pendingSetupScriptWorktreeIDs = [repositories.selectedWorktreeID!]
+    let plain = RemoteRepositoryFixtures.plainFolder()
+    var plainRepositories = RepositoriesFeature.State()
+    plainRepositories.repositories = [plain]
+    plainRepositories.repositoryRoots = [plain.location]
+    plainRepositories.selection = .repository(plain.id)
+    for repositories in [repositories, plainRepositories] {
+      let store = TestStore(
+        initialState: AppFeature.State(repositories: repositories, settings: SettingsFeature.State())
+      ) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+      }
+      store.exhaustivity = .off
+      await store.send(.newTerminal)
+      await store.receive(\.repositories.showToast)
+      #expect(store.state.repositories.statusToast == .warning("Terminals cannot open in remote folders yet."))
+    }
   }
 }

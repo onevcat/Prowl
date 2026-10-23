@@ -246,7 +246,10 @@ struct CommandPaletteFeature {
     let worktreeActionTargetID = actionTargetWorktreeID ?? repositories.selectedWorktreeID
     // A remote folder has no Finder, terminal, script or local launch yet (docs-ai 084 A4b),
     // so the palette leaves those items out. A worktree ID is its encoded location.
-    let targetLocation = worktreeActionTargetID.flatMap(RepositoryLocation.init(id:))
+    // A selected plain folder has no worktree ID; its terminal target stands in, as for the
+    // actions themselves.
+    let targetLocation =
+      worktreeActionTargetID.flatMap(RepositoryLocation.init(id:)) ?? repositories.selectedTerminalWorktree?.location
     let opensTerminals = targetLocation?.availability(of: .terminalTab).isAvailable != false
     // Diff view items follow the broader diff target (worktree or workspace
     // child); the navigation/action items below stay worktree-scoped.
