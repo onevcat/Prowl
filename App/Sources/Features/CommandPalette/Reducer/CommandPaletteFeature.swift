@@ -250,7 +250,7 @@ struct CommandPaletteFeature {
     // actions themselves.
     let targetLocation =
       worktreeActionTargetID.flatMap(RepositoryLocation.init(id:)) ?? repositories.selectedTerminalWorktree?.location
-    let runsScripts = targetLocation?.availability(of: .terminalScript).isAvailable != false
+    let opensTerminals = targetLocation?.availability(of: .terminalTab).isAvailable != false
     // Diff view items follow the broader diff target (worktree or workspace
     // child); the navigation/action items below stay worktree-scoped.
     if repositories.selectedDiffTargetID != nil {
@@ -267,7 +267,7 @@ struct CommandPaletteFeature {
           repositories: repositories,
           worktreeID: worktreeActionTargetID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID,
-          includesRunScript: runsScripts
+          includesRunScript: opensTerminals
         )
       )
     } else if worktreeActionTargetID != nil {
@@ -277,12 +277,14 @@ struct CommandPaletteFeature {
           worktreeID: worktreeActionTargetID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID,
           includeSelectionScopedItems: false,
-          includesRunScript: runsScripts
+          includesRunScript: opensTerminals
         )
       )
     }
-    if runsScripts {
-      items.append(contentsOf: customCommandItems(customCommands))
+    if opensTerminals {
+      // A split command would be a local shell in a remote folder (docs-ai 084 C4).
+      let splits = targetLocation?.availability(of: .terminalSplit).isAvailable != false
+      items.append(contentsOf: customCommandItems(customCommands.filter { splits || $0.command.execution != .split }))
     }
     items.append(
       contentsOf: workflowCommandItems(

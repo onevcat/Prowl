@@ -70,7 +70,8 @@ struct WorktreeTerminalManagerTests {
   }
 
   /// A remote folder gets no plain local shell from any entry point: every tab passes the
-  /// remote branch (docs-ai 084 C3b), which needs the host profile and refuses a script.
+  /// remote branch (docs-ai 084 C3b), which needs the host profile; a script never reaches a
+  /// local shell (C3c).
   @Test func aRemoteWorktreeGetsNoLocalTab() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = RemoteRepositoryFixtures.gitRepository().worktrees[0]

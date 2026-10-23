@@ -292,11 +292,6 @@ struct AppFeature {
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
         guard worktree.location.availability(of: .terminalTab).isAvailable else { return .none }
-        // Scripts do not run in a remote folder yet (docs-ai 084 C3c): its setup script is
-        // not kept pending for a later tab.
-        if !worktree.location.availability(of: .terminalScript).isAvailable {
-          state.repositories.pendingSetupScriptWorktreeIDs.remove(worktree.id)
-        }
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
           await terminalClient.send(
@@ -826,10 +821,7 @@ struct AppFeature {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("terminal_tab_created", nil)
-        // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
-        let shouldRunSetupScript =
-          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-          && worktree.availability(of: .terminalScript).isAvailable
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
           await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
@@ -869,10 +861,6 @@ struct AppFeature {
       case .runScript:
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
-        }
-        // A remote folder runs no script yet (docs-ai 084 C3c).
-        if let reason = worktree.availability(of: .terminalScript).unavailableReason {
-          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -941,9 +929,6 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        if let reason = worktree.availability(of: .terminalScript).unavailableReason {
-          return .send(.repositories(.showToast(.warning(reason.message))))
-        }
         guard
           let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == commandID })
         else {
@@ -952,6 +937,10 @@ struct AppFeature {
         let customCommand = effectiveCommand.command
         guard customCommand.hasRunnableCommand else {
           return .none
+        }
+        // A split command would open a local shell in a remote folder (docs-ai 084 C4).
+        if customCommand.execution == .split, let reason = worktree.availability(of: .terminalSplit).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         let command = customCommand.command
         let closeOnSuccess = customCommand.closeOnSuccess

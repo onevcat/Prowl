@@ -250,15 +250,10 @@ final class LifecycleCommandHandler: CommandHandler {
     case .failure(let error):
       return error.commandResponse(command: "create")
     }
-    // The CLI creates no tab in a remote folder until its input and waits work there
-    // (docs-ai 084 C3c); this comes before the path, a host path that this Mac cannot check.
-    // An Agent Profile launch refuses with its own reason.
-    if input.launch == nil, RepositoryLocation.hasRemoteForm(target.worktreeID) {
-      return errorResponse(
-        command: "create", code: CLIErrorCode.createFailed, message: "The CLI cannot open tabs in remote folders yet.")
-    }
-
-    let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
+    // A remote folder's path is on its host: it is checked by its text, not on this Mac
+    // (docs-ai 084 C3c). An Agent Profile launch refuses a remote folder with its own reason.
+    let path = normalizedAllowedPath(
+      input.path, worktreePath: target.worktreePath, isRemote: RepositoryLocation.hasRemoteForm(target.worktreeID))
     guard input.path == nil || path != nil else {
       return errorResponse(
         command: "create",
@@ -527,10 +522,11 @@ final class LifecycleCommandHandler: CommandHandler {
     return success(command: "close", resource: resolved.resource, target: resolved.target)
   }
 
-  private func normalizedAllowedPath(_ path: String?, worktreePath: String) -> String? {
+  private func normalizedAllowedPath(_ path: String?, worktreePath: String, isRemote: Bool) -> String? {
     guard let path else { return nil }
-    let normalizedPath = normalize(path)
-    let normalizedWorktree = normalize(worktreePath)
+    let normalized: (String) -> String = isRemote ? normalizedHostPath : { self.normalize($0) }
+    let normalizedPath = normalized(path)
+    let normalizedWorktree = normalized(worktreePath)
     guard normalizedPath == normalizedWorktree || normalizedPath.hasPrefix(normalizedWorktree + "/") else {
       return nil
     }

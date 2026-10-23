@@ -899,6 +899,9 @@ absent until Canvas has laid out cards), and `.data.card_count`. See
 ### `prowl create tab`
 Create a new terminal tab (deterministic — unlike `open`). A worktree is required,
 either positionally or with `--worktree`; `--path` must remain inside it.
+In a remote folder, the tab runs `ssh` to the host and lands in the folder (or in `--path`,
+a path on the host, checked by its text only). Its pane may show no output until Prowl has
+prepared the connection.
 
 ```bash
 pane="$(prowl create tab "$wt" --json | jq -r '.data.target.pane.id')"
