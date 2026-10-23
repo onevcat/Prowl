@@ -51,9 +51,16 @@ Why lazy:
   layout and lose the local tabs.
 
 The saved layout outlives a session in which the folder did not restore.
-`makeLayoutSnapshotPayload` keeps each pending layout, unless that folder has live tabs.
-The pending layout is dropped when the folder's first remote pane starts its `ssh`
-(`onRemoteLaunchStarted`). So a remote folder keeps its layout when:
+
+- `makeLayoutSnapshotPayload` saves each pending layout as it was, even over the folder's
+  tabs while their panes still stage. So a quit during staging keeps the saved
+  directories, and so do tabs that failed.
+- When the folder's first remote pane starts its `ssh` (`onRemoteLaunchStarted`), both the
+  manager's copy and the state's copy are dropped. From then on, the live tabs are saved,
+  and a later empty open makes a fresh first tab.
+- A prune that removes the folder's terminal state also drops its saved layout. This is an
+  explicit removal of the folder or worktree. A folder that never loaded has no state, so
+  a prune keeps its layout. So a remote folder keeps its layout when:
 
 - its host is unreachable for a whole session;
 - remote folders are off (`PROWL_REMOTE_FOLDERS=0`);
@@ -92,6 +99,11 @@ stay stored but hidden (C1a).
     selection (checked red).
   - A remote folder that does not load, or cannot restore, never drops the local layout. Its
     saved layout stays in the next save (checked red).
+- `WorktreeTerminalManagerTests`:
+  - A layout that is still staging at quit is saved as it was (checked red).
+  - A started remote pane replaces the saved layout in both copies (checked red).
+  - A removed remote folder drops its saved layout, and one that never loaded keeps it
+    (checked red).
 - `AddRemoteFolderFeatureTests`: the flag is on by default, and off with `0`, `false` or
   `off`.
 - `CommandPaletteFeatureTests`: the global items include Add Remote Folder.
@@ -100,5 +112,7 @@ stay stored but hidden (C1a).
 
 - When a folder opens on an unreachable host, each of its restored panes shows its own
   "did not start" toast. The saved layout stays.
+- A folder removed while its host was unreachable (it never loaded, so it had no state)
+  keeps its saved layout. Adding it again restores that layout.
 - A restored pane's directory is the one its session showed when the layout was saved. On a
   macOS host's plain shell, which is never mapped, the pane opens in the folder.

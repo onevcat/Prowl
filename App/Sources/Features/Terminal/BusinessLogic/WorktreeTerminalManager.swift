@@ -1118,9 +1118,11 @@ final class WorktreeTerminalManager {
     state.onRemoteTerminalFailed = { [weak self] message in
       self?.emit(.remoteTerminalFailed(worktreeID: worktree.id, message: message))
     }
-    // A remote pane started: the folder's live tabs replace its saved layout from now on.
-    state.onRemoteLaunchStarted = { [weak self] in
+    // A remote pane started: the folder's live tabs replace its saved layout from now on,
+    // in the save and for the next empty open.
+    state.onRemoteLaunchStarted = { [weak self, weak state] in
       self?.pendingRemoteLayouts.removeValue(forKey: worktree.id)
+      state?.pendingLayoutSnapshot = nil
     }
   }
 
@@ -1314,6 +1316,9 @@ final class WorktreeTerminalManager {
       removedIDs.insert(id)
     }
     closeUndoStack.discard { removedIDs.contains($0) }
+    // A removed remote folder's saved layout goes with it. One that never loaded has no state
+    // here (its host is unreachable, or remote folders are off), so it is kept.
+    for id in removedIDs { pendingRemoteLayouts.removeValue(forKey: id) }
     for state in removed {
       state.closeAllSurfaces()
     }
@@ -1613,11 +1618,12 @@ final class WorktreeTerminalManager {
   private var pendingRemoteLayouts: [Worktree.ID: TerminalLayoutSnapshotPayload.SnapshotWorktree] = [:]
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
-    // A remote folder's saved layout that no tab has replaced yet (it never opened, or its
-    // host never answered) is kept as it was (docs-ai 084 C5).
-    let activeIDs = Set(activeStates.map(\.worktreeID))
-    let pending = pendingRemoteLayouts.filter { !activeIDs.contains($0.key) }.sorted { $0.key < $1.key }.map(\.value)
+    // A remote folder's saved layout that no remote pane has replaced yet (it never opened,
+    // its host never answered, or its restored panes still stage) is kept as it was, over
+    // its unstarted tabs (docs-ai 084 C5).
+    let pending = pendingRemoteLayouts.sorted { $0.key < $1.key }.map(\.value)
+    let activeStates = activeWorktreeStates.filter { pendingRemoteLayouts[$0.worktreeID] == nil }
+      .sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count) pendingRemote=\(pending.count)"
