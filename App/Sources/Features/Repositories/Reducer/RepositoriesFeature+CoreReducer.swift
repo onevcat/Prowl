@@ -818,6 +818,25 @@ extension RepositoriesFeature {
         }
       }
 
+    case .remoteHostRebindRequested(let hostProfileID):
+      return reduceRemoteHostRebindRequested(hostProfileID)
+
+    case .remoteHostRebindResolved(let target):
+      state.alert = rebindAlert(for: target)
+      return .none
+
+    case .remoteHostRebindFailed(let message):
+      state.alert = messageAlert(
+        title: String(localized: "Prowl could not rebind the host"), message: message)
+      return .none
+
+    case .alert(.presented(.rebindRemoteHost(let hostProfileID, let key))):
+      state.alert = nil
+      return reduceRebindRemoteHost(hostProfileID, to: key)
+
+    case .remoteHostRebound(let hostProfileID):
+      return reduceRemoteHostRebound(hostProfileID, state: &state)
+
     case .addRemoteFolderRequested:
       guard remoteFoldersEnabled else { return .none }
       @Shared(.hostProfiles) var hostProfiles: [HostProfile]

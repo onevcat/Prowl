@@ -74,6 +74,13 @@ struct RepositorySectionView: View {
             terminalManager: terminalManager
           )
         }
+        if let hostStatus = state.remoteHostStatus(for: repository.id) {
+          RemoteHostStatusBadge(status: hostStatus) {
+            if case .needsRebind(let hostProfileID) = hostStatus {
+              store.send(.remoteHostRebindRequested(hostProfileID))
+            }
+          }
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .background {

@@ -327,6 +327,10 @@ struct RepositoriesFeature {
     var unreachableRepositoryIDs: Set<Repository.ID> {
       loadUnreachableRepositoryIDs.union(pollUnreachableRepositoryIDs)
     }
+    /// Host profiles whose SSH configuration resolved to another user, host or port
+    /// (docs-ai 084 C1). Every folder on such a host pauses until the user rebinds it. A
+    /// load or poll that passes the authority check, or the rebind, clears the mark.
+    var rebindHostProfileIDs: Set<HostProfile.ID> = []
     /// The remote git repositories that the refresh cadence polls (B3f).
     var remoteRefreshRepositoryIDs: Set<Repository.ID> = []
     var remoteRefreshInFlightIDs: Set<Repository.ID> = []
@@ -555,6 +559,11 @@ struct RepositoriesFeature {
     /// A remote repository's next poll is due, or its worktree was selected (B3f).
     case remoteRepositoryRefreshDue(Repository.ID)
     case remoteRepositoryRefreshed(Repository.ID, RemoteRefreshResult)
+    /// The user asked to rebind a host profile whose SSH configuration changed (C1).
+    case remoteHostRebindRequested(HostProfile.ID)
+    case remoteHostRebindResolved(RemoteHostTarget)
+    case remoteHostRebindFailed(String)
+    case remoteHostRebound(HostProfile.ID)
     /// The app became active (true) or inactive (false).
     case setRemoteRefreshActive(Bool)
     case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
@@ -573,8 +582,10 @@ struct RepositoriesFeature {
     let rootID: Repository.ID
     let message: String
     var isGitUnavailable: Bool = false
-    /// A remote folder whose host could not be reached (docs-ai 084 B3e); C1 shows it.
+    /// A remote folder whose host could not be reached (docs-ai 084 B3e).
     var isHostUnreachable: Bool = false
+    /// A remote folder whose host profile now resolves to another target (C1).
+    var needsRebind: Bool = false
   }
 
   struct DeleteWorktreeTarget: Equatable {
@@ -627,6 +638,7 @@ struct RepositoriesFeature {
     case confirmArchiveWorktrees([ArchiveWorktreeTarget])
     case confirmForceDeleteBranch(ForceDeleteBranchRequest)
     case confirmRemoveRepository(Repository.ID)
+    case rebindRemoteHost(HostProfile.ID, ConnectionKey)
     case confirmWorkspaceRootDeletion(
       repositoryID: Repository.ID, rootPath: String, selectionWasRemoved: Bool)
     case keepWorkspaceFolderAfterCleanupFailure(
