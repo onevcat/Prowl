@@ -193,7 +193,7 @@ extension RepositoriesFeature {
     let errorMessage: String?
     var isGitUnavailable: Bool = false
     var isHostUnreachable: Bool = false
-    var needsRebind: Bool = false
+    var authority: RemoteAuthorityCheck = .unknown
   }
 
   /// How long a load waits for a remote host before it reports the host unreachable, so a
@@ -248,7 +248,7 @@ extension RepositoriesFeature {
             message: result.errorMessage ?? String(localized: "Unknown error"),
             isGitUnavailable: result.isGitUnavailable,
             isHostUnreachable: result.isHostUnreachable,
-            needsRebind: result.needsRebind
+            authority: result.authority
           )
         )
       }
@@ -297,7 +297,7 @@ extension RepositoriesFeature {
           return false
         }(),
         isHostUnreachable: isRemoteHostUnreachable(error),
-        needsRebind: error as? RemoteRepositoryHostError == .authorityChanged)
+        authority: RemoteAuthorityCheck(error))
     }
   }
 
@@ -337,11 +337,11 @@ extension RepositoriesFeature {
     )
     state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
-    // A remote failure for another reason passed the authority check.
+    // A failure after the authority check clears the mark; one before it leaves the mark.
     var change = RebindMarkChange.none
     for failure in failures {
       guard let hostProfileID = RepositoryLocation(id: failure.rootID)?.hostProfileID else { continue }
-      let step = markRebind(hostProfileID, needsRebind: failure.needsRebind, state: &state)
+      let step = markRebind(hostProfileID, failure.authority, state: &state)
       change.marked.formUnion(step.marked)
       change.cleared.formUnion(step.cleared)
     }
@@ -624,7 +624,9 @@ extension RepositoriesFeature.State {
         rootID: id, message: loadFailuresByID[id] ?? "",
         isGitUnavailable: gitUnavailableRepositoryIDs.contains(id),
         isHostUnreachable: loadUnreachableRepositoryIDs.contains(id),
-        needsRebind: RepositoryLocation(id: id)?.hostProfileID.map(rebindHostProfileIDs.contains) ?? false)
+        // A failure read back from state tells nothing new about the target.
+        authority: RepositoryLocation(id: id)?.hostProfileID.map(rebindHostProfileIDs.contains) == true
+          ? .changed : .unknown)
     }
   }
 

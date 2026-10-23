@@ -19,8 +19,15 @@ All of it is behind `PROWL_REMOTE_FOLDERS=1`, like C1a.
 - The mark is per host profile (`rebindHostProfileIDs`), because every folder of a host
   shares its profile and its authority check:
   - a load or a poll that fails with `authorityChanged` adds the host;
-  - a successful poll, or a load or poll that fails for another reason, removes it, since it
-    passed the authority check;
+  - a successful poll, or a load or poll that fails after the authority check (no answer,
+    a git error), removes it;
+  - a failure before the authority check (`ssh -G` rejects the configuration, the kill
+    switch, a missing host profile or bundled script) leaves the mark as it is
+    (`RemoteAuthorityCheck.unknown`), because it says nothing about the target. A
+    configuration that is wrong for a moment therefore cannot clear the mark while no hold
+    can start;
+  - a failure that the sidebar reads back from state (`currentLoadFailures`) is `.unknown`
+    too;
   - the rebind removes it.
   Removing a folder needs no cleanup. A remote plain folder is not polled: when the SSH
   configuration is put back, its row clears through Rebind Host, which then offers Connect
@@ -107,10 +114,13 @@ targets and shows **Use the New Target**. It stores the new target (the same
   is not written and stops the rebind with its reason. In this test the shared value reads
   the changed file before the save, so the reload-and-retry branch itself does not run;
   it is the same as the add flow's;
+- each failure before the authority check is `.unknown`, and a timeout or a missing `git`
+  passed it;
 - the prompt names both targets; `ConnectionKey.displayName` shows a port other than 22;
 - the add sheet rebinds a changed known host, stores the new target and adds the folder;
 - a changed target found by a poll or a load ends the holds on that host, another host
-  keeps its hold, and a poll that clears the mark holds the connection again (checked red; a one-minute time limit turns a hold that never ends
+  keeps its hold, a rejected configuration keeps the mark (checked red), and a poll that
+  clears the mark holds the connection again (checked red; a one-minute time limit turns a hold that never ends
   into a failure);
 - a failed remote row asks before removal, and a failed local row is removed at once
   (checked red);

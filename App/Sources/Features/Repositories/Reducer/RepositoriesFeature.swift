@@ -585,8 +585,8 @@ struct RepositoriesFeature {
     var isGitUnavailable: Bool = false
     /// A remote folder whose host could not be reached (docs-ai 084 B3e).
     var isHostUnreachable: Bool = false
-    /// A remote folder whose host profile now resolves to another target (C1).
-    var needsRebind: Bool = false
+    /// What the failure says about the host profile's target (C1).
+    var authority: RemoteAuthorityCheck = .unknown
   }
 
   struct DeleteWorktreeTarget: Equatable {
