@@ -103,7 +103,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      let markedHosts = recordLoadFailures(failures, state: &state)
+      let rebindChange = recordLoadFailures(failures, state: &state)
       let invalidRootMessages = invalidRoots.map { String(localized: "\($0) is not a Git repository.") }
       let openFailureMessages = invalidRootMessages + openFailures
       if !openFailureMessages.isEmpty {
@@ -121,7 +121,7 @@ extension RepositoriesFeature {
       )
       var allEffects: [Effect<Action>] = [
         .send(.delegate(.repositoriesChanged(state.repositories))),
-        releaseConnectionHolds(on: markedHosts, state: state),
+        connectionHoldEffects(for: rebindChange, state: state),
       ]
       if selectionChanged {
         allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
