@@ -134,6 +134,8 @@ nonisolated struct RemoteLauncherTests {
     #expect(output.contains("/work/sub:it's ✓:\(home.workingDirectory):unset"), "\(output)")
     #expect(output.components(separatedBy: Self.marker(launch.nonce, state: "done", status: 0)).count == 2, "\(output)")
     #expect(output.contains("NESTED"))
+    // The exit report is a no-op after the first command: no leftover error at exit.
+    #expect(!output.contains("not found"), "\(output)")
     #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
     let loads = home.loads()
     switch shell {
@@ -197,6 +199,83 @@ nonisolated struct RemoteLauncherTests {
     let hook = try #require(loads.firstIndex(of: "user_precmd"), "\(loads)")
     #expect(hook < first, "\(loads)")
     #expect(output.contains("ZD:\(home.path)/.config/zsh"), "\(output)")
+  }
+
+  /// The user's startup files keep their top-level meaning: a `typeset -U path` change and
+  /// an associative array from `.zshrc` stay for the first command and the prompt.
+  @Test func zshStartupFilesKeepTheirTopLevelDeclarations() throws {
+    guard FileManager.default.isExecutableFile(atPath: "/bin/zsh") else { return }
+    let home = try Home()
+    defer { home.remove() }
+    try Data(
+      """
+      typeset -U path PATH
+      path=("$HOME/bin" $path)
+      typeset -A MY_STYLES
+      MY_STYLES[color]=blue
+
+      """.utf8
+    ).write(to: home.root.appending(path: ".zshrc"))
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+      firstCommand: "echo \"FIRST:${path[1]}:${MY_STYLES[color]}\"")
+
+    let (output, _) = try Self.launch(
+      launch, shell: "/bin/zsh", home: home, input: "echo \"PROMPT:${path[1]}:${MY_STYLES[color]}\"\nexit\n")
+
+    #expect(output.contains("FIRST:\(home.path)/bin:blue"), "\(output)")
+    #expect(output.contains("PROMPT:\(home.path)/bin:blue"), "\(output)")
+  }
+
+  /// A first command that ends the shell still reports its status once: `set -e` with a
+  /// failing step, or an explicit `exit`.
+  @Test(arguments: shells)
+  func aFirstCommandThatEndsTheShellStillReports(_ shell: String) throws {
+    let home = try Home()
+    defer { home.remove() }
+    let commands = shell.hasSuffix("fish") ? ["exit 3"] : ["set -e; echo RAN; false", "exit 3"]
+    for command in commands {
+      let launch = RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+        firstCommand: command)
+
+      let (output, launcher) = try Self.launch(launch, shell: shell, home: home, input: "echo SHOULD_NOT_RUN\n")
+
+      let status: Int32 = command.hasPrefix("exit") ? 3 : 1
+      let marker = Self.marker(launch.nonce, state: "error", status: status)
+      #expect(output.components(separatedBy: marker).count == 2, "\(command): \(output)")
+      #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+    }
+  }
+
+  /// The user's own `EXIT` trap comes back after the first command in bash.
+  @Test(arguments: shells.filter { $0.hasSuffix("bash") })
+  func bashKeepsTheUsersExitTrap(_ shell: String) throws {
+    let home = try Home()
+    defer { home.remove() }
+    try Data("trap 'echo USER_EXIT' EXIT\n".utf8).write(to: home.root.appending(path: ".bash_profile"))
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [], firstCommand: "true")
+
+    let (output, _) = try Self.launch(launch, shell: shell, home: home, input: "exit\n")
+
+    #expect(output.contains(Self.marker(launch.nonce, state: "done", status: 0)), "\(output)")
+    #expect(output.contains("USER_EXIT"), "\(output)")
+  }
+
+  /// A symlinked `~/.cache` keeps the launcher's logical path, which passes its check.
+  @Test func aSymlinkedCacheDirectoryStillLaunches() throws {
+    let home = try Home()
+    defer { home.remove() }
+    let elsewhere = home.root.appending(path: "elsewhere", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: home.root.appending(path: ".cache"), withDestinationURL: elsewhere)
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [], firstCommand: "true")
+
+    let (output, _) = try Self.launch(launch, shell: "/bin/bash", home: home, input: "exit\n")
+
+    #expect(output.contains(Self.marker(launch.nonce, state: "done", status: 0)), "\(output)")
   }
 
   /// A launcher outside its own launch directory removes nothing and starts nothing.
@@ -334,6 +413,12 @@ nonisolated struct RemoteLauncherTests {
     } else {
       #expect(output.contains("STATE:/tmp/prowl-home/work/sub:yes"), "\(output)")
     }
+    // A first command that ends the shell still reports.
+    let exiting = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: "/tmp/prowl-home/work", environment: [], firstCommand: "exit 3"
+    )
+    let exited = try Self.launchInDocker(exiting, shell: shell, input: "echo SHOULD_NOT_RUN\n")
+    #expect(exited.contains(Self.marker(exiting.nonce, state: "error", status: 3)), "\(exited)")
     if isFish { #expect(output.contains("LOADS:fish_config,"), "\(output)") }
     if shell.hasSuffix("bash") { #expect(output.contains("LOADS:bash_profile,"), "\(output)") }
     if shell.hasSuffix("zsh") { #expect(output.contains("LOADS:zshrc,"), "\(output)") }
