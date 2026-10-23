@@ -116,13 +116,15 @@ nonisolated enum RemoteLauncher {
   /// - bash: an interactive non-login shell (`--noprofile --rcfile`) whose rc file replays
   ///   the login files; `shopt login_shell` is off and `~/.bash_logout` does not run;
   /// - fish: `--init-command`, which runs after the user's configuration;
-  /// - any other shell runs the command with `-i -c`, then `exec`s a login shell, without
-  ///   the persistent state.
+  /// - any other shell runs the command with `-c`, then `exec`s a login shell, without the
+  ///   persistent state. Not `-i`: an interactive dash drops into a prompt after an interrupt.
   ///
-  /// The launcher waits for the shell instead of `exec`ing it. When the shell ends before
-  /// its first command finished (`exit`, `errexit`, a replaced hook), the launcher reports
-  /// the shell's exit status. The shell itself reports only a finished first command, so no
-  /// trap of the user's is replaced and a subshell's failure is not taken for the command's.
+  /// Each wrapper marks the first command as started (a `started` file), then reports it
+  /// when it finishes, or with status 130 when an interrupt (Ctrl-C) stops it and the prompt
+  /// comes back. No trap of the user's is replaced, so a subshell's failure is not taken for
+  /// the command's. The launcher waits for the shell instead of `exec`ing it: when the shell
+  /// ends in the command (`exit`, `errexit`), the launcher reports the shell's exit status.
+  /// A command that never started (startup files that replace the shell) sends no marker.
   static func launcher(for launch: RemoteLaunch) -> String {
     let quote = RemoteShellCommand.quote
     let exports = launch.environment.map { "\($0.name)=\(quote($0.value)); export \($0.name)" }
@@ -183,22 +185,29 @@ nonisolated enum RemoteLauncher {
           ;;
         *)
           unset PROWL_LAUNCH_DIR
-          "$prowl_shell" -i -c "$(cat "$prowl_dir/command")"
+          # The command shares the launcher's process group: a caught (not ignored) signal
+          # keeps the launcher alive for the report, and the command still gets the default.
+          trap : INT QUIT
+          "$prowl_shell" -c "$(cat "$prowl_dir/command")"
           prowl_status=$?
+          trap - INT QUIT
           rm -rf -- "$prowl_dir"
           if [ "$prowl_status" = 0 ]; then prowl_state=done; else prowl_state=error; fi
           \(marker(posixMarker))
           exec "$prowl_shell" -l
           ;;
       esac
-      # The shell ended. Its directory is still here when the first command did not finish
-      # in it, such as an `exit` or an `errexit` failure in the command, or startup files that
-      # never ran it: the shell's exit status reports instead, so a launch always reports.
+      # The shell ended. Its directory is still here when the first command did not report:
+      # an `exit` or an `errexit` failure in a started command reports the shell's exit
+      # status. A command that never started (startup files that replaced the shell) did
+      # not run, so nothing reports.
       prowl_status=$?
-      if [ -d "$prowl_dir" ]; then
-        rm -rf -- "$prowl_dir"
+      if [ -f "$prowl_dir/started" ]; then
         if [ "$prowl_status" = 0 ]; then prowl_state=done; else prowl_state=error; fi
+        rm -rf -- "$prowl_dir"
         \(marker(posixMarker))
+      elif [ -d "$prowl_dir" ]; then
+        rm -rf -- "$prowl_dir"
       fi
       exit "$prowl_status"
 
@@ -239,6 +248,8 @@ nonisolated enum RemoteLauncher {
   /// The wrapper's `.zlogin`, the last startup file of a login shell: the user's `ZDOTDIR`
   /// comes back for good, and the first command runs from a `precmd` hook added after the
   /// user's own hooks, such as an instant prompt that captures output until its hook ran.
+  /// An `always` block reports an interrupt, which ends the hook and shows the prompt. zsh
+  /// also runs that block for an `exit`, with no usable status, so it reports nothing else.
   private static func zshLogin(marker: String) -> String {
     """
     \(zshUserFile(".zlogin"))
@@ -254,7 +265,12 @@ nonisolated enum RemoteLauncher {
     }
     prowl_first_command() {
       precmd_functions=(${precmd_functions:#prowl_first_command})
-      source "$prowl_launch_dir/command"
+      : > "$prowl_launch_dir/started"
+      {
+        source "$prowl_launch_dir/command"
+      } always {
+        (( TRY_BLOCK_INTERRUPT )) && prowl_report 130
+      }
       prowl_report $?
       unfunction prowl_first_command prowl_report
     }
@@ -262,7 +278,9 @@ nonisolated enum RemoteLauncher {
     """
   }
 
-  /// The bash rc file: the login files, then the first command.
+  /// The bash rc file: the login files, then the first command. An interrupt stops the rc
+  /// file and shows the prompt, so a `PROMPT_COMMAND` hook, added before the command and
+  /// removed after it, reports it with 130 (bash 3.2 gives 128 or 130 for the same Ctrl-C).
   private static func bashRC(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the login files, then the first command.
@@ -281,13 +299,22 @@ nonisolated enum RemoteLauncher {
       unset prowl_launch_dir
       \(marker)
     }
+    prowl_interrupted() {
+      PROMPT_COMMAND=${PROMPT_COMMAND#prowl_interrupted}
+      PROMPT_COMMAND=${PROMPT_COMMAND#; }
+      prowl_report 130
+    }
+    PROMPT_COMMAND="prowl_interrupted${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+    : > "$prowl_launch_dir/started"
     . "$prowl_launch_dir/command"
     prowl_report $?
-    unset -f prowl_report
+    PROMPT_COMMAND=${PROMPT_COMMAND#prowl_interrupted}
+    PROMPT_COMMAND=${PROMPT_COMMAND#; }
     """
   }
 
-  /// The fish init command: the first command after the configuration.
+  /// The fish init command: the first command after the configuration. An interrupt stops
+  /// the init command and shows the prompt, so a one-time `fish_prompt` handler reports it.
   private static func fishInit(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the first command, after the configuration.
@@ -301,9 +328,14 @@ nonisolated enum RemoteLauncher {
       test $prowl_status -eq 0; and set prowl_state done
       \(marker)
     end
+    function prowl_interrupted --on-event fish_prompt
+      functions -e prowl_interrupted
+      prowl_report 130
+    end
+    touch $prowl_launch_dir/started
     source $prowl_launch_dir/command
     prowl_report $status
-    functions -e prowl_report
+    functions -e prowl_interrupted
     """
   }
 

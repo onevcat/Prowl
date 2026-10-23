@@ -79,21 +79,29 @@ hands over per shell:
 | zsh | `ZDOTDIR` points at a wrapper with all four startup files, then `zsh -i -l`. Each wrapper file runs the user's own file at top level (a function would make its `typeset` declarations local, such as `typeset -U path`) with the user's `ZDOTDIR` in place, then points zsh back at the wrapper. A user `.zshenv` that moves `ZDOTDIR` (the XDG layout) moves the user's directory with it. The wrapper's `.zlogin` restores the user's `ZDOTDIR` for good | A one-time `precmd` hook, added after the user's `.zlogin`, so it runs after the user's own hooks (an instant prompt captures output until its hook ran) and before the first prompt |
 | bash | `bash --noprofile --rcfile <wrapper> -i`. The wrapper sources `/etc/profile`, then the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` | At the end of the wrapper |
 | fish | `fish -i -l --init-command 'source $PROWL_LAUNCH_DIR/init.fish'` | `init.fish`, which runs after the user's configuration |
-| any other | `"$SHELL" -i -c <command>`, then `exec "$SHELL" -l` | Apart, without the persistent state |
+| any other | `"$SHELL" -c <command>`, then `exec "$SHELL" -l` | Apart, without the persistent state |
 
 - The first command is sourced (`source` / `.`), so a `cd`, an export or an activated
   environment stays at the prompt.
 - Each wrapper clears its injection variables (`PROWL_LAUNCH_DIR`,
   `PROWL_USER_ZDOTDIR[_SET]`) before the first command, so a nested shell never replays it.
 - Each wrapper removes the launch directory after the first command.
-- **A launch always reports once.** The shell reports a first command that finished in it.
-  The launcher runs zsh, bash and fish as a child, not with `exec`, and waits. When the
-  shell ends and the launch directory is still there, the first command did not finish in
-  the shell. Then the launcher removes the directory and reports the shell's exit status.
-  This covers:
-  - an `exit` in the first command;
-  - an `errexit` failure, such as `set -e` with a failing step;
-  - startup files that never ran the command (see the limits below).
+- **A started command reports once.** Each wrapper writes a `started` file in the launch
+  directory before the first command. Then it reports:
+  - a command that finished, with its status;
+  - a command that an interrupt (Ctrl-C) stopped, with status 130, when the prompt comes
+    back. zsh uses an `always` block (`TRY_BLOCK_INTERRUPT`); bash uses a `PROMPT_COMMAND`
+    hook that it adds before the command and removes after it; fish uses a one-time
+    `fish_prompt` handler. The status is fixed at 130, because bash 3.2 gives 128 or 130
+    for the same Ctrl-C;
+  - a command that ended the shell (`exit`, or an `errexit` failure such as `set -e` with a
+    failing step), with the shell's exit status. The launcher runs zsh, bash and fish as a
+    child, not with `exec`, and waits for it. When the shell ends with `started` still
+    there, the launcher removes the directory and reports.
+
+  A command that never started sends no marker. Startup files that end the shell or
+  replace it (`exec tmux`) before the hook did not run the command, so a status would be
+  false. The launcher removes the directory.
 
   No trap is set, so the user's `EXIT` traps (from the startup files or from the command)
   stay as they are. A subshell that fails under `set -e` while the command goes on is not
@@ -104,6 +112,11 @@ hands over per shell:
   The cost is one waiting `sh` process per terminal. Ctrl-C at the prompt does not reach it:
   an interactive shell takes the terminal in its own process group (measured on this Mac
   for zsh and bash under `sh`).
+- **Any other shell** runs the command with `-c`, not `-i -c` as D5a says: after an
+  interrupt, an interactive `dash -c` drops into a prompt, and its later exit status took
+  the place of the command's. The command shares the launcher's process group, so the
+  launcher catches `INT` and `QUIT` with a no-op trap while it waits. A caught signal goes
+  back to the default in the child, so the command still stops.
 - `-i` is explicit. With a TTY it changes nothing, and it lets the tests run without one.
 
 Known limits:
@@ -114,9 +127,13 @@ Known limits:
   wrapper. So does a login file that `exec`s another program, such as `tmux`. In both
   cases:
   - the first command does not run, and the injection variables stay in that session;
-  - the marker comes only when the shell ends, with the shell's exit status.
+  - no marker comes, and the launcher removes the directory when the shell ends.
 
-  C3b must therefore treat a missing marker as "not complete yet", not as a hang.
+  C3b must therefore treat a missing marker as "not complete yet", and a terminal that
+  ends without one as "did not run", not as a success or a hang.
+- **A replaced `PROMPT_COMMAND` in bash.** A first command that sets `PROMPT_COMMAND`
+  without keeping the old value, then is interrupted, drops the hook. Then the launcher
+  reports at the shell's end, with the shell's exit status.
 - **zsh locals.** In zsh, the first command runs inside the `precmd` function, so a
   `typeset` or `local` in the script stays local to it. The user's startup files are not
   affected.
@@ -183,6 +200,13 @@ The format was chosen over framed OSC 133 for two reasons:
 - **Subshell failure**: in zsh, `(set -e; false)` followed by more commands reports once,
   `done` with status 0, after the rest ran (checked red with the `TRAPZERR` version).
 - **No error at exit**: nothing prints "not found" at exit after a normal first command.
+- **Interrupt**: in a terminal (`script`), Ctrl-C after the command's first line reports
+  `error/130` once, before the shell ends. The prompt still works, the rest of the command
+  does not run, and the later `exit 4` reports nothing more. This runs in zsh, bash 3.2 and
+  bash 5 on this Mac, and in fish, bash, zsh and dash in the container (checked red with
+  the previous launcher).
+- **Never started**: a `.bash_profile` that exits 0, and a zsh `.zlogin` that `exec`s
+  bash, send no marker and leave no directory (checked red with the previous launcher).
 - **Strict parsing**: the nonce and the marker id are checked strictly (a signed, hex or
   out-of-range status is refused). A bad nonce, a bad environment name, an oversized
   script, a NUL byte and another launch's path are refused.

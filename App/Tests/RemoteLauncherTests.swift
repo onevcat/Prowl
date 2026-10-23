@@ -101,6 +101,60 @@ nonisolated struct RemoteLauncherTests {
     return (output, launcher)
   }
 
+  /// Runs the staged `launch` in a terminal (`script` gives it a controlling PTY), so the
+  /// terminal's interrupt character sends SIGINT. Each step waits for its text in the output,
+  /// then types its input.
+  private static func launchInTerminal(
+    _ launch: RemoteLaunch, shell: String, home: Home, steps: [(waitFor: String, send: String)]
+  ) throws -> (output: String, launcher: String) {
+    let environment = [
+      "HOME": home.path, "SHELL": shell, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
+      "TERM": "dumb", "LANG": "en_US.UTF-8",
+    ]
+    let staging = try RemoteLauncher.stagingCommand(for: launch).script()
+    let staged = try run("/bin/sh", ["-s"], input: staging, environment: environment)
+    let launcher = try RemoteLauncher.stagedLauncherPath(from: staged, for: launch)
+    let process = Process()
+    process.executableURL = URL(filePath: "/usr/bin/script")
+    process.arguments = ["-q", "/dev/null", "/bin/sh", launcher]
+    process.environment = environment
+    let stdin = Pipe()
+    let output = Pipe()
+    process.standardInput = stdin
+    process.standardOutput = output
+    process.standardError = output
+    let collected = LockedData()
+    let reader = Thread {
+      while true {
+        let chunk = output.fileHandleForReading.availableData
+        if chunk.isEmpty { break }
+        collected.append(chunk)
+      }
+    }
+    try process.run()
+    reader.start()
+    let text = { String(bytes: collected.data, encoding: .utf8) ?? "" }
+    let deadline = Date().addingTimeInterval(30)
+    for step in steps {
+      while !text().contains(step.waitFor), process.isRunning, Date() < deadline { usleep(20_000) }
+      guard text().contains(step.waitFor) else {
+        Issue.record("no \(step.waitFor.debugDescription) in time: \(text().debugDescription)")
+        break
+      }
+      stdin.fileHandleForWriting.write(Data(step.send.utf8))
+    }
+    while process.isRunning, Date() < deadline { usleep(20_000) }
+    if process.isRunning {
+      kill(process.processIdentifier, SIGKILL)
+      Issue.record("\(shell) did not finish in time")
+    }
+    process.waitUntilExit()
+    try? stdin.fileHandleForWriting.close()
+    let readDeadline = Date().addingTimeInterval(2)
+    while !reader.isFinished, Date() < readDeadline { usleep(20_000) }
+    return (text(), launcher)
+  }
+
   private static func marker(_ nonce: String, state: String, status: Int32) -> String {
     "\u{1b}]7501;state=\(state):id=prowl-launch/\(nonce)/\(status)\u{07}"
   }
@@ -312,6 +366,54 @@ nonisolated struct RemoteLauncherTests {
     #expect(recovered.lowerBound < reported.lowerBound, "\(output)")
   }
 
+  /// An interrupt (Ctrl-C) that stops the first command and gives the prompt back reports
+  /// the command once, with status 130, before the shell ends; the shell's later exit status
+  /// reports nothing more.
+  @Test(arguments: shells)
+  func anInterruptedFirstCommandReportsAtThePrompt(_ shell: String) throws {
+    let home = try Home()
+    defer { home.remove() }
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+      firstCommand: "echo FIRST_START; sleep 12; echo FIRST_END")
+    let marker = Self.marker(launch.nonce, state: "error", status: 130)
+
+    let (output, launcher) = try Self.launchInTerminal(
+      launch, shell: shell, home: home,
+      steps: [("FIRST_START", "\u{03}"), (marker, "echo AL\"\"IVE\nexit 4\n")])
+
+    #expect(output.components(separatedBy: "7501;").count == 2, "\(output.debugDescription)")
+    #expect(output.contains(marker), "\(output.debugDescription)")
+    #expect(output.contains("ALIVE"), "\(output.debugDescription)")
+    #expect(!output.contains("FIRST_END"), "\(output.debugDescription)")
+    #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+  }
+
+  /// A first command that never started, because the startup files ended or replaced the
+  /// shell, did not run: no marker reports it, and the launch directory is gone.
+  @Test func aFirstCommandThatNeverStartedReportsNothing() throws {
+    // A shell, a startup file of that shell, and the file's text.
+    let cases = [
+      ["/bin/bash", ".bash_profile", "echo STARTUP; exit 0"],
+      ["/bin/zsh", ".zlogin", "echo STARTUP; exec /bin/bash --noprofile --norc -i"],
+    ].map { (shell: $0[0], file: $0[1], text: $0[2]) }
+    for item in cases {
+      let home = try Home()
+      defer { home.remove() }
+      try Data((item.text + "\n").utf8).write(to: home.root.appending(path: item.file))
+      let launch = RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+        firstCommand: "echo FIRST_COMMAND_RAN")
+
+      let (output, launcher) = try Self.launch(launch, shell: item.shell, home: home, input: "exit 0\n")
+
+      #expect(output.contains("STARTUP"), "\(item.shell): \(output)")
+      #expect(!output.contains("FIRST_COMMAND_RAN"), "\(item.shell): \(output)")
+      #expect(!output.contains("7501;"), "\(item.shell): \(output)")
+      #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+    }
+  }
+
   /// A symlinked `~/.cache` keeps the launcher's logical path, which passes its check.
   @Test func aSymlinkedCacheDirectoryStillLaunches() throws {
     let home = try Home()
@@ -413,8 +515,16 @@ nonisolated struct RemoteLauncherTests {
   private static let dockerImage = ProcessInfo.processInfo.environment["PROWL_LAUNCHER_DOCKER_IMAGE"]
 
   /// Stages and runs a launch inside the container with `shell` as the login shell.
-  private static func launchInDocker(_ launch: RemoteLaunch, shell: String, input: String) throws -> String {
+  /// With `interrupt`, the launcher runs in a terminal (`script`), gets the interrupt
+  /// character after 3 s, then `echo ALIVE` and `exit 4`.
+  private static func launchInDocker(
+    _ launch: RemoteLaunch, shell: String, input: String, interrupt: Bool = false
+  ) throws -> String {
     let image = try #require(dockerImage)
+    let interruptedRun = """
+      (sleep 3; printf '\\003'; sleep 2; printf 'echo AL""IVE\\nexit 4\\n'; sleep 2) |
+        script -qc "sh $launcher" /dev/null 2>&1 || :
+      """
     let staging = try RemoteLauncher.stagingCommand(for: launch).script()
     let driver = """
       set -e
@@ -426,8 +536,7 @@ nonisolated struct RemoteLauncherTests {
       sh -s > /tmp/staged <<'PROWL_STAGE'
       \(staging)PROWL_STAGE
       launcher=$(sed -n 's/^PROWL_LAUNCH\t//p' /tmp/staged)
-      sh "$launcher" <<'PROWL_INPUT' 2>&1 || :
-      \(input)PROWL_INPUT
+      \(interrupt ? interruptedRun : "sh \"$launcher\" <<'PROWL_INPUT' 2>&1 || :\n\(input)PROWL_INPUT")
       echo "LOADS:$(tr '\n' ',' < "$HOME/startup.log" 2>/dev/null)"
       echo "LEFT:$(ls -A "$HOME/.cache/prowl/launch" | wc -l)"
       """
@@ -468,6 +577,14 @@ nonisolated struct RemoteLauncherTests {
     )
     let exited = try Self.launchInDocker(exiting, shell: shell, input: "echo SHOULD_NOT_RUN\n")
     #expect(exited.contains(Self.marker(exiting.nonce, state: "error", status: 3)), "\(exited)")
+    // An interrupt reports the command once, with status 130.
+    let long = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: "/tmp/prowl-home/work", environment: [],
+      firstCommand: "echo FIRST_START; sleep 12; echo FIRST_END")
+    let interrupted = try Self.launchInDocker(long, shell: shell, input: "", interrupt: true)
+    #expect(interrupted.contains(Self.marker(long.nonce, state: "error", status: 130)), "\(interrupted)")
+    #expect(interrupted.components(separatedBy: "7501;").count == 2, "\(interrupted)")
+    #expect(interrupted.contains("ALIVE") && !interrupted.contains("FIRST_END"), "\(interrupted)")
     if isFish { #expect(output.contains("LOADS:fish_config,"), "\(output)") }
     if shell.hasSuffix("bash") { #expect(output.contains("LOADS:bash_profile,"), "\(output)") }
     if shell.hasSuffix("zsh") { #expect(output.contains("LOADS:zshrc,"), "\(output)") }
