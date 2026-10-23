@@ -281,6 +281,9 @@ nonisolated enum RemoteLauncher {
   /// The bash rc file: the login files, then the first command. An interrupt stops the rc
   /// file and shows the prompt, so a `PROMPT_COMMAND` hook, added before the command and
   /// removed after it, reports it with 130 (bash 3.2 gives 128 or 130 for the same Ctrl-C).
+  /// A command that composes `PROMPT_COMMAND` (`direnv hook bash` puts its hook first) can
+  /// move the hook, also into an array element; the removal looks in every element. A hook
+  /// that stays keeps the incoming exit status and does nothing after the launch.
   private static func bashRC(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the login files, then the first command.
@@ -299,17 +302,30 @@ nonisolated enum RemoteLauncher {
       unset prowl_launch_dir
       \(marker)
     }
+    prowl_unhook() {
+      local prowl_i prowl_hook
+      for prowl_i in "${!PROMPT_COMMAND[@]}"; do
+        prowl_hook=${PROMPT_COMMAND[prowl_i]}
+        prowl_hook=${prowl_hook//prowl_interrupted; /}
+        prowl_hook=${prowl_hook//prowl_interrupted;/}
+        prowl_hook=${prowl_hook%;prowl_interrupted}
+        [ "$prowl_hook" = prowl_interrupted ] && prowl_hook=
+        if [ "$prowl_hook" != "${PROMPT_COMMAND[prowl_i]}" ]; then
+          if [ "$prowl_i" = 0 ]; then PROMPT_COMMAND=$prowl_hook; else PROMPT_COMMAND[prowl_i]=$prowl_hook; fi
+        fi
+      done
+    }
     prowl_interrupted() {
-      PROMPT_COMMAND=${PROMPT_COMMAND#prowl_interrupted}
-      PROMPT_COMMAND=${PROMPT_COMMAND#; }
-      prowl_report 130
+      local prowl_status=$?
+      prowl_unhook
+      [ -n "${prowl_launch_dir-}" ] && prowl_report 130
+      return $prowl_status
     }
     PROMPT_COMMAND="prowl_interrupted${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
     : > "$prowl_launch_dir/started"
     . "$prowl_launch_dir/command"
     prowl_report $?
-    PROMPT_COMMAND=${PROMPT_COMMAND#prowl_interrupted}
-    PROMPT_COMMAND=${PROMPT_COMMAND#; }
+    prowl_unhook
     """
   }
 
