@@ -19,3 +19,7 @@ The fixture repository on the host:
 - the worktree `app-gone`, whose folder was deleted;
 - the bare repository `/tmp/prowl-b3-fx/bare.git`;
 - the plain folder `/tmp/prowl-b3-fx/plain`, and the missing path `/tmp/prowl-b3-fx/none`.
+
+After the change that tells a hidden path from a missing one (review round 1 of #972), the
+script ran again on the same Mac fixtures and gave the same records; only the commit IDs
+and creation times of the recreated fixture differ, so the files were kept.

@@ -42,8 +42,11 @@ holds the script, the parser and the mapping.
   local host.
 - A folder that the script cannot refresh is reported in the reply, so the command itself
   fails only for a connection error. The script tells apart:
-  - a path that does not exist;
-  - a path that exists but cannot be entered (no permission, or not a folder);
+  - a path that does not exist: the deepest ancestor that the script can see is a folder
+    that it can search, so the next part of the path is really absent;
+  - a path that exists but cannot be entered (no permission, or not a folder), or a path
+    below an ancestor that cannot be searched. `test -e` fails there too, but the path may
+    still exist, so it is not reported as missing;
   - no `git` on the login `PATH`;
   - a folder that is not in a repository (`not a git repository`, read with `LC_ALL=C`);
   - any other git refusal, such as `safe.directory`, with git's last error line.
@@ -145,4 +148,7 @@ same rule. It reads path components only and never touches the file system.
   - a real repository with a linked worktree, tracked edits and an untracked file;
   - a missing path, a file, a folder without permission, a plain folder, a `PATH`
     without git, a subfolder of the repository and a linked worktree, each with its error;
+  - a repository, and a path that is gone, below a folder that cannot be searched: both
+    are inaccessible, and after the permission is back, the first is found and the second
+    is missing;
   - a repository without a commit, which has no line changes.
