@@ -81,6 +81,12 @@ stays at the prompt, in the user's login shell.
   OSC 133 can arrive after the `ssh` exited and just before the marker, and the marker must
   still count. A probe never starts the decision. When no probe saw the `ssh`, the decision
   starts at the next probe after the finish.
+- **During the grace.** A local command that finishes during the grace completes nothing.
+  The script's toast and Close on Success stay with the script, until its marker or the
+  abandonment.
+- **Undo.** A remote pane brought back by Undo waits for no marker any more. While the pane
+  was closed, its marker found no origin and was dropped, and its reactions went with the
+  close, so the restored origin counts as completed.
 - **A suspended `ssh`.** When the `ssh` is suspended (still running) and no longer in the
   foreground, its first command completes nothing at once. A later local command then does
   not take its toast or its Close on Success, and a waiter does not wait forever.
@@ -113,6 +119,8 @@ stays at the prompt, in the user's login shell.
   - A marker after the probe saw the `ssh` exit still counts.
   - A marker right after a remote finish with the `ssh` gone still counts within the grace
     (checked red without it).
+  - A local finish within the grace takes none of the script's reactions (checked red).
+  - Undo brings back a script pane that waits for no marker (checked red).
   - A suspended `ssh` abandons its script (checked red).
   - The setup script is consumed only once staged (checked red).
   - A split is refused.
