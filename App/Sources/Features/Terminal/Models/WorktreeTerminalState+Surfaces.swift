@@ -216,7 +216,7 @@ extension WorktreeTerminalState {
     defersSurfaceCreation: Bool = false
   ) -> Result<UUID, SplitCreationError> {
     // A split of a remote pane would be a local shell: remote splits come with docs-ai 084 C4.
-    guard worktree.location.localURL != nil else { return .failure(.remoteFolder) }
+    guard worktree.location.availability(of: .terminalSplit).isAvailable else { return .failure(.remoteFolder) }
     guard let tabID = tabId(containing: anchorSurfaceID),
       let tree = trees[tabID],
       let anchorSurface = surfaces[anchorSurfaceID]

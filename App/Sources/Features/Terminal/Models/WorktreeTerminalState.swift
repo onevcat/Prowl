@@ -270,17 +270,14 @@ final class WorktreeTerminalState {
   @ObservationIgnored var onRemoteTerminalFailed: ((String) -> Void)?
   @ObservationIgnored var accessibilityPosterForTesting: (@MainActor (Any, NSAccessibility.Notification) -> Void)?
   var remoteAgentDetectionMode: RemoteAgentDetection.Mode {
-    if let enabled = remoteAgentDetectionEnabledForTesting { return enabled ? .enabled : .disabled }
-    return RemoteAgentDetection.mode(
-      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment,
-      consent: remoteAgentDetectionConsent)
+    remoteAgentDetectionMode(consent: remoteAgentDetectionConsent)
   }
-  /// The mode for a pane that Prowl opened in a remote folder: no consent to wait for, but
-  /// the kill switch (docs-ai 084 C3b).
-  var remoteLaunchDetectionMode: RemoteAgentDetection.Mode {
+  /// The mode for `consent`; a pane that Prowl opened in a remote folder passes `.enabled`:
+  /// no consent to wait for, but the kill switch (docs-ai 084 C3b).
+  func remoteAgentDetectionMode(consent: RemoteAgentDetectionConsent) -> RemoteAgentDetection.Mode {
     if let enabled = remoteAgentDetectionEnabledForTesting { return enabled ? .enabled : .disabled }
     return RemoteAgentDetection.mode(
-      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: .enabled)
+      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: consent)
   }
   /// Whether a local process still runs, for the `ssh` of a remote pane.
   @ObservationIgnored var processIsAliveForTesting: ((LocalProcessGeneration) -> Bool)?

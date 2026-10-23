@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Remote panes (docs-ai 084 C3b): a remote folder's tab is a local pane whose shell types
@@ -38,6 +39,8 @@ extension WorktreeTerminalState {
     do {
       view.setInitialInput(try RemoteTerminalLine.typed(recipe: profile.recipe, launcherPath: try staged.get()))
       if view.armSurfaceCreation() {
+        // The pane took focus while it had no surface, which Ghostty never saw.
+        if view.window?.firstResponder === view { view.focusDidChange(true) }
         wakeAgentDetection(for: view, tabId: tabID)
         return
       }
@@ -69,41 +72,61 @@ extension WorktreeTerminalState {
     return true
   }
 
-  /// Whether a local "command finished" (OSC 133) completes a command in this pane. In a
-  /// remote pane, it does not while its `ssh` session lasts: it is the `ssh` itself ending,
-  /// or a remote shell's own OSC 133 passing through. After the `ssh` ended, the pane is a
-  /// local shell, and its commands complete as in any pane. A pane whose `ssh` no probe saw
-  /// takes its first finish for the `ssh`.
+  /// Whether a local "command finished" (OSC 133) completes a command in this pane (the
+  /// custom command toast, Close on Success, the long-command notification; a CLI waiter
+  /// always resumes). In a remote pane, it does not while its `ssh` session lasts: it is the
+  /// `ssh` itself ending, or a remote shell's own OSC 133 passing through. After the `ssh`
+  /// ended, the pane is a local shell, and its commands complete as in any pane.
   func remoteLaunchTakesCommandFinished(surfaceID: UUID) -> Bool {
-    guard var origin = remoteLaunchOriginBySurface[surfaceID], !origin.sessionEnded else { return true }
-    if let ssh = origin.ssh, isProcessAlive(ssh) { return false }
-    origin.sessionEnded = true
-    remoteLaunchOriginBySurface[surfaceID] = origin
+    guard var origin = remoteLaunchOriginBySurface[surfaceID] else { return true }
+    defer { remoteLaunchOriginBySurface[surfaceID] = origin }
+    if origin.sessionEnded {
+      guard origin.swallowsNextFinish else { return true }
+      origin.swallowsNextFinish = false
+      return false
+    }
+    if let ssh = origin.ssh {
+      if !isRunning(ssh) { origin.sessionEnded = true }
+    } else {
+      // No probe saw the `ssh` yet: the next one decides (`activeRemoteLaunchOrigin`).
+      origin.unboundFinishSeen = true
+    }
     return false
   }
 
-  /// The pane's origin while its own `ssh` is in the foreground. The first `ssh` that a
-  /// probe sees is the pane's; once it leaves the foreground the session has ended, and a
-  /// later `ssh` in the pane is the user's own (the L0 path, with its consent).
-  func activeRemoteLaunchOrigin(surfaceID: UUID, foregroundSSH ssh: LocalProcessGeneration?) -> RemoteLaunchOrigin? {
+  /// The pane's origin while its own `ssh` is in the foreground: the `ssh` whose arguments
+  /// carry the launch's nonce. Once it leaves the foreground, or no `ssh` is in front after a
+  /// finish that no bound `ssh` explains, the session has ended, and a later `ssh` in the
+  /// pane is the user's own (the L0 path, with its consent).
+  func activeRemoteLaunchOrigin(
+    surfaceID: UUID, foregroundSSH ssh: (generation: LocalProcessGeneration, arguments: [String])?
+  ) -> RemoteLaunchOrigin? {
     guard var origin = remoteLaunchOriginBySurface[surfaceID], !origin.sessionEnded else { return nil }
-    switch (origin.ssh, ssh) {
-    case (nil, nil):
-      return nil
-    case (nil, let ssh?):
-      origin.ssh = ssh
-    case (let bound?, let ssh?) where bound == ssh:
-      return origin
-    case (.some, _):
+    defer { remoteLaunchOriginBySurface[surfaceID] = origin }
+    if let bound = origin.ssh {
+      if ssh?.generation == bound { return origin }
+      // The pane's `ssh` left the foreground. When it exited, the local shell's finish for it
+      // may still come; a suspended one reports none.
       origin.sessionEnded = true
+      origin.swallowsNextFinish = !isRunning(bound)
+      return nil
     }
-    remoteLaunchOriginBySurface[surfaceID] = origin
-    return origin.sessionEnded ? nil : origin
+    if let ssh, ssh.arguments.contains(where: { $0.contains(origin.nonce) }) {
+      origin.ssh = ssh.generation
+      origin.unboundFinishSeen = false
+      return origin
+    }
+    // Not started yet, unless a finish came: then the `ssh` ended before any probe saw it.
+    if origin.unboundFinishSeen { origin.sessionEnded = true }
+    return nil
   }
 
-  /// The label of a remote pane's host: the profile alias for a pane that Prowl opened.
+  /// The label of a remote pane's host: the profile alias, while the pane's own `ssh` is
+  /// the session.
   func remoteHostAlias(surfaceID: UUID) -> String? {
-    guard let origin = remoteLaunchOriginBySurface[surfaceID], !origin.sessionEnded else { return nil }
+    guard let origin = remoteLaunchOriginBySurface[surfaceID], origin.ssh != nil, !origin.sessionEnded else {
+      return nil
+    }
     return origin.alias
   }
 
@@ -113,13 +136,12 @@ extension WorktreeTerminalState {
     remoteLaunchTasksBySurface[surfaceID] != nil
   }
 
+  private func isRunning(_ process: LocalProcessGeneration) -> Bool {
+    processIsAliveForTesting?(process) ?? process.isRunning
+  }
+
   func forgetRemoteLaunch(surfaceID: UUID) {
     remoteLaunchTasksBySurface.removeValue(forKey: surfaceID)?.cancel()
     remoteLaunchOriginBySurface.removeValue(forKey: surfaceID)
-  }
-
-  private func isProcessAlive(_ process: LocalProcessGeneration) -> Bool {
-    if let alive = processIsAliveForTesting { return alive(process) }
-    return ProcessDetection.processStartDate(pid: process.pid) == process.startedAt
   }
 }

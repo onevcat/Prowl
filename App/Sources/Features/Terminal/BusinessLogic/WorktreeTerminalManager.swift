@@ -1628,8 +1628,9 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
+    // A selected remote folder is not in the payload, which must name a saved worktree.
     return TerminalLayoutSnapshotPayload(
-      selectedWorktreeID: selectedWorktreeID,
+      selectedWorktreeID: snapshotWorktrees.contains { $0.worktreeID == selectedWorktreeID } ? selectedWorktreeID : nil,
       worktrees: snapshotWorktrees
     )
   }

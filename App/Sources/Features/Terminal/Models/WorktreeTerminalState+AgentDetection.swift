@@ -362,9 +362,9 @@ extension WorktreeTerminalState {
     // A probe gap (no job read) changes no binding.
     let origin =
       job == nil
-      ? remoteLaunchOriginBySurface[surfaceID].flatMap { $0.sessionEnded ? nil : $0 }
-      : activeRemoteLaunchOrigin(surfaceID: surfaceID, foregroundSSH: foregroundSSH?.generation)
-    switch origin == nil ? remoteAgentDetectionMode : remoteLaunchDetectionMode {
+      ? remoteLaunchOriginBySurface[surfaceID].flatMap { $0.ssh == nil || $0.sessionEnded ? nil : $0 }
+      : activeRemoteLaunchOrigin(surfaceID: surfaceID, foregroundSSH: foregroundSSH)
+    switch remoteAgentDetectionMode(consent: origin == nil ? remoteAgentDetectionConsent : .enabled) {
     case .enabled:
       break
     case .disabled:
@@ -476,7 +476,7 @@ extension WorktreeTerminalState {
     histories[history.ssh] = history
     if histories.count > 1 {
       histories = histories.filter { ssh, _ in
-        ssh == history.ssh || ProcessDetection.processStartDate(pid: ssh.pid) == ssh.startedAt
+        ssh == history.ssh || ssh.isRunning
       }
     }
     remoteFenceHistoryBySurface[surfaceID] = histories

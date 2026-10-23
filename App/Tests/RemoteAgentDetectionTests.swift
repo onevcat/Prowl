@@ -125,6 +125,20 @@ struct RemoteAgentDetectionTests {
       processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "zsh", argv0: "zsh", cmdline: "zsh")])
   }
 
+  /// The `ssh` that a remote folder's pane types: its arguments carry the launch's nonce.
+  private var launchSSHJob: ForegroundJob {
+    let arguments = [
+      "/usr/bin/ssh", "-t", "--", "mini", "exec", "sh", "/home/dev/.cache/prowl/launch/0123456789abcdef/launch.sh",
+    ]
+    return ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(
+          pid: getpid(), parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: arguments.joined(separator: " "),
+          arguments: arguments)
+      ])
+  }
+
   private var sshJob: ForegroundJob {
     ForegroundJob(
       processGroupID: getpid(),
@@ -1785,7 +1799,11 @@ struct RemoteAgentDetectionTests {
     let stored = SSHConnectionRecipe(destination: "dev@mini.local", options: ["-p", "22"])
     fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(recipe: stored)
 
-    await bindClaude(fixture, probe: probe)
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
 
     #expect(asked.isEmpty)
     #expect(fixture.source.recipes == [stored])
@@ -1807,7 +1825,7 @@ struct RemoteAgentDetectionTests {
     fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
       recipe: SSHConnectionRecipe(destination: "mini"))
 
-    probe.job = sshJob
+    probe.job = launchSSHJob
     await detect(fixture)
     for _ in 0..<50 { await Task.yield() }
 

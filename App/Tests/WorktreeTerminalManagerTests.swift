@@ -1027,6 +1027,44 @@ struct WorktreeTerminalManagerTests {
     #expect(clearCount.value == 1)
   }
 
+  /// A remote folder's tabs are not saved (docs-ai 084 C3b, restore comes with C5), and a
+  /// selected remote folder is not named as the payload's selection, which must be a saved
+  /// worktree: the local layout stays valid.
+  @Test func aSelectedRemoteFolderLeavesTheLocalLayoutValid() async throws {
+    let saved = LockIsolated<[TerminalLayoutSnapshotPayload]>([])
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { nil },
+        saveSnapshot: { payload in
+          saved.withValue { $0.append(payload) }
+          return true
+        },
+        clearSnapshot: { true }
+      ),
+      skipsSurfaceCreationForTesting: true
+    )
+    let local = makeWorktree()
+    _ = try #require(manager.state(for: local).createTab())
+    let remote = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let remoteState = manager.state(for: remote)
+    remoteState.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in
+        HostProfile(
+          id: RemoteRepositoryFixtures.hostProfileID, alias: "mini", recipe: SSHConnectionRecipe(destination: "mini"),
+          connectionKey: ConnectionKey(user: "dev", hostname: "mini"))
+      },
+      stage: { _, launch in "/home/dev/.cache/prowl/launch/\(launch.nonce)/launch.sh" })
+    _ = try #require(remoteState.createTab())
+    manager.handleCommand(.setSelectedWorktreeID(remote.id))
+
+    await manager.persistLayoutSnapshot()
+
+    let payload = try #require(saved.value.last)
+    #expect(payload.worktrees.map(\.worktreeID) == [local.id])
+    #expect(payload.selectedWorktreeID == nil)
+  }
+
   private func makeWorktree(
     id: Worktree.ID = "/tmp/repo/wt-1",
     name: String = "wt-1"

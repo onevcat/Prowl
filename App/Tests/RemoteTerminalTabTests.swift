@@ -214,14 +214,23 @@ struct RemoteTerminalTabTests {
     #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == false)
   }
 
+  private static func ssh(_ pid: pid_t, nonce: String?) -> (generation: LocalProcessGeneration, arguments: [String]) {
+    let path = "/home/dev/.cache/prowl/launch/\(nonce ?? "user")/launch.sh"
+    return (
+      LocalProcessGeneration(pid: pid, startedAt: Date(timeIntervalSince1970: 1)),
+      nonce == nil ? ["mini"] : ["-t", "--", "dev@mini", "exec", "sh", path]
+    )
+  }
+
   /// While the pane's `ssh` runs, a local "command finished" is a remote shell's OSC 133 and
   /// completes nothing; the `ssh`'s own finish completes nothing either. After it, the pane
-  /// is a local shell and its commands complete as usual.
+  /// is a local shell and its commands complete as usual. A CLI waiter resumes on each.
   @Test func theSSHFinishCompletesNothingAndLaterCommandsDo() async throws {
     let state = makeState(Staging())
-    let (surface, _) = try await startedRemotePane(state, hasFirstCommand: false)
-    let ssh = LocalProcessGeneration(pid: 4_242, startedAt: Date(timeIntervalSince1970: 1))
-    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh)?.ssh == ssh)
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: false)
+    let ssh = Self.ssh(4_242, nonce: nonce)
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh)?.ssh == ssh.generation)
+    #expect(state.remoteHostAlias(surfaceID: surface.id) == "mini")
     var alive = true
     state.processIsAliveForTesting = { _ in alive }
     var succeeded: [String] = []
@@ -241,16 +250,70 @@ struct RemoteTerminalTabTests {
     #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh) == nil)
   }
 
-  /// An `ssh` that no probe saw (it ended at once) takes the first finish.
-  @Test func anUnseenSSHTakesTheFirstFinish() async throws {
+  /// A CLI waiter resumes on any finish, also the `ssh`'s: a command typed into the host
+  /// shell finishes there.
+  @Test(.timeLimit(.minutes(1))) func aWaiterResumesInARemotePane() async throws {
     let state = makeState(Staging())
-    let (surface, _) = try await startedRemotePane(state, hasFirstCommand: false)
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: false)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in true }
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    state.handleCommandFinished(exitCode: 3, durationNs: 1, surfaceId: surface.id)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [3])
+  }
+
+  /// A finish before any probe saw the `ssh`: the next probe decides. The pane's own `ssh`
+  /// in front means the finish came from the host; no `ssh` in front means the `ssh` ended.
+  @Test func aFinishBeforeTheFirstProbeWaitsForIt() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: false)
+    let (ended, _) = try await startedRemotePane(state, hasFirstCommand: false)
     var succeeded: [String] = []
     state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
-    state.markSurfaceForCustomCommand(surface.id, name: "Build")
 
-    state.handleCommandFinished(exitCode: 255, durationNs: 1, surfaceId: surface.id)
-    #expect(state.remoteLaunchOriginBySurface[surface.id]?.sessionEnded == true)
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(1, nonce: nonce)) != nil)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.sessionEnded == false)
+    #expect(state.remoteHostAlias(surfaceID: surface.id) == "mini")
+
+    state.handleCommandFinished(exitCode: 255, durationNs: 1, surfaceId: ended.id)
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: ended.id, foregroundSSH: nil) == nil)
+    #expect(state.remoteLaunchOriginBySurface[ended.id]?.sessionEnded == true)
+    state.markSurfaceForCustomCommand(ended.id, name: "Build")
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: ended.id)
+    #expect(succeeded == ["Build"])
+  }
+
+  /// Only the `ssh` that runs the launch is the pane's: an `ssh` the user typed after the
+  /// pane's own one never ran is not bound, so it gets no alias and no stored recipe.
+  @Test func anSSHWithoutTheNonceIsNotThePanes() async throws {
+    let state = makeState(Staging())
+    let (surface, _) = try await startedRemotePane(state, hasFirstCommand: false)
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(7, nonce: nil)) == nil)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.ssh == nil)
+    #expect(state.remoteHostAlias(surfaceID: surface.id) == nil)
+  }
+
+  /// A probe that sees the pane's `ssh` gone before the local shell reported its finish:
+  /// that finish still completes nothing, and the next one does.
+  @Test func theSSHFinishAfterAProbeSawItExitCompletesNothing() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: false)
+    let ssh = Self.ssh(4_242, nonce: nonce)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh)
+    state.processIsAliveForTesting = { _ in false }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
+    state.markSurfaceForCustomCommand(surface.id, name: "Session")
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
     state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
 
     #expect(succeeded == ["Build"])

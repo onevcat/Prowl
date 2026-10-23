@@ -255,6 +255,8 @@ struct AppFeatureTerminalSetupScriptTests {
     await store.send(.repositories(.delegate(.worktreeCreated(remote.worktrees[0]))))
     await store.finish()
     #expect(sent.value == [.ensureInitialTab(remote.worktrees[0], runSetupScriptIfNew: false, focusing: false)])
+    // Not kept pending for a later tab once remote scripts run (C3c).
+    #expect(!store.state.repositories.pendingSetupScriptWorktreeIDs.contains(remote.worktrees[0].id))
   }
 
   @Test(.dependencies) func worktreeCreatedTriggersEnsureInitialTabWithSetupScriptFlag() async {
