@@ -73,7 +73,7 @@ nonisolated enum RemoteGitShell {
   static func shell(lane: RemoteCommandLane, limits: RemoteCommandLimits) -> ShellClient {
     let run: @Sendable (URL, [String], URL?) async throws -> ShellOutput = { executable, arguments, directory in
       let command = command(executable: executable, arguments: arguments, directory: directory)
-      return try output(of: try await lane.run(command, limits), command: command)
+      return try output(of: try await lane.run(framed(command), limits), command: command)
     }
     return ShellClient(
       run: run,
@@ -104,6 +104,26 @@ nonisolated enum RemoteGitShell {
       workingDirectory: directory?.path(percentEncoded: false), environment: environment)
   }
 
+  /// Printed before a command's own output. A shell startup file on the host (such as a
+  /// `.zshenv` that prints a greeting) runs before the command, so everything up to the
+  /// marker is not the command's output.
+  static let outputMarker = "\u{1E}PROWL_OUTPUT\u{1E}"
+
+  /// `command`, run after the marker is printed. `exec` keeps its exit status.
+  static func framed(_ command: RemoteShellCommand) -> RemoteShellCommand {
+    var framed = command
+    framed.executable = "sh"
+    framed.arguments =
+      ["-c", #"printf '\036PROWL_OUTPUT\036'; exec "$0" "$@""#, command.executable] + command.arguments
+    return framed
+  }
+
+  /// The output after the marker; the whole output when there is no marker.
+  static func strippingStartupOutput(_ output: String) -> String {
+    guard let marker = output.range(of: outputMarker) else { return output }
+    return String(output[marker.upperBound...])
+  }
+
   /// A non-zero exit becomes a `ShellClientError`, as a local process does, so `GitClient`
   /// handles it the same way. Exit 255 with one of `ssh`'s own messages is a connection
   /// error; git can exit 255 too, and then it stays a git failure.
@@ -115,25 +135,28 @@ nonisolated enum RemoteGitShell {
       throw RemoteRepositoryHostError.connection(.launch(reason))
     case .exited(let result):
       guard !result.outputTruncated else { throw RemoteRepositoryHostError.outputTooLarge }
-      let stdout = String(bytes: result.output, encoding: .utf8) ?? String(bytes: result.output, encoding: .isoLatin1)
+      let stdout = strippingStartupOutput(
+        String(bytes: result.output, encoding: .utf8) ?? String(bytes: result.output, encoding: .isoLatin1) ?? "")
       if result.exitCode == 255, case let failure = RemoteConnectionOwner.failure(result), !failure.isExitStatus {
         throw RemoteRepositoryHostError.connection(failure)
       }
       guard result.exitCode == 0 else {
         throw ShellClientError(
           command: ([command.executable] + command.arguments).joined(separator: " "),
-          stdout: stdout ?? "", stderr: result.errorOutput, exitCode: result.exitCode)
+          stdout: stdout, stderr: result.errorOutput, exitCode: result.exitCode)
       }
-      return ShellOutput(stdout: stdout ?? "", stderr: result.errorOutput, exitCode: 0)
+      return ShellOutput(stdout: stdout, stderr: result.errorOutput, exitCode: 0)
     }
   }
 
   static func resolveGit(lane: RemoteCommandLane) async throws -> GitExecutable {
-    let command = RemoteShellCommand(executable: "sh", arguments: ["-c", "command -v git"])
+    let command = RemoteShellCommand(
+      executable: "sh", arguments: ["-c", #"printf '\036PROWL_OUTPUT\036'; command -v git"#])
     let output: ShellOutput
     do {
       output = try Self.output(of: try await lane.run(command, .commandLane), command: command)
-    } catch is ShellClientError {
+    } catch let error as ShellClientError where error.exitCode == 1 || error.exitCode == 127 {
+      // `command -v` exits 1 (127 in some shells) when it finds nothing.
       throw RemoteRepositoryHostError.gitMissing
     }
     let path = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)

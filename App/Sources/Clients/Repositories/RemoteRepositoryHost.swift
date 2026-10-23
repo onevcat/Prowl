@@ -97,6 +97,7 @@ nonisolated struct RemoteRepositoryHost: Sendable {
   private func fileCount(at path: String, ignored: Bool) async throws -> Int {
     let text = """
       set -o pipefail
+      printf '\\036PROWL_OUTPUT\\036'
       git -C "$1" ls-files --others \(ignored ? "-i " : "")--exclude-standard | wc -l
       """
     let script = RemoteScript(text: text, arguments: [path])

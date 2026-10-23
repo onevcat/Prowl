@@ -61,7 +61,7 @@ struct RemoteRepositoryHostTests {
     let lane = RemoteCommandLane(
       run: { command, _ in
         runs.withValue { $0 += 1 }
-        #expect(command.arguments == ["-c", "command -v git"])
+        #expect(command.arguments.last?.hasSuffix("command -v git") == true)
         return .exited(
           RemoteCommandResult(
             exitCode: 0, output: Data("/usr/local/bin/git\n".utf8), outputTruncated: false, errorOutput: ""))
@@ -72,6 +72,48 @@ struct RemoteRepositoryHostTests {
     #expect(try await executor.resolveGit(false).url.path(percentEncoded: false) == "/usr/local/bin/git")
     _ = try await executor.resolveGit(false)
     #expect(runs.value == 1)
+  }
+
+  /// `sshd` dropping the connection (a restart, connection throttling) is a connection
+  /// error, both while git is found and after.
+  @Test func aConnectionResetByThePeerStaysAConnectionError() async throws {
+    let reset = RemoteCommandOutcome.exited(
+      RemoteCommandResult(
+        exitCode: 255, output: Data(), outputTruncated: false,
+        errorOutput: "kex_exchange_identification: read: Connection reset by peer"))
+    let lane = RemoteCommandLane(run: { _, _ in reset }, runScript: { _, _ in reset })
+    let cache = LockIsolated<GitExecutable?>(nil)
+    let executor = GitCommandExecutor.remote(lane: lane, limits: .commandLane, gitCache: cache)
+
+    await #expect(throws: RemoteRepositoryHostError.connection(.unreachable)) {
+      _ = try await executor.resolveGit(false)
+    }
+    cache.setValue(GitExecutable(url: URL(filePath: "/usr/bin/git"), searchPath: ""))
+    await #expect(throws: RemoteRepositoryHostError.connection(.unreachable)) {
+      _ = try await GitClient(executor: executor).remoteNames(for: URL(filePath: "/srv/app"))
+    }
+  }
+
+  /// A shell startup file on the host can print before every command; that text is not
+  /// git's output.
+  @Test func startupOutputOnTheHostIsNotReadAsGitOutput() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    try await fixture.git(["remote", "add", "origin", "git@github.com:example/app.git"])
+    let linked = try await fixture.addWorktree("linked", branch: "side")
+    let host = RepositoryHost(
+      local: .testValue, remote: fixture.remoteClient(lane: GitFixture.localLane.printingAGreetingFirst()))
+    let location = fixture.remoteLocation
+
+    #expect(try await host.localBranchNames(in: location) == ["side", "trunk"])
+    #expect(try await host.isBareRepository(location) == false)
+    #expect(try await host.remoteNames(in: location) == ["origin"])
+    #expect(await host.remoteInfo(for: location)?.owner == "example")
+    #expect(try await host.untrackedFileCount(in: location) == 0)
+    #expect(try await host.worktrees(in: location).count == 2)
+    let worktree = try #require(try await host.worktrees(in: location).first { !$0.isMain })
+    try await host.removeWorktree(worktree, deleteBranch: false)
+    #expect(!FileManager.default.fileExists(atPath: linked.path))
   }
 
   @Test func aHostWithoutGitIsReported() async {
@@ -415,6 +457,15 @@ private struct GitFixture {
 }
 
 extension RemoteCommandLane {
+  /// The lane, with a greeting printed before every command and script, as a `.zshenv`
+  /// that prints does.
+  fileprivate func printingAGreetingFirst() -> Self {
+    let lane = self
+    return RemoteCommandLane(
+      run: { command, limits in greeted(try await lane.run(command, limits)) },
+      runScript: { script, limits in greeted(try await lane.runScript(script, limits)) })
+  }
+
   /// The lane, except that a command that `fails` matches ends as a dropped connection.
   fileprivate func failing(_ fails: @escaping @Sendable (RemoteShellCommand) -> Bool) -> Self {
     let dropped = RemoteCommandOutcome.exited(
@@ -431,4 +482,12 @@ extension String {
   fileprivate func trimmingSuffix(_ suffix: String) -> String {
     hasSuffix(suffix) && count > 1 ? String(dropLast(suffix.count)) : self
   }
+}
+
+private nonisolated func greeted(_ outcome: RemoteCommandOutcome) -> RemoteCommandOutcome {
+  guard case .exited(let result) = outcome else { return outcome }
+  return .exited(
+    RemoteCommandResult(
+      exitCode: result.exitCode, output: Data("Welcome to the build server!\n".utf8) + result.output,
+      outputTruncated: result.outputTruncated, errorOutput: result.errorOutput))
 }

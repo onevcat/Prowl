@@ -32,12 +32,19 @@ commands through `RemoteCommandLane`:
   - `DEVELOPER_DIR`: it names a folder on this Mac.
 
   `LC_ALL=C` and `LANG=C` still apply, so git's output is parsed as it is locally.
+- **Startup output.** A shell startup file on the host, such as a `.zshenv` that prints a
+  greeting, runs before every lane command and can print to its output. Each command
+  therefore runs as `sh -c 'printf <marker>; exec "$0" "$@"' git …`. The executor keeps
+  only the output after the marker, and `exec` keeps git's exit status. The host-side
+  count scripts print the same marker. The refresh has its own header line (B3a).
 - **Exit status.**
   - A non-zero exit becomes a `ShellClientError`, as for a local process. `GitClient`
     therefore wraps it into the same `GitClientError.commandFailed`.
   - Exit 255 together with one of `ssh`'s own messages (the probe's classification)
     becomes `RemoteRepositoryHostError.connection`. Git can exit 255 too; without such a
-    message it stays a git failure.
+    message it stays a git failure. The classification now also knows `Connection reset`
+    and `kex_exchange_identification`, which `sshd` prints when it drops a connection
+    during a restart or under connection throttling; the probe gains them too.
   - A timeout becomes `RemoteRepositoryHostError.timedOut`, and output cut off at the
     lane's budget becomes `outputTooLarge`. Truncated output is never parsed as complete.
   - `GitClient` rethrows a `RemoteRepositoryHostError` as it is, instead of wrapping it
@@ -45,8 +52,9 @@ commands through `RemoteCommandLane`:
     local host never throws this error.
 - **`git`.** The executor finds `git` once with `command -v git` on the login `PATH`, and it
   keeps the result. The two executors of a host (the normal and the long-running budget)
-  share that result. When `git` is not found, the result is
-  `RemoteRepositoryHostError.gitMissing`.
+  share that result. Only the exit status of `command -v` (1, or 127 in some shells) means
+  that `git` is missing (`RemoteRepositoryHostError.gitMissing`); a connection error
+  stays a connection error.
 - **`wt`.** The executor has no `wt` script yet; B3c stages it.
 
 ### `RemoteRepositoryHost`
@@ -124,6 +132,8 @@ fraction.
 - the leased lane: with a changed authority it runs nothing and holds no lease; with an
   unchanged one it runs the command and releases the lease;
 - `git` resolved once, and a host without git;
+- a connection reset by the peer stays a connection error while git is found and after;
+- with a greeting printed before every command, every read and the removal still work;
 - `hostProfileMissing` from the live client when `hosts.json` lacks the profile;
 - against a real repository through a lane that runs `sh -s` and `bash -s` on this Mac:
   - every read gives the same result as the local `GitClient` on the same repository:
