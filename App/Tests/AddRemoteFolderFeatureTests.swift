@@ -160,3 +160,28 @@ struct AddRemoteFolderFeatureTests {
     #expect(store.state.loadFailuresByID[location.id] != nil)
   }
 }
+
+/// The live check behind the Add button, against a real SSH host when
+/// `PROWL_REMOTE_LANE_HOST` names one. Skipped otherwise.
+@MainActor
+struct RemoteFolderValidatorLiveTests {
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["PROWL_REMOTE_LANE_HOST"] != nil))
+  func aRealHostChecksAFolderForANewAndAKnownProfile() async throws {
+    let hostName = try #require(ProcessInfo.processInfo.environment["PROWL_REMOTE_LANE_HOST"])
+    let validate = RemoteFolderValidatorClient.liveValue.validate
+
+    let added = try await validate(nil, hostName, "~", [])
+    #expect(added.isNewProfile)
+    #expect(added.profile.alias == hostName)
+    #expect(added.rootPath.hasPrefix("/"))
+
+    let again = try await validate(nil, hostName, "~", [added.profile])
+    #expect(!again.isNewProfile)
+    #expect(again.profile.id == added.profile.id)
+    let known = try await validate(added.profile, "", "~", [added.profile])
+    #expect(known.location == added.location)
+    await #expect(throws: RemoteFolderValidationError.folderNotFound("/prowl-none-\(hostName)")) {
+      _ = try await validate(added.profile, "", "/prowl-none-\(hostName)", [added.profile])
+    }
+  }
+}

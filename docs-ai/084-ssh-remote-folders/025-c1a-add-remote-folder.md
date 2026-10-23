@@ -116,3 +116,12 @@ connects again. Both are one-time costs of adding a folder.
   refused, and `~` is the home directory. Replies with a git error, an empty root and an
   inaccessible path give their errors.
 - `CommandPaletteFeatureTests`: the palette's exhaustive kind lists include the new item.
+- Against a real host (opt-in, `TEST_RUNNER_PROWL_REMOTE_LANE_HOST=<host>`):
+  - `RemoteFolderValidatorLiveTests` runs the live check behind the Add button: `ssh -G`,
+    the authority check, the leased lane and the discovery. A new destination makes a new
+    profile; the same destination again, and the chosen profile, reuse it; a missing path is
+    refused.
+  - `aRealHostListsAndChangesWorktrees` also finds the main worktree from a linked worktree
+    and the fixture's parent as a plain folder.
+
+The sheet itself gets its visual check in C1c, with the other UI gates.
