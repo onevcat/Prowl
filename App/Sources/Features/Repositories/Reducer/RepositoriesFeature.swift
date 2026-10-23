@@ -305,6 +305,8 @@ struct RepositoriesFeature {
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
+    /// Remote folders whose host could not be reached at the last load (docs-ai 084 B3e).
+    var unreachableRepositoryIDs: Set<Repository.ID> = []
     /// User-defined display titles indexed by `Repository.ID`. Resolved
     /// once on repo discovery (and refreshed when settings change) so
     /// hot-path display sites — sidebar, shelf spine, canvas card,
@@ -527,6 +529,8 @@ struct RepositoriesFeature {
     let rootID: Repository.ID
     let message: String
     var isGitUnavailable: Bool = false
+    /// A remote folder whose host could not be reached (docs-ai 084 B3e); C1 shows it.
+    var isHostUnreachable: Bool = false
   }
 
   struct DeleteWorktreeTarget: Equatable {
