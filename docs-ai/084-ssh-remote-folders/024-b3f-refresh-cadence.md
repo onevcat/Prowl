@@ -57,11 +57,24 @@ reload too, such as a worktree creation. Without a change, each reload would ask
 remote host again. It would also wait for a host that is down until the B3e deadline,
 and drop that repository from the list, against "a failed poll keeps the last state".
 
-So after the first live load, `reloadRepositories` passes the loaded remote repositories to
-the load (`knownRemoteRepositories`), and the load keeps them as they are. The cadence
-keeps them current. A remote entry that is not loaded yet still loads through its host,
-for example an entry that a failed load left out, or one that was just added. The first
-live load after launch, or after the snapshot restore, asks every host.
+So after the first live load, every load passes the loaded remote repositories
+(`State.retainedRemoteRepositories`), and the load keeps them as they are. The cadence keeps
+them current. Every entry point does this:
+- the reload;
+- adding repositories (`openRepositories`);
+- removing a repository or a failed one.
+
+A remote entry that is not loaded yet still loads through its host, for example an entry
+that a failed load left out, or one that was just added. The first live load after launch,
+or after the snapshot restore, asks every host.
+
+A load runs while polls continue, so a repository that the load kept can be older than the
+reducer's by the time the load ends. The load reports which repositories it kept
+(`reusedRemoteRepositoryIDs` on `repositoriesLoaded` and `openRepositoriesFinished`), and
+the reducer uses its current version of those (`reconcilingReusedRemoteRepositories`). A
+poll that added a worktree, renamed a branch, or a selection or pin of a new worktree in
+the meantime survives the load. `openRepositoriesFinished` also syncs the schedules, as
+`repositoriesLoaded` does.
 
 ### Applying a poll
 
@@ -82,16 +95,19 @@ A good poll is applied as the local monitors' events are applied:
   (`remoteConfigurationChanged`, now shared). The first poll only records the fingerprint.
 
 A failed poll changes nothing else in the repository. Only its failure count changes, and
-its unreachable mark (`unreachableRepositoryIDs`, as at load):
+its poll mark (`pollUnreachableRepositoryIDs`):
 - the mark is set when the host did not answer;
 - the mark is cleared when the host answered with another error, such as a missing folder;
 - the mark is also cleared by the next good poll.
 
+The load keeps its own marks (`loadUnreachableRepositoryIDs`, from `recordLoadFailures`).
+`unreachableRepositoryIDs` is their union. A load that kept a repository asked nothing, so
+it does not touch the poll mark. `currentLoadFailures` carries only load marks.
+
 The poll's error goes to the log (`ProwlLogger("RemoteRefresh")`).
 
-When a repository leaves the cadence, its failure count and fingerprint are cleared. Its
-unreachable mark stays, because the load that removed it set that mark itself
-(`recordLoadFailures`).
+When a repository leaves the cadence, its failure count, fingerprint and poll mark are
+cleared. A load that failed it keeps its load mark.
 
 ### Connection holds
 
@@ -142,6 +158,9 @@ this Mac with real git:
   repository through `repositoriesLoaded`;
 - a reload keeps a loaded remote repository without asking its host, and still loads a
   new remote entry;
+- a reload that kept a repository keeps its poll mark, and passes on only load marks;
+- a kept repository keeps the reducer's newer version after the load; the retained list
+  is empty before the first live load;
 - a host that answers with another error clears a stale unreachable mark;
 - a repository that left the cadence through an unreachable load keeps its mark;
 - polls pause while the app is inactive and run at once when it is active again; an

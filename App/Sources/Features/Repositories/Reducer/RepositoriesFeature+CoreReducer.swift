@@ -207,13 +207,11 @@ extension RepositoriesFeature {
         state.isRefreshingWorktrees = false
         return .none
       }
-      // Loaded remote repositories stay as they are; their refresh cadence keeps them current.
-      let knownRemoteRepositories =
-        state.isInitialLoadComplete ? Array(state.repositories.filter { $0.location.localURL == nil }) : []
       return loadRepositories(
-        fallbackRoots: roots, animated: animated, knownRemoteRepositories: knownRemoteRepositories)
+        fallbackRoots: roots, animated: animated, knownRemoteRepositories: state.retainedRemoteRepositories)
 
-    case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
+    case .repositoriesLoaded(let loadedRepositories, let failures, let roots, let animated, let reusedIDs):
+      let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
       state.snapshotPersistencePhase = state.snapshotPersistencePhase.afterLiveLoad(

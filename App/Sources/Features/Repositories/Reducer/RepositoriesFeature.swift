@@ -260,7 +260,9 @@ struct RepositoriesFeature {
       failures: [LoadFailure],
       invalidRoots: [String],
       openFailures: [String],
-      roots: [RepositoryLocation]
+      roots: [RepositoryLocation],
+      /// Remote repositories that the load kept as they were (docs-ai 084 B3f).
+      reusedRemoteRepositoryIDs: Set<Repository.ID> = []
     )
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
@@ -314,9 +316,15 @@ struct RepositoriesFeature {
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
-    /// Remote folders whose host could not be reached at the last load or poll (docs-ai 084
-    /// B3e, B3f).
-    var unreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Remote folders whose host did not answer at the last load (docs-ai 084 B3e).
+    var loadUnreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Loaded remote repositories whose last poll did not reach the host (B3f). A reload
+    /// that keeps a repository as it was does not touch this mark; a poll does.
+    var pollUnreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Remote folders whose host could not be reached, at the last load or poll.
+    var unreachableRepositoryIDs: Set<Repository.ID> {
+      loadUnreachableRepositoryIDs.union(pollUnreachableRepositoryIDs)
+    }
     /// The remote git repositories that the refresh cadence polls (B3f).
     var remoteRefreshRepositoryIDs: Set<Repository.ID> = []
     var remoteRefreshInFlightIDs: Set<Repository.ID> = []
@@ -490,7 +498,12 @@ struct RepositoriesFeature {
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
-    case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [RepositoryLocation], animated: Bool)
+    /// `reusedRemoteRepositoryIDs` are the remote repositories that the load kept as they
+    /// were; the reducer keeps its current version of them, which a poll may have updated
+    /// while the load ran (docs-ai 084 B3f).
+    case repositoriesLoaded(
+      [Repository], failures: [LoadFailure], roots: [RepositoryLocation], animated: Bool,
+      reusedRemoteRepositoryIDs: Set<Repository.ID> = [])
     case refreshAllCustomTitles
     case refreshCustomTitle(RepositoryLocation)
     case customTitlesLoaded([Repository.ID: String])

@@ -1036,7 +1036,7 @@ struct RemoteRepositoryHostTests {
     let clock = TestClock()
     let repository = try await fixture.loadedRepository()
     var state = RepositoriesFeature.State()
-    state.unreachableRepositoryIDs = [repository.id]
+    state.pollUnreachableRepositoryIDs = [repository.id]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -1107,7 +1107,7 @@ struct RemoteRepositoryHostTests {
     await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
 
     var unreachable = store.state
-    unreachable.unreachableRepositoryIDs = [repository.id]
+    unreachable.pollUnreachableRepositoryIDs = [repository.id]
     let gated = TestStore(initialState: unreachable) {
       RepositoriesFeature()
     }
@@ -1118,6 +1118,56 @@ struct RemoteRepositoryHostTests {
 
     await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
     await store.finish(timeout: .seconds(10))
+  }
+
+  /// A reload that keeps a remote repository does not clear the mark that its poll set,
+  /// and the failures it passes on carry only load marks.
+  @Test(.dependencies) func aReloadThatKeepsARemoteRepositoryKeepsItsPollMark() async throws {
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    state.isInitialLoadComplete = true
+    state.pollUnreachableRepositoryIDs = [repository.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false,
+        reusedRemoteRepositoryIDs: [repository.id]))
+
+    #expect(store.state.unreachableRepositoryIDs == [repository.id])
+    #expect(store.state.currentLoadFailures.isEmpty)
+  }
+
+  /// A load that kept a remote repository brings back the version it captured; a poll may
+  /// have changed it since, and that newer version stays.
+  @Test(.dependencies) func aKeptRemoteRepositoryKeepsTheVersionThatAPollUpdated() {
+    let captured = RemoteRepositoryFixtures.gitRepository()
+    let root = captured.location
+    let added = RemoteRepositoryFixtures.location("/home/dev/app-added")
+    let newer = Repository(
+      location: root, name: captured.name, kind: .git,
+      worktrees: IdentifiedArray(
+        uniqueElements: Array(captured.worktrees)
+          + [Worktree(name: "added", detail: "../app-added", location: added, repositoryLocation: root)]))
+    var state = RepositoriesFeature.State()
+    state.repositories = [newer]
+    state.isInitialLoadComplete = true
+
+    let reconciled = state.reconcilingReusedRemoteRepositories([captured], reusedIDs: [captured.id])
+    let notKept = state.reconcilingReusedRemoteRepositories([captured], reusedIDs: [])
+
+    #expect(reconciled == [newer])
+    #expect(notKept == [captured])
+    #expect(state.retainedRemoteRepositories == [newer])
+    var beforeLoad = state
+    beforeLoad.isInitialLoadComplete = false
+    #expect(beforeLoad.retainedRemoteRepositories.isEmpty)
   }
 
   // MARK: - A real host (opt-in)

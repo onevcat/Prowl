@@ -151,7 +151,8 @@ extension RepositoriesFeature {
           repositories,
           failures: failures,
           roots: roots,
-          animated: animated
+          animated: animated,
+          reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
         )
       )
     }
@@ -302,7 +303,7 @@ extension RepositoriesFeature {
       uniquingKeysWith: { first, _ in first }
     )
     state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
-    state.unreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
+    state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
   }
 
   func applyRepositories(
@@ -504,14 +505,38 @@ private nonisolated final class DeadlineRace<Value: Sendable>: @unchecked Sendab
   }
 }
 
+extension RepositoriesFeature {
+  /// The kept remote repositories that the load returned.
+  nonisolated static func reusedIDs(_ known: [Repository], in loaded: [Repository]) -> Set<Repository.ID> {
+    Set(known.map(\.id)).intersection(loaded.map(\.id))
+  }
+}
+
 extension RepositoriesFeature.State {
+  /// The loaded remote repositories that a load keeps as they are once the first live load
+  /// is done: their refresh cadence keeps them current (docs-ai 084 B3f).
+  var retainedRemoteRepositories: [Repository] {
+    isInitialLoadComplete ? Array(repositories.filter { $0.location.localURL == nil }) : []
+  }
+
+  /// `loaded`, with the current version of each kept remote repository: a poll may have
+  /// changed it while the load ran.
+  func reconcilingReusedRemoteRepositories(
+    _ loaded: [Repository], reusedIDs: Set<Repository.ID>
+  ) -> [Repository] {
+    guard !reusedIDs.isEmpty else { return loaded }
+    return loaded.map { repository in
+      reusedIDs.contains(repository.id) ? (repositories[id: repository.id] ?? repository) : repository
+    }
+  }
+
   /// The failures of the last load, as `recordLoadFailures` kept them.
   var currentLoadFailures: [RepositoriesFeature.LoadFailure] {
     loadFailuresByID.keys.sorted().map { id in
       RepositoriesFeature.LoadFailure(
         rootID: id, message: loadFailuresByID[id] ?? "",
         isGitUnavailable: gitUnavailableRepositoryIDs.contains(id),
-        isHostUnreachable: unreachableRepositoryIDs.contains(id))
+        isHostUnreachable: loadUnreachableRepositoryIDs.contains(id))
     }
   }
 }
