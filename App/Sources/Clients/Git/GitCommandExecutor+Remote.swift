@@ -16,6 +16,8 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
   case outputTooLarge
   /// The operation has no remote implementation yet.
   case unsupported
+  /// The app bundle lacks a script that runs on the host, such as `wt`.
+  case bundledScriptMissing
 
   var errorDescription: String? {
     switch self {
@@ -27,6 +29,8 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
     case .gitMissing: String(localized: "Git was not found on the remote host.")
     case .outputTooLarge: String(localized: "The remote host sent more output than Prowl reads.")
     case .unsupported: String(localized: "Remote folders do not support this yet.")
+    case .bundledScriptMissing:
+      String(localized: "A script that Prowl runs on the remote host is missing from the app.")
     }
   }
 }
@@ -108,13 +112,15 @@ nonisolated enum RemoteGitShell {
   /// `.zshenv` that prints a greeting) runs before the command, so everything up to the
   /// marker is not the command's output.
   static let outputMarker = "\u{1E}PROWL_OUTPUT\u{1E}"
+  /// The shell command that prints `outputMarker`.
+  static let printMarker = #"printf '\036PROWL_OUTPUT\036'"#
 
   /// `command`, run after the marker is printed. `exec` keeps its exit status.
   static func framed(_ command: RemoteShellCommand) -> RemoteShellCommand {
     var framed = command
     framed.executable = "sh"
     framed.arguments =
-      ["-c", #"printf '\036PROWL_OUTPUT\036'; exec "$0" "$@""#, command.executable] + command.arguments
+      ["-c", printMarker + #"; exec "$0" "$@""#, command.executable] + command.arguments
     return framed
   }
 
@@ -150,8 +156,7 @@ nonisolated enum RemoteGitShell {
   }
 
   static func resolveGit(lane: RemoteCommandLane) async throws -> GitExecutable {
-    let command = RemoteShellCommand(
-      executable: "sh", arguments: ["-c", #"printf '\036PROWL_OUTPUT\036'; command -v git"#])
+    let command = RemoteShellCommand(executable: "sh", arguments: ["-c", printMarker + "; command -v git"])
     let output: ShellOutput
     do {
       output = try Self.output(of: try await lane.run(command, .commandLane), command: command)

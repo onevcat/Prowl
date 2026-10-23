@@ -319,6 +319,105 @@ struct RemoteRepositoryHostTests {
     }
   }
 
+  // MARK: - Worktree creation
+
+  /// The bundled `wt` runs on the host as it runs on this Mac: it copies untracked files,
+  /// starts from the base ref, and reports the new worktree's path.
+  @Test func aWorktreeIsCreatedOnTheHostWithTheBundledWt() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    try Data("note\n".utf8).write(to: fixture.main.appending(path: "notes.txt"))
+    let host = RepositoryHost(
+      local: .testValue, remote: fixture.remoteClient(lane: GitFixture.localLane.printingAGreetingFirst()))
+    let location = fixture.remoteLocation
+    let base = fixture.root.appending(path: "worktrees", directoryHint: .isDirectory)
+    let request = GitWorktreeCreateRequest(
+      name: "feature", repoRoot: URL(filePath: location.path), baseDirectory: base,
+      copyFiles: .init(ignored: false, untracked: true), baseRef: "trunk")
+
+    var lines: [ShellStreamLine] = []
+    var created: Worktree?
+    for try await event in host.createWorktreeStream(in: location, request) {
+      switch event {
+      case .outputLine(let line): lines.append(line)
+      case .finished(let worktree): created = worktree
+      }
+    }
+
+    let worktree = try #require(created)
+    let path = fixture.root.path(percentEncoded: false).trimmingSuffix("/") + "/worktrees/feature"
+    #expect(worktree.location == RemoteRepositoryFixtures.location(path))
+    #expect(worktree.name == "feature")
+    #expect(worktree.detail == "../worktrees/feature")
+    #expect(worktree.repositoryLocation == location)
+    #expect(!lines.contains { $0.text.contains("Welcome") || $0.text.hasPrefix("PROWL_") })
+    // `wt --verbose` reports the copy on standard error as it runs.
+    #expect(lines.contains { $0.source == .stderr && $0.text.contains("notes.txt") })
+    #expect(FileManager.default.fileExists(atPath: path + "/notes.txt"))
+    // The refresh lists it under the same ID.
+    #expect(try await host.worktrees(in: location).contains { $0.id == worktree.id && $0.name == "feature" })
+  }
+
+  @Test func aDirectoryOverridePlacesTheWorktreeAndAFailureKeepsWtsMessage() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let host = RepositoryHost(local: .testValue, remote: fixture.remoteClient)
+    let location = fixture.remoteLocation
+    let override = fixture.root.appending(path: "custom/place", directoryHint: .isDirectory)
+    var request = GitWorktreeCreateRequest(
+      name: "topic", repoRoot: URL(filePath: location.path),
+      baseDirectory: fixture.root.appending(path: "worktrees", directoryHint: .isDirectory),
+      copyFiles: .init(ignored: false, untracked: false), baseRef: "", directoryOverride: override)
+
+    var created: Worktree?
+    for try await event in host.createWorktreeStream(in: location, request) {
+      if case .finished(let worktree) = event { created = worktree }
+    }
+    #expect(created?.location.path.hasSuffix("/custom/place") == true)
+
+    // A base ref that does not exist: `wt` refuses, and its message reaches the caller.
+    request.name = "other"
+    request.baseRef = "no-such-ref"
+    request.directoryOverride = nil
+    do {
+      for try await _ in host.createWorktreeStream(in: location, request) {}
+      Issue.record("A worktree from a base ref that does not exist must fail")
+    } catch let GitClientError.commandFailed(command, message) {
+      #expect(command.hasPrefix("wt "))
+      #expect(!message.isEmpty)
+    }
+  }
+
+  @Test func theHostHomeDirectoryIsReadOnce() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let reads = LockIsolated(0)
+    let greeting = GitFixture.localLane.printingAGreetingFirst()
+    let counting = RemoteCommandLane(
+      run: { command, limits in
+        if command.arguments.contains(where: { $0.contains("$HOME") }) { reads.withValue { $0 += 1 } }
+        return try await greeting.run(command, limits)
+      },
+      runScript: { try await greeting.runScript($0, $1) })
+    let host = RepositoryHost(local: .testValue, remote: fixture.remoteClient(lane: counting))
+
+    async let first = host.remoteHomeDirectory(in: fixture.remoteLocation)
+    async let second = host.remoteHomeDirectory(in: fixture.remoteLocation)
+    let homes = try await [first, second]
+
+    #expect(homes == [ProcessInfo.processInfo.environment["HOME"], ProcessInfo.processInfo.environment["HOME"]])
+    #expect(try await host.remoteHomeDirectory(in: fixture.remoteLocation) == homes[0])
+    #expect(reads.value == 1)
+    #expect(try await host.remoteHomeDirectory(in: .local(fixture.main)) == nil)
+  }
+
+  @Test func hostPathsAreRelatedAsTextWithoutThisMacsRules() {
+    #expect(RemotePaths.relativePath(from: "/private/tmp/app", to: "/private/tmp/worktrees/x") == "../worktrees/x")
+    #expect(RemotePaths.relativePath(from: "/srv/app/", to: "/srv/app") == ".")
+    #expect(RemotePaths.relativePath(from: "/srv/app", to: "/srv/app/./wt/../wt2") == "wt2")
+    #expect(RemotePaths.relativePath(from: "/a/b/c", to: "/x") == "../../../x")
+  }
+
   // MARK: - A real host (opt-in)
 
   /// Runs against a real SSH host when `PROWL_REMOTE_LANE_HOST` names one, such as
@@ -364,6 +463,20 @@ struct RemoteRepositoryHostTests {
     #expect(await host.isValidBranchName("feature/next", in: location))
     #expect(try await host.remoteNames(in: location) == ["origin"])
     #expect(await host.remoteInfo(for: location)?.owner == "example")
+    var madeByWt: Worktree?
+    let request = GitWorktreeCreateRequest(
+      name: "made-by-wt", repoRoot: URL(filePath: location.path),
+      baseDirectory: URL(filePath: physicalRoot + "/worktrees", directoryHint: .isDirectory),
+      copyFiles: .init(ignored: false, untracked: false), baseRef: "trunk")
+    for try await event in host.createWorktreeStream(in: location, request) {
+      if case .finished(let worktree) = event { madeByWt = worktree }
+    }
+    let made = try #require(madeByWt)
+    #expect(made.location.path == physicalRoot + "/worktrees/made-by-wt")
+    #expect(try await host.worktrees(in: location).contains { $0.id == made.id })
+    try await host.removeWorktree(made, deleteBranch: true)
+    #expect(try await host.remoteHomeDirectory(in: location)?.hasPrefix("/") == true)
+
     let side = try #require(worktrees.first { !$0.isMain })
     try await host.renameBranch(in: side.location, to: "renamed")
     let renamed = try #require(try await host.worktrees(in: location).first { !$0.isMain })
@@ -409,6 +522,22 @@ private struct GitFixture {
       let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
       return await RemoteCommandRunner.live.execute(
         URL(fileURLWithPath: "/bin/bash"), ["-s"], Data(input.utf8), limits, nil)
+    },
+    stream: { script, limits, onLine in
+      let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
+      let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
+      let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
+      let outcome = await RemoteCommandRunner.live.executeStreaming(
+        URL(fileURLWithPath: "/bin/bash"), ["-s"], Data(input.utf8), limits, nil
+      ) { stream, chunk in
+        switch stream {
+        case .standardOutput: output.append(chunk)
+        case .standardError: errorOutput.append(chunk)
+        }
+      }
+      output.finish()
+      errorOutput.finish()
+      return outcome
     })
 
   init() async throws {
@@ -463,7 +592,11 @@ extension RemoteCommandLane {
     let lane = self
     return RemoteCommandLane(
       run: { command, limits in greeted(try await lane.run(command, limits)) },
-      runScript: { script, limits in greeted(try await lane.runScript(script, limits)) })
+      runScript: { script, limits in greeted(try await lane.runScript(script, limits)) },
+      stream: { script, limits, onLine in
+        onLine(.standardOutput, "Welcome to the build server!")
+        return try await lane.stream(script, limits, onLine)
+      })
   }
 
   /// The lane, except that a command that `fails` matches ends as a dropped connection.
@@ -474,7 +607,8 @@ extension RemoteCommandLane {
     let lane = self
     return RemoteCommandLane(
       run: { command, limits in fails(command) ? dropped : try await lane.run(command, limits) },
-      runScript: { script, limits in try await lane.runScript(script, limits) })
+      runScript: { script, limits in try await lane.runScript(script, limits) },
+      stream: { script, limits, onLine in try await lane.stream(script, limits, onLine) })
   }
 }
 
