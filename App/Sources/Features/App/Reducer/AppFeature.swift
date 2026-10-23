@@ -757,8 +757,7 @@ struct AppFeature {
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
-        let feature: RepositoryFeature = action == .finder ? .finder : .openInEditor
-        if let reason = worktree.availability(of: feature).unavailableReason {
+        if let reason = worktree.availability(of: action.repositoryFeature).unavailableReason {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
@@ -863,6 +862,10 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
+        // A script runs in a terminal, and a remote folder opens none yet (docs-ai 084 C3).
+        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
         let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
           if state.isRunScriptPromptPresented {
@@ -929,6 +932,9 @@ struct AppFeature {
       case .runCustomCommand(let commandID):
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
+        }
+        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         guard
           let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == commandID })
