@@ -855,6 +855,271 @@ struct RemoteRepositoryHostTests {
     #expect(failures.map(\.message) == ["Remote folders are not available yet."])
   }
 
+  // MARK: - Refresh cadence (B3f)
+
+  @Test func theRefreshCadencePollsTheFocusedRepositoryFasterAndBacksOff() {
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 0) == .seconds(10))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 0) == .seconds(60))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 1) == .seconds(20))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 2) == .seconds(240))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: false, failures: 3) == .seconds(300))
+    #expect(RepositoriesFeature.remoteRefreshDelay(isFocused: true, failures: 40) == .seconds(300))
+  }
+
+  /// A loaded remote repository is polled on its host: a renamed branch renames its
+  /// worktree, and edited files update its line counts. Leaving the list stops the polls
+  /// and releases its connection hold.
+  @Test(.dependencies) func aPollAppliesBranchAndLineChangesFromTheHost() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let holds = LockIsolated(0)
+    let releases = LockIsolated(0)
+    var client = fixture.remoteClient
+    client.holdConnection = { _ in
+      holds.withValue { $0 += 1 }
+      return RemoteConnectionHold(release: { releases.withValue { $0 += 1 } })
+    }
+    let repository = try await fixture.loadedRepository()
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = client
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+    #expect(store.state.remoteRefreshRepositoryIDs == [repository.id])
+    try await fixture.git(["branch", "-m", "trunk", "renamed"])
+    try Data("one\ntwo\n".utf8).write(to: fixture.main.appending(path: "a.txt"))
+
+    await clock.advance(by: RepositoriesFeature.remoteRefreshBackgroundInterval)
+    await store.receive(\.remoteRepositoryRefreshDue)
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    #expect(store.state.repositories[id: repository.id]?.worktrees.map(\.name) == ["renamed"])
+    #expect(store.state.worktreeInfoByID[repository.id]?.addedLines == 1)
+    #expect(store.state.remoteRefreshFingerprints[repository.id]?.isEmpty == false)
+    #expect(holds.value == 1)
+
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+    #expect(store.state.remoteRefreshRepositoryIDs.isEmpty)
+    #expect(releases.value == 1)
+  }
+
+  /// A failed poll keeps the last state, marks an unreachable host, and waits longer;
+  /// the next good poll clears the mark.
+  @Test(.dependencies) func aFailedPollKeepsTheLastStateAndBacksOff() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let reachable = LockIsolated(false)
+    let refused = RemoteCommandOutcome.exited(
+      RemoteCommandResult(
+        exitCode: 255, output: Data(), outputTruncated: false,
+        errorOutput: "ssh: connect to host mini port 22: Connection refused"))
+    let lane = GitFixture.localLane
+    let flaky = RemoteCommandLane(
+      run: { reachable.value ? try await lane.run($0, $1) : refused },
+      runScript: { reachable.value ? try await lane.runScript($0, $1) : refused })
+    let repository = try await fixture.loadedRepository()
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient(lane: flaky)
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshDue)
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    #expect(store.state.unreachableRepositoryIDs == [repository.id])
+    #expect(store.state.repositories[id: repository.id] == repository)
+    #expect(store.state.remoteRefreshFailureCounts[repository.id] == 1)
+
+    // The next poll waits twice as long.
+    reachable.setValue(true)
+    await clock.advance(by: .seconds(60))
+    await Task.megaYield()
+    #expect(store.state.remoteRefreshInFlightIDs.isEmpty)
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshDue)
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+    #expect(store.state.unreachableRepositoryIDs.isEmpty)
+    #expect(store.state.remoteRefreshFailureCounts[repository.id] == nil)
+
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
+  /// A worktree that appears on the host updates the repository as a load would; changed
+  /// remote URLs refresh the pull requests.
+  @Test(.dependencies) func aPollReloadsForNewWorktreesAndRefreshesPullRequestsForNewRemotes() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let repository = try await fixture.loadedRepository()
+    @Shared(.repositorySettings(repository.location)) var repositorySettings
+    $repositorySettings.withLock { $0.fetchPullRequestState = false }
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    try await fixture.git(["remote", "add", "origin", "git@github.com:example/app.git"])
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested, timeout: .seconds(10))
+
+    _ = try await fixture.addWorktree("added", branch: "added")
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+    await store.receive(\.repositoriesLoaded, timeout: .seconds(10))
+    #expect(Set(store.state.repositories[id: repository.id]?.worktrees.map(\.name) ?? []) == ["trunk", "added"])
+
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
+  /// A reload keeps a loaded remote repository as it is: it never asks a host that is
+  /// down, and the list never loses the repository. A new remote entry still loads.
+  @Test(.dependencies) func aReloadKeepsLoadedRemoteRepositoriesWithoutAskingTheHost() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let repository = try await fixture.loadedRepository()
+    let asked = LockIsolated(0)
+    let refused = RemoteCommandOutcome.exited(
+      RemoteCommandResult(
+        exitCode: 255, output: Data(), outputTruncated: false, errorOutput: "Connection refused"))
+    let counting = RemoteCommandLane(
+      run: { _, _ in
+        asked.withValue { $0 += 1 }
+        return refused
+      },
+      runScript: { _, _ in
+        asked.withValue { $0 += 1 }
+        return refused
+      })
+    let feature = withDependencies {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient(lane: counting)
+      $0.continuousClock = TestClock()
+    } operation: {
+      RepositoriesFeature()
+    }
+    let other = RemoteRepositoryFixtures.location("/srv/other")
+    let entries = [
+      PersistedRepositoryEntry(path: repository.id, kind: .git), PersistedRepositoryEntry(path: other.id, kind: .git),
+    ]
+
+    let (loaded, failures) = await feature.loadRepositoriesData(entries, knownRemoteRepositories: [repository])
+
+    #expect(loaded == [repository])
+    #expect(failures.map(\.rootID) == [other.id])
+    #expect(asked.value == 1)
+  }
+
+  @Test(.dependencies) func aPollThatReachesTheHostClearsAStaleUnreachableMark() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let repository = try await fixture.loadedRepository()
+    var state = RepositoriesFeature.State()
+    state.unreachableRepositoryIDs = [repository.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+
+    // The host answers, but the folder is gone: reachable, and still a failure.
+    try FileManager.default.removeItem(at: fixture.main)
+    await clock.advance(by: .seconds(60))
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    #expect(store.state.unreachableRepositoryIDs.isEmpty)
+    #expect(store.state.remoteRefreshFailureCounts[repository.id] == 1)
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
+  /// A load that fails because the host does not answer keeps its unreachable mark when
+  /// the repository leaves the cadence.
+  @Test(.dependencies) func aRepositoryThatFailsAsUnreachableKeepsItsMark() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let repository = try await fixture.loadedRepository()
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+
+    let failure = RepositoriesFeature.LoadFailure(
+      rootID: repository.id, message: "The remote host could not be reached.", isHostUnreachable: true)
+    await store.send(.repositoriesLoaded([], failures: [failure], roots: [repository.location], animated: false))
+
+    #expect(store.state.remoteRefreshRepositoryIDs.isEmpty)
+    #expect(store.state.unreachableRepositoryIDs == [repository.id])
+    await store.finish(timeout: .seconds(10))
+  }
+
+  /// Polls pause while the app is inactive and run at once when it is active again; an
+  /// unreachable host gets no pull request refresh.
+  @Test(.dependencies) func pollsPauseWhileInactiveAndUnreachableHostsGetNoPullRequestRefresh() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let repository = try await fixture.loadedRepository()
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+
+    await store.send(.setRemoteRefreshActive(false))
+    await clock.advance(by: .seconds(600))
+    await Task.megaYield()
+    #expect(store.state.remoteRefreshInFlightIDs.isEmpty)
+
+    await store.send(.setRemoteRefreshActive(true))
+    await store.receive(\.remoteRepositoryRefreshDue)
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    var unreachable = store.state
+    unreachable.unreachableRepositoryIDs = [repository.id]
+    let gated = TestStore(initialState: unreachable) {
+      RepositoriesFeature()
+    }
+    await gated.send(
+      .githubIntegration(
+        .repositoryPullRequestRefreshRequested(
+          repositoryLocation: repository.location, worktreeIDs: repository.worktrees.map(\.id))))
+
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
   // MARK: - A real host (opt-in)
 
   /// Runs against a real SSH host when `PROWL_REMOTE_LANE_HOST` names one, such as
@@ -1087,6 +1352,14 @@ private struct GitFixture {
     await store.receive(\.worktreeCreation.createRandomWorktreeFailed, timeout: .seconds(60))
     await store.finish(timeout: .seconds(60))
     return CreationResult(failed: store.state.alert != nil, host: plainHost)
+  }
+
+  /// The repository as the load gives it, listed through the local lane.
+  func loadedRepository() async throws -> Repository {
+    let host = RepositoryHost(local: .testValue, remote: remoteClient)
+    return Repository(
+      location: remoteLocation, name: "main", kind: .git,
+      worktrees: IdentifiedArray(uniqueElements: try await host.worktrees(in: remoteLocation)))
   }
 
   func remove() {

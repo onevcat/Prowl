@@ -128,9 +128,12 @@ extension RepositoriesFeature {
     return "\(path): \(detail)"
   }
 
+  /// `knownRemoteRepositories` are loaded remote repositories that the load keeps as they
+  /// are instead of asking their hosts (docs-ai 084 B3f).
   func loadRepositories(
     fallbackRoots: [RepositoryLocation] = [],
-    animated: Bool = false
+    animated: Bool = false,
+    knownRemoteRepositories: [Repository] = []
   ) -> Effect<Action> {
     let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
@@ -141,7 +144,8 @@ extension RepositoriesFeature {
       for entry in entries where entry.kind == .git && entry.location.localURL != nil {
         _ = try? await repositoryHost.pruneWorktrees(in: entry.location)
       }
-      let (repositories, failures) = await loadRepositoriesData(entries)
+      let (repositories, failures) = await loadRepositoriesData(
+        entries, knownRemoteRepositories: knownRemoteRepositories)
       await send(
         .repositoriesLoaded(
           repositories,
@@ -167,8 +171,11 @@ extension RepositoriesFeature {
   /// cadence (B3f) tries it again.
   static let remoteLoadDeadline: Duration = .seconds(10)
 
-  func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
+  func loadRepositoriesData(
+    _ entries: [PersistedRepositoryEntry], knownRemoteRepositories: [Repository] = []
+  ) async -> ([Repository], [LoadFailure]) {
     let clock = clock
+    let known = Dictionary(knownRemoteRepositories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
         let repositoryHost = self.repositoryHost
@@ -176,6 +183,9 @@ extension RepositoriesFeature {
           // A remote folder loads through its host, within a deadline (docs-ai 084 B3e).
           guard case .remote = entry.location else {
             return await Self.loadRepository(entry, host: repositoryHost)
+          }
+          if let repository = known[entry.location.standardized.id] {
+            return WorktreesFetchResult(entry: entry, repository: repository, errorMessage: nil)
           }
           return await Self.withDeadline(Self.remoteLoadDeadline, clock: clock) {
             await Self.loadRepository(entry, host: repositoryHost)
@@ -285,7 +295,7 @@ extension RepositoriesFeature {
   }
 
   /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
-  /// host.
+  /// host. `State.currentLoadFailures` reads them back.
   func recordLoadFailures(_ failures: [LoadFailure], state: inout State) {
     state.loadFailuresByID = Dictionary(
       failures.map { ($0.rootID, $0.message) },
@@ -491,5 +501,17 @@ private nonisolated final class DeadlineRace<Value: Sendable>: @unchecked Sendab
     }
     for task in tasks { task.cancel() }
     continuation?.resume(returning: value)
+  }
+}
+
+extension RepositoriesFeature.State {
+  /// The failures of the last load, as `recordLoadFailures` kept them.
+  var currentLoadFailures: [RepositoriesFeature.LoadFailure] {
+    loadFailuresByID.keys.sorted().map { id in
+      RepositoriesFeature.LoadFailure(
+        rootID: id, message: loadFailuresByID[id] ?? "",
+        isGitUnavailable: gitUnavailableRepositoryIDs.contains(id),
+        isHostUnreachable: unreachableRepositoryIDs.contains(id))
+    }
   }
 }

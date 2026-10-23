@@ -221,6 +221,20 @@ struct AppFeatureTerminalSetupScriptTests {
     await store.finish()
   }
 
+  /// Selecting a remote worktree refreshes its repository at once (docs-ai 084 B3f).
+  @Test(.dependencies) func selectingARemoteWorktreeRefreshesItsRepository() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: RepositoriesFeature.State(), settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.selectedWorktreeChanged(remote.worktrees[0]))))
+    await store.receive(\.repositories.remoteRepositoryRefreshDue)
+  }
+
   /// A new remote worktree opens no local tab: remote terminals come with docs-ai 084 C3.
   @Test(.dependencies) func aRemoteWorktreeCreatedOpensNoLocalTab() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
