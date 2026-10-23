@@ -63,13 +63,13 @@ struct WorktreeDetailView: View {
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let opensTerminals = actionTargetWorktree?.location.availability(of: .terminalTab).isAvailable != false
-    // A remote folder runs no script yet (docs-ai 084 C3c), so it shows no script or custom
-    // command.
-    let runsScripts = actionTargetWorktree?.location.availability(of: .terminalScript).isAvailable != false
-    let runScriptEnabled = hasActiveTerminalTarget && runsScripts
+    let runScriptEnabled = hasActiveTerminalTarget && opensTerminals
     let runScriptIsRunning =
       actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
-    let customCommands = runsScripts ? state.selectedCustomCommands : []
+    // A split command would be a local shell in a remote folder (docs-ai 084 C4).
+    let splits = actionTargetWorktree?.location.availability(of: .terminalSplit).isAvailable != false
+    let customCommands =
+      opensTerminals ? state.selectedCustomCommands.filter { splits || $0.command.execution != .split } : []
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
       customTitles: repositories.repositoryCustomTitles

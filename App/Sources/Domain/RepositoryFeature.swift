@@ -18,8 +18,6 @@ nonisolated enum RepositoryFeature: CaseIterable, Hashable, Sendable {
   case worktreeCreation
   /// Opening a terminal tab (a remote tab runs the remote launcher, docs-ai 084 C3b).
   case terminalTab
-  /// Running a setup, run or custom script in a terminal (remote scripts come with C3c).
-  case terminalScript
   /// Splitting a terminal pane (remote splits come with C4).
   case terminalSplit
   /// Running a workflow: its history and role launches are rooted in a local worktree (A4a, C2).
@@ -66,8 +64,6 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
         String(localized: "Worktrees cannot be created in remote folders yet.")
       case .terminalTab:
         String(localized: "Terminals cannot open in remote folders yet.")
-      case .terminalScript:
-        String(localized: "Scripts and custom commands do not run in remote folders yet.")
       case .terminalSplit:
         String(localized: "Panes cannot split in remote folders yet.")
       case .workflow:

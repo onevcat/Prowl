@@ -110,12 +110,8 @@ final class TabCommandHandler: CommandHandler {
   }
 
   private func handleCreate(input: TabInput, target: TabResolvedTarget) -> CommandResponse {
-    // As `create tab`: the CLI opens no tab in a remote folder until docs-ai 084 C3c, and a
-    // host path is not checked here.
-    if RepositoryLocation.hasRemoteForm(target.worktreeID) {
-      return errorResponse(code: CLIErrorCode.tabFailed, message: "The CLI cannot open tabs in remote folders yet.")
-    }
-    let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
+    let path = normalizedAllowedPath(
+      input.path, worktreePath: target.worktreePath, isRemote: RepositoryLocation.hasRemoteForm(target.worktreeID))
     guard input.path == nil || path != nil else {
       return errorResponse(
         code: CLIErrorCode.pathNotAllowed,
@@ -136,10 +132,11 @@ final class TabCommandHandler: CommandHandler {
     return success(action: .close, target: target)
   }
 
-  private func normalizedAllowedPath(_ path: String?, worktreePath: String) -> String? {
+  private func normalizedAllowedPath(_ path: String?, worktreePath: String, isRemote: Bool) -> String? {
     guard let path else { return nil }
-    let normalizedPath = normalize(path)
-    let normalizedWorktree = normalize(worktreePath)
+    let normalized: (String) -> String = isRemote ? normalizedHostPath : { self.normalize($0) }
+    let normalizedPath = normalized(path)
+    let normalizedWorktree = normalized(worktreePath)
     guard normalizedPath == normalizedWorktree || normalizedPath.hasPrefix(normalizedWorktree + "/") else {
       return nil
     }
@@ -188,4 +185,18 @@ extension String {
     }
     return value
   }
+}
+
+/// A path on a remote host, normalized by its text only (`.`, `..` and repeated slashes):
+/// nothing on this Mac may change it, such as a local symlink or `/private` (docs-ai 084 C3c).
+func normalizedHostPath(_ path: String) -> String {
+  var components: [Substring] = []
+  for component in path.split(separator: "/", omittingEmptySubsequences: true) {
+    switch component {
+    case ".": continue
+    case "..": _ = components.popLast()
+    default: components.append(component)
+    }
+  }
+  return "/" + components.joined(separator: "/")
 }

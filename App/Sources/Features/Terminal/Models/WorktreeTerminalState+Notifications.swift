@@ -63,8 +63,11 @@ extension WorktreeTerminalState {
   }
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
-    // Notify CLI waiters unconditionally before applying notification filters.
-    resumeCommandFinishedWaiter(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
+    // Notify CLI waiters before applying notification filters; a remote pane's first command
+    // resumes them with its launch marker instead (docs-ai 084 C3c).
+    if !remoteLaunchHoldsWaiters(surfaceID: surfaceId) {
+      resumeCommandFinishedWaiter(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
+    }
     // A remote pane's commands finish on the host: the local shell's finish is its `ssh`
     // (or a remote shell's OSC 133), which completes no script (docs-ai 084 C3b).
     let completesCommand = remoteLaunchTakesCommandFinished(surfaceID: surfaceId)

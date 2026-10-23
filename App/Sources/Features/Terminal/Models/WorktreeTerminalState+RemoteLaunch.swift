@@ -72,9 +72,16 @@ extension WorktreeTerminalState {
     return true
   }
 
+  /// Whether CLI waiters wait for the launch marker: while the pane's first command runs on
+  /// the host, a local "command finished" is never its end (C3c).
+  func remoteLaunchHoldsWaiters(surfaceID: UUID) -> Bool {
+    guard let origin = remoteLaunchOriginBySurface[surfaceID] else { return false }
+    return origin.hasFirstCommand && !origin.completed
+  }
+
   /// Whether a local "command finished" (OSC 133) completes a command in this pane (the
-  /// custom command toast, Close on Success, the long-command notification; a CLI waiter
-  /// always resumes). In a remote pane, it does not while its `ssh` session lasts: it is the
+  /// custom command toast, Close on Success, the long-command notification). In a remote
+  /// pane, it does not while its `ssh` session lasts: it is the
   /// `ssh` itself ending, or a remote shell's own OSC 133 passing through. After the `ssh`
   /// ended, the pane is a local shell, and its commands complete as in any pane.
   func remoteLaunchTakesCommandFinished(surfaceID: UUID) -> Bool {
@@ -83,10 +90,14 @@ extension WorktreeTerminalState {
     if origin.sessionEnded {
       guard origin.swallowsNextFinish else { return true }
       origin.swallowsNextFinish = false
+      abandonFirstCommand(&origin, surfaceID: surfaceID)
       return false
     }
     if let ssh = origin.ssh {
-      if !isRunning(ssh) { origin.sessionEnded = true }
+      if !isRunning(ssh) {
+        origin.sessionEnded = true
+        abandonFirstCommand(&origin, surfaceID: surfaceID)
+      }
     } else {
       // No probe saw the `ssh` yet: the next one decides (`activeRemoteLaunchOrigin`).
       origin.unboundFinishSeen = true
@@ -106,7 +117,7 @@ extension WorktreeTerminalState {
     if let bound = origin.ssh {
       if ssh?.generation == bound { return origin }
       // The pane's `ssh` left the foreground. When it exited, the local shell's finish for it
-      // may still come; a suspended one reports none.
+      // is still to come, after any marker the `ssh` printed; a suspended one reports none.
       origin.sessionEnded = true
       origin.swallowsNextFinish = !isRunning(bound)
       return nil
@@ -117,8 +128,24 @@ extension WorktreeTerminalState {
       return origin
     }
     // Not started yet, unless a finish came: then the `ssh` ended before any probe saw it.
-    if origin.unboundFinishSeen { origin.sessionEnded = true }
+    if origin.unboundFinishSeen {
+      origin.sessionEnded = true
+      abandonFirstCommand(&origin, surfaceID: surfaceID)
+    }
     return nil
+  }
+
+  /// The `ssh`'s finish has come, in the terminal stream after any marker the `ssh` printed:
+  /// a first command without a marker did not run to its end on the host (the launcher
+  /// reports every command that started, C3a). It completes nothing, so no success toast
+  /// and no Close on Success, and a CLI waiter gets no status. A probe that sees the `ssh`
+  /// exit does not decide this: the marker may still be in the stream.
+  private func abandonFirstCommand(_ origin: inout RemoteLaunchOrigin, surfaceID: UUID) {
+    guard origin.hasFirstCommand, !origin.completed else { return }
+    origin.completed = true
+    resumeCommandFinishedWaiter(exitCode: nil, durationNs: 0, surfaceId: surfaceID)
+    pendingCustomCommands.removeValue(forKey: surfaceID)
+    autoCloseSurfaceIds.remove(surfaceID)
   }
 
   /// The label of a remote pane's host: the profile alias, while the pane's own `ssh` is
