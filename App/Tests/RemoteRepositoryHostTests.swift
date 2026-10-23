@@ -1318,6 +1318,17 @@ struct RemoteRepositoryHostTests {
     let host = RepositoryHost(
       local: .testValue, remote: RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil }))
 
+    // The add flow (C1a) finds the main worktree from a linked one, and the fixture's
+    // parent as a plain folder.
+    let main = RemoteFolderDiscovery(rootPath: physicalRoot + "/app", kind: .git)
+    #expect(try await remote.discoverFolder(physicalRoot + "/app-side") == main)
+    #expect(
+      try await remote.discoverFolder(physicalRoot) == RemoteFolderDiscovery(rootPath: physicalRoot, kind: .plain))
+    await #expect(throws: RemoteFolderValidationError.folderNotFound(physicalRoot + "/none")) {
+      _ = try await remote.discoverFolder(physicalRoot + "/none")
+    }
+    #expect(try await remote.discoverFolder("~").rootPath.hasPrefix("/"))
+
     let worktrees = try await host.worktrees(in: location)
     #expect(Set(worktrees.map(\.name)) == ["trunk", "side"])
     #expect(try await host.branchRefs(in: location) == ["side", "trunk"])
