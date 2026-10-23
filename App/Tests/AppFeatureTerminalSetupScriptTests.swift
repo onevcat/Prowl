@@ -221,6 +221,21 @@ struct AppFeatureTerminalSetupScriptTests {
     await store.finish()
   }
 
+  /// A new remote worktree opens no local tab: remote terminals come with docs-ai 084 C3.
+  @Test(.dependencies) func aRemoteWorktreeCreatedOpensNoLocalTab() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: RepositoriesFeature.State(), settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in Issue.record("Unexpected terminal command \(command)") }
+    }
+
+    await store.send(.repositories(.delegate(.worktreeCreated(remote.worktrees[0]))))
+    await store.finish()
+  }
+
   @Test(.dependencies) func worktreeCreatedTriggersEnsureInitialTabWithSetupScriptFlag() async {
     let worktree = makeWorktree()
     let repositoriesState = makeRepositoriesState(

@@ -19,7 +19,7 @@ struct BranchNameSuggestionClient: Sendable {
   var gatherContext:
     @MainActor @Sendable (
       _ repositoryName: String,
-      _ repositoryRootURL: URL,
+      _ repository: RepositoryLocation,
       _ existingBranchNames: [String]
     ) -> BranchNameSuggestionContext
 }

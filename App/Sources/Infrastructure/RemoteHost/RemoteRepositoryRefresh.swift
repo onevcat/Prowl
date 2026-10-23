@@ -347,6 +347,11 @@ nonisolated enum RemotePaths {
     return parts.isEmpty ? "." : parts.joined(separator: "/")
   }
 
+  /// `path` as an absolute path without empty parts, `.`, or the parts that `..` removes.
+  static func canonicalPath(_ path: String) -> String {
+    "/" + components(path).joined(separator: "/")
+  }
+
   /// The parts of an absolute path, without empty parts, `.`, or the parts that `..` removes.
   static func components(_ path: String) -> [String] {
     var parts: [String] = []

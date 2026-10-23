@@ -3309,9 +3309,9 @@ struct RepositoriesFeatureTests {
           pendingID: "pending",
           previousSelection: nil,
           repositoryID: "removed-repository-id",
-          repositoryRootURL: repositoryRootURL,
+          repositoryLocation: .local(repositoryRootURL),
           name: "feature",
-          worktreeDirectory: worktreeDirectory
+          worktreeLocation: .local(worktreeDirectory)
         ))
     )
     await store.finish()
@@ -3901,9 +3901,9 @@ struct RepositoriesFeatureTests {
           pendingID: pendingID,
           previousSelection: nil,
           repositoryID: repository.id,
-          repositoryRootURL: repository.localURL!,
+          repositoryLocation: repository.location,
           name: nil,
-          worktreeDirectory: nil
+          worktreeLocation: nil
         ))
     ) {
       $0.pendingWorktrees = []

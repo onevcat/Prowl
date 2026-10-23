@@ -188,17 +188,19 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     try await longRunningGit.fetchRemote(remote, for: Self.url(path))
   }
 
-  /// `$HOME` on the host, read once per host. A failed read is not kept.
+  /// `$HOME` on the host as a physical path (`pwd -P`), so the worktrees placed under it
+  /// get the IDs that git lists. Read once per host; a failed read is not kept.
   func homeDirectory() async throws -> String {
     let lane = lane
     let task = home.withValue { home in
       if let home { return home }
       let task = Task {
-        let command = RemoteShellCommand(executable: "sh", arguments: ["-c", #"printf '%s' "$HOME""#])
+        let command = RemoteShellCommand(executable: "sh", arguments: ["-c", #"cd -- "$HOME" && pwd -P"#])
         let output = try RemoteGitShell.output(
           of: try await lane.run(RemoteGitShell.framed(command), .commandLane), command: command)
-        guard output.stdout.hasPrefix("/") else { throw RemoteRepositoryHostError.unsupported }
-        return output.stdout
+        let home = output.stdout.trimmingCharacters(in: .newlines)
+        guard home.hasPrefix("/") else { throw RemoteRepositoryHostError.unsupported }
+        return home
       }
       home = task
       return task
@@ -208,6 +210,30 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     } catch {
       home.withValue { if $0 == task { $0 = nil } }
       throw error
+    }
+  }
+
+  /// `path` resolved on the host (`pwd -P`); nil when it is not a folder that can be
+  /// entered, or the host cannot answer.
+  func physicalPath(_ path: String) async -> String? {
+    let command = RemoteShellCommand(executable: "pwd", arguments: ["-P"], workingDirectory: path)
+    let output = try? RemoteGitShell.output(
+      of: try await lane.run(RemoteGitShell.framed(command), .commandLane), command: command)
+    let resolved = output?.stdout.trimmingCharacters(in: .newlines) ?? ""
+    return resolved.hasPrefix("/") ? resolved : nil
+  }
+
+  /// Whether `path` exists on the host; true when the host cannot answer.
+  func pathExists(_ path: String) async -> Bool {
+    let command = RemoteShellCommand(executable: "test", arguments: ["-e", path])
+    do {
+      _ = try RemoteGitShell.output(
+        of: try await lane.run(RemoteGitShell.framed(command), .commandLane), command: command)
+      return true
+    } catch let error as ShellClientError where error.exitCode == 1 {
+      return false
+    } catch {
+      return true
     }
   }
 

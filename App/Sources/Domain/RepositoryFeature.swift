@@ -67,13 +67,14 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
 
 extension RepositoryLocation {
   /// Whether `feature` works for a repository at this location. Every feature
-  /// is available locally; none of them is available on a remote host yet.
+  /// is available locally; on a remote host, only worktree creation is so far
+  /// (docs-ai 084 B3d).
   func availability(of feature: RepositoryFeature) -> FeatureAvailability {
     switch self {
     case .local:
       .available
     case .remote:
-      .unavailable(.remoteFolder(feature))
+      feature == .worktreeCreation ? .available : .unavailable(.remoteFolder(feature))
     }
   }
 }

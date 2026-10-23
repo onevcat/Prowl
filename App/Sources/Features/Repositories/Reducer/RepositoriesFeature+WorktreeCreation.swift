@@ -87,6 +87,8 @@ extension RepositoriesFeature {
       let repositoryHost = repositoryHost
       let repositoryLocation = repository.location
       return .run { send in
+        // A remote repository places worktrees by its host's home; read it alongside the refs.
+        async let homeRead = Result { try await repositoryHost.remoteHomeDirectory(in: repositoryLocation) }
         let automaticBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: repositoryLocation) ?? "HEAD"
         guard !Task.isCancelled else {
           return
@@ -118,6 +120,15 @@ extension RepositoriesFeature {
           }
           baseRefOptions = options
         }
+        let remoteHomeDirectory: String?
+        switch await homeRead {
+        case .success(let home):
+          remoteHomeDirectory = home
+        case .failure(let error):
+          guard !Task.isCancelled else { return }
+          await send(.worktreeCreation(.promptLoadFailed(message: error.localizedDescription)))
+          return
+        }
         guard !Task.isCancelled else {
           return
         }
@@ -127,26 +138,38 @@ extension RepositoriesFeature {
               repositoryID: repositoryID,
               baseRefOptions: baseRefOptions,
               automaticBaseRef: automaticBaseRef,
-              selectedBaseRef: selectedBaseRef
+              selectedBaseRef: selectedBaseRef,
+              remoteHomeDirectory: remoteHomeDirectory
             )
           )
         )
       }
       .cancellable(id: CancelID.worktreePromptLoad, cancelInFlight: true)
 
+    case .promptLoadFailed(let message):
+      state.alert = messageAlert(title: String(localized: "Unable to create worktree"), message: message)
+      return .none
+
     case .promptedWorktreeCreationDataLoaded(
       let repositoryID,
       let baseRefOptions,
       let automaticBaseRef,
-      let selectedBaseRef
+      let selectedBaseRef,
+      let remoteHomeDirectory
     ):
-      guard let repository = state.repositories[id: repositoryID], let rootURL = repository.localURL else {
+      guard let repository = state.repositories[id: repositoryID] else {
+        return .none
+      }
+      guard let placement = Self.worktreePlacement(for: repository.location, remoteHomeDirectory: remoteHomeDirectory)
+      else {
+        state.alert = messageAlert(
+          title: String(localized: "Unable to create worktree"),
+          message: RemoteRepositoryHostError.connection(.unreachable).localizedDescription)
         return .none
       }
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.location)) var repositorySettings
-      let defaultWorktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-        for: rootURL,
+      let defaultWorktreeBaseDirectory = placement.defaultBaseDirectory(
         globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
       )
@@ -158,7 +181,7 @@ extension RepositoriesFeature {
         ?? "new-worktree"
       state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
-        repositoryRootURL: rootURL,
+        placement: placement,
         repositoryName: repository.name,
         automaticBaseRef: automaticBaseRef,
         baseRefOptions: baseRefOptions,
@@ -172,7 +195,6 @@ extension RepositoriesFeature {
       )
       let branchNameSuggestionClient = branchNameSuggestionClient
       let repositoryName = repository.name
-      let repositoryRootURL = rootURL
       let repositoryLocation = repository.location
       let repositoryHost = repositoryHost
       return .run { send in
@@ -181,7 +203,7 @@ extension RepositoriesFeature {
         let remotes = (try? await repositoryHost.remoteNames(in: repositoryLocation)) ?? []
         let context = await branchNameSuggestionClient.gatherContext(
           repositoryName,
-          repositoryRootURL,
+          repositoryLocation,
           BranchNameSanitizer.branchNames(fromRefs: baseRefOptions, remotes: remotes)
         )
         let suggestion = await branchNameSuggestionClient.suggest(context)
@@ -277,22 +299,12 @@ extension RepositoriesFeature {
         )
         return .none
       }
-      // Worktree creation is local until the remote host creates worktrees (docs-ai 084 B3).
-      guard let rootURL = repository.localURL else {
-        let reason = FeatureUnavailableReason.remoteFolder(.worktreeCreation)
-        state.alert = messageAlert(title: String(localized: "Unable to create worktree"), message: reason.message)
-        return .none
-      }
       let previousSelection = state.selectedWorktreeID
       let pendingID = "pending:\(uuid().uuidString)"
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.location)) var repositorySettings
       let globalDefaultWorktreeBaseDirectoryPath = settingsFile.global.defaultWorktreeBaseDirectoryPath
-      let worktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-        for: rootURL,
-        globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
-        repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
-      )
+      let repositoryWorktreeBaseDirectoryPath = repositorySettings.worktreeBaseDirectoryPath
       let selectedBaseRef = repositorySettings.worktreeBaseRef
       let copyIgnoredOnWorktreeCreate =
         repositorySettings.copyIgnoredOnWorktreeCreate ?? settingsFile.global.copyIgnoredOnWorktreeCreate
@@ -311,7 +323,7 @@ extension RepositoriesFeature {
       let repositoryLocation = repository.location
       return .run { send in
         var newWorktreeName: String?
-        var createdWorktreeDirectory: URL?
+        var createdWorktreeLocation: RepositoryLocation?
         var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
         var progressUpdateThrottle = WorktreeCreationProgressUpdateThrottle(
           stride: worktreeCreationProgressUpdateStride
@@ -357,9 +369,9 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: rootURL,
+                    repositoryLocation: repositoryLocation,
                     name: nil,
-                    worktreeDirectory: nil
+                    worktreeLocation: nil
                   )
                 )
               )
@@ -377,9 +389,9 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: rootURL,
+                    repositoryLocation: repositoryLocation,
                     name: nil,
-                    worktreeDirectory: nil
+                    worktreeLocation: nil
                   )
                 )
               )
@@ -394,9 +406,9 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: rootURL,
+                    repositoryLocation: repositoryLocation,
                     name: nil,
-                    worktreeDirectory: nil
+                    worktreeLocation: nil
                   )
                 )
               )
@@ -411,9 +423,9 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: rootURL,
+                    repositoryLocation: repositoryLocation,
                     name: nil,
-                    worktreeDirectory: nil
+                    worktreeLocation: nil
                   )
                 )
               )
@@ -428,9 +440,9 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
-                    repositoryRootURL: rootURL,
+                    repositoryLocation: repositoryLocation,
                     name: nil,
-                    worktreeDirectory: nil
+                    worktreeLocation: nil
                   )
                 )
               )
@@ -440,6 +452,35 @@ extension RepositoriesFeature {
           }
           newWorktreeName = name
           progress.worktreeName = name
+          // A remote repository places worktrees by its host's home (docs-ai 084 B3d). This
+          // runs before the fetch and the file counts, so a host that cannot place the
+          // worktree fails before that work.
+          let worktreePlacement = try await Self.worktreePlacement(for: repositoryLocation, host: repositoryHost)
+          if case .remote = worktreePlacement {
+            for path in [repositoryWorktreeBaseDirectoryPath, placement.path]
+            where WorktreePlacement.namesAnotherUsersHome(path) {
+              throw WorktreePlacementError.anotherUsersHome(path ?? "")
+            }
+          }
+          let worktreeBaseDirectory = worktreePlacement.defaultBaseDirectory(
+            globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
+            repositoryOverridePath: repositoryWorktreeBaseDirectoryPath
+          )
+          // Resolve an explicit destination from the dialog's name / parent-folder
+          // overrides; nil keeps `wt`'s default `base/<branch>` placement.
+          let directoryOverride = worktreePlacement.resolvedDirectory(
+            defaultBaseDirectory: worktreeBaseDirectory,
+            nameOverride: placement.name,
+            pathOverride: placement.path,
+            branchName: name
+          )
+          // Failure cleanup deletes the directory outright, so it only takes one this attempt creates.
+          let worktreeDirectory =
+            directoryOverride ?? worktreeBaseDirectory.appending(path: name, directoryHint: .isDirectory)
+          let worktreeLocation = Self.location(of: worktreeDirectory, in: repositoryLocation)
+          if await !repositoryHost.pathExists(worktreeLocation) {
+            createdWorktreeLocation = worktreeLocation
+          }
           progress.stage = .checkingRepositoryMode
           await send(
             .worktreeCreation(
@@ -505,21 +546,6 @@ extension RepositoriesFeature {
             copyIgnored ? ((try? await repositoryHost.ignoredFileCount(in: repositoryLocation)) ?? 0) : 0
           progress.untrackedFilesToCopyCount =
             copyUntracked ? ((try? await repositoryHost.untrackedFileCount(in: repositoryLocation)) ?? 0) : 0
-          // Resolve an explicit destination from the dialog's name / parent-folder
-          // overrides; nil keeps `wt`'s default `base/<branch>` placement.
-          let directoryOverride = ProwlPaths.resolvedWorktreeDirectory(
-            defaultBaseDirectory: worktreeBaseDirectory,
-            repositoryRootURL: rootURL,
-            nameOverride: placement.name,
-            pathOverride: placement.path,
-            branchName: name
-          )
-          // Failure cleanup deletes the directory outright, so it only takes one this attempt creates.
-          let worktreeDirectory =
-            directoryOverride ?? worktreeBaseDirectory.appending(path: name, directoryHint: .isDirectory)
-          if !FileManager.default.fileExists(atPath: worktreeDirectory.path(percentEncoded: false)) {
-            createdWorktreeDirectory = worktreeDirectory
-          }
           progress.stage = .creatingWorktree
           progress.commandText = worktreeCreateCommand(
             baseDirectoryURL: worktreeBaseDirectory,
@@ -541,7 +567,7 @@ extension RepositoriesFeature {
             in: repositoryLocation,
             GitWorktreeCreateRequest(
               name: name,
-              repoRoot: rootURL,
+              repoRoot: worktreePlacement.repositoryRootURL,
               baseDirectory: worktreeBaseDirectory,
               copyFiles: GitWorktreeCreateRequest.CopyFiles(ignored: copyIgnored, untracked: copyUntracked),
               baseRef: resolvedBaseRef,
@@ -612,9 +638,9 @@ extension RepositoriesFeature {
                 pendingID: pendingID,
                 previousSelection: previousSelection,
                 repositoryID: repository.id,
-                repositoryRootURL: rootURL,
+                repositoryLocation: repositoryLocation,
                 name: newWorktreeName,
-                worktreeDirectory: createdWorktreeDirectory
+                worktreeLocation: createdWorktreeLocation
               )
             )
           )
@@ -656,18 +682,18 @@ extension RepositoriesFeature {
       let pendingID,
       let previousSelection,
       let repositoryID,
-      let repositoryRootURL,
+      let repositoryLocation,
       let name,
-      let worktreeDirectory
+      let worktreeLocation
     ):
       let previousSelectedWorktree = state.worktree(for: previousSelection)
       removePendingWorktree(pendingID, state: &state)
       restoreSelection(previousSelection, pendingID: pendingID, state: &state)
       let cleanup = cleanupFailedWorktree(
         repositoryID: repositoryID,
-        repositoryRootURL: repositoryRootURL,
+        repositoryLocation: repositoryLocation,
         name: name,
-        worktreeDirectory: worktreeDirectory,
+        worktreeLocation: worktreeLocation,
         state: &state
       )
       state.alert = messageAlert(title: title, message: message)
@@ -701,23 +727,24 @@ extension RepositoriesFeature {
           }
         )
       }
-      // Creation is local only, so the worktree that failed to finish is local too.
-      if let cleanupWorktree = cleanup.worktree, let cleanupDirectory = cleanupWorktree.localURL {
+      if let cleanupWorktree = cleanup.worktree {
         let repositoryLocation = cleanupWorktree.repositoryLocation
-        let destination = comparableWorktreePath(cleanupDirectory)
         let branch = cleanupWorktree.name
         let repositoryHost = repositoryHost
         effects.append(
           .run { send in
+            // Git lists a remote worktree by its physical path; the destination was placed
+            // by text, so resolve it on the host before comparing.
+            let destination = await repositoryHost.physicalLocation(cleanupWorktree.location)
             // Another creation can register this destination first; its worktree is not ours.
             let registered = (try? await repositoryHost.worktrees(in: repositoryLocation)) ?? []
-            let ownsDestination = await MainActor.run {
-              registered.contains { worktree in
-                worktree.localURL.map(comparableWorktreePath) == destination && worktree.name == branch
+            let ownedWorktree = await MainActor.run {
+              registered.first { worktree in
+                Self.isSameDestination(worktree.location, destination) && worktree.name == branch
               }
             }
-            if ownsDestination {
-              try? await repositoryHost.removeWorktree(cleanupWorktree, deleteBranch: false)
+            if let ownedWorktree {
+              try? await repositoryHost.removeWorktree(ownedWorktree, deleteBranch: false)
             }
             _ = try? await repositoryHost.pruneWorktrees(in: repositoryLocation)
             await send(.reloadRepositories(animated: true))
@@ -747,3 +774,55 @@ extension RepositoriesFeature {
 }
 
 private nonisolated let worktreeCreationLogger = ProwlLogger("WorktreeCreation")
+
+extension RepositoriesFeature {
+  /// The placement of new worktrees in `repository`; nil for a remote repository whose
+  /// host's home is unknown.
+  nonisolated static func worktreePlacement(
+    for repository: RepositoryLocation, remoteHomeDirectory: String?
+  ) -> WorktreePlacement? {
+    switch repository {
+    case .local(let url):
+      return .local(repositoryRootURL: url)
+    case .remote(_, let path):
+      guard let remoteHomeDirectory else { return nil }
+      return .remote(repositoryPath: path, homeDirectory: remoteHomeDirectory)
+    }
+  }
+
+  /// The placement of new worktrees in `repository`, reading the host's home for a remote one.
+  nonisolated static func worktreePlacement(
+    for repository: RepositoryLocation, host: RepositoryHost
+  ) async throws -> WorktreePlacement {
+    let home = try await host.remoteHomeDirectory(in: repository)
+    guard let placement = worktreePlacement(for: repository, remoteHomeDirectory: home) else {
+      throw RepositoryHostError.remoteUnavailable(repository)
+    }
+    return placement
+  }
+
+  /// A destination folder as a location on the repository's host.
+  nonisolated static func location(of directory: URL, in repository: RepositoryLocation) -> RepositoryLocation {
+    switch repository {
+    case .local:
+      return .local(directory.standardizedFileURL)
+    case .remote(let hostProfileID, _):
+      return .remote(
+        hostProfileID: hostProfileID, path: RemotePaths.canonicalPath(directory.path(percentEncoded: false)))
+    }
+  }
+
+  /// Whether two worktree folders are the same: local paths as the file system compares
+  /// them, host paths as text on the same host.
+  @MainActor
+  static func isSameDestination(_ lhs: RepositoryLocation, _ rhs: RepositoryLocation) -> Bool {
+    switch (lhs, rhs) {
+    case (.local(let lhsURL), .local(let rhsURL)):
+      comparableWorktreePath(lhsURL) == comparableWorktreePath(rhsURL)
+    case (.remote(let lhsHost, let lhsPath), .remote(let rhsHost, let rhsPath)):
+      lhsHost == rhsHost && RemotePaths.components(lhsPath) == RemotePaths.components(rhsPath)
+    default:
+      false
+    }
+  }
+}

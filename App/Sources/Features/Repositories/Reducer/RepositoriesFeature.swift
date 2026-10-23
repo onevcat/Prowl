@@ -133,11 +133,16 @@ struct RepositoriesFeature {
       fetchRemote: Bool,
       placement: WorktreePlacementOverride = WorktreePlacementOverride()
     )
+    /// The prompt could not load, such as when a remote host's home could not be read.
+    case promptLoadFailed(message: String)
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
       baseRefOptions: [String],
       automaticBaseRef: String,
-      selectedBaseRef: String?
+      selectedBaseRef: String?,
+      /// The host's home for a remote repository, which places its worktrees; nil when
+      /// it could not be read, and for a local repository.
+      remoteHomeDirectory: String? = nil
     )
     case startPromptedWorktreeCreation(
       repositoryID: Repository.ID,
@@ -165,10 +170,10 @@ struct RepositoriesFeature {
       pendingID: Worktree.ID,
       previousSelection: Worktree.ID?,
       repositoryID: Repository.ID,
-      repositoryRootURL: URL,
+      repositoryLocation: RepositoryLocation,
       name: String?,
       /// The directory this attempt created, if any. Cleanup removes only this directory.
-      worktreeDirectory: URL?
+      worktreeLocation: RepositoryLocation?
     )
     case consumeSetupScript(Worktree.ID)
     case consumeTerminalFocus(Worktree.ID)

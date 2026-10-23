@@ -17,14 +17,16 @@ struct RepositoryFeatureAvailabilityTests {
     }
   }
 
-  @Test func everyFeatureIsUnavailableRemotelyWithAReason() {
+  @Test func everyFeatureButWorktreeCreationIsUnavailableRemotelyWithAReason() {
     let location = RemoteRepositoryFixtures.location("/home/dev/app")
 
-    for feature in RepositoryFeature.allCases {
+    for feature in RepositoryFeature.allCases where feature != .worktreeCreation {
       let reason = location.availability(of: feature).unavailableReason
       #expect(reason == .remoteFolder(feature))
       #expect(reason?.message.isEmpty == false)
     }
+    // The remote host creates worktrees (docs-ai 084 B3d).
+    #expect(location.availability(of: .worktreeCreation) == .available)
     #expect(
       location.availability(of: .profileLaunch).unavailableReason?.message
         == "Agent Profiles cannot launch in remote folders yet."
