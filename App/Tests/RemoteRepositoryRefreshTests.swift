@@ -253,16 +253,29 @@ struct RemoteRepositoryRefreshTests {
     try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: false)
     let repository = try await fixture.addLinkedWorktree("parent/repo", branch: "side")
     let removedRepository = parent.appending(path: "gone").path
+    // Links outside the locked folder: one to the repository, one to the path that is gone,
+    // and one, relative, through a link to the parent.
+    let alias = fixture.root.appending(path: "alias").path
+    let goneAlias = fixture.root.appending(path: "gone-alias").path
+    let parentAlias = fixture.root.appending(path: "parent-alias").path
+    try FileManager.default.createSymbolicLink(atPath: alias, withDestinationPath: repository.path)
+    try FileManager.default.createSymbolicLink(atPath: goneAlias, withDestinationPath: removedRepository)
+    try FileManager.default.createSymbolicLink(atPath: parentAlias, withDestinationPath: "parent")
+    let throughParentAlias = parentAlias + "/repo"
     try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: parent.path)
 
-    let hidden = await Self.runScript(repository.path)
-    let hiddenAndGone = await Self.runScript(removedRepository)
+    var hidden: [RemoteCommandOutcome] = []
+    for path in [repository.path, removedRepository, alias, goneAlias, throughParentAlias] {
+      hidden.append(await Self.runScript(path))
+    }
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
 
-    #expect(throws: RemoteRepositoryRefreshError.inaccessibleFolder) { try RemoteRepositoryRefresh.parse(hidden) }
-    #expect(throws: RemoteRepositoryRefreshError.inaccessibleFolder) {
-      try RemoteRepositoryRefresh.parse(hiddenAndGone)
+    for outcome in hidden {
+      #expect(throws: RemoteRepositoryRefreshError.inaccessibleFolder) { try RemoteRepositoryRefresh.parse(outcome) }
     }
+    // A link whose target is gone, below a folder that can be searched, is missing.
+    let goneThroughAlias = await Self.runScript(goneAlias)
+    #expect(throws: RemoteRepositoryRefreshError.missingFolder) { try RemoteRepositoryRefresh.parse(goneThroughAlias) }
     // Once the parent can be searched, the same path is found (a linked worktree, so not the
     // root), and the path that is gone is missing.
     let found = await Self.runScript(repository.path)

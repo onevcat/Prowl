@@ -233,13 +233,30 @@ nonisolated struct RemoteRepositoryRefresh: Equatable, Sendable {
     GIT_OPTIONAL_LOCKS=0
     export GIT_OPTIONAL_LOCKS
     prowl_fail() { printf 'PROWL_REFRESH\t\#(formatVersion)\nERROR\t%s\nEND\n' "$1"; exit 0; }
-    # Missing only when the deepest ancestor that can be seen is a folder that can be
-    # searched: then the next part of the path does not exist. An ancestor that cannot be
-    # searched hides the path, which may still exist.
+    # True only when the path surely does not exist: the deepest part of it that can be
+    # seen is a folder that can be searched, so the next part is absent. A link is followed
+    # to its target. A folder that cannot be searched hides the path, which may still exist.
+    prowl_is_missing() {
+      prowl_p=$1
+      prowl_rest=
+      prowl_hops=0
+      while [ ! -e "$prowl_p" ]; do
+        if [ -L "$prowl_p" ]; then
+          [ "$prowl_hops" -lt 16 ] || return 1
+          prowl_t=$(readlink -- "$prowl_p") || return 1
+          case $prowl_t in /*) ;; *) prowl_t=$(dirname -- "$prowl_p")/$prowl_t ;; esac
+          prowl_p=$prowl_t$prowl_rest
+          prowl_rest=
+          prowl_hops=$((prowl_hops + 1))
+          continue
+        fi
+        prowl_rest=/$(basename -- "$prowl_p")$prowl_rest
+        prowl_p=$(dirname -- "$prowl_p")
+      done
+      [ -d "$prowl_p" ] && [ -x "$prowl_p" ]
+    }
     if [ ! -e "$1" ]; then
-      prowl_path=$1
-      while [ ! -e "$prowl_path" ]; do prowl_path=$(dirname -- "$prowl_path"); done
-      [ -d "$prowl_path" ] && [ -x "$prowl_path" ] && prowl_fail missing
+      prowl_is_missing "$1" && prowl_fail missing
       prowl_fail inaccessible
     fi
     cd -- "$1" 2>/dev/null || prowl_fail inaccessible

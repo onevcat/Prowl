@@ -42,8 +42,10 @@ holds the script, the parser and the mapping.
   local host.
 - A folder that the script cannot refresh is reported in the reply, so the command itself
   fails only for a connection error. The script tells apart:
-  - a path that does not exist: the deepest ancestor that the script can see is a folder
-    that it can search, so the next part of the path is really absent;
+  - a path that does not exist: the deepest part of the path that the script can see is a
+    folder that it can search, so the next part is really absent. The walk follows links
+    (with `readlink`, at most 16), so a link to a repository below a folder that cannot be
+    searched is not missing, and a link whose target is gone is;
   - a path that exists but cannot be entered (no permission, or not a folder), or a path
     below an ancestor that cannot be searched. `test -e` fails there too, but the path may
     still exist, so it is not reported as missing;
@@ -148,7 +150,9 @@ same rule. It reads path components only and never touches the file system.
   - a real repository with a linked worktree, tracked edits and an untracked file;
   - a missing path, a file, a folder without permission, a plain folder, a `PATH`
     without git, a subfolder of the repository and a linked worktree, each with its error;
-  - a repository, and a path that is gone, below a folder that cannot be searched: both
-    are inaccessible, and after the permission is back, the first is found and the second
-    is missing;
+  - a repository, and a path that is gone, below a folder that cannot be searched, each
+    reached directly, through an absolute link and through a relative link to the parent:
+    all are inaccessible; after the permission is back, the repository is found, and the
+    path that is gone (also through its link) is missing. The same cases gave the same
+    results for a non-root user in the Debian container (GNU tools);
   - a repository without a commit, which has no line changes.
