@@ -7,6 +7,8 @@ import ProwlCLIShared
 struct TerminalRetainedSurfaceContext {
   let launchProfile: WorktreeTerminalState.SurfaceLaunchProfile?
   let hookRegistration: AgentHookLaunchRegistration?
+  /// A remote pane (docs-ai 084 C3b) keeps its host label and recipe across an undo.
+  var remoteLaunchOrigin: RemoteLaunchOrigin?
 }
 
 /// A tab that was closed but whose surfaces are still alive, so an undo can put

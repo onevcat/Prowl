@@ -302,10 +302,11 @@ struct AppFeature {
         return .merge(effects)
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
-        // A remote worktree gets its first tab once remote terminals exist (docs-ai 084 C3).
         guard worktree.location.availability(of: .terminalTab).isAvailable else { return .none }
+        // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
         let shouldRunSetupScript =
           state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          && worktree.location.availability(of: .terminalScript).isAvailable
         return .run { _ in
           await terminalClient.send(
             .ensureInitialTab(
@@ -834,8 +835,10 @@ struct AppFeature {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(
-          worktree.id)
+        // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
+        let shouldRunSetupScript =
+          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          && worktree.availability(of: .terminalScript).isAvailable
         return .run { _ in
           await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
@@ -876,8 +879,8 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        // A script runs in a terminal, and a remote folder opens none yet (docs-ai 084 C3).
-        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+        // A remote folder runs no script yet (docs-ai 084 C3c).
+        if let reason = worktree.availability(of: .terminalScript).unavailableReason {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -947,7 +950,7 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+        if let reason = worktree.availability(of: .terminalScript).unavailableReason {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         guard

@@ -274,19 +274,23 @@ struct RepositoryHostTests {
     }
   }
 
-  @Test(.dependencies) func openingATerminalTabInARemoteWorktreeShowsTheReason() async {
+  /// The sidebar's New Terminal Tab opens a remote tab, which starts in the remote folder
+  /// (docs-ai 084 C3b).
+  @Test(.dependencies) func openingATerminalTabInARemoteWorktreeOpensARemoteTab() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
+    let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.terminalClient.send = { _ in Issue.record("no terminal command for a remote worktree") }
+      $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
     }
     store.exhaustivity = .off
 
     await store.send(.newTerminalTab(remote.worktrees[0].id))
-    await store.receive(\.showToast)
+    await store.finish()
+    #expect(sent.value == [.createTab(remote.worktrees[0], runSetupScriptIfNew: false)])
   }
 
   @Test(.dependencies) func remoteRepositoriesStayInTheRootListsAfterASnapshotLoad() async {

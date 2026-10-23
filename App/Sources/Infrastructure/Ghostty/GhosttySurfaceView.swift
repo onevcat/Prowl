@@ -136,7 +136,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private(set) var surface: ghostty_surface_t?
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
   private let workingDirectoryCString: UnsafeMutablePointer<CChar>?
-  private let initialInputCString: UnsafeMutablePointer<CChar>?
+  private var initialInputCString: UnsafeMutablePointer<CChar>?
   private let envVarCStrings: [UnsafeMutablePointer<CChar>]
   private let envVarEntries: UnsafeMutablePointer<ghostty_env_var_s>?
   private let envVarCount: Int
@@ -397,6 +397,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
     for pointer in envVarCStrings {
       free(pointer)
     }
+  }
+
+  /// Replaces the input that the shell gets once it starts. It works only before the
+  /// surface exists: a deferred remote pane learns its launcher after staging (docs-ai 084
+  /// C3b).
+  func setInitialInput(_ input: String?) {
+    guard !surfaceCreationArmed else { return }
+    if let initialInputCString { free(initialInputCString) }
+    initialInputCString = input.map { $0.withCString { strdup($0) } }
+  }
+
+  var initialInputForTesting: String? {
+    initialInputCString.map { String(cString: $0) }
   }
 
   @discardableResult

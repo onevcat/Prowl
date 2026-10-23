@@ -37,7 +37,8 @@ struct TerminalEventCoalescer {
     case .customCommandSucceeded, .notificationReceived, .notificationIndicatorChanged,
       .tabCreated, .tabClosed, .tabRestored, .agentEntryRemoved, .commandPaletteToggleRequested,
       .setupScriptConsumed, .layoutRestored, .layoutRestoreFailed,
-      .agentProfileLaunched, .agentProfileLaunchWarning, .agentProfileLaunchFailed, .remoteAgentConsentNeeded:
+      .agentProfileLaunched, .agentProfileLaunchWarning, .agentProfileLaunchFailed, .remoteAgentConsentNeeded,
+      .remoteTerminalFailed:
       return nil
     }
   }

@@ -1766,6 +1766,55 @@ struct RemoteAgentDetectionTests {
     await settle { fixture.source.refreshes == 2 }
   }
 
+  private static func origin(recipe: SSHConnectionRecipe) -> RemoteLaunchOrigin {
+    RemoteLaunchOrigin(
+      hostProfileID: UUID(), alias: "mini", recipe: recipe, nonce: "0123456789abcdef", hasFirstCommand: false,
+      launchedAt: Date())
+  }
+
+  /// A pane that Prowl opened in a remote folder (docs-ai 084 C3b) needs no consent, uses the
+  /// stored recipe instead of the `ssh` arguments, and shows the profile's alias. Once its
+  /// `ssh` ended, a later `ssh` in the pane is the user's own and asks.
+  @Test func aRemoteFolderPaneUsesItsStoredRecipeWithoutConsent() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = [:]
+    var asked: [String] = []
+    fixture.state.onRemoteAgentConsentNeeded = { _, destination in asked.append(destination) }
+    let stored = SSHConnectionRecipe(destination: "dev@mini.local", options: ["-p", "22"])
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(recipe: stored)
+
+    await bindClaude(fixture, probe: probe)
+
+    #expect(asked.isEmpty)
+    #expect(fixture.source.recipes == [stored])
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostLabel == "mini")
+    probe.job = shellJob
+    await detect(fixture)
+    probe.job = sshJob
+    await detect(fixture)
+    #expect(asked == ["mini"])
+  }
+
+  /// The kill switch still turns detection off for a remote folder's pane.
+  @Test func theKillSwitchTurnsOffARemoteFolderPane() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = ["PROWL_REMOTE_AGENT_DETECTION": "0"]
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+
+    probe.job = sshJob
+    await detect(fixture)
+    for _ in 0..<50 { await Task.yield() }
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID] == nil)
+    #expect(fixture.source.attempts == 0)
+  }
+
   @Test func paneShellsExportThePaneIdUnderAnSSHForwardedName() {
     let surface = GhosttySurfaceView(
       runtime: GhosttyRuntime(), workingDirectory: nil, fontSize: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,

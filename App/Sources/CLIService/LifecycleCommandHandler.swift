@@ -91,6 +91,8 @@ enum CLIProfileLaunchFailure: Error, Equatable, Sendable {
         "The split anchor for Agent Profile “\(profile.name)” is no longer available."
       case .splitCreationFailed(.insertionFailed):
         "Failed to insert the split for Agent Profile “\(profile.name)”."
+      case .splitCreationFailed(.remoteFolder):
+        "Agent Profile “\(profile.name)” cannot launch in a remote folder yet."
       case .tabCreationFailed:
         "Failed to create a tab for Agent Profile “\(profile.name)”."
       case .launchedSurfaceMissing:
@@ -248,12 +250,12 @@ final class LifecycleCommandHandler: CommandHandler {
     case .failure(let error):
       return error.commandResponse(command: "create")
     }
-    // A remote folder opens no terminal until its launcher exists (docs-ai 084 C3); this
-    // comes before the path, a host path that this Mac cannot check. An Agent Profile
-    // launch refuses with its own reason.
+    // The CLI creates no tab in a remote folder until its input and waits work there
+    // (docs-ai 084 C3c); this comes before the path, a host path that this Mac cannot check.
+    // An Agent Profile launch refuses with its own reason.
     if input.launch == nil, RepositoryLocation.hasRemoteForm(target.worktreeID) {
       return errorResponse(
-        command: "create", code: CLIErrorCode.createFailed, message: "Terminals cannot open in remote folders yet.")
+        command: "create", code: CLIErrorCode.createFailed, message: "The CLI cannot open tabs in remote folders yet.")
     }
 
     let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)

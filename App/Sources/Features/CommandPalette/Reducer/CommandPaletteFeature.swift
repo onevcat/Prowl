@@ -250,7 +250,7 @@ struct CommandPaletteFeature {
     // actions themselves.
     let targetLocation =
       worktreeActionTargetID.flatMap(RepositoryLocation.init(id:)) ?? repositories.selectedTerminalWorktree?.location
-    let opensTerminals = targetLocation?.availability(of: .terminalTab).isAvailable != false
+    let runsScripts = targetLocation?.availability(of: .terminalScript).isAvailable != false
     // Diff view items follow the broader diff target (worktree or workspace
     // child); the navigation/action items below stay worktree-scoped.
     if repositories.selectedDiffTargetID != nil {
@@ -267,7 +267,7 @@ struct CommandPaletteFeature {
           repositories: repositories,
           worktreeID: worktreeActionTargetID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID,
-          includesRunScript: opensTerminals
+          includesRunScript: runsScripts
         )
       )
     } else if worktreeActionTargetID != nil {
@@ -277,11 +277,11 @@ struct CommandPaletteFeature {
           worktreeID: worktreeActionTargetID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID,
           includeSelectionScopedItems: false,
-          includesRunScript: opensTerminals
+          includesRunScript: runsScripts
         )
       )
     }
-    if opensTerminals {
+    if runsScripts {
       items.append(contentsOf: customCommandItems(customCommands))
     }
     items.append(
