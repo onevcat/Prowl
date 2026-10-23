@@ -23,6 +23,7 @@ All of it shows only for a remote folder, which exists only with `PROWL_REMOTE_F
 | Toolbar Open menu: Copy Path | Enabled; copies the host path |
 | Sidebar menus (worktree and repository): Reveal in Finder | Shown disabled with the reason; before, it was hidden |
 | Worktree menu: Show Diff, Show Outgoing Changes | Disabled with the reason |
+| Worktree menu: New Terminal Tab | Disabled with the reason (found in the visual check) |
 | Worktree row change counts | Not a button; the tooltip gives the reason and the untracked-file note |
 | Agents popover: Agent Profile rows | Disabled and dimmed, with the reason as subtitle |
 | Quick Launch (toolbar) | Enabled, with the reason as tooltip; a click shows it as a toast (A4a) |
