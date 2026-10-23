@@ -154,6 +154,24 @@ struct RemoteTerminalTabTests {
     #expect(state.trees[tabID]?.leaves().count == 1)
   }
 
+  /// A pane that waits for its launcher has no native surface: an occlusion request (the
+  /// worktree went to the background) is kept, and the new surface starts with it instead of
+  /// Ghostty's visible default.
+  @Test func aDeferredSurfaceKeepsItsOcclusionForTheNewSurface() {
+    let view = GhosttySurfaceView(
+      runtime: GhosttyRuntime(), workingDirectory: nil, fontSize: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      defersSurfaceCreation: true)
+    view.setOcclusion(false)
+    #expect(view.desiredOcclusionForTesting == false)
+
+    var state = GhosttySurfaceView.OcclusionState()
+    state.setDesired(false)
+    let pending = state.resetForNewSurface()
+    let applies = state.prepareToApply(false)
+    #expect(pending == false)
+    #expect(applies)
+  }
+
   // MARK: - Completion
 
   private func startedRemotePane(

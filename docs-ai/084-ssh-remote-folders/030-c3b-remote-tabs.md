@@ -35,7 +35,10 @@ refuses (the C1c backstop). It branches to the remote tab:
    command.
 4. When staging returns, the pane gets its input (`GhosttySurfaceView.setInitialInput`,
    which works only before the surface exists), and the surface is created. The pane took
-   focus while it had no surface, so Ghostty gets the focus then. A failure
+   focus while it had no surface, so Ghostty gets the focus then. An occlusion request
+   (the worktree went to the background while staging) is kept, and the new surface
+   starts with it instead of Ghostty's visible default
+   (`OcclusionState.resetForNewSurface`). A failure
    closes the tab without an undo record, because nothing ran in it. The user then gets a
    toast through the `remoteTerminalFailed` event: "The terminal on <alias> did not start:
    <reason>."
@@ -140,8 +143,8 @@ with the pane (`TerminalRetainedSurfaceContext`).
   selection that is not a saved worktree fails validation, and the local layout would be
   lost. A restored leaf would be a local shell until C5.
 - **CLI.**
-  - `create tab` keeps refusing a remote folder until C3c, with "The CLI cannot open tabs in
-    remote folders yet.".
+  - `create tab` and the legacy `tab create` keep refusing a remote folder until C3c, with
+    "The CLI cannot open tabs in remote folders yet.", before any path check.
   - A remote folder with a pane resolves like any worktree.
   - A remote folder without one gets "Worktree '…' is a remote folder with no open
     terminal.".
@@ -161,6 +164,9 @@ with the pane (`TerminalRetainedSurfaceContext`).
     pane's own `ssh` keeps the session, no `ssh` ends it. A finish after a probe saw the
     `ssh` exit completes nothing.
   - An `ssh` without the launch's nonce is not bound (checked red).
+  - A deferred surface keeps an occlusion request for its new surface (checked red).
+- `CLITabCommandHandlerTests/createRefusesARemoteFolder`: the legacy `tab create`, with and
+  without a path (checked red).
   - No layout is applied to a remote folder.
   - The typed line quotes options and refuses backslashes, control characters and unsafe
     launcher paths.
