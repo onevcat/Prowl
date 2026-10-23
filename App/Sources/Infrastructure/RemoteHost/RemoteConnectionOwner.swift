@@ -234,7 +234,7 @@ actor RemoteConnectionOwner {
     (
       [
         "connection refused", "timed out", "no route to host", "network is unreachable", "connection closed",
-        "broken pipe",
+        "broken pipe", "connection reset", "kex_exchange_identification",
       ], .unreachable
     ),
   ]
