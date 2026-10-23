@@ -118,6 +118,11 @@ nonisolated enum RemoteLauncher {
   /// - fish: `--init-command`, which runs after the user's configuration;
   /// - any other shell runs the command with `-i -c`, then `exec`s a login shell, without
   ///   the persistent state.
+  ///
+  /// The launcher waits for the shell instead of `exec`ing it. When the shell ends before
+  /// its first command finished (`exit`, `errexit`, a replaced hook), the launcher reports
+  /// the shell's exit status. The shell itself reports only a finished first command, so no
+  /// trap of the user's is replaced and a subshell's failure is not taken for the command's.
   static func launcher(for launch: RemoteLaunch) -> String {
     let quote = RemoteShellCommand.quote
     let exports = launch.environment.map { "\($0.name)=\(quote($0.value)); export \($0.name)" }
@@ -162,19 +167,19 @@ nonisolated enum RemoteLauncher {
             export PROWL_USER_ZDOTDIR PROWL_USER_ZDOTDIR_SET
           fi
           ZDOTDIR=$prowl_dir/zsh; export ZDOTDIR
-          exec "$prowl_shell" -i -l
+          "$prowl_shell" -i -l
           ;;
         bash)
           cat > "$prowl_dir/bashrc" <<'PROWL_EOF'
       \(bashRC(marker: marker(posixMarker)))
       PROWL_EOF
-          exec "$prowl_shell" --noprofile --rcfile "$prowl_dir/bashrc" -i
+          "$prowl_shell" --noprofile --rcfile "$prowl_dir/bashrc" -i
           ;;
         fish)
           cat > "$prowl_dir/init.fish" <<'PROWL_EOF'
       \(fishInit(marker: marker(fishMarker)))
       PROWL_EOF
-          exec "$prowl_shell" -i -l --init-command 'source $PROWL_LAUNCH_DIR/init.fish'
+          "$prowl_shell" -i -l --init-command 'source $PROWL_LAUNCH_DIR/init.fish'
           ;;
         *)
           unset PROWL_LAUNCH_DIR
@@ -186,6 +191,16 @@ nonisolated enum RemoteLauncher {
           exec "$prowl_shell" -l
           ;;
       esac
+      # The shell ended. Its directory is still here when the first command did not finish
+      # in it, such as an `exit` or an `errexit` failure in the command, or startup files that
+      # never ran it: the shell's exit status reports instead, so a launch always reports.
+      prowl_status=$?
+      if [ -d "$prowl_dir" ]; then
+        rm -rf -- "$prowl_dir"
+        if [ "$prowl_status" = 0 ]; then prowl_state=done; else prowl_state=error; fi
+        \(marker(posixMarker))
+      fi
+      exit "$prowl_status"
 
       """
   }
@@ -224,10 +239,6 @@ nonisolated enum RemoteLauncher {
   /// The wrapper's `.zlogin`, the last startup file of a login shell: the user's `ZDOTDIR`
   /// comes back for good, and the first command runs from a `precmd` hook added after the
   /// user's own hooks, such as an instant prompt that captures output until its hook ran.
-  /// A first command that ends the shell still reports: `exit` through a top-level `EXIT`
-  /// trap (unless the user set one; `zshexit` hooks do not run for a login shell on every
-  /// build), and an `errexit` failure through `TRAPZERR` (unless the user has one), as zsh
-  /// runs neither an `always` block nor the `EXIT` trap when it fails inside a function.
   private static func zshLogin(marker: String) -> String {
     """
     \(zshUserFile(".zlogin"))
@@ -241,29 +252,17 @@ nonisolated enum RemoteLauncher {
       unset prowl_launch_dir
       \(marker)
     }
-    if [[ "$(trap)" != *" EXIT"* ]]; then
-      trap 'prowl_exit_status=$?; (( $+functions[prowl_report] )) && prowl_report $prowl_exit_status' EXIT
-    fi
     prowl_first_command() {
       precmd_functions=(${precmd_functions:#prowl_first_command})
-      local prowl_zerr=0
-      if (( ! $+functions[TRAPZERR] )); then
-        prowl_zerr=1
-        TRAPZERR() { local prowl_failed=$?; [[ -o errexit ]] && prowl_report $prowl_failed; return 0; }
-      fi
       source "$prowl_launch_dir/command"
-      local prowl_status=$?
-      (( prowl_zerr )) && unfunction TRAPZERR
-      prowl_report $prowl_status
+      prowl_report $?
       unfunction prowl_first_command prowl_report
     }
     precmd_functions+=(prowl_first_command)
     """
   }
 
-  /// The bash rc file: the login files, then the first command. A first command that ends
-  /// the shell (`exit`, or an `errexit` failure) still reports through an `EXIT` trap; the
-  /// user's own `EXIT` trap comes back afterwards.
+  /// The bash rc file: the login files, then the first command.
   private static func bashRC(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the login files, then the first command.
@@ -282,18 +281,13 @@ nonisolated enum RemoteLauncher {
       unset prowl_launch_dir
       \(marker)
     }
-    prowl_user_exit_trap=$(trap -p EXIT)
-    trap 'prowl_report $?' EXIT
     . "$prowl_launch_dir/command"
     prowl_report $?
-    if [ -n "$prowl_user_exit_trap" ]; then eval "$prowl_user_exit_trap"; else trap - EXIT; fi
     unset -f prowl_report
-    unset prowl_user_exit_trap
     """
   }
 
-  /// The fish init command: the first command after the configuration. fish has no
-  /// `errexit`; an `exit` in the first command still reports through `fish_exit`.
+  /// The fish init command: the first command after the configuration.
   private static func fishInit(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the first command, after the configuration.
@@ -307,12 +301,9 @@ nonisolated enum RemoteLauncher {
       test $prowl_status -eq 0; and set prowl_state done
       \(marker)
     end
-    function prowl_on_exit --on-event fish_exit
-      prowl_report $status
-    end
     source $prowl_launch_dir/command
     prowl_report $status
-    functions -e prowl_report prowl_on_exit
+    functions -e prowl_report
     """
   }
 
