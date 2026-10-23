@@ -3,7 +3,8 @@
 ## Context
 
 The "Remote refresh (D4)" section of [000-plan.md](000-plan.md) describes what one poll of
-a remote repository returns. B3 is split into three PRs (see the plan's slice table):
+a remote repository returns. B3 was split into three PRs (see the plan's slice table;
+B3b later split worktree creation into its own PR, see 020):
 
 - **B3a (this record):** the refresh script, the reply format and its parser, and the
   mapping to `Worktree` and `GitLineChanges`;

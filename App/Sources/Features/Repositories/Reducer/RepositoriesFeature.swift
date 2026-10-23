@@ -607,7 +607,8 @@ struct RepositoriesFeature {
   @Dependency(GithubCLIClient.self) var githubCLI
   /// Repository-scoped git operations go through the host (docs-ai 084);
   /// `gitClient` stays for local URLs that are not a repository's location.
-  var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient) }
+  var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient, remote: remoteRepositoryHosts) }
+  @Dependency(RemoteRepositoryHostClient.self) var remoteRepositoryHosts
   @Dependency(PullRequestRefreshCoordinatorClient.self) var pullRequestRefreshCoordinator
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(OpenURLClient.self) var openURLClient
