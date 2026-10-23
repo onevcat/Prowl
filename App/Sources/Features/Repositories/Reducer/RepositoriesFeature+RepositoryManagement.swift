@@ -352,9 +352,10 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map(\.location)
+          let shownEntries = await shownEntries(remainingEntries)
+          let roots = shownEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(
-            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
+            shownEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -390,9 +391,10 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map(\.location)
+          let shownEntries = await shownEntries(remainingEntries)
+          let roots = shownEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(
-            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
+            shownEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -494,10 +496,11 @@ extension RepositoriesFeature {
     invalidRoots: [String], openFailures: [String], knownRemoteRepositories: [Repository]
   ) async -> Action {
     let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
-    let mergedRoots = mergedEntries.map(\.location)
     await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+    let shownEntries = shownEntries(mergedEntries)
+    let mergedRoots = shownEntries.map(\.location)
     let (repositories, failures) = await loadRepositoriesData(
-      mergedEntries, knownRemoteRepositories: knownRemoteRepositories)
+      shownEntries, knownRemoteRepositories: knownRemoteRepositories)
     return .repositoryManagement(
       .openRepositoriesFinished(
         repositories,

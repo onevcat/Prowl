@@ -19,9 +19,23 @@ is three changes, so C1 is three PRs:
 
 ## Change
 
-Everything is behind `PROWL_REMOTE_FOLDERS=1`. Without it, nothing changes. Views read
+Everything is behind `PROWL_REMOTE_FOLDERS=1`. Views read
 `RemoteFolders.isEnabledInThisProcess`, which reads the environment once. Reducers read the
-`RemoteFoldersEnabledKey` dependency, so tests can turn the flag on.
+`RemoteFoldersEnabledKey` dependency (on in tests, which turn it off where they need to).
+
+### Without the flag
+
+The flag also covers folders that were added in a session with the flag on. The Debug and
+the installed app share `~/.prowl`, so one opted-in session must not make the default app
+show or connect to a remote folder. While the flag is off:
+
+- the stored entries stay as they are: a load, an add or a removal saves the full list;
+- remote entries do not load, show or connect (`shownEntries`), and the restored snapshot
+  drops remote repositories, so there is no polling and no connection hold;
+- the prunes keep every ID with the remote form (`keepsHiddenRemoteID`): pins, the
+  repository order, the worktree order, archived worktrees and `prowlCreatedWorktreeIDs`.
+
+With the flag on again, the folders come back with their pins and orders.
 
 ### Entry points
 
@@ -110,6 +124,9 @@ connects again. Both are one-time costs of adding a folder.
   - the kill switch stops remote folder connections;
   - an added folder becomes an entry and loads; in tests, without a host connection, it
     stays listed as a load failure.
+  - while the flag is off, a stored remote folder stays stored and hidden: only the local
+    folder loads, no host is asked, and pins and orders are kept (checked red without the
+    gate).
 - `RemoteRepositoryHostTests`: on a real repository through the local lane, a main path, a
   subfolder and a linked worktree all find the main worktree. A worktree of a bare
   repository finds the bare repository. A plain folder is plain, a missing path is
