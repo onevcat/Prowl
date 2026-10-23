@@ -1815,6 +1815,7 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.source.recipes == [stored])
     #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "mini")
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostLabel == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostProfileID != nil)
     probe.job = shellJob
     await detect(fixture)
     probe.job = sshJob
