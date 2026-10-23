@@ -38,6 +38,12 @@ share one path; only the location differs.
   host did not answer in time."). One unreachable host never holds back the local
   repositories for the lane's 30 s deadline, on launch or on any reload, such as after a
   worktree creation. B3f tries the host again.
+  - At the deadline, the load returns at once and only cancels the remote operation
+    (`DeadlineRace`). A task group would wait for the operation to end, and some remote
+    waits do not respond to cancellation: the shared read of the login `PATH` runs in a
+    task of its own, with its own budget. With a task group, a 10 s deadline took 13 s in
+    a reproduction.
+  - A cancelled load returns at once too.
 - **A failure.** It becomes a `LoadFailure` with the error's message, for example:
   - "The folder on the remote host is not a Git repository.";
   - "The remote host refused the SSH login.";
@@ -78,6 +84,8 @@ exists before C1, so nothing connects without consent.
   connection's message. A folder that is not a repository gives a failure that is not
   marked;
 - a host that does not answer fails the load at the deadline, marked unreachable;
+- a remote wait that ignores cancellation does not hold the load past the deadline. With
+  the task-group race, this test hangs;
 - only a host that does not answer, or a timeout, is unreachable: a refused login, a
   changed host key, a shell failure and a missing profile are not;
 - a remote plain folder without a host connection fails to load.

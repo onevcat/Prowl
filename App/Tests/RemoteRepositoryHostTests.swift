@@ -795,6 +795,39 @@ struct RemoteRepositoryHostTests {
     #expect(failures.first?.message == "The remote host did not answer in time.")
   }
 
+  /// A wait that ignores cancellation, as the shared read of the login `PATH` does, must
+  /// not hold the load past its deadline.
+  @Test(.dependencies) func theDeadlineDoesNotWaitForAnOperationThatIgnoresCancellation() async throws {
+    let clock = TestClock()
+    let gate = CancellationIgnoringGate()
+    let stuck = RemoteCommandLane(
+      run: { _, _ in
+        await gate.wait()
+        return .timedOut
+      },
+      runScript: { _, _ in
+        await gate.wait()
+        return .timedOut
+      })
+    let hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    let remote = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: stuck)
+    let feature = withDependencies {
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil })
+      $0.continuousClock = clock
+    } operation: {
+      RepositoriesFeature()
+    }
+    let location = RemoteRepositoryFixtures.location("/srv/app")
+
+    let load = Task { await feature.loadRepositoriesData([PersistedRepositoryEntry(path: location.id, kind: .git)]) }
+    await Task.megaYield()
+    await clock.advance(by: RepositoriesFeature.remoteLoadDeadline)
+    let (_, failures) = await load.value
+    gate.open()
+
+    #expect(failures.map(\.isHostUnreachable) == [true])
+  }
+
   /// A refused login or a changed host key needs the user, so it is not "unreachable".
   @Test func onlyAHostThatDoesNotAnswerIsUnreachable() {
     #expect(isRemoteHostUnreachable(RemoteRepositoryHostError.connection(.unreachable)))
@@ -1114,4 +1147,31 @@ private nonisolated func greeted(_ outcome: RemoteCommandOutcome) -> RemoteComma
     RemoteCommandResult(
       exitCode: result.exitCode, output: Data("Welcome to the build server!\n".utf8) + result.output,
       outputTruncated: result.outputTruncated, errorOutput: result.errorOutput))
+}
+
+/// Suspends callers until `open`, whether or not their task is cancelled.
+private nonisolated final class CancellationIgnoringGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    await withCheckedContinuation { continuation in
+      let resumeNow = lock.withLock {
+        if isOpen { return true }
+        waiters.append(continuation)
+        return false
+      }
+      if resumeNow { continuation.resume() }
+    }
+  }
+
+  func open() {
+    let waiting = lock.withLock {
+      isOpen = true
+      defer { waiters = [] }
+      return waiters
+    }
+    for waiter in waiting { waiter.resume() }
+  }
 }
