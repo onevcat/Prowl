@@ -23,9 +23,16 @@ All of this is unused until B3 and C1. Exposure: none.
   into a volume that is not mounted or missing permissions. A save does not overwrite such
   a file (`HostProfilesFileError.unreadableFile`), so the hosts that remote folders refer
   to are never lost. Those folders show as unavailable until the file is readable again.
+- **A save is a compare and swap.** The key remembers what the file held at the last load
+  or save. A save writes only when the file still holds the same thing; otherwise it fails
+  with `HostProfilesFileError.changedSinceLoad`. Without this, an edit of the empty
+  fallback list would erase the hosts in a file that became readable again (a fixed
+  permission, a link target that reappeared). It also covers a file that another Prowl
+  wrote. The caller reloads (`$hostProfiles.load()`) and edits again. A deliberate removal
+  after a load still works, because nothing merges.
 - When a save is refused, the shared value still holds the change in memory. C1's Add
   Remote Folder must check the save error before it writes an entry that refers to the new
-  host.
+  host, and it reloads after `changedSinceLoad`.
 
 ### Entries
 
@@ -79,6 +86,10 @@ load.
 - a local entry has no host, and the old format decodes and encodes without one;
 - a file that cannot be read (a permission error) loads as empty, and a save neither
   writes it nor succeeds;
+- a file that becomes readable again after a failed load is not replaced by an edit of
+  the fallback list (`changedSinceLoad`). After a reload, adding a host keeps the existing
+  one, and a deliberate removal works;
+- a file that appears after a load found none is not replaced either;
 - a remote repository round-trips through snapshot version 3 without any local path check;
 - a remote repository never fails the snapshot on a local path check;
 - a missing local repository still discards the whole snapshot;
