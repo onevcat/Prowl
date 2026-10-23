@@ -223,20 +223,6 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     return resolved.hasPrefix("/") ? resolved : nil
   }
 
-  /// Whether `path` exists on the host; true when the host cannot answer.
-  func pathExists(_ path: String) async -> Bool {
-    let command = RemoteShellCommand(executable: "test", arguments: ["-e", path])
-    do {
-      _ = try RemoteGitShell.output(
-        of: try await lane.run(RemoteGitShell.framed(command), .commandLane), command: command)
-      return true
-    } catch let error as ShellClientError where error.exitCode == 1 {
-      return false
-    } catch {
-      return true
-    }
-  }
-
   // MARK: - Worktree
 
   /// Creates a worktree with the bundled `wt` script, run by `bash -s` in the repository
@@ -272,15 +258,22 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     let script = RemoteScript(
       text: try Self.creationScriptText(), arguments: arguments, workingDirectory: repository.path)
     let lines = WorktreeCreationLines(onLine: onLine)
-    let outcome = try await lane.stream(script, .worktreeCreation) { stream, text in lines.receive(stream, text) }
+    let outcome: RemoteCommandOutcome
+    do {
+      outcome = try await lane.stream(script, .worktreeCreation) { stream, text in lines.receive(stream, text) }
+    } catch {
+      throw RemoteWorktreeCreationError(underlying: error, addedPath: lines.addedPath)
+    }
     let display = RemoteShellCommand(executable: "wt", arguments: arguments)
     let commandText = ([display.executable] + arguments).joined(separator: " ")
     do {
       _ = try RemoteGitShell.output(of: outcome, command: display)
     } catch let error as RemoteRepositoryHostError {
-      throw error
+      throw RemoteWorktreeCreationError(underlying: error, addedPath: lines.addedPath)
     } catch {
-      throw wrapShellError(error, operation: .worktreeCreate, command: commandText)
+      throw RemoteWorktreeCreationError(
+        underlying: wrapShellError(error, operation: .worktreeCreate, command: commandText),
+        addedPath: lines.addedPath)
     }
     guard let result = lines.result else {
       throw GitClientError.commandFailed(command: commandText, message: "Empty output")
@@ -302,9 +295,23 @@ nonisolated struct RemoteRepositoryHost: Sendable {
   /// The command substitution must not be part of a condition (`|| exit`, `if`): bash 5
   /// then ignores `set -e` inside it, and `wt` would go on after a failed
   /// `git worktree add`. Its status is read on the next line instead.
+  ///
+  /// A `git` function reports each `git worktree add` that succeeds on standard error
+  /// (`PROWL_WORKTREE_ADDED`). It is the only proof that this attempt registered a
+  /// worktree, so cleanup after a failure never removes one that another creation added.
   private static func creationScriptText() throws -> String {
     guard let wtScript = bundledWtScript else { throw RemoteRepositoryHostError.bundledScriptMissing }
     return """
+      git() {
+        command git "$@"
+        prowl_git_status=$?
+        if [ "$prowl_git_status" -eq 0 ] && [ "$1" = -C ] && [ "$3" = worktree ] && [ "$4" = add ]; then
+          shift 4
+          if [ "$1" = -b ]; then shift 2; fi
+          printf 'PROWL_WORKTREE_ADDED\\t%s\\n' "$1" >&2
+        fi
+        return "$prowl_git_status"
+      }
       prowl_wt() {
       \(wtScript)
       }
@@ -392,6 +399,10 @@ private nonisolated final class WorktreeCreationLines: @unchecked Sendable {
   private var sawMarker = false
   private var root: String?
   private var path: String?
+  private var added: String?
+
+  /// The path of a worktree that this attempt's `git worktree add` registered.
+  var addedPath: String? { lock.withLock { added } }
 
   init(onLine: @escaping @Sendable (ShellStreamLine) -> Void) {
     self.onLine = onLine
@@ -408,6 +419,10 @@ private nonisolated final class WorktreeCreationLines: @unchecked Sendable {
     let line: ShellStreamLine? = lock.withLock {
       switch stream {
       case .standardError:
+        if text.hasPrefix("PROWL_WORKTREE_ADDED\t") {
+          added = String(text.dropFirst("PROWL_WORKTREE_ADDED\t".count))
+          return nil
+        }
         return ShellStreamLine(source: .stderr, text: text)
       case .standardOutput:
         guard sawMarker else {
@@ -427,4 +442,13 @@ private nonisolated final class WorktreeCreationLines: @unchecked Sendable {
     }
     if let line { onLine(line) }
   }
+}
+
+/// A remote worktree creation that failed. `addedPath` is the worktree that this attempt
+/// registered before the failure, if it did; nothing else may be cleaned up.
+nonisolated struct RemoteWorktreeCreationError: Error, LocalizedError {
+  let underlying: Error
+  let addedPath: String?
+
+  var errorDescription: String? { underlying.localizedDescription }
 }

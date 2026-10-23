@@ -177,14 +177,6 @@ nonisolated struct RepositoryHost: Sendable {
     return local.createWorktreeStream(request)
   }
 
-  /// Whether something exists at `location`. A remote check that cannot reach the host
-  /// says yes, so that cleanup never treats an existing folder as its own.
-  func pathExists(_ location: RepositoryLocation) async -> Bool {
-    if let url = location.localURL { return FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) }
-    guard let host = await availableRemoteHost(location) else { return true }
-    return await host.pathExists(location.path)
-  }
-
   /// `location` with its path resolved on its host, for comparing it with the paths
   /// that git lists; a local location, or one that cannot be resolved, as it is.
   func physicalLocation(_ location: RepositoryLocation) async -> RepositoryLocation {

@@ -621,6 +621,15 @@ struct WorktreeDetailView: View {
       MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
     } else if let loadingInfo {
       WorktreeLoadingView(info: loadingInfo)
+    } else if let selectedTerminalWorktree,
+      let reason = selectedTerminalWorktree.location.availability(of: .terminalTab).unavailableReason
+    {
+      // Remote terminals come with docs-ai 084 C3; a remote worktree gets no local shell.
+      ContentUnavailableView(
+        selectedTerminalWorktree.name,
+        systemImage: "network",
+        description: Text(reason.message)
+      )
     } else if let selectedTerminalWorktree {
       let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(
         selectedTerminalWorktree.id)
