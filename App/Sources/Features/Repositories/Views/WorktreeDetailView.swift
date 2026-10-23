@@ -123,6 +123,7 @@ struct WorktreeDetailView: View {
     let actions = makeFocusedActions(
       repositories: repositories,
       hasActiveWorktree: hasActiveTerminalTarget,
+      opensTerminals: opensTerminals,
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
     )
@@ -779,6 +780,7 @@ struct WorktreeDetailView: View {
   private func makeFocusedActions(
     repositories: RepositoriesFeature.State,
     hasActiveWorktree: Bool,
+    opensTerminals: Bool,
     runScriptEnabled: Bool,
     runScriptIsRunning: Bool
   ) -> FocusedActions {
@@ -833,7 +835,8 @@ struct WorktreeDetailView: View {
 
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
-      newTerminal: action(.newTerminal),
+      // A remote folder opens no terminal yet (docs-ai 084 C3).
+      newTerminal: opensTerminals ? action(.newTerminal) : nil,
       closeTab: closeTabFocusedAction(
         repositories: repositories, hasActiveWorktree: hasActiveWorktree),
       closeSurface: closeSurfaceFocusedAction(

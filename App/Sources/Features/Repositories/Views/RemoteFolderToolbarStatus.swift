@@ -69,7 +69,7 @@ struct RemoteFolderStatusButton: View {
   private var symbol: String {
     switch status.hostStatus {
     case nil: "network"
-    case .unreachable: "network.slash"
+    case .unreachable, .connectionFailed: "network.slash"
     case .needsRebind: "exclamationmark.triangle.fill"
     }
   }
@@ -78,6 +78,7 @@ struct RemoteFolderStatusButton: View {
     switch status.hostStatus {
     case nil: String(localized: "Connected")
     case .unreachable: String(localized: "Not answering")
+    case .connectionFailed: String(localized: "Not connected")
     case .needsRebind: String(localized: "SSH configuration changed")
     }
   }
@@ -132,6 +133,8 @@ private struct RemoteFolderStatusPanel: View {
       String(localized: "Connected.")
     case .unreachable:
       String(localized: "The host did not answer. Prowl shows the last state and tries again.")
+    case .connectionFailed(let reason):
+      String(localized: "Prowl could not connect: \(reason) It shows the last state and tries again.")
     case .needsRebind:
       String(
         localized: """

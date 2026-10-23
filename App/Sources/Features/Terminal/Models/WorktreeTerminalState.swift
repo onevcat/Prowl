@@ -982,6 +982,9 @@ final class WorktreeTerminalState {
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
+    // Every tab passes here: a remote folder gets no local shell, from any entry point,
+    // until its launcher exists (docs-ai 084 C3).
+    guard worktree.location.availability(of: .terminalTab).isAvailable else { return nil }
     let tabId = tabManager.createTab(
       title: creation.title,
       icon: creation.icon,

@@ -819,6 +819,9 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
+        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
         analyticsClient.capture("terminal_tab_created", nil)
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(
           worktree.id)
