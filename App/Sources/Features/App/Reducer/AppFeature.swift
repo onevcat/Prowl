@@ -295,6 +295,8 @@ struct AppFeature {
         return .merge(effects)
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
+        // A remote worktree gets its first tab once remote terminals exist (docs-ai 084 C3).
+        guard worktree.location.availability(of: .terminalTab).isAvailable else { return .none }
         let shouldRunSetupScript =
           state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
