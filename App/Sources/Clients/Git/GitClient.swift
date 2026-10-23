@@ -288,7 +288,7 @@ struct GitClient {
       let wtURL = try wtScriptURL()
       let command =
         ([wtURL.lastPathComponent]
-        + createWorktreeArguments(
+        + Self.createWorktreeArguments(
           baseDirectory: baseDirectory,
           name: name,
           copyIgnored: copyFiles.ignored,
@@ -308,7 +308,7 @@ struct GitClient {
         let repositoryRootURL = request.repoRoot.standardizedFileURL
         do {
           let wtURL = try wtScriptURL()
-          let arguments = createWorktreeArguments(
+          let arguments = Self.createWorktreeArguments(
             baseDirectory: request.baseDirectory,
             name: request.name,
             copyIgnored: request.copyFiles.ignored,
@@ -379,7 +379,8 @@ struct GitClient {
     }
   }
 
-  nonisolated private func createWorktreeArguments(
+  /// The `wt` arguments of a creation; the remote host runs the same ones (docs-ai 084 B3c).
+  nonisolated static func createWorktreeArguments(
     baseDirectory: URL,
     name: String,
     copyIgnored: Bool,

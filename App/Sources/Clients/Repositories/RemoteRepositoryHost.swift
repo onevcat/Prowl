@@ -15,7 +15,9 @@ import Sharing
 /// - a worktree is removed with `git worktree remove`, not moved aside on this Mac;
 /// - the branch name and line changes of one worktree are not read here: the local
 ///   monitors that ask for them do not run for remote repositories, and the refresh
-///   carries both (B3d).
+///   carries both (B3e);
+/// - a worktree is created by the bundled `wt` script, which the lane sends to `bash -s`
+///   on the host (B3c).
 nonisolated struct RemoteRepositoryHost: Sendable {
   let hostProfileID: UUID
   private let lane: RemoteCommandLane
@@ -25,6 +27,8 @@ nonisolated struct RemoteRepositoryHost: Sendable {
   private let longRunningGit: GitClient
 
   private let executor: GitCommandExecutor
+  /// The `$HOME` read; concurrent first callers share it.
+  private let home = LockIsolated<Task<String, Error>?>(nil)
 
   init(hostProfileID: UUID, lane: RemoteCommandLane) {
     self.hostProfileID = hostProfileID
@@ -97,7 +101,7 @@ nonisolated struct RemoteRepositoryHost: Sendable {
   private func fileCount(at path: String, ignored: Bool) async throws -> Int {
     let text = """
       set -o pipefail
-      printf '\\036PROWL_OUTPUT\\036'
+      \(RemoteGitShell.printMarker)
       git -C "$1" ls-files --others \(ignored ? "-i " : "")--exclude-standard | wc -l
       """
     let script = RemoteScript(text: text, arguments: [path])
@@ -184,7 +188,112 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     try await longRunningGit.fetchRemote(remote, for: Self.url(path))
   }
 
+  /// `$HOME` on the host, read once per host. A failed read is not kept.
+  func homeDirectory() async throws -> String {
+    let lane = lane
+    let task = home.withValue { home in
+      if let home { return home }
+      let task = Task {
+        let command = RemoteShellCommand(executable: "sh", arguments: ["-c", #"printf '%s' "$HOME""#])
+        let output = try RemoteGitShell.output(
+          of: try await lane.run(RemoteGitShell.framed(command), .commandLane), command: command)
+        guard output.stdout.hasPrefix("/") else { throw RemoteRepositoryHostError.unsupported }
+        return output.stdout
+      }
+      home = task
+      return task
+    }
+    do {
+      return try await task.value
+    } catch {
+      home.withValue { if $0 == task { $0 = nil } }
+      throw error
+    }
+  }
+
   // MARK: - Worktree
+
+  /// Creates a worktree with the bundled `wt` script, run by `bash -s` in the repository
+  /// with the same arguments as on this Mac (`GitClient.createWorktreeArguments`). The
+  /// request's folders are paths on the host. Progress lines arrive as `wt` prints them.
+  /// The script itself resolves the new worktree's path (`pwd -P`), so the worktree's ID
+  /// is the path that git lists, and no second command runs after `wt` succeeded.
+  func createWorktreeStream(
+    _ request: GitWorktreeCreateRequest, in repository: RepositoryLocation
+  ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let worktree = try await createWorktree(request, in: repository) { continuation.yield(.outputLine($0)) }
+          continuation.yield(.finished(worktree))
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
+  private func createWorktree(
+    _ request: GitWorktreeCreateRequest, in repository: RepositoryLocation,
+    onLine: @escaping @Sendable (ShellStreamLine) -> Void
+  ) async throws -> Worktree {
+    let arguments = GitClient.createWorktreeArguments(
+      baseDirectory: request.baseDirectory, name: request.name, copyIgnored: request.copyFiles.ignored,
+      copyUntracked: request.copyFiles.untracked, baseRef: request.baseRef,
+      directoryOverride: request.directoryOverride)
+    let script = RemoteScript(
+      text: try Self.creationScriptText(), arguments: arguments, workingDirectory: repository.path)
+    let lines = WorktreeCreationLines(onLine: onLine)
+    let outcome = try await lane.stream(script, .worktreeCreation) { stream, text in lines.receive(stream, text) }
+    let display = RemoteShellCommand(executable: "wt", arguments: arguments)
+    let commandText = ([display.executable] + arguments).joined(separator: " ")
+    do {
+      _ = try RemoteGitShell.output(of: outcome, command: display)
+    } catch let error as RemoteRepositoryHostError {
+      throw error
+    } catch {
+      throw wrapShellError(error, operation: .worktreeCreate, command: commandText)
+    }
+    guard let result = lines.result else {
+      throw GitClientError.commandFailed(command: commandText, message: "Empty output")
+    }
+    return Worktree(
+      name: request.name,
+      detail: RemotePaths.relativePath(from: result.root, to: result.path),
+      location: .remote(hostProfileID: hostProfileID, path: result.path),
+      repositoryLocation: repository,
+      // The host's creation time arrives with the next refresh; the worktree was made now.
+      createdAt: Date()
+    )
+  }
+
+  /// `wt` runs inside a function, so its standard output can be read: the script prints
+  /// it after the marker, then the repository's and the new worktree's physical paths as
+  /// the last two lines. Git's C locale applies, as `GitClient` sets it locally.
+  private static func creationScriptText() throws -> String {
+    guard let wtScript = bundledWtScript else { throw RemoteRepositoryHostError.bundledScriptMissing }
+    return """
+      prowl_wt() {
+      \(wtScript)
+      }
+      LC_ALL=C LANG=C LC_MESSAGES=C
+      export LC_ALL LANG LC_MESSAGES
+      \(RemoteGitShell.printMarker)
+      printf '\\n'
+      prowl_root=$(pwd -P)
+      prowl_output=$(prowl_wt "$@") || exit $?
+      printf '%s\\n' "$prowl_output"
+      prowl_path=$(printf '%s\\n' "$prowl_output" | awk 'NF { line = $0 } END { print line }')
+      if [ -n "$prowl_path" ] && cd -- "$prowl_path" 2>/dev/null; then prowl_path=$(pwd -P); fi
+      printf 'PROWL_ROOT\\t%s\\nPROWL_PATH\\t%s\\n' "$prowl_root" "$prowl_path"
+      """
+  }
+
+  private static let bundledWtScript: String? = Bundle.main
+    .url(forResource: "wt", withExtension: nil, subdirectory: "git-wt")
+    .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
 
   /// Removes a registered worktree with `git worktree remove --force`, as the local host
   /// does after it moved the folder aside. A path that git does not list is refused.
@@ -235,4 +344,55 @@ extension RemoteRepositoryHostClient: DependencyKey {
     })
   }()
   static let testValue = RemoteRepositoryHostClient.unavailable
+}
+
+/// The lines of a remote worktree creation: standard output before the marker is shell
+/// startup output and is dropped; the `PROWL_ROOT` and `PROWL_PATH` records at the end are
+/// the result, not progress.
+private nonisolated final class WorktreeCreationLines: @unchecked Sendable {
+  struct Result {
+    let root: String
+    let path: String
+  }
+
+  private let lock = NSLock()
+  private let onLine: @Sendable (ShellStreamLine) -> Void
+  private var sawMarker = false
+  private var root: String?
+  private var path: String?
+
+  init(onLine: @escaping @Sendable (ShellStreamLine) -> Void) {
+    self.onLine = onLine
+  }
+
+  var result: Result? {
+    lock.withLock {
+      guard let root, let path, !path.isEmpty else { return nil }
+      return Result(root: root, path: path)
+    }
+  }
+
+  func receive(_ stream: RemoteOutputStream, _ text: String) {
+    let line: ShellStreamLine? = lock.withLock {
+      switch stream {
+      case .standardError:
+        return ShellStreamLine(source: .stderr, text: text)
+      case .standardOutput:
+        guard sawMarker else {
+          if text.hasSuffix(RemoteGitShell.outputMarker) { sawMarker = true }
+          return nil
+        }
+        if text.hasPrefix("PROWL_ROOT\t") {
+          root = String(text.dropFirst("PROWL_ROOT\t".count))
+          return nil
+        }
+        if text.hasPrefix("PROWL_PATH\t") {
+          path = String(text.dropFirst("PROWL_PATH\t".count))
+          return nil
+        }
+        return ShellStreamLine(source: .stdout, text: text)
+      }
+    }
+    if let line { onLine(line) }
+  }
 }

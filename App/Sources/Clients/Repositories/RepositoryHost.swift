@@ -147,19 +147,40 @@ nonisolated struct RepositoryHost: Sendable {
     try await local.fetchRemote(remote, localURL(repository))
   }
 
-  /// Creates a worktree in `repository`, which replaces the request's `repoRoot`.
-  /// The other folders of the request are local URLs. A remote repository cannot create
-  /// worktrees yet (B3c).
+  /// Creates a worktree in `repository`, which replaces the request's `repoRoot`. For a
+  /// local repository, the other folders of the request are local URLs; for a remote one,
+  /// they hold paths on its host.
   func createWorktreeStream(
     in repository: RepositoryLocation,
     _ request: GitWorktreeCreateRequest
   ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
     guard let url = repository.localURL else {
-      return AsyncThrowingStream { $0.finish(throwing: RepositoryHostError.remoteUnavailable(repository)) }
+      return AsyncThrowingStream { continuation in
+        let task = Task {
+          do {
+            guard let host = try await remoteHost(repository) else {
+              throw RepositoryHostError.remoteUnavailable(repository)
+            }
+            for try await event in host.createWorktreeStream(request, in: repository) {
+              continuation.yield(event)
+            }
+            continuation.finish()
+          } catch {
+            continuation.finish(throwing: error)
+          }
+        }
+        continuation.onTermination = { _ in task.cancel() }
+      }
     }
     var request = request
     request.repoRoot = url
     return local.createWorktreeStream(request)
+  }
+
+  /// `$HOME` on a remote repository's host, where remote worktrees are placed by
+  /// default; nil for a local repository.
+  func remoteHomeDirectory(in repository: RepositoryLocation) async throws -> String? {
+    try await remoteHost(repository)?.homeDirectory()
   }
 
   // MARK: - Worktree
@@ -174,13 +195,13 @@ nonisolated struct RepositoryHost: Sendable {
     _ = try await local.removeWorktree(worktree, deleteBranch)
   }
 
-  /// Nil for a remote worktree: the batched refresh carries its branch (B3d).
+  /// Nil for a remote worktree: the batched refresh carries its branch (B3e).
   func branchName(of worktree: RepositoryLocation) async -> String? {
     guard let url = worktree.localURL else { return nil }
     return await local.branchName(url)
   }
 
-  /// Nil for a remote worktree: the batched refresh carries its line changes (B3d).
+  /// Nil for a remote worktree: the batched refresh carries its line changes (B3e).
   func lineChanges(in worktree: RepositoryLocation) async -> GitLineChanges? {
     guard let url = worktree.localURL else { return nil }
     return await local.lineChanges(url)
