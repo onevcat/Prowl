@@ -240,6 +240,21 @@ struct AddRemoteFolderFeatureTests {
     #expect(store.state.prowlCreatedWorktreeIDs == [remoteWorktree])
   }
 
+  /// A sidebar disclosure change keeps the collapse state of remote folders that are not
+  /// loaded: hidden without the flag, unreachable, or before the live load.
+  @Test func theSidebarKeepsTheCollapseStateOfUnloadedRemoteFolders() {
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app").id
+    let other = RemoteRepositoryFixtures.location("/home/dev/other").id
+    #expect(
+      SidebarView.storedCollapsedIDs(["/tmp/b/"], previous: ["/tmp/a/", remote], loaded: ["/tmp/a/", "/tmp/b/"])
+        == ["/tmp/b/", remote])
+    // A loaded remote folder follows the disclosure like any other repository.
+    #expect(
+      SidebarView.storedCollapsedIDs(["/tmp/a/"], previous: [remote, other], loaded: ["/tmp/a/", remote])
+        == ["/tmp/a/", other])
+    #expect(SidebarView.storedCollapsedIDs([], previous: ["/tmp/gone/"], loaded: ["/tmp/a/"]) == [])
+  }
+
   /// A checked folder is added as an entry and loaded through its host.
   @Test(.dependencies) func anAddedFolderBecomesAnEntryAndLoads() async {
     let location = RemoteRepositoryFixtures.location("/home/dev/app")

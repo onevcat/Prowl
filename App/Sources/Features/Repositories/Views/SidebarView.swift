@@ -52,9 +52,20 @@ struct SidebarView: View {
     .onChange(of: repositoryIDs) { _, newValue in
       let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
       $collapsedRepositoryIDs.withLock {
-        $0 = Array(collapsed).sorted()
+        $0 = Self.storedCollapsedIDs(collapsed, previous: $0, loaded: newValue)
       }
     }
+  }
+
+  /// The collapsed IDs to store: `collapsed` among the loaded repositories, and the stored
+  /// remote folders that are not loaded. A remote folder can be hidden (no flag),
+  /// unreachable or not loaded yet, and keeps its state for when it shows again (docs-ai
+  /// 084 C1a).
+  nonisolated static func storedCollapsedIDs(
+    _ collapsed: Set<Repository.ID>, previous: [Repository.ID], loaded: Set<Repository.ID>
+  ) -> [Repository.ID] {
+    let unloadedRemote = previous.filter { !loaded.contains($0) && RepositoryLocation.hasRemoteForm($0) }
+    return Array(collapsed.union(unloadedRemote)).sorted()
   }
 
   private func expandedRepoIDsBinding(
@@ -66,7 +77,7 @@ struct SidebarView: View {
       set: { newValue in
         let collapsed = repositoryIDs.subtracting(newValue)
         $collapsedRepositoryIDs.withLock {
-          $0 = Array(collapsed).sorted()
+          $0 = Self.storedCollapsedIDs(collapsed, previous: $0, loaded: repositoryIDs)
         }
       }
     )
