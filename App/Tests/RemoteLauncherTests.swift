@@ -248,19 +248,68 @@ nonisolated struct RemoteLauncherTests {
     }
   }
 
-  /// The user's own `EXIT` trap comes back after the first command in bash.
+  /// The user's own `EXIT` traps are never replaced: a trap from the startup files and one
+  /// that the first command sets both run, and the launch reports once either way.
   @Test(arguments: shells.filter { $0.hasSuffix("bash") })
-  func bashKeepsTheUsersExitTrap(_ shell: String) throws {
+  func bashKeepsTheUsersExitTraps(_ shell: String) throws {
+    struct Case {
+      let profile: String
+      let command: String
+      let state: String
+      let status: Int32
+      let cleanup: String
+    }
+    let userTrap = "trap 'echo USER_CLEANUP' EXIT"
+    let cases = [
+      Case(
+        profile: userTrap, command: "true", state: "done", status: 0, cleanup: "USER_CLEANUP"),
+      Case(
+        profile: userTrap, command: "exit 3", state: "error", status: 3, cleanup: "USER_CLEANUP"),
+      Case(
+        profile: userTrap, command: "set -e; false", state: "error", status: 1,
+        cleanup: "USER_CLEANUP"),
+      Case(
+        profile: "", command: "trap 'echo COMMAND_CLEANUP' EXIT; true", state: "done", status: 0,
+        cleanup: "COMMAND_CLEANUP"),
+      Case(
+        profile: "", command: "trap 'echo COMMAND_CLEANUP' EXIT; exit 3", state: "error", status: 3,
+        cleanup: "COMMAND_CLEANUP"),
+    ]
+    for item in cases {
+      let home = try Home()
+      defer { home.remove() }
+      try Data((item.profile + "\n").utf8).write(to: home.root.appending(path: ".bash_profile"))
+      let launch = RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+        firstCommand: item.command)
+
+      let (output, launcher) = try Self.launch(launch, shell: shell, home: home, input: "exit\n")
+
+      let marker = Self.marker(launch.nonce, state: item.state, status: item.status)
+      #expect(output.components(separatedBy: marker).count == 2, "\(item.command): \(output)")
+      #expect(!output.contains("7501;state=\(item.state == "done" ? "error" : "done")"), "\(item.command): \(output)")
+      #expect(output.contains(item.cleanup), "\(item.command): \(output)")
+      #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+    }
+  }
+
+  /// A subshell that fails under `set -e` while the command goes on is not the command's
+  /// end: the launch reports once, after the whole command, with its own status.
+  @Test func zshTakesNoSubshellFailureForTheCommands() throws {
+    guard FileManager.default.isExecutableFile(atPath: "/bin/zsh") else { return }
     let home = try Home()
     defer { home.remove() }
-    try Data("trap 'echo USER_EXIT' EXIT\n".utf8).write(to: home.root.appending(path: ".bash_profile"))
     let launch = RemoteLaunch(
-      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [], firstCommand: "true")
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [],
+      firstCommand: "(set -e; false)\necho RECOVERED\ntrue\n")
 
-    let (output, _) = try Self.launch(launch, shell: shell, home: home, input: "exit\n")
+    let (output, _) = try Self.launch(launch, shell: "/bin/zsh", home: home, input: "exit\n")
 
-    #expect(output.contains(Self.marker(launch.nonce, state: "done", status: 0)), "\(output)")
-    #expect(output.contains("USER_EXIT"), "\(output)")
+    let marker = Self.marker(launch.nonce, state: "done", status: 0)
+    #expect(output.components(separatedBy: "7501;").count == 2, "\(output)")
+    let recovered = try #require(output.range(of: "RECOVERED"), "\(output)")
+    let reported = try #require(output.range(of: marker), "\(output)")
+    #expect(recovered.lowerBound < reported.lowerBound, "\(output)")
   }
 
   /// A symlinked `~/.cache` keeps the launcher's logical path, which passes its check.
