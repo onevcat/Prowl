@@ -41,6 +41,19 @@ nonisolated enum RemoteTerminalLine {
     }
   }
 
+  /// The session options that a configuration could set to something else than running the
+  /// launcher in the foreground: a `RemoteCommand` (such as `tmux attach`) conflicts with the
+  /// command (`Cannot execute command-line and remote command`), and `SessionType`,
+  /// `ForkAfterAuthentication` or `StdinNull` would run no interactive session. `ssh` keeps
+  /// the first value it obtains, so these come before the recipe. Forwardings, the agent and
+  /// the other options stay as the user's configuration sets them.
+  static let sessionOverrides = [
+    "-o", "RemoteCommand=none",
+    "-o", "SessionType=default",
+    "-o", "ForkAfterAuthentication=no",
+    "-o", "StdinNull=no",
+  ]
+
   /// Characters that zsh, bash and fish all take literally outside quotes.
   private static let safeCharacters = Set(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./_-")
@@ -51,7 +64,9 @@ nonisolated enum RemoteTerminalLine {
   /// quotes. The launcher path is a word of the remote command, so it must be safe as is.
   static func typed(recipe: SSHConnectionRecipe, launcherPath: String) throws(LineError) -> String {
     guard !launcherPath.isEmpty, launcherPath.allSatisfy(safeCharacters.contains) else { throw .untypeable }
-    let arguments = ["/usr/bin/ssh", "-t"] + recipe.options + ["--", recipe.destination, "exec", "sh", launcherPath]
+    let arguments =
+      ["/usr/bin/ssh", "-t"] + sessionOverrides + recipe.options
+      + ["--", recipe.destination, "exec", "sh", launcherPath]
     var words: [String] = []
     for argument in arguments {
       if !argument.isEmpty, argument.allSatisfy(safeCharacters.contains) {
