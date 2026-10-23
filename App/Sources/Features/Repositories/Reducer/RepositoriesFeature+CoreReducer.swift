@@ -814,6 +814,23 @@ extension RepositoriesFeature {
         }
       }
 
+    case .addRemoteFolderRequested:
+      guard remoteFoldersEnabled else { return .none }
+      @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+      state.addRemoteFolder = AddRemoteFolderFeature.State(hostProfiles: hostProfiles)
+      return .none
+
+    case .addRemoteFolder(.presented(.delegate(.cancel))):
+      state.addRemoteFolder = nil
+      return .none
+
+    case .addRemoteFolder(.presented(.delegate(.added(let location, let kind)))):
+      state.addRemoteFolder = nil
+      return .send(.repositoryManagement(.openRemoteRepository(location, kind: kind)))
+
+    case .addRemoteFolder:
+      return .none
+
     case .worktreeCreationPrompt(.presented(.delegate(.cancel))):
       return .send(.worktreeCreation(.promptCanceled))
 

@@ -1840,7 +1840,7 @@ private func makeItem(
 
 private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteItem.Category {
   switch kind {
-  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .installCLI,
+  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .addRemoteFolder, .installCLI,
     .openRepositorySettings, .editWorkspace:
     return .app
   case .newWorktree, .refreshWorktrees, .viewArchivedWorktrees,
@@ -1870,7 +1870,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
 
 private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
   switch kind {
-  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .installCLI,
+  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .addRemoteFolder, .installCLI,
     .newWorktree, .refreshWorktrees, .viewArchivedWorktrees, .jumpToLatestUnread,
     .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest,
     .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails,
