@@ -144,7 +144,7 @@ final class TargetResolver {
       // worktree without tabs.
       if snapshot.remoteFolders.contains(where: { $0.matchesExactly(value) }) {
         return .failure(
-          .notFound("Worktree '\(value)' is a remote folder: terminals cannot open in remote folders yet."))
+          .notFound("Worktree '\(value)' is a remote folder with no open terminal."))
       }
       return .failure(.notFound("Worktree '\(value)' not found."))
     }

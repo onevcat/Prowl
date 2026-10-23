@@ -66,6 +66,9 @@ extension AppFeature {
       let message = String(localized: "\(name) succeeded in \(formatCustomCommandDuration(durationMs))")
       return .send(.repositories(.showToast(.success(message))))
 
+    case .remoteTerminalFailed(_, let message):
+      return .send(.repositories(.showToast(.warning(message))))
+
     case .runScriptStatusChanged(let worktreeID, let isRunning):
       if isRunning {
         state.runScriptStatusByWorktreeID[worktreeID] = true

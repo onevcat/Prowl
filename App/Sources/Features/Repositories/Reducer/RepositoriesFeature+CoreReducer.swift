@@ -638,17 +638,19 @@ extension RepositoriesFeature {
 
     case .newTerminalTab(let worktreeID):
       guard let worktree = state.worktree(for: worktreeID) else { return .none }
-      // Remote tabs come with the remote launcher (docs-ai 084 C3).
-      guard let worktreeDirectory = worktree.localURL else {
-        let reason = FeatureUnavailableReason.remoteFolder(.terminalTab)
+      if let reason = worktree.availability(of: .terminalTab).unavailableReason {
         return .send(.showToast(.warning(reason.message)))
       }
-      // Pin the new tab's cwd to the worktree root: Ghostty's default new-tab
-      // behavior inherits the focused surface's cwd, which is wrong when the
-      // user targets a worktree from the sidebar.
       let createTab: Effect<Action> = .run { _ in
-        await terminalClient.send(
-          .createTabInDirectory(worktree, directory: worktreeDirectory))
+        if let worktreeDirectory = worktree.localURL {
+          // Pin the new tab's cwd to the worktree root: Ghostty's default new-tab
+          // behavior inherits the focused surface's cwd, which is wrong when the
+          // user targets a worktree from the sidebar.
+          await terminalClient.send(.createTabInDirectory(worktree, directory: worktreeDirectory))
+        } else {
+          // A remote tab starts in the remote folder itself (docs-ai 084 C3b).
+          await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: false))
+        }
       }
       // Canvas focuses and reveals the new card itself when it appears, like
       // every other tab created while Canvas is showing.

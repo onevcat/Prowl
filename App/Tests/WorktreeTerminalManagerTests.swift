@@ -69,12 +69,18 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.stateIfExists(for: worktree.id) == nil)
   }
 
-  /// A remote folder gets no local shell from any entry point: every tab passes the same
-  /// backstop (docs-ai 084 C1c).
+  /// A remote folder gets no plain local shell from any entry point: every tab passes the
+  /// remote branch (docs-ai 084 C3b), which needs the host profile and refuses a script.
   @Test func aRemoteWorktreeGetsNoLocalTab() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = RemoteRepositoryFixtures.gitRepository().worktrees[0]
     let state = manager.state(for: worktree)
+    state.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in nil },
+      stage: { _, _ in
+        Issue.record("nothing may be staged")
+        return ""
+      })
 
     #expect(state.createTab(setupScript: "echo setup") == nil)
     #expect(state.runScript("echo run") == nil)
