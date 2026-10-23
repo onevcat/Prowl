@@ -21,8 +21,9 @@ a manual `ssh`.
 
 - `foregroundWorkingDirectory` gives the directory of the foreground process of the pane's
   own session in the latest snapshot. Inside tmux, it is the client's active pane. A tmux
-  client whose server Prowl cannot read hides where the user works, so it gives none. A
-  failed or unmapped snapshot keeps the last known directory. It is nil when no snapshot
+  client whose server Prowl cannot read hides where the user works, so it gives none, and
+  no earlier directory stands in. A failed or unmapped snapshot keeps the last known
+  directory. It is nil when no snapshot
   mapped the session, for example on a macOS host whose platform shell hides
   `LC_PROWL_PANE`.
 - `agentWorkingDirectory` gives the bound remote agent's own directory, or else the
@@ -72,6 +73,10 @@ whose process is remote, before the pane's OSC 7 or local launch directory. The 
 Agents entry and `prowl agents` then name the host's project. The same holds for agents
 behind a manual `ssh` (L0).
 
+When the host directory is unknown (an unprobed agent, or no mapped snapshot), a remote
+agent has no directory. It never falls back to the pane's OSC 7 or local launch directory,
+so the row falls back to the pane's worktree.
+
 That directory is a path on the host, so it never resolves against this Mac's worktrees.
 `ActiveAgentEntry.localWorkingDirectory` is nil for a remote agent. `remoteWorktreeID`
 resolves the agent only to its own pane's remote folder, when the directory lies inside
@@ -99,6 +104,8 @@ resolves the directory in the staging task.
   kept for Undo (checked red). A failed snapshot keeps the last known directory (checked
   red). A remote agent's directory resolves only to its remote folder
   (`RemoteAgentPresentationTests`, checked red).
+- An unreadable tmux server hides the directory (checked red). An unprobed remote agent with
+  a local OSC 7 directory has no directory (checked red).
 
 ## Known limits
 

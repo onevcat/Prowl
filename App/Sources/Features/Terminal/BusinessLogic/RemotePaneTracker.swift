@@ -295,13 +295,15 @@ final class RemotePaneTracker {
 
   /// The working directory of the foreground process of the pane's session (inside tmux, of
   /// the client's active pane): from the latest snapshot, else the last one that showed it.
-  /// nil when no snapshot mapped the session or the host did not read it (docs-ai 084 C4).
+  /// nil when no snapshot mapped the session, the host did not read it, or the latest
+  /// snapshot shows a tmux client whose server Prowl cannot read: the user works somewhere
+  /// that no earlier directory tells (docs-ai 084 C4).
   var foregroundWorkingDirectory: String? {
-    currentForegroundWorkingDirectory ?? lastKnownWorkingDirectory
+    if mappedSession()?.hasUnreadTmuxPane == true { return nil }
+    return currentForegroundWorkingDirectory ?? lastKnownWorkingDirectory
   }
 
-  /// The latest snapshot's directory. A tmux client whose server Prowl cannot read hides
-  /// where the user works, so it has none.
+  /// The latest snapshot's directory, when it maps the session to a readable foreground.
   private var currentForegroundWorkingDirectory: String? {
     guard let session = mappedSession(), !session.hasUnreadTmuxPane else { return nil }
     let processes = session.tmux?.processes ?? session.processes

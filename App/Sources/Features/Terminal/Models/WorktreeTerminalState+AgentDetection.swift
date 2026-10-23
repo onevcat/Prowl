@@ -962,12 +962,10 @@ extension WorktreeTerminalState {
 
   func activeAgentWorkingDirectory(surfaceID: UUID) -> URL? {
     guard let surface = surfaces[surfaceID] else { return nil }
-    // A remote agent works on its host: its directory is the one the probe read there, not
-    // this pane's local one (docs-ai 084 C4).
-    if surfaceAgentStates[surfaceID]?.agentProcess.map({ $0.origin != .local }) == true,
-      let directory = remotePaneTrackers[surfaceID]?.agentWorkingDirectory
-    {
-      return URL(fileURLWithPath: directory, isDirectory: true)
+    // A remote agent works on its host: its directory is the one the probe read there, never
+    // this pane's local one. Unknown there, it is unknown (docs-ai 084 C4).
+    if surfaceAgentStates[surfaceID]?.agentProcess.map({ $0.origin != .local }) == true {
+      return remotePaneTrackers[surfaceID]?.agentWorkingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
     // This can run while handling Ghostty callbacks, so use cached Swift state instead of
     // re-entering Ghostty for inherited surface config.

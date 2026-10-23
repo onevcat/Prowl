@@ -1154,6 +1154,8 @@ struct RemoteAgentDetectionTests {
     var removed: [UUID] = []
     fixture.state.onAgentEntryChanged = { emitted.append($0) }
     fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    // The pane's local directory is never a remote agent's (docs-ai 084 C4).
+    fixture.surface.bridge.state.pwd = "/Users/local/project"
     fixture.source.failNext(100)
     probe.job = sshJob
     await detect(fixture)
@@ -1171,6 +1173,7 @@ struct RemoteAgentDetectionTests {
     let entry = try #require(emitted.last)
     #expect(entry.remote?.isUnprobed == true)
     #expect(entry.remote?.isStale == false)
+    #expect(entry.workingDirectory == nil)
     #expect(pane?.session == nil)
 
     // A withdrawal or quiet producer never releases it; the observation turns stale instead.
@@ -1869,6 +1872,11 @@ struct RemoteAgentDetectionTests {
     await settle { fixture.source.refreshes > refreshes + 1 }
     await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)
     #expect(await stale.value == "/srv/b")
+
+    // A tmux client whose server Prowl cannot read hides where the user works: no earlier
+    // directory stands in, so a split starts in the folder.
+    await deliver(fixture, unreadTmuxSnapshot(4, pane: fixture.surfaceID))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == nil)
   }
 
   /// The kill switch still turns detection off for a remote folder's pane.
