@@ -48,7 +48,8 @@ extension RepositoriesFeature {
     state.remoteRefreshRepositoryIDs = desired
     var effects: [Effect<Action>] = []
     for id in removed {
-      // The load that removed it set its unreachable mark, if any; it stays.
+      // A load that failed it keeps its own mark (`loadUnreachableRepositoryIDs`).
+      state.pollUnreachableRepositoryIDs.remove(id)
       state.remoteRefreshFailureCounts[id] = nil
       state.remoteRefreshFingerprints[id] = nil
       state.remoteRefreshInFlightIDs.remove(id)
@@ -124,14 +125,14 @@ extension RepositoriesFeature {
       // with another error is reachable.
       state.remoteRefreshFailureCounts[repositoryID, default: 0] += 1
       if isHostUnreachable {
-        state.unreachableRepositoryIDs.insert(repositoryID)
+        state.pollUnreachableRepositoryIDs.insert(repositoryID)
       } else {
-        state.unreachableRepositoryIDs.remove(repositoryID)
+        state.pollUnreachableRepositoryIDs.remove(repositoryID)
       }
       remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
     case .refreshed(let refresh):
       state.remoteRefreshFailureCounts[repositoryID] = nil
-      state.unreachableRepositoryIDs.remove(repositoryID)
+      state.pollUnreachableRepositoryIDs.remove(repositoryID)
       effects.append(contentsOf: applyRemoteRefresh(refresh, to: repository, state: &state))
     }
     effects.append(scheduleRemoteRefresh(repositoryID, state: state))
