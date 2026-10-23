@@ -550,6 +550,8 @@ show a consent prompt or start detection. Direct commands such as `ssh -t host c
   the folder's stored SSH settings instead of reading the command line. Its pane and agents
   show the host's alias. `PROWL_REMOTE_AGENT_DETECTION=0` still turns detection off. Once
   that `ssh` ends, a later `ssh` in the same pane is your own and follows the rules above.
+- **Directory.** A remote agent's directory (its project in Active Agents and `prowl
+  agents`) is the one the probe reads on the host, not the pane's local directory.
 - **Toolbar status.** While the focused pane's `ssh` uses Prowl's own connection, the
   toolbar status shows the host and "Agent detection on", or "Agents not detected" with a
   warning glyph. Hover (or click) for a panel that tells what the extra connection does,

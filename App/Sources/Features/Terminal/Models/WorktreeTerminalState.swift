@@ -1025,27 +1025,18 @@ final class WorktreeTerminalState {
     var remote = creation
     remote.initialInput = nil
     remote.defersSurfaceCreation = true
-    remote.workingDirectoryOverride =
-      profile.recipe.workingDirectory.map { URL(filePath: $0, directoryHint: .isDirectory) }
-      ?? FileManager.default.homeDirectoryForCurrentUser
+    remote.workingDirectoryOverride = Self.localDirectory(for: profile)
     let inserted = insertTab(remote)
     guard let surfaceID = inserted.surfaceID else { return inserted.tabID }
     startRemoteLaunch(
-      RemoteLaunch(
-        nonce: RemoteLaunch.makeNonce(), workingDirectory: remoteDirectory,
-        environment: [
-          RemoteLaunchVariable(name: "PROWL_WORKTREE_PATH", value: path),
-          RemoteLaunchVariable(name: "PROWL_ROOT_PATH", value: worktree.repositoryLocation.path),
-          RemoteLaunchVariable(name: GhosttySurfaceView.remotePaneIdentityEnvironmentKey, value: surfaceID.uuidString),
-        ],
-        firstCommand: creation.initialInput),
+      remoteLaunch(surfaceID: surfaceID, workingDirectory: remoteDirectory, firstCommand: creation.initialInput),
       profile: profile, surfaceID: surfaceID, tabID: inserted.tabID,
       consumesSetupScript: creation.consumesSetupScript)
     return inserted.tabID
   }
 
   /// A host path from a `URL`, without the trailing slash of a directory URL.
-  private static func hostPath(_ path: String) -> String {
+  static func hostPath(_ path: String) -> String {
     path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
   }
 

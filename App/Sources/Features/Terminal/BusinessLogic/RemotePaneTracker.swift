@@ -157,6 +157,8 @@ final class RemotePaneTracker {
   /// remote shell.
   private var boundFromTmux = false
   private var consumedSequence: (epoch: UInt64, sequence: UInt64)?
+  /// Callers of `refreshedWorkingDirectory` that wait for the next snapshot.
+  private var snapshotWaiters: [CheckedContinuation<Void, Never>] = []
 
   /// The remote session's anchor, learned from a snapshot that carried this pane's id. On
   /// macOS the id is readable only from non-platform foreground processes, so the session
@@ -231,6 +233,7 @@ final class RemotePaneTracker {
       for await snapshot in lease.snapshots {
         guard !self.retired, !Task.isCancelled else { break }
         self.latest = snapshot
+        self.resumeSnapshotWaiters()
         self.onSnapshot()
       }
     }
@@ -240,6 +243,7 @@ final class RemotePaneTracker {
   func retire() {
     guard !retired else { return }
     retired = true
+    resumeSnapshotWaiters()
     connectTask?.cancel()
     if let lease {
       Task { await lease.close() }
@@ -282,6 +286,59 @@ final class RemotePaneTracker {
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
       programStatusFence: boundRecordFence, confirmedAt: confirmedAt)
+  }
+
+  /// The working directory of the foreground process of the pane's session in the latest
+  /// snapshot (inside tmux, of the client's active pane): nil when the session is not
+  /// mapped or the host did not read it (docs-ai 084 C4).
+  var foregroundWorkingDirectory: String? {
+    guard let session = mappedSession() else { return nil }
+    let processes = session.tmux?.processes ?? session.processes
+    let group = session.tmux?.foregroundProcessGroupID ?? session.foregroundProcessGroupID
+    let members = processes.filter { $0.processGroupID == group }
+    return (members.first { $0.pid == group } ?? members.first)?.workingDirectory
+  }
+
+  /// The working directory of the bound remote agent in the latest snapshot, else the
+  /// session's foreground one.
+  var agentWorkingDirectory: String? {
+    if let session = mappedSession(), case .remote(let ref) = bound?.process.ref {
+      let processes = (session.tmux?.processes ?? []) + session.processes
+      if let process = processes.first(where: { $0.pid == ref.pid && $0.startToken == ref.startToken }),
+        let directory = process.workingDirectory
+      {
+        return directory
+      }
+    }
+    return foregroundWorkingDirectory
+  }
+
+  /// The foreground working directory after a fresh snapshot, or the last known one when
+  /// none arrives within `timeout` (a split opens where the pane is, docs-ai 084 C4).
+  func refreshedWorkingDirectory(timeout: Duration, clock: any Clock<Duration>) async -> String? {
+    guard let lease, !retired else { return foregroundWorkingDirectory }
+    await withCheckedContinuation { continuation in
+      snapshotWaiters.append(continuation)
+      Task { await lease.refresh() }
+      Task { [weak self] in
+        try? await clock.sleep(for: timeout)
+        self?.resumeSnapshotWaiters()
+      }
+    }
+    return foregroundWorkingDirectory
+  }
+
+  private func resumeSnapshotWaiters() {
+    let waiters = snapshotWaiters
+    snapshotWaiters.removeAll()
+    for waiter in waiters { waiter.resume() }
+  }
+
+  /// The pane's own session in the latest snapshot.
+  private func mappedSession() -> RemoteProbeSession? {
+    guard let latest, let report = latest.report else { return nil }
+    let matching = sessions(in: report, epoch: latest.connectionEpoch)
+    return matching.count == 1 ? matching[0] : nil
   }
 
   /// The agent's screen when the pane's session shows a tmux client (L0 item 6).

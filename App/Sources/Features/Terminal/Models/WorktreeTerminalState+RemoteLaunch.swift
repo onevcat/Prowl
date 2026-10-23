@@ -11,18 +11,61 @@ extension WorktreeTerminalState {
     remoteTerminalStagerForTesting ?? .live
   }
 
+  /// The launch of a remote pane: the folder's paths and the pane id on the host.
+  func remoteLaunch(surfaceID: UUID, workingDirectory: String, firstCommand: String?) -> RemoteLaunch {
+    RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: workingDirectory,
+      environment: [
+        RemoteLaunchVariable(name: "PROWL_WORKTREE_PATH", value: worktree.location.path),
+        RemoteLaunchVariable(name: "PROWL_ROOT_PATH", value: worktree.repositoryLocation.path),
+        RemoteLaunchVariable(name: GhosttySurfaceView.remotePaneIdentityEnvironmentKey, value: surfaceID.uuidString),
+      ],
+      firstCommand: firstCommand)
+  }
+
+  /// A remote pane's local working directory: the recipe's, so relative `-F` and `-i`
+  /// options resolve as when the host was added.
+  static func localDirectory(for profile: HostProfile) -> URL {
+    profile.recipe.workingDirectory.map { URL(filePath: $0, directoryHint: .isDirectory) }
+      ?? FileManager.default.homeDirectoryForCurrentUser
+  }
+
+  /// How long a split waits for a fresh snapshot of its anchor's directory.
+  static let splitDirectoryTimeout: Duration = .seconds(1)
+
+  /// Where a remote split starts (C4): `override` (a host path), else where the anchor pane
+  /// is on the host now (a fresh probe, then the last known one), else the folder.
+  func remoteSplitDirectory(anchorSurfaceID: UUID, override: URL?) async -> String {
+    if let override { return Self.hostPath(override.path(percentEncoded: false)) }
+    if remoteHostAlias(surfaceID: anchorSurfaceID) != nil, let tracker = remotePaneTrackers[anchorSurfaceID],
+      let directory = await tracker.refreshedWorkingDirectory(
+        timeout: Self.splitDirectoryTimeout, clock: remoteLaunchClock)
+    {
+      return directory
+    }
+    return worktree.location.path
+  }
+
   /// Stages `launch` on the host, then types the `ssh` line into the deferred pane and
   /// creates its surface. A failure closes the tab (nothing ran in it) and tells the user.
   /// A launch that carries the pending setup script (`consumesSetupScript`) consumes it only
   /// once the launcher is staged; otherwise it stays pending for the next tab.
+  /// A `resolveWorkingDirectory` (a split's) decides the launch's directory before staging.
   func startRemoteLaunch(
-    _ launch: RemoteLaunch, profile: HostProfile, surfaceID: UUID, tabID: TerminalTabID, consumesSetupScript: Bool
+    _ launch: RemoteLaunch, profile: HostProfile, surfaceID: UUID, tabID: TerminalTabID, consumesSetupScript: Bool,
+    resolveWorkingDirectory: (@MainActor () async -> String)? = nil
   ) {
     remoteLaunchOriginBySurface[surfaceID] = RemoteLaunchOrigin(
       hostProfileID: profile.id, alias: profile.alias, recipe: profile.recipe, nonce: launch.nonce,
       hasFirstCommand: launch.firstCommand != nil, launchedAt: Date())
     let stager = remoteTerminalStager
     remoteLaunchTasksBySurface[surfaceID] = Task { [weak self] in
+      var launch = launch
+      if let resolveWorkingDirectory {
+        launch = RemoteLaunch(
+          nonce: launch.nonce, workingDirectory: await resolveWorkingDirectory(), environment: launch.environment,
+          firstCommand: launch.firstCommand)
+      }
       let staged: Result<String, any Error>
       do {
         staged = .success(try await stager.stage(profile, launch))
