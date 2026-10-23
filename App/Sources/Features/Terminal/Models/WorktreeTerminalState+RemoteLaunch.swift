@@ -109,10 +109,15 @@ extension WorktreeTerminalState {
     guard var origin = remoteLaunchOriginBySurface[surfaceID] else { return true }
     defer { remoteLaunchOriginBySurface[surfaceID] = origin }
     if origin.sessionEnded {
-      guard origin.swallowsNextFinish else { return true }
-      origin.swallowsNextFinish = false
-      scheduleAbandonFirstCommand(surfaceID: surfaceID)
-      return false
+      if origin.swallowsNextFinish {
+        origin.swallowsNextFinish = false
+        scheduleAbandonFirstCommand(surfaceID: surfaceID)
+        return false
+      }
+      // A first command still within its marker grace keeps its reactions: a local command
+      // that finishes then completes nothing, so it cannot take the script's toast or Close
+      // on Success.
+      return !origin.hasFirstCommand || origin.completed
     }
     if let ssh = origin.ssh {
       if !isRunning(ssh) {

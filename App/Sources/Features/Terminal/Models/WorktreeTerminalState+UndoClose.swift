@@ -222,7 +222,11 @@ extension WorktreeTerminalState {
     if let profile = context?.launchProfile {
       launchProfilesBySurface[view.id] = profile
     }
-    if let origin = context?.remoteLaunchOrigin {
+    if var origin = context?.remoteLaunchOrigin {
+      // While the pane was closed, its launch marker found no origin and was dropped. Its
+      // reactions went with the close, so the first command waits for nothing any more:
+      // later finishes complete as usual (docs-ai 084 C3c).
+      origin.completed = true
       remoteLaunchOriginBySurface[view.id] = origin
     }
     if let registration = context?.hookRegistration {

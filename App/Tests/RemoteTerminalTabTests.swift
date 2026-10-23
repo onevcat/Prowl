@@ -412,6 +412,10 @@ struct RemoteTerminalTabTests {
     #expect(state.commandFinishedWaiters[surface.id] != nil)
     state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surface.id)
     #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == false)
+    // A local command that finishes within the grace takes none of the script's reactions.
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surface.id)
+    #expect(succeeded.isEmpty)
+    #expect(state.isMarkedForAutoClose(surface.id))
     await clock.advance(by: WorktreeTerminalState.remoteMarkerGrace)
 
     var results: [Int?] = []
@@ -516,6 +520,24 @@ struct RemoteTerminalTabTests {
 
     #expect(succeeded == ["Build"])
     #expect(!state.isMarkedForAutoClose(surface.id))
+  }
+
+  /// A remote script tab closed and brought back by Undo waits for no marker any more: the
+  /// marker found no origin while the pane was closed, so a later finish completes as usual.
+  @Test func undoBringsBackAScriptPaneThatWaitsForNoMarker() async throws {
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(), undoCloseClock: TestClock(), skipsSurfaceCreationForTesting: true)
+    let state = manager.state(for: RemoteRepositoryFixtures.gitRepository().worktrees[0])
+    state.remoteTerminalStagerForTesting = Staging().stager(profile: Self.profile)
+    let (surface, _) = try await startedRemotePane(state, hasFirstCommand: true)
+    let tabID = try #require(state.tabID(containing: surface.id))
+
+    #expect(state.closeTab(tabID, confirmation: .skip))
+    #expect(manager.undoClose())
+
+    #expect(state.surfaceView(for: surface.id) === surface)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == true)
+    #expect(!state.remoteLaunchHoldsWaiters(surfaceID: surface.id))
   }
 
   /// A remote folder's tabs are not saved in the layout, and a saved layout is not applied
