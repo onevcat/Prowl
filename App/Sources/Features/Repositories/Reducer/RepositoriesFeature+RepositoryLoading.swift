@@ -259,25 +259,28 @@ extension RepositoriesFeature {
     }
   }
 
-  /// `operation`'s result, or `onTimeout`'s when `deadline` passes first; the operation is
-  /// then cancelled, which stops its command.
+  /// `operation`'s result, or `onTimeout`'s when `deadline` passes first. On a timeout this
+  /// returns at once and only cancels the operation: a remote wait that does not respond to
+  /// cancellation (such as a shared read of the login `PATH`) must not hold the load past
+  /// its deadline. A cancelled caller gets `onTimeout`'s result too.
   private nonisolated static func withDeadline(
     _ deadline: Duration, clock: any Clock<Duration>,
     operation: @escaping @Sendable () async -> WorktreesFetchResult,
     onTimeout: @escaping @Sendable () -> WorktreesFetchResult
   ) async -> WorktreesFetchResult {
-    await withTaskGroup(of: WorktreesFetchResult?.self) { group in
-      group.addTask { await operation() }
-      group.addTask {
-        try? await clock.sleep(for: deadline)
-        return Task.isCancelled ? nil : onTimeout()
+    let race = DeadlineRace<WorktreesFetchResult>()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        race.start(
+          continuation: continuation,
+          operation: Task { race.finish(with: await operation()) },
+          timer: Task {
+            try? await clock.sleep(for: deadline)
+            race.finish(with: onTimeout())
+          })
       }
-      for await result in group {
-        guard let result else { continue }
-        group.cancelAll()
-        return result
-      }
-      return onTimeout()
+    } onCancel: {
+      race.finish(with: onTimeout())
     }
   }
 
@@ -452,5 +455,41 @@ extension RepositoriesFeature {
       return true
     }
     return false
+  }
+}
+
+/// The first of an operation and its deadline to finish resumes the caller; the other is
+/// cancelled and its result dropped.
+private nonisolated final class DeadlineRace<Value: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Value, Never>?
+  private var pending: Value?
+  private var tasks: [Task<Void, Never>] = []
+  private var isFinished = false
+
+  func start(continuation: CheckedContinuation<Value, Never>, operation: Task<Void, Never>, timer: Task<Void, Never>) {
+    let early: Value? = lock.withLock {
+      tasks = [operation, timer]
+      if isFinished { return pending }
+      self.continuation = continuation
+      return nil
+    }
+    if let early {
+      operation.cancel()
+      timer.cancel()
+      continuation.resume(returning: early)
+    }
+  }
+
+  func finish(with value: Value) {
+    let (continuation, tasks): (CheckedContinuation<Value, Never>?, [Task<Void, Never>]) = lock.withLock {
+      guard !isFinished else { return (nil, []) }
+      isFinished = true
+      pending = value
+      defer { self.continuation = nil }
+      return (self.continuation, self.tasks)
+    }
+    for task in tasks { task.cancel() }
+    continuation?.resume(returning: value)
   }
 }
