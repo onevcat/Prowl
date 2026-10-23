@@ -61,6 +61,9 @@ struct TerminalClient {
     case focusSelectedTab(Worktree)
     case prune(Set<Worktree.ID>)
     case prunePreservingRepositories(keeping: Set<Worktree.ID>, repositoryIDs: Set<Repository.ID>)
+    /// A repository the user removed while it was not loaded: its saved remote layout goes too
+    /// (docs-ai 084 C5).
+    case discardSavedLayout(repositoryID: Repository.ID)
     case setNotificationsEnabled(Bool)
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setCanvasMode(Bool)

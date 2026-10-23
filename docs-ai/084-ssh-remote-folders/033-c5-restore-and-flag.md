@@ -60,7 +60,11 @@ The saved layout outlives a session in which the folder did not restore.
   and a later empty open makes a fresh first tab.
 - A prune that removes the folder's terminal state also drops its saved layout. This is an
   explicit removal of the folder or worktree. A folder that never loaded has no state, so
-  a prune keeps its layout. So a remote folder keeps its layout when:
+  a prune keeps its layout.
+- Removing a folder that never loaded, from its failed row, sends
+  `TerminalClient.Command.discardSavedLayout(repositoryID:)`. This drops the saved layout
+  of the repository's own worktree: a plain folder, or a git repository's main worktree.
+  A merely unreachable or hidden folder sends nothing and keeps its layout. So a remote folder keeps its layout when:
 
 - its host is unreachable for a whole session;
 - remote folders are off (`PROWL_REMOTE_FOLDERS=0`);
@@ -104,6 +108,9 @@ stay stored but hidden (C1a).
   - A started remote pane replaces the saved layout in both copies (checked red).
   - A removed remote folder drops its saved layout, and one that never loaded keeps it
     (checked red).
+  - A removed unloaded folder (`discardSavedLayout`) drops its layout while another
+    unloaded one keeps its own. `RemoteHostRebindTests` checks that the failed-row removal
+    sends the command (checked red).
 - `AddRemoteFolderFeatureTests`: the flag is on by default, and off with `0`, `false` or
   `off`.
 - `CommandPaletteFeatureTests`: the global items include Add Remote Folder.
@@ -112,7 +119,7 @@ stay stored but hidden (C1a).
 
 - When a folder opens on an unreachable host, each of its restored panes shows its own
   "did not start" toast. The saved layout stays.
-- A folder removed while its host was unreachable (it never loaded, so it had no state)
-  keeps its saved layout. Adding it again restores that layout.
+- A linked worktree of a git repository that never loaded and was then removed keeps its
+  saved layout. Its ID is not known without the loaded repository.
 - A restored pane's directory is the one its session showed when the layout was saved. On a
   macOS host's plain shell, which is never mapped, the pane opens in the folder.

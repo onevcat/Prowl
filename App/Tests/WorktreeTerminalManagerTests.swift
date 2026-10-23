@@ -1208,6 +1208,31 @@ struct WorktreeTerminalManagerTests {
     #expect(saved.value?.worktrees.first?.tabs.map(\.tabID) == [tabID.rawValue.uuidString])
   }
 
+  /// A remote folder that never loaded and that the user removes from its failed row loses
+  /// its saved layout; another one that never loaded keeps it (docs-ai 084 C5).
+  @Test func aRemovedUnloadedRemoteFolderDropsItsSavedLayout() async throws {
+    let gone = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/gone").worktrees[0]
+    let later = RemoteRepositoryFixtures.gitRepository(path: "/home/dev/later").worktrees[0]
+    let payload = TerminalLayoutSnapshotPayload(
+      worktrees: [remoteLayout(gone, cwd: "/home/dev/gone"), remoteLayout(later, cwd: "/home/dev/later")])
+    let saved = LockIsolated<TerminalLayoutSnapshotPayload?>(nil)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { payload },
+        saveSnapshot: {
+          saved.setValue($0)
+          return true
+        }, clearSnapshot: { true }),
+      skipsSurfaceCreationForTesting: true)
+    await manager.restoreLayoutSnapshot(from: [])
+
+    manager.handleCommand(.discardSavedLayout(repositoryID: gone.id))
+    await manager.persistLayoutSnapshot()
+
+    #expect(saved.value?.worktrees.map(\.worktreeID) == [later.id])
+  }
+
   /// A removed remote folder's saved layout goes with it; one that never loaded stays
   /// (docs-ai 084 C5).
   @Test func aRemovedRemoteFolderDropsItsSavedLayout() async throws {

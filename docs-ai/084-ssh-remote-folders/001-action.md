@@ -89,4 +89,5 @@ All dates are 2026. Each slice PR went through a Pi Reviewer review loop until c
 - **In Place custom commands** stay refused in remote folders.
 - **Not built for remote folders:** remote workflows, including the host-aware workflow
   `rootKey` (C2 deferred it), and Agent Profile launches (082 L1f).
-- **Restore at launch.** An unreachable host gives one "did not start" toast per remote pane.
+- **Restore on an unreachable host.** When a remote folder first opens and its host does not
+  answer, each restored pane gives its own "did not start" toast. The saved layout stays.
