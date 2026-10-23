@@ -177,6 +177,12 @@ nonisolated struct RepositoryHost: Sendable {
     return local.createWorktreeStream(request)
   }
 
+  /// Throws unless a remote location's host is known: `remoteUnavailable` without a host
+  /// connection, `hostProfileMissing` without its profile. A local location passes.
+  func requireRemoteHost(for location: RepositoryLocation) async throws {
+    _ = try await remoteHost(location)
+  }
+
   /// `location` with its path resolved on its host, for comparing it with the paths
   /// that git lists; a local location, or one that cannot be resolved, as it is.
   func physicalLocation(_ location: RepositoryLocation) async -> RepositoryLocation {
@@ -204,13 +210,13 @@ nonisolated struct RepositoryHost: Sendable {
     _ = try await local.removeWorktree(worktree, deleteBranch)
   }
 
-  /// Nil for a remote worktree: the batched refresh carries its branch (B3e).
+  /// Nil for a remote worktree: the batched refresh carries its branch (B3f).
   func branchName(of worktree: RepositoryLocation) async -> String? {
     guard let url = worktree.localURL else { return nil }
     return await local.branchName(url)
   }
 
-  /// Nil for a remote worktree: the batched refresh carries its line changes (B3e).
+  /// Nil for a remote worktree: the batched refresh carries its line changes (B3f).
   func lineChanges(in worktree: RepositoryLocation) async -> GitLineChanges? {
     guard let url = worktree.localURL else { return nil }
     return await local.lineChanges(url)

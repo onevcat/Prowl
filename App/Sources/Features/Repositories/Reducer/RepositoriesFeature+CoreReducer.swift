@@ -227,11 +227,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      state.loadFailuresByID = Dictionary(
-        failures.map { ($0.rootID, $0.message) },
-        uniquingKeysWith: { first, _ in first }
-      )
-      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+      recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,

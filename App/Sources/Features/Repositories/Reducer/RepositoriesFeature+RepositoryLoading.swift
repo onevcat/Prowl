@@ -136,7 +136,9 @@ extension RepositoriesFeature {
     return .run { [animated, fallbackRoots] send in
       let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
       let roots = entries.map(\.location)
-      for entry in entries where entry.kind == .git {
+      // A remote prune would add a connection per entry to every reload; the refresh lists
+      // a worktree whose folder is gone, so remote entries skip it (docs-ai 084 B3e).
+      for entry in entries where entry.kind == .git && entry.location.localURL != nil {
         _ = try? await repositoryHost.pruneWorktrees(in: entry.location)
       }
       let (repositories, failures) = await loadRepositoriesData(entries)
@@ -157,60 +159,30 @@ extension RepositoriesFeature {
     let repository: Repository?
     let errorMessage: String?
     var isGitUnavailable: Bool = false
+    var isHostUnreachable: Bool = false
   }
 
+  /// How long a load waits for a remote host before it reports the host unreachable, so a
+  /// host that does not answer never holds back the other repositories. The refresh
+  /// cadence (B3f) tries it again.
+  static let remoteLoadDeadline: Duration = .seconds(10)
+
   func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
+    let clock = clock
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
         let repositoryHost = self.repositoryHost
         group.addTask {
-          // Remote folders load through their host (docs-ai 084 B3); until then they fail.
-          if case .remote = entry.location {
-            return WorktreesFetchResult(
-              entry: entry,
-              repository: nil,
-              errorMessage: RepositoryHostError.remoteUnavailable(entry.location).localizedDescription
-            )
+          // A remote folder loads through its host, within a deadline (docs-ai 084 B3e).
+          guard case .remote = entry.location else {
+            return await Self.loadRepository(entry, host: repositoryHost)
           }
-          let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
-          switch entry.kind {
-          case .git:
-            do {
-              let worktrees = try await repositoryHost.worktrees(in: .local(rootURL))
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: Repository(
-                  location: .local(rootURL),
-                  name: Repository.name(for: rootURL),
-                  kind: .git,
-                  worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })
-                ),
-                errorMessage: nil
-              )
-            } catch {
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: nil,
-                errorMessage: error.localizedDescription,
-                isGitUnavailable: {
-                  if case GitClientError.unavailable = error { return true }
-                  return false
-                }()
-              )
-            }
-          case .plain:
-            let workspace = ProjectWorkspace.load(from: rootURL)
-            return WorktreesFetchResult(
-              entry: entry,
-              repository: Repository(
-                location: .local(rootURL),
-                name: workspace?.title ?? Repository.name(for: rootURL),
-                kind: .plain,
-                worktrees: IdentifiedArray(),
-                workspace: workspace
-              ),
-              errorMessage: nil
-            )
+          return await Self.withDeadline(Self.remoteLoadDeadline, clock: clock) {
+            await Self.loadRepository(entry, host: repositoryHost)
+          } onTimeout: {
+            WorktreesFetchResult(
+              entry: entry, repository: nil,
+              errorMessage: RemoteRepositoryHostError.timedOut.localizedDescription, isHostUnreachable: true)
           }
         }
       }
@@ -234,12 +206,90 @@ extension RepositoriesFeature {
           LoadFailure(
             rootID: rootID,
             message: result.errorMessage ?? String(localized: "Unknown error"),
-            isGitUnavailable: result.isGitUnavailable
+            isGitUnavailable: result.isGitUnavailable,
+            isHostUnreachable: result.isHostUnreachable
           )
         )
       }
     }
     return (loaded, failures)
+  }
+
+  /// Loads one entry through `host`, which runs a local location on this Mac and a remote
+  /// one on its host. A plain folder loads without a check, as before; a remote one only
+  /// needs its host to be known. Workspaces are local only (A4a).
+  private nonisolated static func loadRepository(
+    _ entry: PersistedRepositoryEntry, host: RepositoryHost
+  ) async -> WorktreesFetchResult {
+    let location: RepositoryLocation =
+      switch entry.location {
+      case .local: .local(URL(fileURLWithPath: entry.path).standardizedFileURL)
+      case .remote: entry.location
+      }
+    do {
+      switch entry.kind {
+      case .git:
+        let worktrees = try await host.worktrees(in: location)
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: Repository(
+            location: location, name: Repository.name(for: location), kind: .git,
+            worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })),
+          errorMessage: nil
+        )
+      case .plain:
+        if location.localURL == nil { try await host.requireRemoteHost(for: location) }
+        let workspace = location.localURL.flatMap(ProjectWorkspace.load(from:))
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: Repository(
+            location: location, name: workspace?.title ?? Repository.name(for: location), kind: .plain,
+            worktrees: IdentifiedArray(), workspace: workspace),
+          errorMessage: nil
+        )
+      }
+    } catch {
+      return WorktreesFetchResult(
+        entry: entry, repository: nil, errorMessage: error.localizedDescription,
+        isGitUnavailable: {
+          if case GitClientError.unavailable = error { return true }
+          return false
+        }(),
+        isHostUnreachable: isRemoteHostUnreachable(error))
+    }
+  }
+
+  /// `operation`'s result, or `onTimeout`'s when `deadline` passes first; the operation is
+  /// then cancelled, which stops its command.
+  private nonisolated static func withDeadline(
+    _ deadline: Duration, clock: any Clock<Duration>,
+    operation: @escaping @Sendable () async -> WorktreesFetchResult,
+    onTimeout: @escaping @Sendable () -> WorktreesFetchResult
+  ) async -> WorktreesFetchResult {
+    await withTaskGroup(of: WorktreesFetchResult?.self) { group in
+      group.addTask { await operation() }
+      group.addTask {
+        try? await clock.sleep(for: deadline)
+        return Task.isCancelled ? nil : onTimeout()
+      }
+      for await result in group {
+        guard let result else { continue }
+        group.cancelAll()
+        return result
+      }
+      return onTimeout()
+    }
+  }
+
+  /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
+  /// host.
+  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) {
+    state.loadFailuresByID = Dictionary(
+      failures.map { ($0.rootID, $0.message) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+    state.unreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
   }
 
   func applyRepositories(
