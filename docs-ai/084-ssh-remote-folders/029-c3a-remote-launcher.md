@@ -61,9 +61,11 @@ The staging command refuses some launches before anything is sent:
 
 The launcher first prepares the shell:
 
-0. It checks that it runs from its own launch directory (`…/launch/<nonce>`). Otherwise it
-   stops before it removes anything. A launcher run as `sh -s` or with a wrong path would
-   otherwise see `.` as its directory.
+0. It checks that it runs from its own launch directory. The check is on the path as
+   typed (`/…/.cache/prowl/launch/<nonce>`, from `dirname "$0"`). It is not the resolved
+   path, because a symlinked `~/.cache` resolves elsewhere. Otherwise it stops before it
+   removes anything: a launcher run as `sh -s` or with a wrong path would see `.` as its
+   directory.
 1. It `cd`s to the working directory. If the directory is missing, it falls back to the
    home directory.
 2. It exports the environment.
@@ -74,7 +76,7 @@ hands over per shell:
 
 | Shell | Hand-over | First command |
 | --- | --- | --- |
-| zsh | `ZDOTDIR` points at a wrapper with all four startup files, then `exec zsh -i -l`. Each wrapper file runs the user's own file with the user's `ZDOTDIR` in place, then points zsh back at the wrapper. A user `.zshenv` that moves `ZDOTDIR` (the XDG layout) moves the user's directory with it. The wrapper's `.zlogin` restores the user's `ZDOTDIR` for good | A one-time `precmd` hook, added after the user's `.zlogin`, so it runs after the user's own hooks (an instant prompt captures output until its hook ran) and before the first prompt |
+| zsh | `ZDOTDIR` points at a wrapper with all four startup files, then `exec zsh -i -l`. Each wrapper file runs the user's own file at top level (a function would make its `typeset` declarations local, such as `typeset -U path`) with the user's `ZDOTDIR` in place, then points zsh back at the wrapper. A user `.zshenv` that moves `ZDOTDIR` (the XDG layout) moves the user's directory with it. The wrapper's `.zlogin` restores the user's `ZDOTDIR` for good | A one-time `precmd` hook, added after the user's `.zlogin`, so it runs after the user's own hooks (an instant prompt captures output until its hook ran) and before the first prompt |
 | bash | `exec bash --noprofile --rcfile <wrapper> -i`. The wrapper sources `/etc/profile`, then the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` | At the end of the wrapper |
 | fish | `exec fish -i -l --init-command 'source $PROWL_LAUNCH_DIR/init.fish'` | `init.fish`, which runs after the user's configuration |
 | any other | `"$SHELL" -i -c <command>`, then `exec "$SHELL" -l` | Apart, without the persistent state |
@@ -84,6 +86,16 @@ hands over per shell:
 - Each wrapper clears its injection variables (`PROWL_LAUNCH_DIR`,
   `PROWL_USER_ZDOTDIR[_SET]`) before the first command, so a nested shell never replays it.
 - Each wrapper removes the launch directory after the first command.
+- **A first command that ends the shell still reports once**, through an `exit` or through
+  an `errexit` failure such as `set -e` with a failing step:
+  - bash sets an `EXIT` trap around the first command, and restores the user's own `EXIT`
+    trap after it;
+  - zsh sets a top-level `EXIT` trap, unless the user set one. zsh's `zshexit` hooks do not
+    run when a login shell exits inside `precmd` on Debian's zsh 5.9 (measured), so the
+    trap is used instead. For an `errexit` failure, zsh sets `TRAPZERR` during the command,
+    unless the user has one, because zsh runs neither an `always` block nor the `EXIT` trap
+    when it fails inside a function. After the first command, the trap does nothing;
+  - fish has no `errexit`; an `exit` reports through a `fish_exit` handler.
 - `-i` is explicit. With a TTY it changes nothing, and it lets the tests run without one.
 
 Known limits:
@@ -97,8 +109,11 @@ Known limits:
   - the launch directory stays until a later staging removes it.
 
   C3b must therefore treat a missing marker as "no completion", not as a hang.
-- **zsh locals.** In zsh, the command runs inside a function, so a `typeset` or `local` in
-  the script stays local to it.
+- **zsh locals.** In zsh, the first command runs inside the `precmd` function, so a
+  `typeset` or `local` in the script stays local to it. The user's startup files are not
+  affected.
+- **A user `EXIT` trap or `TRAPZERR` in zsh.** When the user set one, Prowl does not replace
+  it, so a first command that ends the shell sends no marker.
 - **Debian-family bash.** bash built with `SYS_BASHRC` reads `/etc/bash.bashrc` even with
   `--rcfile`, and the replayed `/etc/profile` reads it again. Measured in the Debian image:
   one extra read. Removing the replay would lose the login semantics. Most of that file is
@@ -147,7 +162,17 @@ The format was chosen over framed OSC 133 for two reasons:
   `.zshrc` adds, and a `~/.zshenv` that moves `ZDOTDIR` still loads `.zshrc` and `.zlogin`
   from there once (checked red with the hook added first).
 - **Outside its directory**: a launcher outside its launch directory removes nothing and
-  starts nothing (checked red without the check).
+  starts nothing (checked red without the check). A symlinked `~/.cache` still launches
+  (checked red with the resolved path).
+- **zsh top-level files**: a `typeset -U path` change and an associative array from `.zshrc`
+  stay for the first command and the prompt (checked red with a function around the
+  source).
+- **Ending the shell**: a first command that ends the shell with `set -e` and a failing
+  step, or with `exit 3`, reports its status once and removes its directory. This runs in
+  zsh, bash 3.2 and bash 5 on this Mac (checked red without the bash trap), and with
+  `exit 3` in fish, bash, zsh and dash in the container.
+- **bash user trap**: bash gives the user's `EXIT` trap back after the first command.
+- **No error at exit**: nothing prints "not found" at exit after a normal first command.
 - **Strict parsing**: the nonce and the marker id are checked strictly (a signed, hex or
   out-of-range status is refused). A bad nonce, a bad environment name, an oversized
   script, a NUL byte and another launch's path are refused.

@@ -124,10 +124,11 @@ nonisolated enum RemoteLauncher {
     let marker = { (shellPrintf: String) in shellPrintf.replacing("NONCE", with: launch.nonce) }
     return """
       # Prowl remote terminal (docs-ai 084 C3). It removes itself.
-      prowl_dir=$(cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
-      # Only its own launch directory is ever removed.
+      # Only its own launch directory is ever removed: the path that staging printed, as
+      # typed (a symlinked ~/.cache keeps its logical path).
+      prowl_dir=$(dirname -- "$0")
       case $prowl_dir in
-        */\(launchDirectory)/\(launch.nonce)) ;;
+        /*/\(launchDirectory)/\(launch.nonce)) ;;
         *) echo "prowl: the launcher is not in its launch directory" >&2; exit 1 ;;
       esac
       cd -- \(quote(launch.workingDirectory)) 2>/dev/null || cd || :
@@ -147,9 +148,12 @@ nonisolated enum RemoteLauncher {
           cat > "$prowl_dir/zsh/.zshenv" <<'PROWL_EOF'
       \(zshEnvironment)
       PROWL_EOF
-          for prowl_file in zprofile zshrc; do
-            printf 'prowl_user_file .%s\n' "$prowl_file" > "$prowl_dir/zsh/.$prowl_file"
-          done
+          cat > "$prowl_dir/zsh/.zprofile" <<'PROWL_EOF'
+      \(zshUserFile(".zprofile"))
+      PROWL_EOF
+          cat > "$prowl_dir/zsh/.zshrc" <<'PROWL_EOF'
+      \(zshUserFile(".zshrc"))
+      PROWL_EOF
           cat > "$prowl_dir/zsh/.zlogin" <<'PROWL_EOF'
       \(zshLogin(marker: marker(posixMarker)))
       PROWL_EOF
@@ -192,9 +196,10 @@ nonisolated enum RemoteLauncher {
   private static let fishMarker =
     #"printf '\e]7501;state=%s:id=\#(markerIDPrefix)/NONCE/%s\a' $prowl_state $prowl_status"#
 
-  /// The wrapper's `.zshenv`. Each wrapper file runs the user's own file with the user's
-  /// `ZDOTDIR` in place, then points zsh back at the wrapper for the next file; a user
-  /// `.zshenv` that sets `ZDOTDIR` (the XDG layout) moves the user's directory with it.
+  /// The wrapper's `.zshenv`. Each wrapper file runs the user's own file at top level (a
+  /// function would make its `typeset` declarations local) with the user's `ZDOTDIR` in
+  /// place, then points zsh back at the wrapper for the next file. A user `.zshenv` that
+  /// sets `ZDOTDIR` (the XDG layout) moves the user's directory with it.
   private static let zshEnvironment = """
     # Prowl remote terminal (docs-ai 084 C3): the user's files, each from the user's ZDOTDIR.
     prowl_wrapper_dir=$ZDOTDIR
@@ -202,39 +207,63 @@ nonisolated enum RemoteLauncher {
     unset prowl_user_zdotdir
     [ -n "${PROWL_USER_ZDOTDIR_SET-}" ] && prowl_user_zdotdir=$PROWL_USER_ZDOTDIR
     unset PROWL_LAUNCH_DIR PROWL_USER_ZDOTDIR PROWL_USER_ZDOTDIR_SET
-    prowl_user_file() {
-      if [ -n "${prowl_user_zdotdir+set}" ]; then ZDOTDIR=$prowl_user_zdotdir; else unset ZDOTDIR; fi
-      [ -f "${ZDOTDIR:-$HOME}/$1" ] && source "${ZDOTDIR:-$HOME}/$1"
-      if [ -n "${ZDOTDIR+set}" ]; then prowl_user_zdotdir=$ZDOTDIR; else unset prowl_user_zdotdir; fi
-      ZDOTDIR=$prowl_wrapper_dir
-    }
-    prowl_user_file .zshenv
+    \(zshUserFile(".zshenv"))
     """
+
+  /// Runs the user's `file` (such as `.zshrc`) at top level, from the user's `ZDOTDIR`, and
+  /// keeps a `ZDOTDIR` that it changes.
+  private static func zshUserFile(_ file: String) -> String {
+    """
+    if [ -n "${prowl_user_zdotdir+set}" ]; then ZDOTDIR=$prowl_user_zdotdir; else unset ZDOTDIR; fi
+    [ -f "${ZDOTDIR:-$HOME}/\(file)" ] && source "${ZDOTDIR:-$HOME}/\(file)"
+    if [ -n "${ZDOTDIR+set}" ]; then prowl_user_zdotdir=$ZDOTDIR; else unset prowl_user_zdotdir; fi
+    ZDOTDIR=$prowl_wrapper_dir
+    """
+  }
 
   /// The wrapper's `.zlogin`, the last startup file of a login shell: the user's `ZDOTDIR`
   /// comes back for good, and the first command runs from a `precmd` hook added after the
   /// user's own hooks, such as an instant prompt that captures output until its hook ran.
+  /// A first command that ends the shell still reports: `exit` through a top-level `EXIT`
+  /// trap (unless the user set one; `zshexit` hooks do not run for a login shell on every
+  /// build), and an `errexit` failure through `TRAPZERR` (unless the user has one), as zsh
+  /// runs neither an `always` block nor the `EXIT` trap when it fails inside a function.
   private static func zshLogin(marker: String) -> String {
     """
-    prowl_user_file .zlogin
+    \(zshUserFile(".zlogin"))
     if [ -n "${prowl_user_zdotdir+set}" ]; then ZDOTDIR=$prowl_user_zdotdir; else unset ZDOTDIR; fi
     unset prowl_user_zdotdir prowl_wrapper_dir
-    unfunction prowl_user_file
-    prowl_first_command() {
-      precmd_functions=(${precmd_functions:#prowl_first_command})
-      source "$prowl_launch_dir/command"
-      local prowl_status=$?
+    prowl_report() {
+      [ -n "${prowl_launch_dir-}" ] || return 0
+      local prowl_status=$1 prowl_state=error
+      [ "$prowl_status" = 0 ] && prowl_state=done
       rm -rf -- "$prowl_launch_dir"
       unset prowl_launch_dir
-      local prowl_state=error
-      [ "$prowl_status" = 0 ] && prowl_state=done
       \(marker)
-      unfunction prowl_first_command
+    }
+    if [[ "$(trap)" != *" EXIT"* ]]; then
+      trap 'prowl_exit_status=$?; (( $+functions[prowl_report] )) && prowl_report $prowl_exit_status' EXIT
+    fi
+    prowl_first_command() {
+      precmd_functions=(${precmd_functions:#prowl_first_command})
+      local prowl_zerr=0
+      if (( ! $+functions[TRAPZERR] )); then
+        prowl_zerr=1
+        TRAPZERR() { local prowl_failed=$?; [[ -o errexit ]] && prowl_report $prowl_failed; return 0; }
+      fi
+      source "$prowl_launch_dir/command"
+      local prowl_status=$?
+      (( prowl_zerr )) && unfunction TRAPZERR
+      prowl_report $prowl_status
+      unfunction prowl_first_command prowl_report
     }
     precmd_functions+=(prowl_first_command)
     """
   }
 
+  /// The bash rc file: the login files, then the first command. A first command that ends
+  /// the shell (`exit`, or an `errexit` failure) still reports through an `EXIT` trap; the
+  /// user's own `EXIT` trap comes back afterwards.
   private static func bashRC(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the login files, then the first command.
@@ -245,27 +274,45 @@ nonisolated enum RemoteLauncher {
       if [ -r "$prowl_file" ]; then . "$prowl_file"; break; fi
     done
     unset prowl_file
+    prowl_report() {
+      [ -n "${prowl_launch_dir-}" ] || return 0
+      local prowl_status=$1 prowl_state=error
+      [ "$prowl_status" = 0 ] && prowl_state=done
+      rm -rf -- "$prowl_launch_dir"
+      unset prowl_launch_dir
+      \(marker)
+    }
+    prowl_user_exit_trap=$(trap -p EXIT)
+    trap 'prowl_report $?' EXIT
     . "$prowl_launch_dir/command"
-    prowl_status=$?
-    rm -rf -- "$prowl_launch_dir"
-    if [ "$prowl_status" = 0 ]; then prowl_state=done; else prowl_state=error; fi
-    \(marker)
-    unset prowl_launch_dir prowl_status prowl_state
+    prowl_report $?
+    if [ -n "$prowl_user_exit_trap" ]; then eval "$prowl_user_exit_trap"; else trap - EXIT; fi
+    unset -f prowl_report
+    unset prowl_user_exit_trap
     """
   }
 
+  /// The fish init command: the first command after the configuration. fish has no
+  /// `errexit`; an `exit` in the first command still reports through `fish_exit`.
   private static func fishInit(marker: String) -> String {
     """
     # Prowl remote terminal (docs-ai 084 C3): the first command, after the configuration.
     set -g prowl_launch_dir $PROWL_LAUNCH_DIR
     set -e PROWL_LAUNCH_DIR
+    function prowl_report --argument-names prowl_status
+      set -q prowl_launch_dir; or return 0
+      rm -rf -- $prowl_launch_dir
+      set -e prowl_launch_dir
+      set -l prowl_state error
+      test $prowl_status -eq 0; and set prowl_state done
+      \(marker)
+    end
+    function prowl_on_exit --on-event fish_exit
+      prowl_report $status
+    end
     source $prowl_launch_dir/command
-    set -g prowl_status $status
-    rm -rf -- $prowl_launch_dir
-    set -g prowl_state error
-    test $prowl_status -eq 0; and set prowl_state done
-    \(marker)
-    set -e prowl_launch_dir prowl_status prowl_state
+    prowl_report $status
+    functions -e prowl_report prowl_on_exit
     """
   }
 
