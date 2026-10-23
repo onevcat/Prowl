@@ -28,7 +28,7 @@ All dates are 2026. Each slice PR went through a Pi Reviewer review loop until c
 | 10-23 | C3b: remote tabs, `RemoteLaunchOrigin`, the typed `ssh` line; 3 review rounds | #983 | [030](030-c3b-remote-tabs.md) |
 | 10-24 | C3c: remote scripts, Close on Success, waiters, CLI tabs; 3 review rounds | #984 | [031](031-c3c-remote-scripts.md) |
 | 10-24 | C4: remote splits, the tracker's directory on the host, the remote agent directory; 3 review rounds | #985 | [032](032-c4-remote-splits.md) |
-| 10-24 | C5: layout restore with remote leaves; remote folders on; user docs | this slice's PR | [033](033-c5-restore-and-flag.md) |
+| 10-24 | C5: layout restore with remote leaves, deferred until the folder opens; remote folders on; user docs | #986 | [033](033-c5-restore-and-flag.md) |
 
 ## Outcome & current state (after C5)
 
