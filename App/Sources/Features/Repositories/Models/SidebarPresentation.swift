@@ -1,4 +1,5 @@
 import Foundation
+import Sharing
 
 struct SidebarPresentation: Equatable {
   var items: [SidebarItem]
@@ -102,6 +103,8 @@ struct FailedRepositoryModel: Equatable, Identifiable {
   var path: String
   var failureMessage: String
   var isGitUnavailable: Bool = false
+  /// The host of a remote folder that did not answer or needs a rebind (docs-ai 084 C1).
+  var hostStatus: RemoteHostStatus?
   var isReorderable: Bool
 }
 
@@ -151,15 +154,15 @@ extension RepositoriesFeature.State {
     for standardizedRoot in roots {
       let repositoryID = standardizedRoot.id
       if let failureMessage = loadFailuresByID[repositoryID] {
-        let path = standardizedRoot.path
         items.append(
           .failedRepository(
             FailedRepositoryModel(
               id: repositoryID,
               name: Repository.name(for: standardizedRoot),
-              path: path,
+              path: sidebarPath(for: standardizedRoot),
               failureMessage: failureMessage,
               isGitUnavailable: gitUnavailableRepositoryIDs.contains(repositoryID),
+              hostStatus: remoteHostStatus(for: repositoryID),
               isReorderable: true
             )
           )
@@ -191,6 +194,16 @@ extension RepositoriesFeature.State {
     }
 
     return SidebarPresentation(items: items)
+  }
+}
+
+extension RepositoriesFeature.State {
+  /// The local path, or `alias:/path` for a remote folder (docs-ai 084 D1).
+  fileprivate func sidebarPath(for location: RepositoryLocation) -> String {
+    guard case .remote(let hostProfileID, let path) = location else { return location.path }
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    let alias = hostProfiles.first { $0.id == hostProfileID }?.alias ?? String(localized: "Unknown host")
+    return "\(alias):\(path)"
   }
 }
 

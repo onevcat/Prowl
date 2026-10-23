@@ -133,11 +133,20 @@ nonisolated struct HostProfilesKey: SharedKey {
   }
 }
 
-nonisolated enum HostProfilesFileError: Error, Equatable {
+nonisolated enum HostProfilesFileError: Error, Equatable, LocalizedError {
   /// `hosts.json` exists but this build cannot read it, so it is not overwritten.
   case unreadableFile
   /// `hosts.json` is not what the shared value was loaded from; reload before editing.
   case changedSinceLoad
+
+  var errorDescription: String? {
+    switch self {
+    case .unreadableFile:
+      String(localized: "This version of Prowl cannot read ~/.prowl/hosts.json, so it does not change it.")
+    case .changedSinceLoad:
+      String(localized: "~/.prowl/hosts.json changed while Prowl saved it. Try again.")
+    }
+  }
 }
 
 nonisolated extension SharedReaderKey where Self == HostProfilesKey.Default {
