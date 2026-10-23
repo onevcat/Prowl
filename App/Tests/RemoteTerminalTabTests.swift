@@ -656,6 +656,33 @@ struct RemoteTerminalTabTests {
     }
   }
 
+  /// A remote folder's saved layout restores when its terminals first open, once; the panes
+  /// reconnect then, not at launch (C5).
+  @Test(.timeLimit(.minutes(1))) func aPendingRemoteLayoutRestoresWhenTheFolderOpens() async throws {
+    let staging = Staging()
+    let state = makeState(staging)
+    var started = 0
+    state.onRemoteLaunchStarted = { started += 1 }
+    let tabID = UUID().uuidString
+    state.pendingLayoutSnapshot = .init(
+      worktreeID: state.worktree.id, selectedTabID: tabID,
+      tabs: [
+        .init(
+          tabID: tabID, title: "app 1", customTitle: nil, icon: nil,
+          splitRoot: .leaf(
+            surfaceID: UUID().uuidString,
+            remote: .init(hostProfileID: RemoteRepositoryFixtures.hostProfileID.uuidString, cwdPath: "/home/dev/app")))
+      ])
+    #expect(staging.launches.value.isEmpty)
+
+    state.ensureInitialTab(focusing: false)
+
+    #expect(state.pendingLayoutSnapshot == nil)
+    #expect(state.tabManager.tabs.map(\.id.rawValue.uuidString) == [tabID])
+    await waitUntil { started == 1 }
+    #expect(staging.launches.value.count == 1)
+  }
+
   /// A remote folder whose host profile is gone is not restored.
   @Test func aRemoteFolderWithoutItsHostProfileIsNotRestored() {
     let state = makeState(Staging(), profile: nil)

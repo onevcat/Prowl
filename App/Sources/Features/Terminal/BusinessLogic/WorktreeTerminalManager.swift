@@ -1070,6 +1070,7 @@ final class WorktreeTerminalManager {
       self?.emit(
         .customCommandSucceeded(worktreeID: worktree.id, name: name, durationMs: durationMs))
     }
+    state.pendingLayoutSnapshot = pendingRemoteLayouts[worktree.id]
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
     return state
@@ -1116,6 +1117,10 @@ final class WorktreeTerminalManager {
     }
     state.onRemoteTerminalFailed = { [weak self] message in
       self?.emit(.remoteTerminalFailed(worktreeID: worktree.id, message: message))
+    }
+    // A remote pane started: the folder's live tabs replace its saved layout from now on.
+    state.onRemoteLaunchStarted = { [weak self] in
+      self?.pendingRemoteLayouts.removeValue(forKey: worktree.id)
     }
   }
 
@@ -1604,13 +1609,20 @@ final class WorktreeTerminalManager {
     }
   }
 
+  /// Saved remote folder layouts that no remote pane has replaced yet (docs-ai 084 C5).
+  private var pendingRemoteLayouts: [Worktree.ID: TerminalLayoutSnapshotPayload.SnapshotWorktree] = [:]
+
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
     let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    // A remote folder's saved layout that no tab has replaced yet (it never opened, or its
+    // host never answered) is kept as it was (docs-ai 084 C5).
+    let activeIDs = Set(activeStates.map(\.worktreeID))
+    let pending = pendingRemoteLayouts.filter { !activeIDs.contains($0.key) }.sorted { $0.key < $1.key }.map(\.value)
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
-        + " totalStates=\(states.count)"
+        + " totalStates=\(states.count) pendingRemote=\(pending.count)"
     )
-    guard !activeStates.isEmpty else {
+    guard !activeStates.isEmpty || !pending.isEmpty else {
       return nil
     }
 
@@ -1625,6 +1637,7 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
+    snapshotWorktrees.append(contentsOf: pending)
     // The selection must name a saved worktree.
     return TerminalLayoutSnapshotPayload(
       selectedWorktreeID: snapshotWorktrees.contains { $0.worktreeID == selectedWorktreeID } ? selectedWorktreeID : nil,
@@ -1648,14 +1661,23 @@ final class WorktreeTerminalManager {
     var skippedWorktreeIDs: Set<Worktree.ID> = []
 
     for snapshot in payload.worktrees {
-      // A remote folder may not load at launch (its host is unreachable), and its panes may
-      // not reconnect: it is skipped, never a reason to drop the local layout (docs-ai 084 C5).
-      let isRemote = RepositoryLocation.hasRemoteForm(snapshot.worktreeID)
+      // A remote folder restores when its terminals first open (`pendingLayoutSnapshot`), so
+      // launch opens no burst of connections and an unreachable host never drops the local
+      // layout. Until a remote pane starts, its saved layout stays in the save (docs-ai 084 C5).
+      if RepositoryLocation.hasRemoteForm(snapshot.worktreeID) {
+        pendingRemoteLayouts[snapshot.worktreeID] = snapshot
+        if let worktree = worktreeByID[snapshot.worktreeID] {
+          state(for: worktree).pendingLayoutSnapshot = snapshot
+        } else {
+          skippedWorktreeIDs.insert(snapshot.worktreeID)
+        }
+        continue
+      }
       guard let worktree = worktreeByID[snapshot.worktreeID] else {
         terminalLogger.warning(
           "[LayoutRestore] apply: worktreeID \(snapshot.worktreeID) not found in available worktrees"
         )
-        if allowsMissingWorktrees || isRemote {
+        if allowsMissingWorktrees {
           skippedWorktreeIDs.insert(snapshot.worktreeID)
           continue
         }
@@ -1670,10 +1692,6 @@ final class WorktreeTerminalManager {
         terminalLogger.warning(
           "[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
         state.closeAllSurfaces()
-        if isRemote {
-          skippedWorktreeIDs.insert(snapshot.worktreeID)
-          continue
-        }
         for restored in restoredStates {
           restored.closeAllSurfaces()
         }

@@ -58,7 +58,7 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
       case .remote(let folderHost, let folder)? = RepositoryLocation(id: worktreeID), folderHost == hostProfileID
     else { return nil }
     let path = directory.count > 1 && directory.hasSuffix("/") ? String(directory.dropLast()) : directory
-    return path == folder || path.hasPrefix(folder == "/" ? "/" : folder + "/") ? worktreeID : nil
+    return RemotePaths.contains(path, in: folder) ? worktreeID : nil
   }
 
   /// Equality for emission purposes, excluding raw state and diagnostic reasons. `rawState` oscillates

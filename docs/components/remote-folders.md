@@ -7,8 +7,9 @@ reaches over SSH. It shows in the sidebar next to your local repositories. Its t
 scripts and agents run on that host. Prowl installs nothing on the host and edits no
 startup file there.
 
-Remote folders are on by default. `PROWL_REMOTE_FOLDERS=0` in Prowl's environment turns
-them off: the menu items go away, and stored remote folders stay stored but hidden.
+Remote folders are on by default. `PROWL_REMOTE_FOLDERS=0` (or `false`, `off`, `no`) in
+Prowl's environment turns them off: the menu items go away, and stored remote folders and
+their saved layouts stay stored but hidden.
 
 ## Adding a remote folder
 
@@ -53,9 +54,10 @@ finishes. When the launcher cannot be staged, the tab closes with the reason.
 - **When `ssh` ends.** The pane returns to a local shell. A later `ssh` that you type in
   that pane is your own, and it follows the rules for manual SSH sessions in
   [agent detection](agent-detection.md#remote-agents-over-ssh).
-- **Restore.** After a restart, remote tabs and splits connect again with a plain shell,
-  where they were on the host. A script never runs again. An unreachable host's folder is
-  skipped, and your local layout is still restored.
+- **Restore.** After a restart, a remote folder's tabs and splits come back when you first
+  open the folder. They connect again with a plain shell, where they were on the host. A
+  script never runs again. An unreachable host never affects your local layout, and the
+  folder keeps its saved layout until its panes connect again.
 
 ## Scripts and custom commands
 

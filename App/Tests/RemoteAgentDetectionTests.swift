@@ -2,6 +2,7 @@ import AppKit
 import Clocks
 import Foundation
 import GhosttyKit
+import IdentifiedCollections
 import ProwlCLIShared
 import Testing
 
@@ -80,13 +81,14 @@ struct RemoteAgentDetectionTests {
     }
   }
 
-  private func makeFixture(probe: Probe, enabled: Bool = true) -> Fixture {
+  private func makeFixture(probe: Probe, enabled: Bool = true, worktree: Worktree? = nil) -> Fixture {
     let state = WorktreeTerminalState(
       runtime: GhosttyRuntime(),
-      worktree: Worktree(
-        id: "/tmp/repo/worktree", name: "worktree", detail: "",
-        workingDirectory: URL(fileURLWithPath: "/tmp/repo/worktree"),
-        repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")),
+      worktree: worktree
+        ?? Worktree(
+          id: "/tmp/repo/worktree", name: "worktree", detail: "",
+          workingDirectory: URL(fileURLWithPath: "/tmp/repo/worktree"),
+          repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")),
       skipsSurfaceCreationForTesting: true)
     let source = FakeRemoteSource()
     state.remoteAgentDetectionEnabledForTesting = enabled
@@ -1878,6 +1880,27 @@ struct RemoteAgentDetectionTests {
     // directory stands in, so a split starts in the folder.
     await deliver(fixture, unreadTmuxSnapshot(4, pane: fixture.surfaceID))
     #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == nil)
+  }
+
+  /// A remote folder's saved layout keeps where its pane's own session is on the host
+  /// (docs-ai 084 C5), and nothing local.
+  @Test func aRemoteLeafSavesItsHostDirectory() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe, worktree: RemoteRepositoryFixtures.gitRepository().worktrees[0])
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture,
+      snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/home/dev/app/api")))
+
+    let saved = try #require(fixture.state.makeLayoutSnapshotWorktree())
+    let leaf = try #require(saved.tabs.first?.splitRoot)
+    #expect(leaf.remote?.cwdPath == "/home/dev/app/api")
+    #expect(leaf.remote?.hostProfileID == RemoteRepositoryFixtures.hostProfileID.uuidString.lowercased())
+    #expect(leaf.cwdPath == nil)
   }
 
   /// The kill switch still turns detection off for a remote folder's pane.

@@ -27,30 +27,45 @@ restored leaf would have been a local shell. The plan's C5 row asks for:
 
 ### Restore
 
-`applyLayoutSnapshot` no longer refuses a remote folder. `restoreSplitNode` restores a
-remote leaf as a new remote pane (`restoreRemoteLeaf`):
+A remote folder's saved layout restores when its terminals first open, not at launch.
+`applyLayoutSnapshotPayload` keeps it in `pendingRemoteLayouts`, and hands it to the
+folder's state as `pendingLayoutSnapshot`. The folder's first `ensureInitialTab` (its view
+appears, or the reducer opens it) applies the layout once.
+
+Each remote leaf becomes a new remote pane (`restoreRemoteLeaf`):
 
 - a deferred surface in the recipe's local directory;
 - a plain launch with no first command, so a script never runs again (R-9).
 
-Its directory on the host is the saved one when it lies inside the folder, checked by text
-(`RemotePaths.canonicalPath`). Otherwise it is the folder. A missing host profile fails the
-worktree's restore.
+Its directory on the host is the saved one when the leaf was saved for the same host and
+the directory lies inside the folder. Both checks are by text: `RemotePaths.canonicalPath`
+and `RemotePaths.contains`. Otherwise the pane starts in the folder.
 
-`makeLayoutSnapshotPayload` saves remote states again. The C3b filter is removed, and the
-selection may name a remote folder.
+A failed restore, such as a missing host profile, opens a plain first tab instead.
 
-A remote folder never makes the whole restore fail, which would clear the saved layout and
-lose the local tabs:
+Why lazy:
 
-- a saved remote worktree that did not load (its host is unreachable) is skipped, even
-  when no repository failed to load;
-- a remote worktree whose apply fails (no host profile) is skipped;
-- its staging failures later close each pane with a toast (C3b).
+- launch opens no burst of staging commands and `ssh` logins, which could hit sshd's
+  `MaxStartups` or authentication prompts;
+- an unreachable host never makes the whole restore fail, which would clear the saved
+  layout and lose the local tabs.
+
+The saved layout outlives a session in which the folder did not restore.
+`makeLayoutSnapshotPayload` keeps each pending layout, unless that folder has live tabs.
+The pending layout is dropped when the folder's first remote pane starts its `ssh`
+(`onRemoteLaunchStarted`). So a remote folder keeps its layout when:
+
+- its host is unreachable for a whole session;
+- remote folders are off (`PROWL_REMOTE_FOLDERS=0`);
+- every restored pane fails to stage.
+
+The C3b filter is removed, so the payload saves remote states again, and the selection may
+name a remote folder.
 
 ### The flag
 
-`RemoteFolders.isEnabled` is now true unless `PROWL_REMOTE_FOLDERS=0`. The menu item, the
+`RemoteFolders.isEnabled` is now true unless `PROWL_REMOTE_FOLDERS` is `0`, `false`, `off`
+or `no` (any case). The menu item, the
 Add popover button and the palette item show by default. With `0`, stored remote folders
 stay stored but hidden (C1a).
 
@@ -66,17 +81,24 @@ stay stored but hidden (C1a).
 - `RemoteTerminalTabTests`:
   - A restored remote leaf reconnects with a plain shell, never a script. It uses the saved
     directory inside the folder, normalized, and otherwise the folder (checked red).
+  - A pending remote layout restores at the folder's first `ensureInitialTab`, once, and
+    stages nothing before (checked red).
   - A folder without its host profile is not restored.
   - An older leaf decodes without an origin.
+- `RemoteAgentDetectionTests/aRemoteLeafSavesItsHostDirectory`: a remote leaf saves where
+  its own session is on the host, and nothing local.
 - `WorktreeTerminalManagerTests`:
   - A remote folder is saved with its host, and a selected remote folder is the payload's
     selection (checked red).
-  - A remote folder that did not load, or that cannot restore, is skipped, and the local
-    layout is restored (checked red).
-- `AddRemoteFolderFeatureTests`: the flag is on by default and off with `0`.
+  - A remote folder that does not load, or cannot restore, never drops the local layout. Its
+    saved layout stays in the next save (checked red).
+- `AddRemoteFolderFeatureTests`: the flag is on by default, and off with `0`, `false` or
+  `off`.
+- `CommandPaletteFeatureTests`: the global items include Add Remote Folder.
 
 ## Known limits
 
-- At launch, every remote pane of an unreachable host shows its own "did not start" toast.
+- When a folder opens on an unreachable host, each of its restored panes shows its own
+  "did not start" toast. The saved layout stays.
 - A restored pane's directory is the one its session showed when the layout was saved. On a
   macOS host's plain shell, which is never mapped, the pane opens in the folder.

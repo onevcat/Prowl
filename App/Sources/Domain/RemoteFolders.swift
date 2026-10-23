@@ -6,8 +6,10 @@ import Foundation
 nonisolated enum RemoteFolders {
   static let environmentKey = "PROWL_REMOTE_FOLDERS"
 
+  /// Off for `0`, `false`, `off` or `no` (any case); on otherwise, also when unset.
   static func isEnabled(environment: [String: String]) -> Bool {
-    environment[environmentKey] != "0"
+    let value = environment[environmentKey]?.trimmingCharacters(in: .whitespaces).lowercased()
+    return !["0", "false", "off", "no"].contains(value ?? "")
   }
 
   /// Read once: the environment does not change while the app runs.

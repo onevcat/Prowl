@@ -347,6 +347,12 @@ nonisolated enum RemotePaths {
     return parts.isEmpty ? "." : parts.joined(separator: "/")
   }
 
+  /// Whether the canonical `path` is `folder` or lies inside it, by text: both are paths on
+  /// a host, which this Mac cannot resolve.
+  static func contains(_ path: String, in folder: String) -> Bool {
+    path == folder || path.hasPrefix(folder == "/" ? "/" : folder + "/")
+  }
+
   /// `path` as an absolute path without empty parts, `.`, or the parts that `..` removes.
   static func canonicalPath(_ path: String) -> String {
     "/" + components(path).joined(separator: "/")
