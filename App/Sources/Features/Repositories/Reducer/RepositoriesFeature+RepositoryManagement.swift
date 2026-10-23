@@ -366,6 +366,8 @@ extension RepositoriesFeature {
       let knownRemoteRepositories = state.retainedRemoteRepositories
       return .merge(
         failedIconCleanup,
+        // A failed repository has no terminal state to prune: its saved layout goes here.
+        .run { _ in await terminalClient.send(.discardSavedLayout(repositoryID: repositoryID)) },
         // Failed roots are absent from the loaded models, so a reload may not emit this delegate.
         .send(.delegate(.repositoriesChanged(state.repositories))),
         .run { send in
