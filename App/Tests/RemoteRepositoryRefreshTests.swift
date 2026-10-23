@@ -244,6 +244,33 @@ struct RemoteRepositoryRefreshTests {
     }
   }
 
+  /// `test -e` fails for a path below a folder that cannot be searched, although the path
+  /// still exists; that must not read as a deleted repository.
+  @Test func aRepositoryBelowAFolderThatCannotBeSearchedIsInaccessibleNotMissing() async throws {
+    let fixture = try await LocalRepositoryFixture()
+    defer { fixture.remove() }
+    let parent = fixture.root.appending(path: "parent", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: false)
+    let repository = try await fixture.addLinkedWorktree("parent/repo", branch: "side")
+    let removedRepository = parent.appending(path: "gone").path
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: parent.path)
+
+    let hidden = await Self.runScript(repository.path)
+    let hiddenAndGone = await Self.runScript(removedRepository)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
+
+    #expect(throws: RemoteRepositoryRefreshError.inaccessibleFolder) { try RemoteRepositoryRefresh.parse(hidden) }
+    #expect(throws: RemoteRepositoryRefreshError.inaccessibleFolder) {
+      try RemoteRepositoryRefresh.parse(hiddenAndGone)
+    }
+    // Once the parent can be searched, the same path is found (a linked worktree, so not the
+    // root), and the path that is gone is missing.
+    let found = await Self.runScript(repository.path)
+    let gone = await Self.runScript(removedRepository)
+    #expect(throws: RemoteRepositoryRefreshError.notRepositoryRoot) { try RemoteRepositoryRefresh.parse(found) }
+    #expect(throws: RemoteRepositoryRefreshError.missingFolder) { try RemoteRepositoryRefresh.parse(gone) }
+  }
+
   /// The local host shows no line changes when `git diff HEAD` fails; the remote one agrees.
   @Test func aRepositoryWithoutACommitHasNoLineChanges() async throws {
     let fixture = try await LocalRepositoryFixture(commit: false)

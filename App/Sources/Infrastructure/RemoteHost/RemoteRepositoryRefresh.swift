@@ -233,7 +233,15 @@ nonisolated struct RemoteRepositoryRefresh: Equatable, Sendable {
     GIT_OPTIONAL_LOCKS=0
     export GIT_OPTIONAL_LOCKS
     prowl_fail() { printf 'PROWL_REFRESH\t\#(formatVersion)\nERROR\t%s\nEND\n' "$1"; exit 0; }
-    [ -e "$1" ] || prowl_fail missing
+    # Missing only when the deepest ancestor that can be seen is a folder that can be
+    # searched: then the next part of the path does not exist. An ancestor that cannot be
+    # searched hides the path, which may still exist.
+    if [ ! -e "$1" ]; then
+      prowl_path=$1
+      while [ ! -e "$prowl_path" ]; do prowl_path=$(dirname -- "$prowl_path"); done
+      [ -d "$prowl_path" ] && [ -x "$prowl_path" ] && prowl_fail missing
+      prowl_fail inaccessible
+    fi
     cd -- "$1" 2>/dev/null || prowl_fail inaccessible
     command -v git >/dev/null 2>&1 || prowl_fail no-git
     if ! prowl_error=$(LC_ALL=C git rev-parse --git-dir 2>&1 >/dev/null); then
