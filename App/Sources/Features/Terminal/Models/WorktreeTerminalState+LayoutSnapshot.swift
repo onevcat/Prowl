@@ -42,10 +42,13 @@ extension WorktreeTerminalState {
       )
     }
 
+    var repositoryID: String?
+    if case .remote = worktree.repositoryLocation { repositoryID = worktree.repositoryLocation.id }
     let result = TerminalLayoutSnapshotPayload.SnapshotWorktree(
       worktreeID: worktree.id,
       selectedTabID: tabManager.selectedTabId?.rawValue.uuidString,
-      tabs: snapshotTabs
+      tabs: snapshotTabs,
+      repositoryID: repositoryID
     )
     terminalStateLogger.info(
       "[LayoutRestore] makeSnapshot: success, \(snapshotTabs.count) tab(s) captured"

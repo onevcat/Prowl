@@ -104,6 +104,10 @@ extension TerminalLayoutSnapshotPayload {
     let worktreeID: String
     let selectedTabID: String?
     let tabs: [SnapshotTab]
+    /// The repository of a remote worktree, so that removing a repository that never loaded
+    /// also drops the layouts of its linked worktrees (docs-ai 084 C5). Nil for a local
+    /// worktree and in older files.
+    var repositoryID: String?
 
     func isValid(
       maxTabsPerWorktree: Int,
