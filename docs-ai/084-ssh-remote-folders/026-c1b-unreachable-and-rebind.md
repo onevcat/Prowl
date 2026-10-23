@@ -29,6 +29,11 @@ All of it is behind `PROWL_REMOTE_FOLDERS=1`, like C1a.
   - a failure that the sidebar reads back from state (`currentLoadFailures`) is `.unknown`
     too;
   - the rebind removes it.
+
+  Restarting a hold is best effort. If the SSH configuration changes again between a poll
+  that passed the authority check and the hold that follows it, `holdConnection` finds the
+  changed target and holds nothing. That folder then has no hold until the next change of
+  its host's mark or a rebind. The polls still run; each command opens its own connection.
   Removing a folder needs no cleanup. A remote plain folder is not polled: when the SSH
   configuration is put back, its row clears through Rebind Host, which then offers Connect
   Again.
