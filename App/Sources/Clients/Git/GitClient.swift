@@ -1054,13 +1054,17 @@ struct GitClient {
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {
-    let rootPath = worktree.repositoryRootURL.path(percentEncoded: false)
-    let worktreeURL = worktree.workingDirectory.standardizedFileURL
+    // The local client removes local worktrees only (RepositoryHost routes by location).
+    guard let workingDirectory = worktree.localURL, let repositoryRootURL = worktree.repositoryLocalURL else {
+      throw RepositoryHostError.remoteUnavailable(worktree.location)
+    }
+    let rootPath = repositoryRootURL.path(percentEncoded: false)
+    let worktreeURL = workingDirectory.standardizedFileURL
     let worktreePath = Self.canonicalWorktreePath(worktreeURL.path(percentEncoded: false))
     let initialWorktreePaths = try await registeredWorktreePaths(rootPath: rootPath)
     guard initialWorktreePaths.contains(worktreePath) else {
       throw GitClientError.worktreeNotRegistered(
-        path: worktree.workingDirectory.path(percentEncoded: false)
+        path: workingDirectory.path(percentEncoded: false)
       )
     }
     let relocatedURL =
@@ -1093,24 +1097,24 @@ struct GitClient {
       if deleteBranch {
         _ = try? await deleteLocalBranch(
           named: worktree.name,
-          for: worktree.repositoryRootURL,
+          for: repositoryRootURL,
           force: false
         )
       }
       Task.detached {
         try? FileManager.default.removeItem(at: relocatedURL)
       }
-      return worktree.workingDirectory
+      return workingDirectory
     }
     try await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
     if deleteBranch {
       _ = try? await deleteLocalBranch(
         named: worktree.name,
-        for: worktree.repositoryRootURL,
+        for: repositoryRootURL,
         force: false
       )
     }
-    return worktree.workingDirectory
+    return workingDirectory
   }
 
   nonisolated private func registeredWorktreePaths(rootPath: String) async throws -> Set<String> {

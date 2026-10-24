@@ -360,12 +360,14 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   }
 
   func perform(with worktree: Worktree, onError: @escaping @MainActor @Sendable (OpenActionError) -> Void) {
+    // Open actions need the folder on this Mac; the reducer refuses remote worktrees (docs-ai 084 A4a).
+    guard let workingDirectory = worktree.localURL else { return }
     let actionTitle = title
     switch self {
     case .editor:
       return
     case .finder:
-      NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
+      NSWorkspace.shared.activateFileViewerSelecting([workingDirectory])
     // Apps that require CLI arguments instead of Apple Events to open directories.
     case .androidStudio, .clion, .goland, .intellij, .intellijEAP, .phpstorm, .pycharm, .rider,
       .rubymine, .rustrover, .webstorm:
@@ -384,7 +386,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       }
       let configuration = NSWorkspace.OpenConfiguration()
       configuration.createsNewApplicationInstance = true
-      configuration.arguments = [worktree.workingDirectory.path]
+      configuration.arguments = [workingDirectory.path]
       NSWorkspace.shared.openApplication(
         at: appURL,
         configuration: configuration
@@ -417,7 +419,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       }
       let configuration = NSWorkspace.OpenConfiguration()
       NSWorkspace.shared.open(
-        [worktree.workingDirectory],
+        [workingDirectory],
         withApplicationAt: appURL,
         configuration: configuration
       ) { _, error in

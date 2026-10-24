@@ -352,7 +352,7 @@ struct ArchivedAutoDeletePeriodAppTests {
     } withDependencies: {
       $0.gitClient.removeWorktree = { worktree, _ in
         removed.withValue { $0.append(worktree.id) }
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -387,7 +387,7 @@ struct ArchivedAutoDeletePeriodAppTests {
       $0.date = DateGenerator { date.value }
       $0.gitClient.removeWorktree = { worktree, _ in
         removed.withValue { $0.append(worktree.id) }
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -418,7 +418,7 @@ struct ArchivedAutoDeletePeriodAppTests {
       $0.date = DateGenerator { date.value }
       $0.gitClient.removeWorktree = { worktree, _ in
         removed.withValue { $0.append(worktree.id) }
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -452,7 +452,7 @@ struct ArchivedAutoDeletePeriodAppTests {
     await store.send(
       .repositories(
         .repositoriesLoaded(
-          refreshed, failures: [], roots: refreshed.map(\.rootURL), animated: false
+          refreshed, failures: [], roots: refreshed.map(\.localURL!), animated: false
         )))
     await store.send(.settings(.alert(.presented(.confirmArchivedAutoDeletePeriod(.sevenDays)))))
     await store.receive(\.settings.archivedAutoDeletePeriodChangeEvaluated)
@@ -474,7 +474,7 @@ struct ArchivedAutoDeletePeriodAppTests {
     } withDependencies: {
       $0.gitClient.removeWorktree = { worktree, _ in
         removed.withValue { $0.append(worktree.id) }
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -497,7 +497,7 @@ struct ArchivedAutoDeletePeriodAppTests {
       $0.date.now = archivedAutoDeleteTestNow.addingTimeInterval(7 * 86_400)
       $0.gitClient.removeWorktree = { worktree, _ in
         removed.withValue { $0.append(worktree.id) }
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -541,7 +541,7 @@ struct ArchivedAutoDeletePeriodAppTests {
     } withDependencies: {
       $0.gitClient.removeWorktree = { worktree, _ in
         Issue.record("Cancelled change must not delete \(worktree.id)")
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off

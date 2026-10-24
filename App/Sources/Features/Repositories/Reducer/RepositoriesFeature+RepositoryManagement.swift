@@ -198,7 +198,7 @@ extension RepositoriesFeature {
         state.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
           repositoryID: repositoryID,
           workspaceTitle: repository.name,
-          rootPath: repository.rootURL.path(percentEncoded: false),
+          rootPath: repository.location.path,
           branchOptions: branchOptions
         )
         return .none
@@ -248,7 +248,14 @@ extension RepositoriesFeature {
         )
       }
       let repositoryID = repository.id
-      let rootURL = repository.rootURL
+      // Workspaces are local folders (docs-ai 084 A4a).
+      guard let rootURL = repository.localURL else {
+        return .send(
+          .repositoryManagement(
+            .repositoryRemoved(repository.id, selectionWasRemoved: selectionWasRemoved)
+          )
+        )
+      }
       // Resolve the (source repo, branch) pairs the user opted to delete. The
       // deletion itself is routed through GitClient's guarded entry point so a
       // protected branch (main/master/default) can never be force-deleted.
@@ -331,7 +338,7 @@ extension RepositoriesFeature {
       }
       let failedIconCleanup = iconDetectionRemovalEffect(
         repositoryID: repositoryID,
-        rootURL: state.repositories[id: repositoryID]?.rootURL
+        rootURL: state.repositories[id: repositoryID]?.localURL
       )
       let remainingRoots = state.repositoryRoots
       return .merge(
@@ -366,7 +373,7 @@ extension RepositoriesFeature {
       }
       let iconCleanup = iconDetectionRemovalEffect(
         repositoryID: repositoryID,
-        rootURL: state.repositories[id: repositoryID]?.rootURL
+        rootURL: state.repositories[id: repositoryID]?.localURL
       )
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let remainingRoots = state.repositoryRoots

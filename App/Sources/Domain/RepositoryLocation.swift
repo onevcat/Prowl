@@ -63,6 +63,12 @@ nonisolated enum RepositoryLocation: Hashable, Sendable {
     }
   }
 
+  /// The path shown to the user and copied by Copy Path: a local path without a
+  /// trailing slash, as `URL.path` gives it, or the path on the remote host.
+  var displayPath: String {
+    localURL?.path ?? path
+  }
+
   /// The path on the location's own host.
   var path: String {
     switch self {

@@ -175,11 +175,12 @@ extension RepositoriesFeature.State {
   /// on-disk working directory. Used both to refresh their live status and to
   /// render their sidebar rows. Child id is the working-directory path string.
   func resolvedWorkspaceChildren(in repository: Repository) -> [ResolvedWorkspaceChild] {
-    guard let workspace = repository.workspace else {
+    // Workspaces are local folders (docs-ai 084 A4a).
+    guard let workspace = repository.workspace, let rootURL = repository.localURL else {
       return []
     }
     return workspace.repositories.map { entry in
-      let url = entry.resolvedURL(relativeTo: repository.rootURL)
+      let url = entry.resolvedURL(relativeTo: rootURL)
       return ResolvedWorkspaceChild(
         id: url.path(percentEncoded: false),
         workspaceID: repository.id,
@@ -363,7 +364,7 @@ extension RepositoriesFeature.State {
       repositoryID: pending.repositoryID,
       name: pending.progress.titleText,
       detail: pending.progress.detailText,
-      workingDirectory: nil,
+      folderName: nil,
       info: worktreeInfo(for: pending.id),
       isPinned: false,
       isMainWorktree: false,
@@ -389,7 +390,7 @@ extension RepositoriesFeature.State {
       repositoryID: repositoryID,
       name: worktree.name,
       detail: worktree.detail,
-      workingDirectory: worktree.workingDirectory,
+      folderName: URL(filePath: worktree.location.path, directoryHint: .isDirectory).lastPathComponent,
       info: worktreeInfo(for: worktree.id),
       isPinned: isPinned,
       isMainWorktree: isMainWorktree,
@@ -446,7 +447,8 @@ extension RepositoriesFeature.State {
       }
     }
     if ordered.isEmpty {
-      ordered = repositories.map(\.rootURL)
+      // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
+      ordered = repositories.compactMap(\.localURL)
     }
     return ordered
   }

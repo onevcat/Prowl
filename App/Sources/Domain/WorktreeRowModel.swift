@@ -5,8 +5,8 @@ struct WorktreeRowModel: Identifiable, Hashable {
   let repositoryID: Repository.ID
   let name: String
   let detail: String
-  /// Nil for a worktree that is still being created.
-  let workingDirectory: URL?
+  /// The worktree's folder name, on any host. Nil for a worktree that is still being created.
+  let folderName: String?
   let info: WorktreeInfoEntry?
   let isPinned: Bool
   let isMainWorktree: Bool

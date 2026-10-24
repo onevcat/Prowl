@@ -347,7 +347,7 @@ private struct ShelfSpineHeader: View {
   let hasAggregatedNotification: Bool
   let icon: RepositoryIconSource?
   let iconTint: Color
-  let repositoryRootURL: URL
+  let repositoryRootURL: URL?
 
   /// Reserved slot for the top decoration (icon and/or notification),
   /// sized at the maximum expected configuration (14pt icon plus a

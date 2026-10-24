@@ -223,7 +223,7 @@ enum WorkflowRunAdmission {
       definitionPath: entry.file.url.path(percentEncoded: false),
       worktree: WorkflowRunWorktree(
         id: worktree.id, name: worktree.name, branch: environment.branchName(worktree),
-        path: worktree.workingDirectory.path(percentEncoded: false)),
+        path: worktree.location.path),
       sourceSessionIdentity: source.paneID.flatMap { environment.detectedAgent($0)?.sessionIdentity })
     context.sourcePaneID = source.paneID
     context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
@@ -649,7 +649,7 @@ enum WorkflowRunAdmission {
     switch scope {
     case .bundle: .bundle
     case .user: .user
-    case .repo: .repo(repositoryID: worktree.repositoryRootURL.path(percentEncoded: false))
+    case .repo: .repo(repositoryID: worktree.repositoryLocation.id)
     }
   }
 

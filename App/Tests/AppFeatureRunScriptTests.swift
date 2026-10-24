@@ -69,7 +69,7 @@ struct AppFeatureRunScriptTests {
     let savedRunScript = withDependencies {
       $0.settingsFileStorage = storage.storage
     } operation: {
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      @Shared(.repositorySettings(worktree.repositoryLocalURL!)) var repositorySettings
       return repositorySettings.runScript
     }
     #expect(savedRunScript == "npm run dev")

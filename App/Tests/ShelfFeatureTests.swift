@@ -614,7 +614,7 @@ struct ShelfFeatureTests {
   @Test(.dependencies) func markWorktreeClosedAdvancesToNextBookWhenAvailable() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
-    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryRoots = [fixture.repo.localURL!]
     state.repositoryOrderIDs = [fixture.repo.id]
     state.selection = .worktree(fixture.worktrees[1].id)  // Middle book open.
     state.isShelfActive = true
@@ -644,7 +644,7 @@ struct ShelfFeatureTests {
   @Test(.dependencies) func markWorktreeClosedFallsBackToPreviousBookWhenClosingLast() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
-    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryRoots = [fixture.repo.localURL!]
     state.repositoryOrderIDs = [fixture.repo.id]
     state.selection = .worktree(fixture.worktrees[2].id)  // Last book open.
     state.isShelfActive = true

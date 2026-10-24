@@ -97,9 +97,20 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     self.manager = manager
   }
 
+  /// The worktree folder shown on the mirror. A remote worktree shows its path on its host;
+  /// the `host` field joins it in docs-ai 084 C2.
+  private static func directoryPath(of worktree: Worktree) -> String {
+    worktree.location.displayPath
+  }
+
+  /// The repository folder name shown as the pane's project.
+  private static func projectName(of worktree: Worktree) -> String {
+    URL(filePath: worktree.repositoryLocation.path, directoryHint: .isDirectory).lastPathComponent
+  }
+
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
-      let project = state.worktree.repositoryRootURL.lastPathComponent
+      let project = Self.projectName(of: state.worktree)
       return state.tabManager.tabs.flatMap { tab in
         let leaves = state.trees[tab.id]?.leaves() ?? []
         return leaves.enumerated().compactMap { paneIndex, view -> MirrorPaneDescriptor? in
@@ -116,7 +127,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
           }
           return MirrorPaneDescriptor(
             id: view.id, title: title.joined(separator: " · "),
-            directory: state.worktree.workingDirectory.path, busy: false,
+            directory: Self.directoryPath(of: state.worktree), busy: false,
             projectName: project,
             subtitle: location.joined(separator: " · "))
         }

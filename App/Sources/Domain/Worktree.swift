@@ -88,31 +88,14 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
   var repositoryLocalURL: URL? {
     repositoryLocation.localURL
   }
-
-  /// The local working directory. A forward kept while call sites move to
-  /// `location` or `localURL` (docs-ai 084 A3); it traps for a remote worktree.
-  var workingDirectory: URL {
-    guard let localURL else { preconditionFailure("workingDirectory read on remote worktree \(id)") }
-    return localURL
-  }
-
-  /// The local repository root. A forward kept while call sites move to
-  /// `repositoryLocation` or `repositoryLocalURL` (docs-ai 084 A3); it traps
-  /// for a remote worktree.
-  var repositoryRootURL: URL {
-    guard let repositoryLocalURL else {
-      preconditionFailure("repositoryRootURL read on remote worktree \(id)")
-    }
-    return repositoryLocalURL
-  }
 }
 
 extension Worktree {
   /// Environment variables exposed to all Prowl scripts.
   var scriptEnvironment: [String: String] {
     [
-      "PROWL_WORKTREE_PATH": workingDirectory.path(percentEncoded: false),
-      "PROWL_ROOT_PATH": repositoryRootURL.path(percentEncoded: false),
+      "PROWL_WORKTREE_PATH": location.path,
+      "PROWL_ROOT_PATH": repositoryLocation.path,
     ]
   }
 

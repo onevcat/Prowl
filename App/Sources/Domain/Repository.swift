@@ -105,13 +105,6 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     location.localURL
   }
 
-  /// The local root folder. A forward kept while call sites move to
-  /// `location` or `localURL` (docs-ai 084 A3); it traps for a remote repository.
-  var rootURL: URL {
-    guard let localURL else { preconditionFailure("rootURL read on remote repository \(id)") }
-    return localURL
-  }
-
   var initials: String {
     Self.initials(from: name)
   }

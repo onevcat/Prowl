@@ -29,8 +29,8 @@ struct RepositoryTerminalWorktreeTests {
     #expect(worktree.id == repository.id)
     #expect(worktree.name == "notes")
     #expect(worktree.detail == "/tmp/work/notes")
-    #expect(worktree.workingDirectory == root)
-    #expect(worktree.repositoryRootURL == root)
+    #expect(worktree.localURL! == root)
+    #expect(worktree.repositoryLocalURL! == root)
     #expect(worktree.isMain)
   }
 
@@ -49,7 +49,7 @@ struct RepositoryTerminalWorktreeTests {
 
     #expect(worktree.id == repository.id)
     #expect(worktree.name == "Feature")
-    #expect(worktree.workingDirectory == root)
+    #expect(worktree.localURL! == root)
   }
 
   @Test func gitRepositoryHasNoTerminalWorktree() {

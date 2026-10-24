@@ -654,7 +654,7 @@ struct AppFeatureCommandPaletteTests {
     await store.send(.commandPalette(.delegate(.copyPath)))
     await store.finish()
 
-    #expect(NSPasteboard.general.string(forType: .string) == worktree.workingDirectory.path)
+    #expect(NSPasteboard.general.string(forType: .string) == worktree.localURL!.path)
   }
 
   @Test(.dependencies) func copyPathWithoutSelectedWorktreeIsNoop() async {
@@ -1006,7 +1006,7 @@ struct AppFeatureCommandPaletteTests {
       worktrees: [],
       workspace: ProjectWorkspace(title: "Workspace", repositories: [entry])
     )
-    let childID = entry.resolvedURL(relativeTo: workspace.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: workspace.localURL!).path(percentEncoded: false)
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [workspace]
     repositoriesState.selection = .repository(workspace.id)
@@ -1066,7 +1066,7 @@ struct AppFeatureCommandPaletteTests {
       worktrees: [],
       workspace: ProjectWorkspace(title: "Workspace", repositories: [entry])
     )
-    let childID = entry.resolvedURL(relativeTo: workspace.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: workspace.localURL!).path(percentEncoded: false)
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [workspace]
     repositoriesState.selection = .repository(workspace.id)
@@ -1126,7 +1126,7 @@ struct AppFeatureCommandPaletteTests {
       worktrees: [],
       workspace: ProjectWorkspace(title: "Workspace", repositories: [entry])
     )
-    let childID = entry.resolvedURL(relativeTo: workspace.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: workspace.localURL!).path(percentEncoded: false)
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [workspace]
     repositoriesState.selection = .repository(workspace.id)

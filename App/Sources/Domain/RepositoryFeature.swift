@@ -14,6 +14,10 @@ nonisolated enum RepositoryFeature: CaseIterable, Hashable, Sendable {
   case archiveScript
   /// Launching an Agent Profile in the repository (remote launches come with 082 L1f).
   case profileLaunch
+  /// Creating a worktree (remote creation runs through the remote host, B3 and later).
+  case worktreeCreation
+  /// Opening a terminal tab from the sidebar (remote tabs come with C3).
+  case terminalTab
 }
 
 nonisolated enum FeatureAvailability: Equatable, Sendable {
@@ -52,6 +56,10 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
         String(localized: "Archive scripts do not run for remote folders.")
       case .profileLaunch:
         String(localized: "Agent Profiles cannot launch in remote folders yet.")
+      case .worktreeCreation:
+        String(localized: "Worktrees cannot be created in remote folders yet.")
+      case .terminalTab:
+        String(localized: "Terminals cannot open in remote folders yet.")
       }
     }
   }

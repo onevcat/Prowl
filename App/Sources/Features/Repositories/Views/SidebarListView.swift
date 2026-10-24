@@ -691,13 +691,13 @@ struct SidebarListView: View {
   ) -> URL? {
     for repository in repositories {
       if let worktree = repository.worktrees[id: worktreeID] {
-        return worktree.workingDirectory
+        return worktree.localURL
       }
     }
     guard let repository = repositories[id: worktreeID],
       repository.capabilities.supportsRunnableFolderActions
     else { return nil }
-    return repository.rootURL
+    return repository.localURL
   }
 }
 

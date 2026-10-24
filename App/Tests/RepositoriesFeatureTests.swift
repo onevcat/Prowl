@@ -185,7 +185,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -443,7 +443,7 @@ struct RepositoriesFeatureTests {
       pullRequest: nil
     )
 
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock { $0.observeLineDiffsAutomatically = false }
 
     let lineChangeRequests = LockIsolated(0)
@@ -614,7 +614,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
+      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
     ) {
       $0.pullRequestRefreshCheckpointByWorktreeID = [worktree.id: kept]
       $0.pullRequestRefreshForcedWorktreeIDs = []
@@ -635,7 +635,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -823,7 +823,7 @@ struct RepositoriesFeatureTests {
       workspace: workspace
     )
 
-    let childID = repository.rootURL.appending(path: "app").standardizedFileURL.path(
+    let childID = repository.localURL!.appending(path: "app").standardizedFileURL.path(
       percentEncoded: false)
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
@@ -1713,11 +1713,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.rootURL, newRepository.rootURL]
+          roots: [existingRepository.localURL!, newRepository.localURL!]
         ))
     ) {
       $0.repositories = [existingRepository, newRepository]
-      $0.repositoryRoots = [existingRepository.rootURL, newRepository.rootURL]
+      $0.repositoryRoots = [existingRepository.localURL!, newRepository.localURL!]
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.selectWorktree) {
@@ -1757,11 +1757,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.rootURL, plainRepository.rootURL]
+          roots: [existingRepository.localURL!, plainRepository.localURL!]
         ))
     ) {
       $0.repositories = [existingRepository, plainRepository]
-      $0.repositoryRoots = [existingRepository.rootURL, plainRepository.rootURL]
+      $0.repositoryRoots = [existingRepository.localURL!, plainRepository.localURL!]
       $0.pendingTerminalFocusWorktreeIDs = [plainRepository.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -1790,11 +1790,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [repository.rootURL]
+          roots: [repository.localURL!]
         ))
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [repository.rootURL]
+      $0.repositoryRoots = [repository.localURL!]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1824,11 +1824,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.rootURL, newRepository.rootURL]
+          roots: [existingRepository.localURL!, newRepository.localURL!]
         ))
     ) {
       $0.repositories = [existingRepository, newRepository]
-      $0.repositoryRoots = [existingRepository.rootURL, newRepository.rootURL]
+      $0.repositoryRoots = [existingRepository.localURL!, newRepository.localURL!]
       $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -2172,7 +2172,7 @@ struct RepositoriesFeatureTests {
 
     #expect(
       sentCommands.value == [
-        .createTabInDirectory(worktree, directory: worktree.workingDirectory)
+        .createTabInDirectory(worktree, directory: worktree.localURL!)
       ]
     )
   }
@@ -2199,7 +2199,7 @@ struct RepositoriesFeatureTests {
     #expect(store.state.selection == .canvas)
     #expect(
       sentCommands.value == [
-        .createTabInDirectory(worktree, directory: worktree.workingDirectory)
+        .createTabInDirectory(worktree, directory: worktree.localURL!)
       ]
     )
   }
@@ -2461,9 +2461,9 @@ struct RepositoriesFeatureTests {
     let expectedWorktree = Worktree(
       id: repository.id,
       name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
+      detail: repository.localURL!.path(percentEncoded: false),
+      workingDirectory: repository.localURL!,
+      repositoryRootURL: repository.localURL!
     )
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: initialState) {
@@ -2596,9 +2596,9 @@ struct RepositoriesFeatureTests {
         == Worktree(
           id: repository.id,
           name: repository.name,
-          detail: repository.rootURL.path(percentEncoded: false),
-          workingDirectory: repository.rootURL,
-          repositoryRootURL: repository.rootURL
+          detail: repository.localURL!.path(percentEncoded: false),
+          workingDirectory: repository.localURL!,
+          repositoryRootURL: repository.localURL!
         )
     )
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -2922,7 +2922,7 @@ struct RepositoriesFeatureTests {
     var state = makeState(repositories: [repository])
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
-      repositoryRootURL: repository.rootURL,
+      repositoryRootURL: repository.localURL!,
       repositoryName: repository.name,
       automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
@@ -2950,7 +2950,7 @@ struct RepositoriesFeatureTests {
     var state = makeState(repositories: [repository])
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
-      repositoryRootURL: repository.rootURL,
+      repositoryRootURL: repository.localURL!,
       repositoryName: repository.name,
       automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
@@ -3045,7 +3045,7 @@ struct RepositoriesFeatureTests {
     var state = makeState(repositories: [repository])
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
-      repositoryRootURL: repository.rootURL,
+      repositoryRootURL: repository.localURL!,
       repositoryName: repository.name,
       automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
@@ -3243,7 +3243,7 @@ struct RepositoriesFeatureTests {
         }
       }
       $0.gitClient.removeWorktree = { worktree, _ in
-        let workingDirectory = await MainActor.run { worktree.workingDirectory }
+        let workingDirectory = await MainActor.run { worktree.localURL! }
         removedPaths.withValue { $0.append(workingDirectory.path(percentEncoded: false)) }
         return workingDirectory
       }
@@ -3290,7 +3290,7 @@ struct RepositoriesFeatureTests {
         return [registered]
       }
       $0.gitClient.removeWorktree = { worktree, _ in
-        let (root, directory) = await MainActor.run { (worktree.repositoryRootURL, worktree.workingDirectory) }
+        let (root, directory) = await MainActor.run { (worktree.repositoryLocalURL!, worktree.localURL!) }
         removedRoots.withValue { $0.append(root) }
         return directory
       }
@@ -3580,7 +3580,7 @@ struct RepositoriesFeatureTests {
       $0.global.fetchOriginBeforeWorktreeCreation = false
       $0.global.defaultWorktreeBaseDirectoryPath = "/tmp/global-worktrees"
     }
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.worktreeBaseDirectoryPath = "/tmp/repo-override"
     }
@@ -3609,7 +3609,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-      for: repository.rootURL,
+      for: repository.localURL!,
       globalDefaultPath: "/tmp/global-worktrees",
       repositoryOverridePath: "/tmp/repo-override"
     )
@@ -3633,7 +3633,7 @@ struct RepositoriesFeatureTests {
       $0.global.fetchOriginBeforeWorktreeCreation = false
       $0.global.defaultWorktreeBaseDirectoryPath = "/tmp/global-worktrees"
     }
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.worktreeBaseDirectoryPath = nil
     }
@@ -3662,7 +3662,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedBaseDirectory = ProwlPaths.worktreeBaseDirectory(
-      for: repository.rootURL,
+      for: repository.localURL!,
       globalDefaultPath: "/tmp/global-worktrees",
       repositoryOverridePath: nil
     )
@@ -3687,7 +3687,7 @@ struct RepositoriesFeatureTests {
       $0.global.copyIgnoredOnWorktreeCreate = true
       $0.global.copyUntrackedOnWorktreeCreate = true
     }
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.copyIgnoredOnWorktreeCreate = nil
       $0.copyUntrackedOnWorktreeCreate = nil
@@ -3738,7 +3738,7 @@ struct RepositoriesFeatureTests {
       $0.global.copyIgnoredOnWorktreeCreate = true
       $0.global.copyUntrackedOnWorktreeCreate = true
     }
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.copyIgnoredOnWorktreeCreate = nil
       $0.copyUntrackedOnWorktreeCreate = nil
@@ -3900,7 +3900,7 @@ struct RepositoriesFeatureTests {
           pendingID: pendingID,
           previousSelection: nil,
           repositoryID: repository.id,
-          repositoryRootURL: repository.rootURL,
+          repositoryRootURL: repository.localURL!,
           name: nil,
           worktreeDirectory: nil
         ))
@@ -3985,7 +3985,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
       $0.gitClient.deleteLocalBranch = { _, _, _ in .deleted }
       $0.gitClient.worktrees = { _ in [mainWorktree] }
     }
@@ -4018,7 +4018,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
       $0.gitClient.worktrees = { _ in [mainWorktree] }
     }
     store.exhaustivity = .off
@@ -4093,7 +4093,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.gitClient.removeWorktree = { worktree, deleteBranch in
         #expect(deleteBranch == false)
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
       $0.gitClient.deleteLocalBranch = { _, _, force in
         forceDeleteAttempts.withValue { $0.append(force) }
@@ -4391,7 +4391,7 @@ struct RepositoriesFeatureTests {
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
     var state = makeState(repositories: [repository])
     state.selection = .worktree(mainWorktree.id)
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.archiveScript = "echo syncing\necho done"
     }
@@ -4456,7 +4456,7 @@ struct RepositoriesFeatureTests {
       repoRoot: repoRoot
     )
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.archiveScript = "exit 7"
     }
@@ -4570,7 +4570,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     )
@@ -4610,7 +4610,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     )
@@ -4647,7 +4647,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -4910,7 +4910,7 @@ struct RepositoriesFeatureTests {
       worktrees[id: worktree.id] = renamedWorktree
       repository = Repository(
         id: repository.id,
-        rootURL: repository.rootURL,
+        rootURL: repository.localURL!,
         name: repository.name,
         worktrees: worktrees
       )
@@ -5088,7 +5088,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -5117,7 +5117,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -5148,7 +5148,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -5180,7 +5180,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [updatedRepository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -5209,7 +5209,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [updatedRepository],
         failures: [],
-        roots: [repository.rootURL],
+        roots: [repository.localURL!],
         animated: false
       )
     ) {
@@ -5445,7 +5445,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
     }
     store.exhaustivity = .off
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: featureWorktree.name)
@@ -5491,7 +5491,7 @@ struct RepositoriesFeatureTests {
       $0.gitClient.removeWorktree = { worktree, deleteBranch in
         #expect(worktree.id == externalWorktree.id)
         #expect(deleteBranch == false)
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -5530,7 +5530,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
       $0.gitClient.deleteLocalBranch = { branchName, _, force in
         #expect(force == false)
         deletedBranches.withValue { $0.append(branchName) }
@@ -5649,7 +5649,7 @@ struct RepositoriesFeatureTests {
     $settingsFile.withLock {
       $0.global.pullRequestMergeStrategy = .squash
     }
-    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    @Shared(.repositorySettings(repository.localURL!)) var repositorySettings
     $repositorySettings.withLock {
       $0.pullRequestMergeStrategy = nil
     }
@@ -6785,7 +6785,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.date = .constant(fixedDate)
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
     }
     store.exhaustivity = .off
 
@@ -6819,7 +6819,7 @@ struct RepositoriesFeatureTests {
       $0.gitClient.removeWorktree = { worktree, deleteBranch in
         #expect(worktree.id == expiredWorktree.id)
         #expect(deleteBranch == false)
-        return worktree.workingDirectory
+        return worktree.localURL!
       }
     }
     store.exhaustivity = .off
@@ -6909,7 +6909,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.date = .constant(fixedDate)
-      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.localURL! }
       $0.gitClient.worktrees = { _ in [mainWorktree] }
     }
     store.exhaustivity = .off
@@ -7425,7 +7425,7 @@ struct RepositoriesFeatureTests {
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws", children: [entry])
     var state = makeState(repositories: [repository])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     state.workspaceChildBranchByID[childID] = "live-branch"
     state.workspaceChildInfoByID[childID] = WorktreeInfoEntry(
       addedLines: 3, removedLines: 1, pullRequest: nil)
@@ -7465,7 +7465,7 @@ struct RepositoriesFeatureTests {
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws-diff", children: [entry])
     var state = makeState(repositories: [repository])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     state.workspaceChildBranchByID[childID] = "live-branch"
 
     let target = state.diffTarget(for: .workspaceChild(workspaceID: repository.id, path: childID))
@@ -7478,7 +7478,7 @@ struct RepositoriesFeatureTests {
     #expect(target?.repositoryRootURL == childURL)
     // Hunk stays hosted in the workspace terminal, running in the child dir.
     #expect(target?.terminalHost.id == repository.id)
-    #expect(target?.terminalHost.workingDirectory == repository.rootURL)
+    #expect(target?.terminalHost.localURL! == repository.localURL!)
     #expect(target?.terminalWorkingDirectory == childURL)
   }
 
@@ -7501,9 +7501,9 @@ struct RepositoriesFeatureTests {
       children: [withMetadataBranch, withoutAnyBranch]
     )
     let state = makeState(repositories: [repository])
-    let metadataChildID = withMetadataBranch.resolvedURL(relativeTo: repository.rootURL)
+    let metadataChildID = withMetadataBranch.resolvedURL(relativeTo: repository.localURL!)
       .path(percentEncoded: false)
-    let namelessChildID = withoutAnyBranch.resolvedURL(relativeTo: repository.rootURL)
+    let namelessChildID = withoutAnyBranch.resolvedURL(relativeTo: repository.localURL!)
       .path(percentEncoded: false)
 
     #expect(
@@ -7543,7 +7543,7 @@ struct RepositoriesFeatureTests {
     let firstWorkspace = makeWorkspaceRepository(id: "/tmp/ws-dup-1", children: [sharedEntry])
     let secondWorkspace = makeWorkspaceRepository(id: "/tmp/ws-dup-2", children: [sharedEntry])
     let state = makeState(repositories: [firstWorkspace, secondWorkspace])
-    let childID = sharedEntry.resolvedURL(relativeTo: firstWorkspace.rootURL).path(percentEncoded: false)
+    let childID = sharedEntry.resolvedURL(relativeTo: firstWorkspace.localURL!).path(percentEncoded: false)
 
     let firstTarget = state.diffTarget(
       for: .workspaceChild(workspaceID: firstWorkspace.id, path: childID)
@@ -7581,9 +7581,9 @@ struct RepositoriesFeatureTests {
       children: [linkedEntry, remoteEntry]
     )
     let state = makeState(repositories: [repository])
-    let linkedChildID = linkedEntry.resolvedURL(relativeTo: repository.rootURL)
+    let linkedChildID = linkedEntry.resolvedURL(relativeTo: repository.localURL!)
       .path(percentEncoded: false)
-    let remoteChildID = remoteEntry.resolvedURL(relativeTo: repository.rootURL)
+    let remoteChildID = remoteEntry.resolvedURL(relativeTo: repository.localURL!)
       .path(percentEncoded: false)
 
     let linkedTarget = state.diffTarget(
@@ -7612,7 +7612,7 @@ struct RepositoriesFeatureTests {
     let selectedWorkspace = makeWorkspaceRepository(id: "/tmp/ws-prune-1", children: [sharedEntry])
     let otherWorkspace = makeWorkspaceRepository(id: "/tmp/ws-prune-2", children: [sharedEntry])
     var state = makeState(repositories: [selectedWorkspace, otherWorkspace])
-    let childID = sharedEntry.resolvedURL(relativeTo: selectedWorkspace.rootURL)
+    let childID = sharedEntry.resolvedURL(relativeTo: selectedWorkspace.localURL!)
       .path(percentEncoded: false)
     state.selection = .repository(selectedWorkspace.id)
     state.selectedWorkspaceChildID = childID
@@ -7640,7 +7640,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo-pr/wt", name: "feature")
     let repository = makeRepository(id: "/tmp/repo-pr", worktrees: [worktree])
     var state = makeState(repositories: [repository, workspace])
-    let childID = entry.resolvedURL(relativeTo: workspace.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: workspace.localURL!).path(percentEncoded: false)
     let worktreePR = makePullRequest(state: "OPEN", headRefName: "feature", number: 1)
     let childPR = makePullRequest(state: "OPEN", headRefName: "child-branch", number: 2)
     state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(pullRequest: worktreePR)
@@ -7664,7 +7664,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo-sel/wt", name: "alpha")
     let repository = makeRepository(id: "/tmp/repo-sel", worktrees: [worktree])
     var state = makeState(repositories: [repository, workspace])
-    let childID = entry.resolvedURL(relativeTo: workspace.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: workspace.localURL!).path(percentEncoded: false)
 
     state.selection = .worktree(worktree.id)
     #expect(state.selectedDiffTargetID == .worktree(worktree.id))
@@ -7690,7 +7690,7 @@ struct RepositoriesFeatureTests {
       sourceKind: .existingPath
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws-open-child", children: [entry])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
@@ -7712,9 +7712,9 @@ struct RepositoriesFeatureTests {
     let workspaceWorktree = Worktree(
       id: repository.id,
       name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
+      detail: repository.localURL!.path(percentEncoded: false),
+      workingDirectory: repository.localURL!,
+      repositoryRootURL: repository.localURL!
     )
     #expect(
       sentCommands.value == [
@@ -7735,7 +7735,7 @@ struct RepositoriesFeatureTests {
       branchName: "metadata"
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws-refresh", children: [entry])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     var initialState = makeState(repositories: [repository])
     // A stale child entry from a workspace that no longer exists must be pruned.
     initialState.workspaceChildInfoByID["/tmp/gone/app"] = WorktreeInfoEntry(
@@ -7755,7 +7755,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
+      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
     )
     await store.receive(\.workspaceChildrenInfoLoaded)
     await store.finish()
@@ -7805,7 +7805,7 @@ struct RepositoriesFeatureTests {
       branchName: "metadata"
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws-open-refresh", children: [entry])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
     } withDependencies: {
@@ -7823,11 +7823,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [repository.rootURL]
+          roots: [repository.localURL!]
         ))
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [repository.rootURL]
+      $0.repositoryRoots = [repository.localURL!]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -7847,7 +7847,7 @@ struct RepositoriesFeatureTests {
       branchName: "metadata"
     )
     let repository = makeWorkspaceRepository(id: "/tmp/ws-pr", children: [entry])
-    let childID = entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false)
+    let childID = entry.resolvedURL(relativeTo: repository.localURL!).path(percentEncoded: false)
     let pullRequest = makePullRequest(state: "OPEN", headRefName: "feature/live", number: 42)
     var initialState = makeState(repositories: [repository])
     initialState.githubIntegrationAvailability = .available
@@ -7880,7 +7880,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
+      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
     )
     await store.receive(\.workspaceChildrenInfoLoaded)
     await store.finish()
@@ -7955,7 +7955,7 @@ struct RepositoriesFeatureTests {
   private func makeState(repositories: [Repository]) -> RepositoriesFeature.State {
     var state = RepositoriesFeature.State()
     state.repositories = IdentifiedArray(uniqueElements: repositories)
-    state.repositoryRoots = repositories.map(\.rootURL)
+    state.repositoryRoots = repositories.map(\.localURL!)
     return state
   }
 
