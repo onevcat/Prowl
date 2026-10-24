@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -268,7 +268,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output. Six PRs: the refresh script, its reply parser and the mapping to worktrees (B3a, see 019); `RemoteRepositoryHost` with the other git operations on the command lane, as the remote input of `RepositoryHost` (B3b, see 020); worktree creation on the host with the bundled `wt` script (B3c, see 021); the creation flow in the reducer by location, remote worktree placement and the end of the creation gate (B3d, see 022); repository loading through the host with an unreachable mark (B3e, see 023); the refresh cadence with backoff, held connection leases, branch and line changes from the refresh, pull request refresh, and the last state kept through a failed poll (B3f, see 024) (amended 2026-10-23) | None (unused) |
 | C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder. Three PRs: the flag, the add sheet, validation on the host and the stored profile and entry (C1a, see 025); the unreachable state, the rebind prompt with restarted connection holds, and what removal does to data (C1b); the A4b UI gates and the toolbar status for folder connections, with the visual check (C1c) (amended 2026-10-23) | Behind the flag |
 | C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
-| C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
+| C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin`. Three PRs: the launcher, its staging and the OSC 7501 completion marker (C3a, see 029); remote tabs with the typed line, `RemoteLaunchOrigin` and the marker mapped to the completion (C3b); remote scripts, Close on Success and CLI waiters (C3c) (amended 2026-10-23) | Behind the flag |
 | C4 | Tracker cwd accessor, remote splits, remote agent cwd | Behind the flag |
 | C5 | Snapshot origin, reconnect on restore, `docs/` update; flag on | Remote folders ship |
 
@@ -312,8 +312,12 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Close confirmation: Ghostty reports a live process while `ssh` runs, so every remote pane
   asks before it closes.
 - Launcher location (`$TMPDIR` or `~/.cache/prowl`) and cleanup when ssh never runs it.
+  (Answered 2026-10-23 in C3a: `~/.cache/prowl/launch/<nonce>/`, mode 0700; the launch
+  removes it, and each staging removes those older than a day. See 029.)
 - Completion marker format, and whether framed OSC 133 inside the outer `ssh` command
   confuses Ghostty's prompt tracking for the local shell.
+  (Answered 2026-10-23 in C3a: OSC 7501 with `id=prowl-launch/<nonce>/<status>`; framed 133
+  is not used. See 029.)
 - Where `wt` puts remote worktrees (the worktree base directory setting is a local path).
   (Answered 2026-10-23 in B3d: under `<home>/.prowl/repos/<repository>` on the host; the
   repository's own setting is a host path, and the global default does not apply. See
@@ -351,3 +355,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: C1b shows unreachable and changed hosts in the sidebar, adds the rebind prompt that stores the new target and connects again, and states what removing a remote folder does to its data — see [026-c1b-unreachable-and-rebind.md](026-c1b-unreachable-and-rebind.md)
 - Updated 2026-10-23: C1c lands the A4b UI gates (disabled controls with reasons, palette filtering, terminal commands refused and hidden), keeps Finder and Copy Path checks in the views, and shows the folder connection in the toolbar status — see [027-c1c-ui-gates.md](027-c1c-ui-gates.md)
 - Updated 2026-10-23: C2 adds the `host` field to CLI worktrees, includes remote folders in the CLI contexts, the `label:path` selector (a bare path matches local only), reachable refusals for remote tabs and workflows; the host-aware workflow `rootKey` is deferred until remote workflows exist — see [028-c2-cli-host.md](028-c2-cli-host.md)
+- Updated 2026-10-23: C3 split into three PRs; C3a adds the remote launcher (staging over `sh -s`, per-shell hand-over, OSC 7501 completion marker), tested with real shells — see [029-c3a-remote-launcher.md](029-c3a-remote-launcher.md)
