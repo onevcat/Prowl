@@ -19,6 +19,10 @@ actor RemoteConnectionOwner {
     /// Command lane processes that may run at once on the shared connection (docs-ai 084 B1);
     /// `sshd` allows ten sessions per connection by default, and the probe needs one.
     var maxConcurrentCommands = 4
+    /// How long a failed read of the login `PATH` is kept before a command reads it again.
+    /// A held connection keeps one owner alive for long (docs-ai 084 B3f), so a host that
+    /// was slow once must not lose its login `PATH` for good.
+    var loginPathRetryInterval: TimeInterval = 60
 
     init(controlDirectory: String = RemoteConnectionOwner.defaultControlDirectory()) {
       self.controlDirectory = controlDirectory
@@ -60,6 +64,7 @@ actor RemoteConnectionOwner {
   private var grantedWaiters: Set<UUID> = []
   private var activeCommands: [UUID: Task<RemoteCommandOutcome, Never>] = [:]
   private var loginPathTask: Task<String?, Never>?
+  private var loginPathFailedAt: TimeInterval?
 
   init(
     connection: ConnectionKey,
@@ -291,10 +296,18 @@ extension RemoteConnectionOwner {
   }
 
   /// The `PATH` of the user's login shell on the host, read once per owner; concurrent
-  /// callers share one read. Nil when it cannot be read, and that result is kept too:
-  /// commands then run with the default `PATH` of a non-login session.
+  /// callers share one read. Nil when it cannot be read: commands then run with the
+  /// default `PATH` of a non-login session. A failed read is kept for
+  /// `loginPathRetryInterval`, then the next caller reads it again.
   func loginPath() async -> String? {
-    if let loginPathTask { return await loginPathTask.value }
+    if let current = loginPathTask {
+      let path = await current.value
+      guard path == nil else { return path }
+      let now = ProcessInfo.processInfo.systemUptime
+      if let failedAt = loginPathFailedAt, now - failedAt < configuration.loginPathRetryInterval { return nil }
+      // Another caller may have started the next read while this one waited.
+      if let next = loginPathTask, next != current { return await next.value }
+    }
     let task = Task { await self.readLoginPath() }
     loginPathTask = task
     return await task.value
@@ -304,8 +317,11 @@ extension RemoteConnectionOwner {
     let outcome = await runOnLane(
       remoteCommand: ["sh", "-s"], input: Self.loginPathScript,
       limits: RemoteCommandLimits(deadline: 10, outputBytes: 64 * 1024, errorBytes: 16 * 1024), onOutput: nil)
-    guard case .exited(let result) = outcome, result.exitCode == 0 else { return nil }
-    return Self.parseLoginPath(result.output)
+    let path: String? =
+      if case .exited(let result) = outcome, result.exitCode == 0 { Self.parseLoginPath(result.output) } else { nil }
+    // Recorded before the read's task ends, so every caller that waited on it sees it.
+    loginPathFailedAt = path == nil ? ProcessInfo.processInfo.systemUptime : nil
+    return path
   }
 
   /// Prints the login shell's `PATH` between two U+0001 markers, so that output from the

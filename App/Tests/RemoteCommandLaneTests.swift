@@ -263,6 +263,34 @@ nonisolated struct RemoteCommandLaneTests {
     #expect(reads.value == 1)
   }
 
+  /// A held connection keeps its owner for long (docs-ai 084 B3f): a failed read is tried
+  /// again after `loginPathRetryInterval`, and a good one is kept.
+  @Test func aFailedLoginPathIsReadAgainAfterTheRetryInterval() async {
+    let reads = LockIsolated(0)
+    var configuration = RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests")
+    configuration.loginPathRetryInterval = 0
+    let owner = RemoteConnectionOwner(
+      connection: Self.key, recipe: Self.recipe, configuration: configuration,
+      runner: RemoteCommandRunner { _, _, _, _, _ in
+        let read = reads.withValue { count in
+          count += 1
+          return count
+        }
+        let output = read == 1 ? Data() : Data("\u{1}/usr/local/bin:/usr/bin\u{1}".utf8)
+        return .exited(
+          RemoteCommandResult(exitCode: read == 1 ? 1 : 0, output: output, outputTruncated: false, errorOutput: ""))
+      })
+
+    let first = await owner.loginPath()
+    let second = await owner.loginPath()
+    let third = await owner.loginPath()
+
+    #expect(first == nil)
+    #expect(second == "/usr/local/bin:/usr/bin")
+    #expect(third == second)
+    #expect(reads.value == 2)
+  }
+
   @Test func streamedOutputAndErrorOutputArriveLineByLine() async throws {
     let lines = LockIsolated<[String]>([])
     let owner = Self.makeOwner(

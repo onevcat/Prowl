@@ -81,7 +81,9 @@ extension RepositoriesFeature {
       }
       return .merge(
         .send(.showToast(.success(String(localized: "Workspace saved")))),
-        loadRepositories(fallbackRoots: state.repositoryRoots, animated: true)
+        loadRepositories(
+          fallbackRoots: state.repositoryRoots, animated: true,
+          knownRemoteRepositories: state.retainedRemoteRepositories)
       )
 
     case .workspaceSaveFailed(let message):

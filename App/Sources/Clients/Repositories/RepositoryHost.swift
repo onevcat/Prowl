@@ -192,6 +192,12 @@ nonisolated struct RepositoryHost: Sendable {
     return .remote(hostProfileID: hostProfileID, path: resolved)
   }
 
+  /// One batched refresh of a remote repository (docs-ai 084 B3f).
+  func remoteRefresh(in repository: RepositoryLocation) async throws -> RemoteRepositoryRefresh {
+    guard let host = try await remoteHost(repository) else { throw RepositoryHostError.remoteUnavailable(repository) }
+    return try await host.refresh(repositoryPath: repository.path)
+  }
+
   /// `$HOME` on a remote repository's host, where remote worktrees are placed by
   /// default; nil for a local repository.
   func remoteHomeDirectory(in repository: RepositoryLocation) async throws -> String? {
