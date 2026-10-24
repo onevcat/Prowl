@@ -173,7 +173,7 @@ struct RemoteAgentDetectionTests {
       clientPID: 150, paneID: paneID, tty: "/dev/pts/3", isInMode: inMode,
       foregroundProcessGroupID: foreground.processGroupID, processes: [foreground], screen: screen,
       isScreenTruncated: false)
-    let now = ProcessInfo.processInfo.systemUptime - age
+    let now = Self.uptime - age
     return RemoteProbeSnapshot(
       connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: sequence,
       startedAt: now, finishedAt: now, outcome: outcome,
@@ -188,7 +188,7 @@ struct RemoteAgentDetectionTests {
       paneID: pane, anchorPID: 100, tty: "/dev/pts/0", foregroundProcessGroupID: client.processGroupID,
       processes: [client])
     session.hasUnreadTmuxPane = true
-    let now = ProcessInfo.processInfo.systemUptime
+    let now = Self.uptime
     return RemoteProbeSnapshot(
       connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: sequence,
       startedAt: now, finishedAt: now, outcome: .complete,
