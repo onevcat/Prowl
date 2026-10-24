@@ -101,6 +101,7 @@ extension WorktreeTerminalState {
       view.setInitialInput(try RemoteTerminalLine.typed(recipe: profile.recipe, launcherPath: try staged.get()))
       if view.armSurfaceCreation() {
         remoteLaunchOriginBySurface[surfaceID]?.launchedAt = Date()
+        onRemoteLaunchStarted?()
         if consumesSetupScript { onSetupScriptConsumed?() }
         // The pane took focus while it had no surface, which Ghostty never saw.
         if view.window?.firstResponder === view { view.focusDidChange(true) }

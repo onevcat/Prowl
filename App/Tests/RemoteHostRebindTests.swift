@@ -317,10 +317,12 @@ struct RemoteHostRebindTests {
     @Shared(.hostProfiles) var hostProfiles: [HostProfile]
     $hostProfiles.withLock { $0 = [Self.profile] }
     let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
     } withDependencies: {
       $0.continuousClock = TestClock()
+      $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
     }
     store.exhaustivity = .off
 
@@ -329,6 +331,9 @@ struct RemoteHostRebindTests {
     #expect(message.contains("files on mini stay as they are"))
     await store.send(.alert(.presented(.confirmRemoveFailedRepository(remote.id))))
     await store.receive(\.repositoryManagement.removeFailedRepository)
+    // Its saved terminal layout goes too (docs-ai 084 C5).
+    await store.finish(timeout: .seconds(10))
+    #expect(sent.value.contains(.discardSavedLayout(repositoryID: remote.id)))
 
     await store.send(.repositoryManagement(.requestRemoveFailedRepository("/tmp/local/")))
     await store.receive(\.repositoryManagement.removeFailedRepository)
