@@ -141,14 +141,93 @@ struct RemoteTerminalTabTests {
     #expect(messages.count == 1)
   }
 
-  /// A split in a remote folder would be a local shell: refused until C4.
-  @Test func aRemoteFolderRefusesASplit() throws {
-    let state = makeState(Staging())
-
+  /// A split in a remote folder is a new remote pane (C4): its input is its own launch's
+  /// first command, never typed into a local shell; with no known directory of the anchor
+  /// on the host, it starts in the folder.
+  @Test func aRemoteSplitIsANewRemotePane() async throws {
+    let staging = Staging()
+    let state = makeState(staging)
     let tabID = try #require(state.createTab())
-    let surface = try onlySurface(state, tabID)
-    #expect(state.createSplit(of: surface.id, direction: .right, initialInput: nil) == .failure(.remoteFolder))
+    let anchor = try onlySurface(state, tabID)
+    await waitUntil { anchor.surfaceCreationArmed }
+
+    let splitID = try state.createSplit(of: anchor.id, direction: .right, initialInput: "make watch").get()
+    let split = try #require(state.surfaceView(for: splitID))
+    await waitUntil { split.surfaceCreationArmed }
+
+    #expect(state.trees[tabID]?.leaves().count == 2)
+    let launch = try #require(staging.launches.value.last)
+    #expect(staging.launches.value.count == 2)
+    #expect(launch.workingDirectory == "/home/dev/app")
+    #expect(launch.firstCommand == "make watch\n")
+    #expect(launch.environment.contains(RemoteLaunchVariable(name: "LC_PROWL_PANE", value: splitID.uuidString)))
+    #expect(split.initialInputForTesting?.hasPrefix(" /usr/bin/ssh -t ") == true)
+    #expect(split.initialInputForTesting?.contains("make watch") == false)
+    #expect(state.remoteLaunchOriginBySurface[splitID]?.hasFirstCommand == true)
+  }
+
+  /// A split that cannot stage closes alone: the tab and its other panes stay.
+  @Test func aSplitThatCannotStageClosesAlone() async throws {
+    let launches = LockIsolated(0)
+    let state = makeState(Staging())
+    state.remoteTerminalStagerForTesting = RemoteTerminalStager(
+      profile: { _ in Self.profile },
+      stage: { _, launch in
+        let count = launches.withValue {
+          $0 += 1
+          return $0
+        }
+        if count > 1 { throw RemoteRepositoryHostError.timedOut }
+        return "/home/dev/.cache/prowl/launch/\(launch.nonce)/launch.sh"
+      })
+    var messages: [String] = []
+    state.onRemoteTerminalFailed = { messages.append($0) }
+    let tabID = try #require(state.createTab())
+    let anchor = try onlySurface(state, tabID)
+    await waitUntil { anchor.surfaceCreationArmed }
+
+    _ = try state.createSplit(of: anchor.id, direction: .right, initialInput: nil).get()
+    await waitUntil { !messages.isEmpty }
+
+    #expect(state.tabManager.tabs.map(\.id) == [tabID])
+    #expect(state.trees[tabID]?.leaves().map(\.id) == [anchor.id])
+  }
+
+  /// A split closed while it waits for its launcher has nothing for Undo to bring back.
+  @Test func aSplitClosedWhileStagingIsNotKeptForUndo() async throws {
+    let (gate, release) = AsyncStream<Void>.makeStream()
+    let staging = Staging()
+    let state = makeState(staging)
+    let tabID = try #require(state.createTab())
+    let anchor = try onlySurface(state, tabID)
+    await waitUntil { anchor.surfaceCreationArmed }
+    state.remoteTerminalStagerForTesting = Staging(gate: gate).stager(profile: Self.profile)
+    state.undoCloseTimeout = .seconds(5)
+    var recorded = false
+    state.onCloseRecorded = { _ in recorded = true }
+
+    let splitID = try state.createSplit(of: anchor.id, direction: .right, initialInput: nil).get()
+    #expect(state.isAwaitingRemoteLaunch(splitID))
+    #expect(state.closeSurface(id: splitID, confirmation: .skip))
+    release.finish()
+
+    #expect(!recorded)
+    #expect(state.surfaceView(for: splitID) == nil)
+  }
+
+  /// A split whose host profile is gone opens no pane and tells the user.
+  @Test func aRemoteSplitWithoutItsHostProfileTellsTheUser() throws {
+    let staging = Staging()
+    let state = makeState(staging)
+    let tabID = try #require(state.createTab())
+    let anchor = try onlySurface(state, tabID)
+    state.remoteTerminalStagerForTesting = staging.stager(profile: nil)
+    var messages: [String] = []
+    state.onRemoteTerminalFailed = { messages.append($0) }
+
+    #expect(state.createSplit(of: anchor.id, direction: .right, initialInput: nil) == .failure(.remoteFolder))
     #expect(state.trees[tabID]?.leaves().count == 1)
+    #expect(messages.count == 1)
   }
 
   /// A script in a remote folder (C3c) is the launch's first command on the host, byte for

@@ -1,4 +1,5 @@
 import Foundation
+import IdentifiedCollections
 import Testing
 
 @testable import Prowl
@@ -64,6 +65,35 @@ struct RemoteAgentPresentationTests {
     #expect(tmux.contains("tmux -S"))
     #expect(!tmux.contains("OSC 7501"))
     #expect(AgentsCommandHandler.correlation(.tmuxUnreachable) == ("tmux_unreachable", nil))
+  }
+
+  /// A remote agent's directory is on its host (docs-ai 084 C4): it never resolves to a
+  /// local worktree with the same path, only to its own remote folder.
+  @Test func aRemoteAgentDirectoryResolvesOnlyToItsRemoteFolder() {
+    let folder = RemoteRepositoryFixtures.gitRepository(path: "/tmp/repo")
+    var entry = ActiveAgentEntry(
+      id: UUID(), worktreeID: folder.worktrees[0].id, worktreeName: "main",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/api", isDirectory: true),
+      tabID: TerminalTabID(rawValue: UUID()), paneTitle: "claude", surfaceID: UUID(), paneIndex: 1,
+      iconLookupToken: "claude", agent: .claude, session: nil, rawState: .idle, displayState: .idle,
+      lastChangedAt: now)
+    #expect(entry.localWorkingDirectory != nil)
+    #expect(entry.remoteWorktreeID == nil)
+    entry.remote = RemoteAgentContext(connection: key, correlation: .correlated, confirmedAt: now, now: now)
+    #expect(entry.localWorkingDirectory == nil)
+    // A later `ssh` from the same pane to another host: the same path is not this folder's.
+    #expect(entry.remoteWorktreeID == nil)
+    entry.remote?.hostProfileID = UUID()
+    #expect(entry.remoteWorktreeID == nil)
+    entry.remote?.hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    #expect(entry.remoteWorktreeID == folder.worktrees[0].id)
+    var outside = ActiveAgentEntry(
+      id: entry.id, worktreeID: entry.worktreeID, worktreeName: "main",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repository", isDirectory: true), tabID: entry.tabID,
+      paneTitle: "claude", surfaceID: entry.surfaceID, paneIndex: 1, iconLookupToken: "claude", agent: .claude,
+      session: nil, rawState: .idle, displayState: .idle, lastChangedAt: now)
+    outside.remote = entry.remote
+    #expect(outside.remoteWorktreeID == nil)
   }
 
   @Test func theRowTooltipAddsTheExplanationForRemoteAgents() {

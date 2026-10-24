@@ -1,4 +1,5 @@
 import AppKit
+import Clocks
 import Foundation
 import GhosttyKit
 import ProwlCLIShared
@@ -149,10 +150,12 @@ struct RemoteAgentDetectionTests {
       ])
   }
 
-  private func remoteProcess(_ pid: Int32, name: String, start: String = "t1") -> RemoteProbeProcess {
+  private func remoteProcess(
+    _ pid: Int32, name: String, start: String = "t1", directory: String = "/home/dev"
+  ) -> RemoteProbeProcess {
     RemoteProbeProcess(
       pid: pid, parentPID: 100, processGroupID: pid, startToken: start, elapsedSeconds: 1, name: name,
-      arguments: [name], commandLine: name, workingDirectory: "/home/dev")
+      arguments: [name], commandLine: name, workingDirectory: directory)
   }
 
   private func snapshot(
@@ -1151,6 +1154,8 @@ struct RemoteAgentDetectionTests {
     var removed: [UUID] = []
     fixture.state.onAgentEntryChanged = { emitted.append($0) }
     fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    // The pane's local directory is never a remote agent's (docs-ai 084 C4).
+    fixture.surface.bridge.state.pwd = "/Users/local/project"
     fixture.source.failNext(100)
     probe.job = sshJob
     await detect(fixture)
@@ -1168,6 +1173,7 @@ struct RemoteAgentDetectionTests {
     let entry = try #require(emitted.last)
     #expect(entry.remote?.isUnprobed == true)
     #expect(entry.remote?.isStale == false)
+    #expect(entry.workingDirectory == nil)
     #expect(pane?.session == nil)
 
     // A withdrawal or quiet producer never releases it; the observation turns stale instead.
@@ -1809,11 +1815,69 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.source.recipes == [stored])
     #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "mini")
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostLabel == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostProfileID != nil)
     probe.job = shellJob
     await detect(fixture)
     probe.job = sshJob
     await detect(fixture)
     #expect(asked == ["mini"])
+  }
+
+  /// A remote agent's entry and directory are the host's (docs-ai 084 C4), not the pane's
+  /// local one.
+  @Test func aRemoteAgentWorksInItsHostDirectory() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture,
+      snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude", directory: "/srv/app/api")))
+    await detect(fixture)
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.agentWorkingDirectory == "/srv/app/api")
+    #expect(fixture.state.activeAgentWorkingDirectory(surfaceID: fixture.surfaceID)?.path == "/srv/app/api")
+  }
+
+  /// A remote split starts where its anchor pane is on the host: after a fresh snapshot,
+  /// else the last known directory when none comes in time (docs-ai 084 C4).
+  @Test func aRemoteSplitStartsWhereItsAnchorIs() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    let clock = TestClock()
+    fixture.state.remoteLaunchClock = clock
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/a")))
+    let refreshes = fixture.source.refreshes
+
+    let fresh = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes }
+    await deliver(
+      fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/b")))
+    #expect(await fresh.value == "/srv/b")
+
+    // A failed snapshot keeps the last known directory.
+    await deliver(
+      fixture,
+      RemoteProbeSnapshot(
+        connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: 3,
+        startedAt: Self.uptime, finishedAt: Self.uptime, outcome: .failed(.unreachable), report: nil))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == "/srv/b")
+    let stale = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes + 1 }
+    await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)
+    #expect(await stale.value == "/srv/b")
+
+    // A tmux client whose server Prowl cannot read hides where the user works: no earlier
+    // directory stands in, so a split starts in the folder.
+    await deliver(fixture, unreadTmuxSnapshot(4, pane: fixture.surfaceID))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == nil)
   }
 
   /// The kill switch still turns detection off for a remote folder's pane.

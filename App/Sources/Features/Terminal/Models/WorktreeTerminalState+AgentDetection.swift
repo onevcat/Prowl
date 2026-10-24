@@ -267,7 +267,9 @@ extension WorktreeTerminalState {
     guard origin != .local else { return nil }
     let known = stabilized != .unknown && remotePaneTrackers[surfaceID]?.tmuxScreen() != .unavailable
     var context = remote?.context(now: now, stateKnown: known)
-    context?.hostAlias = remoteHostAlias(surfaceID: surfaceID)
+    let alias = remoteHostAlias(surfaceID: surfaceID)
+    context?.hostAlias = alias
+    context?.hostProfileID = alias == nil ? nil : remoteLaunchOriginBySurface[surfaceID]?.hostProfileID
     return context
   }
 
@@ -962,6 +964,11 @@ extension WorktreeTerminalState {
 
   func activeAgentWorkingDirectory(surfaceID: UUID) -> URL? {
     guard let surface = surfaces[surfaceID] else { return nil }
+    // A remote agent works on its host: its directory is the one the probe read there, never
+    // this pane's local one. Unknown there, it is unknown (docs-ai 084 C4).
+    if surfaceAgentStates[surfaceID]?.agentProcess.map({ $0.origin != .local }) == true {
+      return remotePaneTrackers[surfaceID]?.agentWorkingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
     // This can run while handling Ghostty callbacks, so use cached Swift state instead of
     // re-entering Ghostty for inherited surface config.
     if let pwd = surface.bridge.state.pwd?.trimmingCharacters(in: .whitespacesAndNewlines),

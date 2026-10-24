@@ -92,9 +92,9 @@ struct RemoteFolderUIGateTests {
         == .remoteChannel(channel))
   }
 
-  /// The palette leaves out what a remote folder cannot do: Finder, split custom commands,
-  /// Agent Profiles and workflows. Copy Path, Run Script and tab custom commands stay
-  /// (docs-ai 084 C3c).
+  /// The palette leaves out what a remote folder cannot do: Finder, In Place custom
+  /// commands, Agent Profiles and workflows. Copy Path, Run Script, tab and split custom
+  /// commands stay (docs-ai 084 C3c, C4).
   @Test(.dependencies) func thePaletteLeavesOutWhatARemoteFolderCannotDo() {
     let state = Self.remoteState()
     let commands = [
@@ -106,6 +106,10 @@ struct RemoteFolderUIGateTests {
         source: .global,
         command: UserCustomCommand(
           id: "watch", title: "Watch", systemImage: "eye", command: "make watch", execution: .split, shortcut: nil)),
+      EffectiveCustomCommand(
+        source: .global,
+        command: UserCustomCommand(
+          id: "type", title: "Type", systemImage: "keyboard", command: "ls", execution: .terminalInput, shortcut: nil)),
     ]
     let items = CommandPaletteFeature.commandPaletteItems(from: state, customCommands: commands)
     let kinds = items.map(\.kind)
@@ -116,7 +120,7 @@ struct RemoteFolderUIGateTests {
     let customIDs = kinds.compactMap { kind -> EffectiveCustomCommand.Identifier? in
       if case .runCustomCommand(let id, _) = kind { id } else { nil }
     }
-    #expect(customIDs == commands.prefix(1).map(\.id))
+    #expect(customIDs == commands.prefix(2).map(\.id))
     @Shared(.userGlobalSettings) var globalSettings
     $globalSettings.withLock {
       $0.agentProfiles = [AgentProfile(id: UUID(), name: "Codex", runtime: .codex)]
@@ -130,12 +134,12 @@ struct RemoteFolderUIGateTests {
   }
 
   /// A selected remote plain folder has no worktree ID; the palette filters by its terminal
-  /// target, as the actions do: no split command. A local plain folder keeps it.
+  /// target, as the actions do: no In Place command. A local plain folder keeps it.
   @Test(.dependencies) func thePaletteFiltersASelectedRemotePlainFolder() {
     let command = EffectiveCustomCommand(
       source: .global,
       command: UserCustomCommand(
-        id: "watch", title: "Watch", systemImage: "eye", command: "make watch", execution: .split, shortcut: nil))
+        id: "type", title: "Type", systemImage: "keyboard", command: "ls", execution: .terminalInput, shortcut: nil))
     func hasCustomCommand(_ folder: Repository) -> Bool {
       var state = RepositoriesFeature.State()
       state.repositories = [folder]
@@ -192,10 +196,10 @@ struct RemoteFolderUIGateTests {
     #expect(!isRemoteConnectionFailure(RemoteRepositoryHostError.gitMissing))
   }
 
-  /// A script or a custom command in a remote folder runs there (docs-ai 084 C3c), except a
-  /// split command (a local shell until C4) and an In Place command (the focused pane may be
-  /// the local shell or a password prompt): each shows its reason and sends nothing.
-  @Test(.dependencies) func scriptsAndCustomCommandsRunInARemoteFolderButASplitDoesNot() async {
+  /// A script or a custom command in a remote folder runs there (docs-ai 084 C3c), a split
+  /// command too (C4), but not an In Place command (the focused pane may be the local shell
+  /// or a password prompt): it shows its reason and sends nothing.
+  @Test(.dependencies) func scriptsAndCustomCommandsRunInARemoteFolderButInPlaceDoesNot() async {
     var state = AppFeature.State(repositories: Self.remoteState(), settings: SettingsFeature.State())
     state.selectedRunScript = "make dev"
     state.selectedCustomCommands = [
@@ -233,10 +237,10 @@ struct RemoteFolderUIGateTests {
           false
         }
       })
-    let count = commands.count
     await store.send(.runCustomCommand(state.selectedCustomCommands[1].id))
-    await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("Panes cannot split in remote folders yet."))
+    await store.finish()
+    #expect(sent.value.contains { if case .createSplitWithInput = $0 { true } else { false } })
+    let count = sent.value.count
     await store.send(.runCustomCommand(state.selectedCustomCommands[2].id))
     await store.receive(\.repositories.showToast)
     #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote folders yet."))

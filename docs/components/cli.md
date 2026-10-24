@@ -946,7 +946,9 @@ receipt semantics.
 
 ### `prowl create pane`
 Create a split beside an explicit pane anchor. The anchor is a pane UUID or current-process
-`pN` handle, supplied positionally or with `--pane`; `--direction` is required.
+`pN` handle, supplied positionally or with `--pane`; `--direction` is required. In a remote
+folder, the split connects to the host on its own and starts where the anchor pane is on the
+host (or in the folder when Prowl cannot tell).
 
 ```bash
 pane="$(prowl create pane "$anchor" --direction right --json | jq -r '.data.target.pane.id')"
