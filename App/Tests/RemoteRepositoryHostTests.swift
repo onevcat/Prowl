@@ -694,6 +694,167 @@ struct RemoteRepositoryHostTests {
     #expect(store.state.repositories[id: repository.id]?.worktrees.contains { $0.location.path == path } == true)
   }
 
+  // MARK: - Loading through the host (B3e)
+
+  @Test(.dependencies) func remoteFoldersLoadTheirWorktreesThroughTheHost() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    _ = try await fixture.addWorktree("linked", branch: "side")
+    let plain = fixture.root.appending(path: "notes", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: false)
+    let plainLocation = RemoteRepositoryFixtures.location(plain.path(percentEncoded: false).trimmingSuffix("/"))
+    let entries = [
+      PersistedRepositoryEntry(path: fixture.remoteLocation.id, kind: .git),
+      PersistedRepositoryEntry(path: plainLocation.id, kind: .plain),
+    ]
+    let feature = withDependencies {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = TestClock()
+    } operation: {
+      RepositoriesFeature()
+    }
+
+    let (loaded, failures) = await feature.loadRepositoriesData(entries)
+
+    #expect(failures.isEmpty)
+    #expect(loaded.map(\.id) == [fixture.remoteLocation.id, plainLocation.id])
+    #expect(loaded[0].kind == .git)
+    #expect(loaded[0].name == "main")
+    #expect(Set(loaded[0].worktrees.map(\.name)) == ["trunk", "side"])
+    #expect(loaded[0].worktrees.first { $0.isMain }?.location == fixture.remoteLocation)
+    #expect(loaded[1].kind == .plain)
+    #expect(loaded[1].name == "notes")
+  }
+
+  /// A host that cannot be reached marks the failure, so the sidebar can say so (C1); a
+  /// folder that is not a repository is a plain failure.
+  @Test(.dependencies) func aRemoteFolderThatCannotLoadSaysWhetherTheHostIsUnreachable() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let plain = fixture.root.appending(path: "plain", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: false)
+    let notGit = RemoteRepositoryFixtures.location(plain.path(percentEncoded: false).trimmingSuffix("/"))
+    let refused = RemoteCommandOutcome.exited(
+      RemoteCommandResult(
+        exitCode: 255, output: Data(), outputTruncated: false,
+        errorOutput: "ssh: connect to host mini port 22: Connection refused"))
+    let unreachableClient = fixture.remoteClient(
+      lane: RemoteCommandLane(run: { _, _ in refused }, runScript: { _, _ in refused }))
+    func load(_ client: RemoteRepositoryHostClient, _ location: RepositoryLocation) async
+      -> [RepositoriesFeature.LoadFailure]
+    {
+      let feature = withDependencies {
+        $0[RemoteRepositoryHostClient.self] = client
+        $0.continuousClock = TestClock()
+      } operation: {
+        RepositoriesFeature()
+      }
+      return await feature.loadRepositoriesData([PersistedRepositoryEntry(path: location.id, kind: .git)]).1
+    }
+
+    let unreachable = await load(unreachableClient, fixture.remoteLocation)
+    let notARepository = await load(fixture.remoteClient, notGit)
+
+    #expect(unreachable.map(\.isHostUnreachable) == [true])
+    #expect(unreachable.first?.message == "The remote host could not be reached.")
+    #expect(notARepository.map(\.isHostUnreachable) == [false])
+    #expect(notARepository.first?.message == "The folder on the remote host is not a Git repository.")
+  }
+
+  /// A host that does not answer holds back the load only until the deadline, then the
+  /// folder fails as unreachable.
+  @Test(.dependencies) func aHostThatDoesNotAnswerFailsTheLoadAtTheDeadline() async throws {
+    let clock = TestClock()
+    let hanging = RemoteCommandLane(
+      run: { _, _ in
+        try await Task.never()
+        return .timedOut
+      },
+      runScript: { _, _ in
+        try await Task.never()
+        return .timedOut
+      })
+    let hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    let remote = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: hanging)
+    let feature = withDependencies {
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil })
+      $0.continuousClock = clock
+    } operation: {
+      RepositoriesFeature()
+    }
+    let location = RemoteRepositoryFixtures.location("/srv/app")
+
+    let load = Task { await feature.loadRepositoriesData([PersistedRepositoryEntry(path: location.id, kind: .git)]) }
+    // Let the load reach its deadline sleep before the clock moves.
+    await Task.megaYield()
+    await clock.advance(by: RepositoriesFeature.remoteLoadDeadline)
+    let (loaded, failures) = await load.value
+
+    #expect(loaded.isEmpty)
+    #expect(failures.map(\.isHostUnreachable) == [true])
+    #expect(failures.first?.message == "The remote host did not answer in time.")
+  }
+
+  /// A wait that ignores cancellation, as the shared read of the login `PATH` does, must
+  /// not hold the load past its deadline.
+  @Test(.dependencies) func theDeadlineDoesNotWaitForAnOperationThatIgnoresCancellation() async throws {
+    let clock = TestClock()
+    let gate = CancellationIgnoringGate()
+    let stuck = RemoteCommandLane(
+      run: { _, _ in
+        await gate.wait()
+        return .timedOut
+      },
+      runScript: { _, _ in
+        await gate.wait()
+        return .timedOut
+      })
+    let hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    let remote = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: stuck)
+    let feature = withDependencies {
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil })
+      $0.continuousClock = clock
+    } operation: {
+      RepositoriesFeature()
+    }
+    let location = RemoteRepositoryFixtures.location("/srv/app")
+
+    let load = Task { await feature.loadRepositoriesData([PersistedRepositoryEntry(path: location.id, kind: .git)]) }
+    await Task.megaYield()
+    await clock.advance(by: RepositoriesFeature.remoteLoadDeadline)
+    let (_, failures) = await load.value
+    gate.open()
+
+    #expect(failures.map(\.isHostUnreachable) == [true])
+  }
+
+  /// A refused login or a changed host key needs the user, so it is not "unreachable".
+  @Test func onlyAHostThatDoesNotAnswerIsUnreachable() {
+    #expect(isRemoteHostUnreachable(RemoteRepositoryHostError.connection(.unreachable)))
+    #expect(isRemoteHostUnreachable(RemoteRepositoryRefreshError.timedOut))
+    #expect(!isRemoteHostUnreachable(RemoteRepositoryHostError.connection(.authentication)))
+    #expect(!isRemoteHostUnreachable(RemoteRepositoryRefreshError.connection(.hostKey)))
+    #expect(!isRemoteHostUnreachable(RemoteRepositoryRefreshError.connection(.exit(1, "bash: not found"))))
+    #expect(!isRemoteHostUnreachable(RepositoryHostError.hostProfileMissing(UUID())))
+  }
+
+  /// A remote plain folder needs its host to be known, as a remote git repository does.
+  @Test(.dependencies) func aRemotePlainFolderWithoutItsHostFailsToLoad() async {
+    let location = RemoteRepositoryFixtures.location("/home/dev/notes")
+    let feature = withDependencies {
+      $0.continuousClock = TestClock()
+    } operation: {
+      RepositoriesFeature()
+    }
+
+    let (loaded, failures) = await feature.loadRepositoriesData([
+      PersistedRepositoryEntry(path: location.id, kind: .plain)
+    ])
+
+    #expect(loaded.isEmpty)
+    #expect(failures.map(\.message) == ["Remote folders are not available yet."])
+  }
+
   // MARK: - A real host (opt-in)
 
   /// Runs against a real SSH host when `PROWL_REMOTE_LANE_HOST` names one, such as
@@ -986,4 +1147,31 @@ private nonisolated func greeted(_ outcome: RemoteCommandOutcome) -> RemoteComma
     RemoteCommandResult(
       exitCode: result.exitCode, output: Data("Welcome to the build server!\n".utf8) + result.output,
       outputTruncated: result.outputTruncated, errorOutput: result.errorOutput))
+}
+
+/// Suspends callers until `open`, whether or not their task is cancelled.
+private nonisolated final class CancellationIgnoringGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    await withCheckedContinuation { continuation in
+      let resumeNow = lock.withLock {
+        if isOpen { return true }
+        waiters.append(continuation)
+        return false
+      }
+      if resumeNow { continuation.resume() }
+    }
+  }
+
+  func open() {
+    let waiting = lock.withLock {
+      isOpen = true
+      defer { waiters = [] }
+      return waiters
+    }
+    for waiter in waiting { waiter.resume() }
+  }
 }

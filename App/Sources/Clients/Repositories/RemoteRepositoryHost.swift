@@ -15,7 +15,7 @@ import Sharing
 /// - a worktree is removed with `git worktree remove`, not moved aside on this Mac;
 /// - the branch name and line changes of one worktree are not read here: the local
 ///   monitors that ask for them do not run for remote repositories, and the refresh
-///   carries both (B3e);
+///   carries both (B3f);
 /// - a worktree is created by the bundled `wt` script, which the lane sends to `bash -s`
 ///   on the host (B3c).
 nonisolated struct RemoteRepositoryHost: Sendable {
@@ -451,4 +451,23 @@ nonisolated struct RemoteWorktreeCreationError: Error, LocalizedError {
   let addedPath: String?
 
   var errorDescription: String? { underlying.localizedDescription }
+}
+
+extension RemoteProbeFailure {
+  /// The host did not answer: no route, a refused or dropped connection. A refused login, a
+  /// changed host key or a configuration problem is not, because the user must act.
+  nonisolated var isUnreachable: Bool { self == .unreachable }
+}
+
+/// Whether `error` says that a remote host could not be reached, as opposed to a problem
+/// that the user must fix (login, host key) or a problem with the repository on it.
+nonisolated func isRemoteHostUnreachable(_ error: Error) -> Bool {
+  switch error {
+  case RemoteRepositoryHostError.timedOut, RemoteRepositoryRefreshError.timedOut:
+    true
+  case RemoteRepositoryHostError.connection(let failure), RemoteRepositoryRefreshError.connection(let failure):
+    failure.isUnreachable
+  default:
+    false
+  }
 }

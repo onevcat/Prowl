@@ -312,6 +312,7 @@ struct RepositoryHostTests {
     let entries = [PersistedRepositoryEntry(path: remote.id, kind: .git)]
     let feature = withDependencies {
       $0.gitClient = Self.failingGitClient
+      $0.continuousClock = TestClock()
     } operation: {
       RepositoriesFeature()
     }

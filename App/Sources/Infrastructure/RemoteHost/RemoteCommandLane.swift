@@ -49,7 +49,7 @@ nonisolated struct RemoteCommandLane: Sendable {
   }
 
   /// Leases the connection of `profile` for each command. While nothing else holds a
-  /// lease, each command connects again; B3e keeps a lease while a repository is loaded.
+  /// lease, each command connects again; B3f keeps a lease while a repository is loaded.
   ///
   /// Each command first resolves the profile's recipe with `ssh -G`, as panes do. When the
   /// configuration now reaches another user, host name or port, nothing runs: a removal
