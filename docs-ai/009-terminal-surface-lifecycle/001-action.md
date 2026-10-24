@@ -13,7 +13,7 @@
 | 2026-04-16 | Fix Canvas split-pane rendering freeze: `isCanvasManaged` flag skips `applySurfaceActivity` while Canvas owns occlusion; new split panes explicitly un-occluded in Canvas | PR #203 |
 | 2026-04-29 | Investigation closed in the tracking doc: no recurrence after #201/#203; most investigation logs removed, low-frequency `[CanvasExit]` / `[TerminalWake]` logs retained | `doc-onevcat/canvas-exit-terminal-blank-tracking.md` |
 | 2026-05-29 | Fix terminal surface leak on tab close (fixes #370): stale SwiftUI renders no longer recreate surfaces for closed tabs; first tab uses Ghostty tab context — see [002-surface-resource-waste.md](002-surface-resource-waste.md) | PR #372 |
-| 2026-10-24 | Fix blank Canvas card for the tab selected on entry (regression from #931's `RemotePaneBadge` overlay, first shipped in 2026.10.21): the leaving normal view's split host built one more terminal wrapper whose `init` took the surface from the Canvas card and never joined a window. A host in a window now takes back a surface that sits outside every window, and the surface asks its live hosts to do so when it leaves the window | PR #987 |
+| 2026-10-24 | Fix blank Canvas card for the tab selected on entry (regression from #931's `RemotePaneBadge` overlay, first shipped in 2026.10.21): the leaving normal view's split host built one more terminal wrapper whose `init` took the surface from the Canvas card and never joined a window. A host in a window now takes back a surface that sits outside every window, and the surface asks its live hosts to do so when it leaves the window. `TerminalSplitTreeAXContainer` also detaches its inner `NSHostingView` when SwiftUI dismantles it, so the leaving tree cannot build that wrapper | PR #987 |
 
 ## Outcome & current state (as of 2026-10-24)
 
@@ -35,6 +35,12 @@
   unconditionally, so a wrapper that SwiftUI builds in a leaving view tree can strand it;
   the in-window rule repairs that. `[CanvasExit] hostReattach` / `hostReattachComplete`
   logs.
+- `App/Sources/Features/Terminal/Views/TerminalSplitTreeView.swift` —
+  `TerminalSplitTreeAXContainer.dismantleNSView` calls
+  `TerminalSplitAXContainerView.detachHostingView()` (2026-10-24). SwiftUI dismantles the
+  representable before AppKit takes the container out of the window; in that interval the
+  inner `NSHostingView` can build its saved `rootView` again and call `makeNSView` on the
+  leaving tree. Removing the hosting view at dismantle stops it.
 - `supacode/Features/Terminal/BusinessLogic/WorktreeTerminalManager.swift` —
   `setSelectedWorktreeID` handles the leaving-canvas transition (previous selection nil):
   occludes all worktrees except the newly selected one; `[CanvasExit] enteringCanvas` /
@@ -78,6 +84,12 @@
   deinit; the entry reflects that confidence level.
 - 2026-10-24: the Canvas-entry blank card was captured with wrapper-level logs. Entering
   through the sidebar segment or `prowl canvas show` reproduced it every time; `⌘⌥↩` did
-  not, so the trigger depends on SwiftUI update order. Why the overlay makes the leaving
-  `NSHostingView` (inside `TerminalSplitTreeAXContainer`) build a new wrapper instead of
-  updating the old one is not known; the fix does not depend on it.
+  not, so the trigger depends on SwiftUI update order. Mechanism, confirmed with stacks and
+  a standalone repro: an `NSHostingView` nested in an `NSViewRepresentable` stays in the
+  window after SwiftUI dismantles the representable. Its content subgraph is invalidated,
+  and its own graph host then builds the saved `rootView` again on the next transaction
+  flush, which calls `makeNSView` on the leaving tree. In Prowl a `.task` modifier (even an
+  empty one; `.onAppear` and `.onDisappear` do not) makes that flush lay out the leaf, so
+  `RemotePaneBadge` exposed it. The standalone repro hits it without `.task`. The detach at
+  dismantle removes the trigger; the ownership rule stays as the safety net for other
+  SwiftUI paths.
