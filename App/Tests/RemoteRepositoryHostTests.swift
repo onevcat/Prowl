@@ -1,7 +1,9 @@
+import ComposableArchitecture
 import ConcurrencyExtras
 import Dependencies
 import DependenciesTestSupport
 import Foundation
+import IdentifiedCollections
 import Sharing
 import Testing
 
@@ -382,9 +384,15 @@ struct RemoteRepositoryHostTests {
     do {
       for try await _ in host.createWorktreeStream(in: location, request) {}
       Issue.record("A worktree from a base ref that does not exist must fail")
-    } catch let GitClientError.commandFailed(command, message) {
+    } catch let failure as RemoteWorktreeCreationError {
+      guard case GitClientError.commandFailed(let command, let message)? = failure.underlying as? GitClientError else {
+        Issue.record("Unexpected error: \(failure.underlying)")
+        return
+      }
       #expect(command.hasPrefix("wt "))
       #expect(!message.isEmpty)
+      // Nothing was registered, so there is nothing to clean up.
+      #expect(failure.addedPath == nil)
     }
   }
 
@@ -413,13 +421,65 @@ struct RemoteRepositoryHostTests {
         if case .finished = event { finished = true }
       }
       Issue.record("A failed git worktree add must fail the creation under \(bash)")
-    } catch let GitClientError.commandFailed(command, _) {
+    } catch let failure as RemoteWorktreeCreationError {
+      guard case GitClientError.commandFailed(let command, _)? = failure.underlying as? GitClientError else {
+        Issue.record("Unexpected error: \(failure.underlying)")
+        return
+      }
       #expect(command.hasPrefix("wt "))
+      #expect(failure.addedPath == nil)
     }
 
     #expect(!finished)
     #expect(!FileManager.default.fileExists(atPath: occupied.appending(path: "notes.txt").path))
     #expect(try await host.worktrees(in: fixture.remoteLocation).map(\.name) == ["trunk"])
+  }
+
+  /// Another creator on the host registers the same branch at the same destination just
+  /// before this attempt's `git worktree add`. This attempt fails, and its cleanup must
+  /// leave the winner's worktree and its uncommitted files alone.
+  @Test(.dependencies) func aFailedCreationNeverRemovesAWorktreeThatAnotherCreatorAdded() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let wrapper = try fixture.gitWrapper(
+      """
+      if [ "$3" = worktree ] && [ "$4" = add ] && [ "$5" = -b ] && [ ! -e "$PROWL_TEST_ROOT/raced" ]; then
+        touch "$PROWL_TEST_ROOT/raced"
+        "$PROWL_REAL_GIT" -C "$2" worktree add -q -b "$6" "$7" "$8"
+        echo dirty > "$7/keep-me.txt"
+      fi
+      """)
+    let result = try await fixture.createThroughTheReducer(branch: "feature", wrapper: wrapper)
+
+    #expect(result.failed)
+    let winner = fixture.root.path(percentEncoded: false).trimmingSuffix("/") + "/worktrees/feature"
+    #expect(FileManager.default.fileExists(atPath: winner + "/keep-me.txt"))
+    #expect(try await result.host.worktrees(in: fixture.remoteLocation).contains { $0.location.path == winner })
+  }
+
+  /// The connection drops after this attempt's own `git worktree add`: the host
+  /// reported the worktree it registered, so cleanup removes it.
+  @Test(.dependencies) func aFailedCreationRemovesTheWorktreeThatItAdded() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let result = try await fixture.createThroughTheReducer(
+      branch: "feature", lane: GitFixture.localLane.droppingTheConnectionAfterEachStream())
+
+    #expect(result.failed)
+    let path = fixture.root.path(percentEncoded: false).trimmingSuffix("/") + "/worktrees/feature"
+    #expect(!FileManager.default.fileExists(atPath: path))
+    #expect(try await result.host.worktrees(in: fixture.remoteLocation).map(\.name) == ["trunk"])
+  }
+
+  /// A remote worktree gets no automatic local shell, so its setup script never runs here.
+  @MainActor @Test func aRemoteWorktreeGetsNoAutomaticLocalTab() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let state = WorktreeTerminalState(runtime: GhosttyRuntime(), worktree: remote.worktrees[0])
+
+    state.ensureInitialTab(focusing: false)
+    await Task.yield()
+
+    #expect(state.tabManager.tabs.isEmpty)
   }
 
   @Test func theHostHomeDirectoryIsReadOnce() async throws {
@@ -450,6 +510,188 @@ struct RemoteRepositoryHostTests {
     #expect(RemotePaths.relativePath(from: "/srv/app/", to: "/srv/app") == ".")
     #expect(RemotePaths.relativePath(from: "/srv/app", to: "/srv/app/./wt/../wt2") == "wt2")
     #expect(RemotePaths.relativePath(from: "/a/b/c", to: "/x") == "../../../x")
+  }
+
+  // MARK: - Placement and the creation flow (B3d)
+
+  @Test func remoteWorktreesArePlacedByTheHostsHome() {
+    let placement = WorktreePlacement.remote(repositoryPath: "/srv/app", homeDirectory: "/home/dev")
+
+    #expect(
+      placement.defaultBaseDirectory(globalDefaultPath: "/Users/me/worktrees", repositoryOverridePath: nil)
+        .path(percentEncoded: false) == "/home/dev/.prowl/repos/app/")
+    let override = { (path: String) in
+      placement.defaultBaseDirectory(globalDefaultPath: nil, repositoryOverridePath: path).path(percentEncoded: false)
+    }
+    #expect(override("~/wt") == "/home/dev/wt/")
+    #expect(override("~") == "/home/dev/")
+    #expect(override("../wt") == "/srv/wt/")
+    #expect(override("/data/./wt/") == "/data/wt/")
+    let base = URL(filePath: "/home/dev/.prowl/repos/app", directoryHint: .isDirectory)
+    #expect(
+      placement.resolvedDirectory(defaultBaseDirectory: base, nameOverride: " ", pathOverride: "", branchName: "x")
+        == nil)
+    #expect(
+      placement.resolvedDirectory(
+        defaultBaseDirectory: base, nameOverride: "leaf", pathOverride: "~/p", branchName: "x")?
+        .path(percentEncoded: false) == "/home/dev/p/leaf/")
+    #expect(
+      placement.previewDirectory(defaultBaseDirectory: base, nameOverride: "", pathOverride: "", branchName: "feat/x")
+        .path(percentEncoded: false) == "/home/dev/.prowl/repos/app/feat/x/")
+  }
+
+  @Test func remoteRepositoryFolderNamesAndAnotherUsersHome() {
+    #expect(WorktreePlacement.repositoryDirectoryName("/srv/app/") == "app")
+    #expect(WorktreePlacement.repositoryDirectoryName("/private/var/repos/app/.bare") == "private_var_repos_app_.bare")
+    #expect(WorktreePlacement.repositoryDirectoryName("/") == "_")
+    #expect(WorktreePlacement.namesAnotherUsersHome("~deploy/worktrees"))
+    #expect(!WorktreePlacement.namesAnotherUsersHome("~/worktrees"))
+    #expect(!WorktreePlacement.namesAnotherUsersHome("~"))
+    #expect(!WorktreePlacement.namesAnotherUsersHome("/srv/~x"))
+  }
+
+  /// The prompt shows why the host's home could not be read, not a generic message.
+  @Test(.dependencies) func thePromptShowsWhyTheHostCannotPlaceAWorktree() async throws {
+    let refused = RemoteCommandOutcome.exited(
+      RemoteCommandResult(
+        exitCode: 255, output: Data(), outputTruncated: false, errorOutput: "dev@mini: Permission denied (publickey)."))
+    let hostProfileID = RemoteRepositoryFixtures.hostProfileID
+    let remote = RemoteRepositoryHost(
+      hostProfileID: hostProfileID, lane: RemoteCommandLane(run: { _, _ in refused }, runScript: { _, _ in refused }))
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global.promptForWorktreeCreation = true }
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil })
+    }
+    store.exhaustivity = .off
+
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
+    await store.receive(\.worktreeCreation.promptLoadFailed, timeout: .seconds(30)) {
+      $0.alert = RepositoriesFeature().messageAlert(
+        title: "Unable to create worktree", message: "The remote host refused the SSH login.")
+    }
+    #expect(store.state.worktreeCreationPrompt == nil)
+  }
+
+  @Test(.dependencies) func aRemoteBaseDirectoryInAnotherUsersHomeIsRefused() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let location = fixture.remoteLocation
+    let hostClient = fixture.remoteClient
+    let repository = Repository(location: location, name: "main", worktrees: [])
+    @Shared(.repositorySettings(location)) var repositorySettings
+    $repositorySettings.withLock { $0.worktreeBaseDirectoryPath = "~deploy/worktrees" }
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0[RemoteRepositoryHostClient.self] = hostClient
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreation(
+        .createWorktreeInRepository(
+          repositoryID: repository.id, nameSource: .explicit("feature"), baseRefSource: .explicit("trunk"),
+          fetchRemote: false)))
+    await store.receive(\.worktreeCreation.createRandomWorktreeFailed, timeout: .seconds(60))
+    await store.finish(timeout: .seconds(60))
+
+    #expect(
+      store.state.alert?.message.map { String(state: $0) }?.contains("another user's home (~deploy/worktrees)") == true)
+    #expect(!FileManager.default.fileExists(atPath: fixture.main.path(percentEncoded: false) + "~deploy"))
+  }
+
+  /// A creation that registered its worktree and then failed is cleaned up on the host,
+  /// also when its destination was placed through a link; a worktree of another branch
+  /// at the destination is left alone.
+  @Test(.dependencies) func aFailedRemoteCreationRemovesOnlyItsOwnWorktree() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let location = fixture.remoteLocation
+    let hostClient = fixture.remoteClient
+    let host = RepositoryHost(local: .testValue, remote: hostClient)
+    let real = fixture.root.appending(path: "real", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: real, withIntermediateDirectories: false)
+    let link = fixture.root.path(percentEncoded: false).trimmingSuffix("/") + "/link"
+    try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: real.path(percentEncoded: false))
+    let ours = try await fixture.addWorktree("real/ours", branch: "ours")
+    _ = try await fixture.addWorktree("real/theirs", branch: "theirs")
+    var state = RepositoriesFeature.State()
+    state.repositories = [
+      Repository(
+        location: location, name: "main",
+        worktrees: IdentifiedArray(uniqueElements: try await host.worktrees(in: location)))
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = hostClient
+    }
+    store.exhaustivity = .off
+
+    for (branch, folder) in [("ours", "ours"), ("not-theirs", "theirs")] {
+      await store.send(
+        .worktreeCreation(
+          .createRandomWorktreeFailed(
+            title: "Unable to create worktree", message: "boom", pendingID: "pending:\(branch)",
+            previousSelection: nil, repositoryID: location.id, repositoryLocation: location, name: branch,
+            worktreeLocation: RemoteRepositoryFixtures.location(link + "/" + folder))))
+      await store.finish(timeout: .seconds(60))
+    }
+
+    let names = Set(try await host.worktrees(in: location).map(\.name))
+    #expect(names == ["trunk", "theirs"])
+    #expect(!FileManager.default.fileExists(atPath: ours.path(percentEncoded: false)))
+  }
+
+  /// The creation flow of the reducer runs on the remote host: placement under the
+  /// repository's own setting (a host path), `wt` on the host, and the new worktree by its
+  /// host path. The local git client is never asked.
+  @Test(.dependencies) func theReducerCreatesAWorktreeInARemoteRepository() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let location = fixture.remoteLocation
+    let hostClient = fixture.remoteClient
+    let host = RepositoryHost(local: .testValue, remote: hostClient)
+    let repository = Repository(
+      location: location, name: "main",
+      worktrees: IdentifiedArray(uniqueElements: try await host.worktrees(in: location)))
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = false
+    }
+    @Shared(.repositorySettings(location)) var repositorySettings
+    $repositorySettings.withLock { $0.worktreeBaseDirectoryPath = "../worktrees" }
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0[RemoteRepositoryHostClient.self] = hostClient
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreation(
+        .createWorktreeInRepository(
+          repositoryID: repository.id, nameSource: .explicit("feature"), baseRefSource: .explicit("trunk"),
+          fetchRemote: false)))
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded, timeout: .seconds(60))
+    await store.finish(timeout: .seconds(60))
+
+    let path = fixture.root.path(percentEncoded: false).trimmingSuffix("/") + "/worktrees/feature"
+    #expect(FileManager.default.fileExists(atPath: path))
+    #expect(store.state.repositories[id: repository.id]?.worktrees.contains { $0.location.path == path } == true)
   }
 
   // MARK: - A real host (opt-in)
@@ -547,22 +789,24 @@ private struct GitFixture {
   /// the login `PATH`.
   static let localLane = lane(bash: "/bin/bash")
 
-  /// Scripts run with `bash`, so a test can pick bash 3.2 or bash 5.
-  static func lane(bash: String) -> RemoteCommandLane {
-    RemoteCommandLane(
+  /// Scripts run with `bash`, so a test can pick bash 3.2 or bash 5. `pathPrefix` comes
+  /// before the process's `PATH` for scripts, such as a folder with a `git` wrapper.
+  static func lane(bash: String, pathPrefix: String? = nil) -> RemoteCommandLane {
+    let searchPath = [pathPrefix, ProcessInfo.processInfo.environment["PATH"]].compactMap { $0 }.joined(separator: ":")
+    return RemoteCommandLane(
       run: { command, limits in
         var command = command
-        command.environment.insert((name: "PATH", value: ProcessInfo.processInfo.environment["PATH"] ?? ""), at: 0)
+        command.environment.insert((name: "PATH", value: searchPath), at: 0)
         return await RemoteCommandRunner.live.execute(
           URL(fileURLWithPath: "/bin/sh"), ["-s"], Data(try command.script().utf8), limits, nil)
       },
       runScript: { script, limits in
-        let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
+        let input = try script.standardInput(path: searchPath)
         return await RemoteCommandRunner.live.execute(
           URL(fileURLWithPath: bash), ["-s"], Data(input.utf8), limits, nil)
       },
       stream: { script, limits, onLine in
-        let input = try script.standardInput(path: ProcessInfo.processInfo.environment["PATH"])
+        let input = try script.standardInput(path: searchPath)
         let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
         let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
         let outcome = await RemoteCommandRunner.live.executeStreaming(
@@ -619,12 +863,91 @@ private struct GitFixture {
     return url
   }
 
+  /// A folder with a `git` that runs `prelude` before the real git, for scripts that the
+  /// lane runs. `PROWL_REAL_GIT` and `PROWL_TEST_ROOT` are set for the prelude.
+  func gitWrapper(_ prelude: String) throws -> String {
+    let folder = root.appending(path: "bin", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let script = """
+      #!/bin/sh
+      PROWL_REAL_GIT='\(executable.url.path(percentEncoded: false))'
+      PROWL_TEST_ROOT='\(root.path(percentEncoded: false).trimmingSuffix("/"))'
+      \(prelude)
+      exec "$PROWL_REAL_GIT" "$@"
+
+      """
+    let url = folder.appending(path: "git")
+    try Data(script.utf8).write(to: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    return folder.path(percentEncoded: false)
+  }
+
+  struct CreationResult {
+    let failed: Bool
+    let host: RepositoryHost
+  }
+
+  /// Runs the reducer's creation of `branch` under `<root>/worktrees`, with `wrapper`'s
+  /// `git` for the creation script, and waits for its cleanup.
+  @MainActor
+  func createThroughTheReducer(
+    branch: String, copyUntracked: Bool = false, wrapper: String? = nil, lane: RemoteCommandLane? = nil
+  ) async throws -> CreationResult {
+    let location = remoteLocation
+    let plainHost = RepositoryHost(local: .testValue, remote: remoteClient)
+    let wrappedClient = remoteClient(lane: lane ?? Self.lane(bash: "/bin/bash", pathPrefix: wrapper))
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = false
+      $0.global.copyUntrackedOnWorktreeCreate = copyUntracked
+      $0.global.copyIgnoredOnWorktreeCreate = false
+    }
+    @Shared(.repositorySettings(location)) var repositorySettings
+    $repositorySettings.withLock { $0.worktreeBaseDirectoryPath = "../worktrees" }
+    var state = RepositoriesFeature.State()
+    state.repositories = [
+      Repository(
+        location: location, name: "main",
+        worktrees: IdentifiedArray(uniqueElements: try await plainHost.worktrees(in: location)))
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0[RemoteRepositoryHostClient.self] = wrappedClient
+    }
+    store.exhaustivity = .off
+    await store.send(
+      .worktreeCreation(
+        .createWorktreeInRepository(
+          repositoryID: location.id, nameSource: .explicit(branch), baseRefSource: .explicit("trunk"),
+          fetchRemote: false)))
+    await store.receive(\.worktreeCreation.createRandomWorktreeFailed, timeout: .seconds(60))
+    await store.finish(timeout: .seconds(60))
+    return CreationResult(failed: store.state.alert != nil, host: plainHost)
+  }
+
   func remove() {
     try? FileManager.default.removeItem(at: root)
   }
 }
 
 extension RemoteCommandLane {
+  /// The lane, except that each stream ends as a dropped connection after its script ran.
+  fileprivate func droppingTheConnectionAfterEachStream() -> Self {
+    let lane = self
+    return RemoteCommandLane(
+      run: { try await lane.run($0, $1) },
+      runScript: { try await lane.runScript($0, $1) },
+      stream: { script, limits, onLine in
+        _ = try await lane.stream(script, limits, onLine)
+        return .exited(
+          RemoteCommandResult(
+            exitCode: 255, output: Data(), outputTruncated: false, errorOutput: "Connection closed by remote host"))
+      })
+  }
+
   /// The lane, with a greeting printed before every command and script, as a `.zshenv`
   /// that prints does.
   fileprivate func printingAGreetingFirst() -> Self {

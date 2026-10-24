@@ -177,6 +177,15 @@ nonisolated struct RepositoryHost: Sendable {
     return local.createWorktreeStream(request)
   }
 
+  /// `location` with its path resolved on its host, for comparing it with the paths
+  /// that git lists; a local location, or one that cannot be resolved, as it is.
+  func physicalLocation(_ location: RepositoryLocation) async -> RepositoryLocation {
+    guard case .remote(let hostProfileID, let path) = location,
+      let host = await availableRemoteHost(location), let resolved = await host.physicalPath(path)
+    else { return location }
+    return .remote(hostProfileID: hostProfileID, path: resolved)
+  }
+
   /// `$HOME` on a remote repository's host, where remote worktrees are placed by
   /// default; nil for a local repository.
   func remoteHomeDirectory(in repository: RepositoryLocation) async throws -> String? {

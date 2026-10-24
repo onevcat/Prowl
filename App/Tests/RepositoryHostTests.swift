@@ -251,20 +251,24 @@ struct RepositoryHostTests {
     }
   }
 
-  @Test(.dependencies) func creatingAWorktreeInARemoteRepositoryExplainsWhy() async {
+  /// Without a host connection, the prompt cannot place a remote worktree.
+  @Test(.dependencies) func creatingAWorktreeInARemoteRepositoryWithoutAHostExplainsWhy() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
-    } withDependencies: {
-      $0.gitClient = Self.failingGitClient
     }
 
-    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(remote.id))) {
+    await store.send(
+      .worktreeCreation(
+        .promptedWorktreeCreationDataLoaded(
+          repositoryID: remote.id, baseRefOptions: [], automaticBaseRef: "", selectedBaseRef: nil,
+          remoteHomeDirectory: nil))
+    ) {
       $0.alert = RepositoriesFeature().messageAlert(
         title: "Unable to create worktree",
-        message: "Worktrees cannot be created in remote folders yet."
+        message: "The remote host could not be reached."
       )
     }
   }
