@@ -22,6 +22,22 @@ nonisolated enum RemoteRepositoryRefreshError: Error, Equatable, Sendable {
   case incompleteOutput
 }
 
+extension RemoteRepositoryRefreshError: LocalizedError {
+  nonisolated var errorDescription: String? {
+    switch self {
+    case .connection(let failure): failure.remoteFolderDescription
+    case .timedOut: String(localized: "The remote host did not answer in time.")
+    case .missingFolder: String(localized: "The folder no longer exists on the remote host.")
+    case .inaccessibleFolder: String(localized: "Prowl cannot open the folder on the remote host.")
+    case .notGitRepository: String(localized: "The folder on the remote host is not a Git repository.")
+    case .notRepositoryRoot: String(localized: "The folder on the remote host is not the root of its repository.")
+    case .gitMissing: String(localized: "Git was not found on the remote host.")
+    case .gitFailed(let message): String(localized: "Git on the remote host refused the repository: \(message)")
+    case .incompleteOutput: String(localized: "The remote host sent an incomplete reply.")
+    }
+  }
+}
+
 nonisolated enum RemoteWorktreeState: String, Equatable, Sendable {
   case present = "ok"
   /// Git still lists the worktree, but its folder is gone.

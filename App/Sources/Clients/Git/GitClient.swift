@@ -1324,6 +1324,9 @@ struct GitClient {
     let command = ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " ")
     do {
       return try await git.run(arguments, shell: shell).stdout
+    } catch let error as RemoteRepositoryHostError {
+      // A remote host that cannot be reached is not a git failure (docs-ai 084 B3b).
+      throw error
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }

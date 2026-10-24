@@ -717,7 +717,7 @@ extension RepositoriesFeature {
               }
             }
             if ownsDestination {
-              _ = try? await repositoryHost.removeWorktree(cleanupWorktree, deleteBranch: false)
+              try? await repositoryHost.removeWorktree(cleanupWorktree, deleteBranch: false)
             }
             _ = try? await repositoryHost.pruneWorktrees(in: repositoryLocation)
             await send(.reloadRepositories(animated: true))
