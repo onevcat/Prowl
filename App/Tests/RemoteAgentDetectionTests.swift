@@ -125,6 +125,20 @@ struct RemoteAgentDetectionTests {
       processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "zsh", argv0: "zsh", cmdline: "zsh")])
   }
 
+  /// The `ssh` that a remote folder's pane types: its arguments carry the launch's nonce.
+  private var launchSSHJob: ForegroundJob {
+    let arguments = [
+      "/usr/bin/ssh", "-t", "--", "mini", "exec", "sh", "/home/dev/.cache/prowl/launch/0123456789abcdef/launch.sh",
+    ]
+    return ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(
+          pid: getpid(), parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: arguments.joined(separator: " "),
+          arguments: arguments)
+      ])
+  }
+
   private var sshJob: ForegroundJob {
     ForegroundJob(
       processGroupID: getpid(),
@@ -1764,6 +1778,59 @@ struct RemoteAgentDetectionTests {
     tracker.requestSoon()
     await detect(fixture)
     await settle { fixture.source.refreshes == 2 }
+  }
+
+  private static func origin(recipe: SSHConnectionRecipe) -> RemoteLaunchOrigin {
+    RemoteLaunchOrigin(
+      hostProfileID: UUID(), alias: "mini", recipe: recipe, nonce: "0123456789abcdef", hasFirstCommand: false,
+      launchedAt: Date())
+  }
+
+  /// A pane that Prowl opened in a remote folder (docs-ai 084 C3b) needs no consent, uses the
+  /// stored recipe instead of the `ssh` arguments, and shows the profile's alias. Once its
+  /// `ssh` ended, a later `ssh` in the pane is the user's own and asks.
+  @Test func aRemoteFolderPaneUsesItsStoredRecipeWithoutConsent() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = [:]
+    var asked: [String] = []
+    fixture.state.onRemoteAgentConsentNeeded = { _, destination in asked.append(destination) }
+    let stored = SSHConnectionRecipe(destination: "dev@mini.local", options: ["-p", "22"])
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(recipe: stored)
+
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+
+    #expect(asked.isEmpty)
+    #expect(fixture.source.recipes == [stored])
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostLabel == "mini")
+    probe.job = shellJob
+    await detect(fixture)
+    probe.job = sshJob
+    await detect(fixture)
+    #expect(asked == ["mini"])
+  }
+
+  /// The kill switch still turns detection off for a remote folder's pane.
+  @Test func theKillSwitchTurnsOffARemoteFolderPane() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = ["PROWL_REMOTE_AGENT_DETECTION": "0"]
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+
+    probe.job = launchSSHJob
+    await detect(fixture)
+    for _ in 0..<50 { await Task.yield() }
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID] == nil)
+    #expect(fixture.source.attempts == 0)
   }
 
   @Test func paneShellsExportThePaneIdUnderAnSSHForwardedName() {

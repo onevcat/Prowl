@@ -7,6 +7,8 @@ import ProwlCLIShared
 enum SplitCreationError: Error, Equatable, Sendable {
   case anchorNotFound(UUID)
   case insertionFailed
+  /// Splits in a remote folder come with docs-ai 084 C4.
+  case remoteFolder
 }
 
 extension WorktreeTerminalState {
@@ -213,6 +215,8 @@ extension WorktreeTerminalState {
     focusing: Bool = true,
     defersSurfaceCreation: Bool = false
   ) -> Result<UUID, SplitCreationError> {
+    // A split of a remote pane would be a local shell: remote splits come with docs-ai 084 C4.
+    guard worktree.location.availability(of: .terminalSplit).isAvailable else { return .failure(.remoteFolder) }
     guard let tabID = tabId(containing: anchorSurfaceID),
       let tree = trees[tabID],
       let anchorSurface = surfaces[anchorSurfaceID]
@@ -483,7 +487,9 @@ extension WorktreeTerminalState {
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context,
-      environment: worktree.scriptEnvironment.merging(additionalEnvironment) { _, patched in patched },
+      // A remote folder's paths are on its host: the launcher exports them there (C3b).
+      environment: (worktree.location.localURL == nil ? [:] : worktree.scriptEnvironment)
+        .merging(additionalEnvironment) { _, patched in patched },
       skipsSurfaceCreationForTesting: skipsSurfaceCreationForTesting,
       failsSurfaceCreationForTesting: failsSurfaceCreationForTesting,
       defersSurfaceCreation: defersSurfaceCreation
@@ -761,6 +767,7 @@ extension WorktreeTerminalState {
     surfaces.removeValue(forKey: surfaceID)
     launchProfilesBySurface.removeValue(forKey: surfaceID)
     launchHookRegistrationsBySurface.removeValue(forKey: surfaceID)
+    forgetRemoteLaunch(surfaceID: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
     pendingCustomCommands.removeValue(forKey: surfaceID)

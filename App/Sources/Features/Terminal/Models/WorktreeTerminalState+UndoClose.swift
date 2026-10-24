@@ -33,8 +33,9 @@ extension WorktreeTerminalState {
       contexts: contexts
     )
     // A pane whose process already ended has nothing to bring back; it is
-    // freed with the close and the record keeps only the living panes.
-    for leaf in tree.leaves() where leaf.childProcessHasExited {
+    // freed with the close and the record keeps only the living panes. So is a
+    // remote pane that still waits for its launcher (docs-ai 084 C3b).
+    for leaf in tree.leaves() where leaf.childProcessHasExited || isAwaitingRemoteLaunch(leaf.id) {
       record = record?.removingSurface(id: leaf.id)
     }
     return record
@@ -44,7 +45,8 @@ extension WorktreeTerminalState {
   func retainedContext(for surfaceID: UUID) -> TerminalRetainedSurfaceContext {
     TerminalRetainedSurfaceContext(
       launchProfile: launchProfilesBySurface[surfaceID],
-      hookRegistration: launchHookRegistrationsBySurface[surfaceID]
+      hookRegistration: launchHookRegistrationsBySurface[surfaceID],
+      remoteLaunchOrigin: remoteLaunchOriginBySurface[surfaceID]
     )
   }
 
@@ -68,7 +70,7 @@ extension WorktreeTerminalState {
   func detachTree(for tabId: TerminalTabID) {
     guard let tree = trees.removeValue(forKey: tabId) else { return }
     for surface in tree.leaves() {
-      if surface.childProcessHasExited {
+      if surface.childProcessHasExited || isAwaitingRemoteLaunch(surface.id) {
         surface.closeSurface()
         forgetSurface(surface.id)
       } else {
@@ -219,6 +221,9 @@ extension WorktreeTerminalState {
     }
     if let profile = context?.launchProfile {
       launchProfilesBySurface[view.id] = profile
+    }
+    if let origin = context?.remoteLaunchOrigin {
+      remoteLaunchOriginBySurface[view.id] = origin
     }
     if let registration = context?.hookRegistration {
       launchHookRegistrationsBySurface[view.id] = registration

@@ -996,10 +996,7 @@ final class WorktreeTerminalManager {
       threshold: commandFinishedNotificationThreshold
     )
     state.setRemoteAgentDetectionConsent(remoteAgentDetectionConsent)
-    state.onRemoteAgentConsentNeeded = { [weak self] surfaceID, destination in
-      self?.emit(
-        .remoteAgentConsentNeeded(worktreeID: worktree.id, surfaceID: surfaceID, destination: destination))
-    }
+    wireRemoteCallbacks(of: state, worktree: worktree)
     state.undoCloseTimeout = closeUndoStack.timeout
     state.onCloseRecorded = { [weak self] record in
       guard let self else { return }
@@ -1107,6 +1104,18 @@ final class WorktreeTerminalManager {
       guard let registration = plan.hookRegistration else { return true }
       _ = agentObservationStore.registerManagedHook(registration, surfaceID: surfaceID)
       return true
+    }
+  }
+
+  /// The remote callbacks of a worktree's terminal state: the L0 consent question
+  /// (docs-ai 082) and a remote tab that did not start (084 C3b).
+  private func wireRemoteCallbacks(of state: WorktreeTerminalState, worktree: Worktree) {
+    state.onRemoteAgentConsentNeeded = { [weak self] surfaceID, destination in
+      self?.emit(
+        .remoteAgentConsentNeeded(worktreeID: worktree.id, surfaceID: surfaceID, destination: destination))
+    }
+    state.onRemoteTerminalFailed = { [weak self] message in
+      self?.emit(.remoteTerminalFailed(worktreeID: worktree.id, message: message))
     }
   }
 
@@ -1596,7 +1605,10 @@ final class WorktreeTerminalManager {
   }
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    // A restored remote leaf would be a plain local shell: remote restore comes with
+    // docs-ai 084 C5, so a remote folder's tabs are not saved.
+    let activeStates = activeWorktreeStates.filter { $0.worktree.location.localURL != nil }
+      .sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count)"
@@ -1616,8 +1628,9 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
+    // A selected remote folder is not in the payload, which must name a saved worktree.
     return TerminalLayoutSnapshotPayload(
-      selectedWorktreeID: selectedWorktreeID,
+      selectedWorktreeID: snapshotWorktrees.contains { $0.worktreeID == selectedWorktreeID } ? selectedWorktreeID : nil,
       worktrees: snapshotWorktrees
     )
   }

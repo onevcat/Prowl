@@ -54,6 +54,8 @@ extension WorktreeTerminalState {
   }
 
   func handleProgramStatus(_ report: GhosttyProgramStatusReport, surfaceID: UUID, now: Date = Date()) {
+    // A remote launch's completion marker is not a program status (docs-ai 084 C3b).
+    if handleRemoteLaunchMarker(report, surfaceID: surfaceID, now: now) { return }
     var store = programStatusStoresBySurface[surfaceID] ?? ProgramStatusRecordStore()
     store.apply(report, arrivedAt: now)
     programStatusStoresBySurface[surfaceID] = store

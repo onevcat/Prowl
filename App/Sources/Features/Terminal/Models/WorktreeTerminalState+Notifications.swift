@@ -64,16 +64,30 @@ extension WorktreeTerminalState {
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
     // Notify CLI waiters unconditionally before applying notification filters.
-    if let continuation = commandFinishedWaiters.removeValue(forKey: surfaceId) {
-      let durationMs = Int(durationNs / 1_000_000)
-      continuation.yield((exitCode: exitCode, durationMs: durationMs))
-      continuation.finish()
-    }
+    resumeCommandFinishedWaiter(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
+    // A remote pane's commands finish on the host: the local shell's finish is its `ssh`
+    // (or a remote shell's OSC 133), which completes no script (docs-ai 084 C3b).
+    let completesCommand = remoteLaunchTakesCommandFinished(surfaceID: surfaceId)
 
     surfaceRunningStartedAtById.removeValue(forKey: surfaceId)
     noteCommandFinishedForCommandDetection(surfaceId: surfaceId)
     noteCommandFinishedForAgentDetection(surfaceID: surfaceId)
 
+    guard completesCommand else { return }
+    completeCommand(exitCode: exitCode, durationNs: durationNs, surfaceId: surfaceId)
+  }
+
+  func resumeCommandFinishedWaiter(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
+    if let continuation = commandFinishedWaiters.removeValue(forKey: surfaceId) {
+      let durationMs = Int(durationNs / 1_000_000)
+      continuation.yield((exitCode: exitCode, durationMs: durationMs))
+      continuation.finish()
+    }
+  }
+
+  /// The one-shot reactions to a finished command: the custom command toast, Close on
+  /// Success and the long-command notification.
+  func completeCommand(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
     // Custom command success toast. One-shot: removed regardless of outcome.
     if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {
       let durationMs = Int(durationNs / 1_000_000)

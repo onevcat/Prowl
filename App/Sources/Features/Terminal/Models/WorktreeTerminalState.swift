@@ -261,13 +261,26 @@ final class WorktreeTerminalState {
   @ObservationIgnored var remoteConsentAskedSSHBySurface: [UUID: LocalProcessGeneration] = [:]
   /// A pane's `ssh` needs the user's answer before Prowl connects: (surface, destination).
   @ObservationIgnored var onRemoteAgentConsentNeeded: ((UUID, String) -> Void)?
+  /// The panes that Prowl opened for a remote folder (docs-ai 084 C3b).
+  @ObservationIgnored var remoteLaunchOriginBySurface: [UUID: RemoteLaunchOrigin] = [:]
+  /// The staging of each remote pane that waits for its launcher.
+  @ObservationIgnored var remoteLaunchTasksBySurface: [UUID: Task<Void, Never>] = [:]
+  @ObservationIgnored var remoteTerminalStagerForTesting: RemoteTerminalStager?
+  /// A remote pane could not start: the message for the user.
+  @ObservationIgnored var onRemoteTerminalFailed: ((String) -> Void)?
   @ObservationIgnored var accessibilityPosterForTesting: (@MainActor (Any, NSAccessibility.Notification) -> Void)?
   var remoteAgentDetectionMode: RemoteAgentDetection.Mode {
+    remoteAgentDetectionMode(consent: remoteAgentDetectionConsent)
+  }
+  /// The mode for `consent`; a pane that Prowl opened in a remote folder passes `.enabled`:
+  /// no consent to wait for, but the kill switch (docs-ai 084 C3b).
+  func remoteAgentDetectionMode(consent: RemoteAgentDetectionConsent) -> RemoteAgentDetection.Mode {
     if let enabled = remoteAgentDetectionEnabledForTesting { return enabled ? .enabled : .disabled }
     return RemoteAgentDetection.mode(
-      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment,
-      consent: remoteAgentDetectionConsent)
+      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: consent)
   }
+  /// Whether a local process still runs, for the `ssh` of a remote pane.
+  @ObservationIgnored var processIsAliveForTesting: ((LocalProcessGeneration) -> Bool)?
   /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
   @ObservationIgnored var agentProcessProbeForTesting: AgentProcessProbeOverride?
   @ObservationIgnored var programStatusSupportForTesting: ((DetectedAgent) -> ProgramStatusSupport)?
@@ -593,14 +606,14 @@ final class WorktreeTerminalState {
   }
 
   func ensureInitialTab(focusing: Bool) {
-    // A remote worktree gets no automatic local shell or setup script (docs-ai 084 C3).
     guard worktree.location.availability(of: .terminalTab).isAvailable else { return }
     guard tabManager.tabs.isEmpty else { return }
     guard !isEnsuringInitialTab else { return }
     isEnsuringInitialTab = true
     Task {
       let setupScript: String?
-      if pendingSetupScript {
+      // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
+      if pendingSetupScript, worktree.location.availability(of: .terminalScript).isAvailable {
         setupScript = repositorySettings.setupScript
       } else {
         setupScript = nil
@@ -627,6 +640,8 @@ final class WorktreeTerminalState {
     let context = GHOSTTY_SURFACE_CONTEXT_TAB
     let resolvedInheritanceSurfaceId = inheritingFromSurfaceId ?? currentFocusedSurfaceId()
     let title = title ?? "\(worktree.name) \(nextTabIndex())"
+    // Scripts do not run in a remote folder yet (docs-ai 084 C3c): no setup script there.
+    let setupScript = worktree.location.availability(of: .terminalScript).isAvailable ? setupScript : nil
     let setupInput = setupScriptInput(setupScript: setupScript)
     let commandInput = initialInput.flatMap { runScriptInput($0) }
     let resolvedInput: String?
@@ -976,15 +991,55 @@ final class WorktreeTerminalState {
     var selecting: Bool = true
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
-    let workingDirectoryOverride: URL?
+    var workingDirectoryOverride: URL?
     var additionalEnvironment: [String: String] = [:]
     var defersSurfaceCreation = false
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
-    // Every tab passes here: a remote folder gets no local shell, from any entry point,
-    // until its launcher exists (docs-ai 084 C3).
-    guard worktree.location.availability(of: .terminalTab).isAvailable else { return nil }
+    // Every tab passes here: in a remote folder, from any entry point, a tab is a local
+    // pane that runs the remote launcher (docs-ai 084 C3b), never a plain local shell.
+    if case .remote(let hostProfileID, let path) = worktree.location {
+      return createRemoteTab(creation, hostProfileID: hostProfileID, path: path)
+    }
+    return insertTab(creation).tabID
+  }
+
+  /// A remote folder's tab: a deferred local pane, which types
+  /// `ssh -t <recipe> -- exec sh <launcher>` once the launcher is staged on the host.
+  /// Its local working directory is the recipe's, so relative `-F` and `-i` options resolve
+  /// as when the host was added. A first command (a script) waits for C3c.
+  private func createRemoteTab(_ creation: TabCreation, hostProfileID: UUID, path: String) -> TerminalTabID? {
+    guard creation.initialInput == nil else {
+      terminalStateLogger.warning("Remote tab with a first command refused: scripts come with docs-ai 084 C3c")
+      return nil
+    }
+    let stager = remoteTerminalStager
+    guard let profile = stager.profile(hostProfileID) else {
+      onRemoteTerminalFailed?(RepositoryHostError.hostProfileMissing(hostProfileID).localizedDescription)
+      return nil
+    }
+    var remote = creation
+    remote.defersSurfaceCreation = true
+    remote.workingDirectoryOverride =
+      profile.recipe.workingDirectory.map { URL(filePath: $0, directoryHint: .isDirectory) }
+      ?? FileManager.default.homeDirectoryForCurrentUser
+    let inserted = insertTab(remote)
+    guard let surfaceID = inserted.surfaceID else { return inserted.tabID }
+    startRemoteLaunch(
+      RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: path,
+        environment: [
+          RemoteLaunchVariable(name: "PROWL_WORKTREE_PATH", value: path),
+          RemoteLaunchVariable(name: "PROWL_ROOT_PATH", value: worktree.repositoryLocation.path),
+          RemoteLaunchVariable(name: GhosttySurfaceView.remotePaneIdentityEnvironmentKey, value: surfaceID.uuidString),
+        ],
+        firstCommand: nil),
+      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID)
+    return inserted.tabID
+  }
+
+  private func insertTab(_ creation: TabCreation) -> (tabID: TerminalTabID, surfaceID: UUID?) {
     let tabId = tabManager.createTab(
       title: creation.title,
       icon: creation.icon,
@@ -1012,7 +1067,7 @@ final class WorktreeTerminalState {
       lastForegroundCreatedTabID = tabId
     }
     onTabCreated?()
-    return tabId
+    return (tabId, tree.root?.leftmostLeaf().id)
   }
 
   func selectTab(_ tabId: TerminalTabID) {

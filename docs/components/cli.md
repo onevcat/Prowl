@@ -243,8 +243,8 @@ Each agent contains:
   additional confirmation.
 - `remote`: present only for an agent on a remote host behind the pane's `ssh` (see
   [agent detection](agent-detection.md#remote-agents-over-ssh)). It contains:
-  - `host` (`user@hostname`), `user`, `hostname`, `port`: absent while the connection
-    is not resolved.
+  - `host` (`user@hostname`, or the host's alias in a tab of a remote folder), `user`,
+    `hostname`, `port`: absent while the connection is not resolved.
   - `correlation`: `pending`, `correlated`, `ambiguous`, `unmapped`,
     `probe_unavailable`, `unsupported`, or `tmux_unreachable` (the pane shows a tmux
     client whose server Prowl cannot reach).

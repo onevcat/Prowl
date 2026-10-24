@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import ConcurrencyExtras
 import DependenciesTestSupport
 import Foundation
 import ProwlCLIShared
@@ -198,7 +199,7 @@ struct RemoteFolderUIGateTests {
       $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
     }
     store.exhaustivity = .off
-    let message = "Terminals cannot open in remote folders yet."
+    let message = "Scripts and custom commands do not run in remote folders yet."
 
     await store.send(.runScript)
     await store.receive(\.repositories.showToast)
@@ -208,9 +209,9 @@ struct RemoteFolderUIGateTests {
     #expect(store.state.repositories.statusToast == .warning(message))
   }
 
-  /// New Terminal (menu bar and shortcut) in a remote folder shows the reason and sends
-  /// nothing, also with a setup script pending; a remote plain folder too.
-  @Test(.dependencies) func newTerminalInARemoteFolderShowsTheReason() async {
+  /// New Terminal (menu bar and shortcut) in a remote folder opens a remote tab (docs-ai 084
+  /// C3b), without the pending setup script (C3c); a remote plain folder too.
+  @Test(.dependencies) func newTerminalInARemoteFolderOpensARemoteTab() async throws {
     var repositories = Self.remoteState()
     repositories.pendingSetupScriptWorktreeIDs = [repositories.selectedWorktreeID!]
     let plain = RemoteRepositoryFixtures.plainFolder()
@@ -219,17 +220,20 @@ struct RemoteFolderUIGateTests {
     plainRepositories.repositoryRoots = [plain.location]
     plainRepositories.selection = .repository(plain.id)
     for repositories in [repositories, plainRepositories] {
+      let sent = LockIsolated<[TerminalClient.Command]>([])
       let store = TestStore(
         initialState: AppFeature.State(repositories: repositories, settings: SettingsFeature.State())
       ) {
         AppFeature()
       } withDependencies: {
-        $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+        $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
       }
       store.exhaustivity = .off
       await store.send(.newTerminal)
-      await store.receive(\.repositories.showToast)
-      #expect(store.state.repositories.statusToast == .warning("Terminals cannot open in remote folders yet."))
+      await store.finish()
+      let worktree = try #require(store.state.repositories.selectedTerminalWorktree)
+      #expect(sent.value == [.createTab(worktree, runSetupScriptIfNew: false)])
+      #expect(store.state.repositories.statusToast == nil)
     }
   }
 }

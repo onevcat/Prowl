@@ -58,6 +58,8 @@ extension WorktreeTerminalState {
       "[LayoutRestore] applySnapshot: worktree=\(worktree.id)"
         + " snapshotWorktreeID=\(snapshot.worktreeID) tabs=\(snapshot.tabs.count)"
     )
+    // Remote restore comes with docs-ai 084 C5.
+    guard worktree.location.localURL != nil else { return false }
     guard snapshot.worktreeID == worktree.id else {
       terminalStateLogger.warning("[LayoutRestore] applySnapshot: worktreeID mismatch")
       return false

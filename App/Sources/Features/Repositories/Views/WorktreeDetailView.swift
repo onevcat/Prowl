@@ -62,13 +62,14 @@ struct WorktreeDetailView: View {
       actionTargetWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
-    // A remote folder opens no terminal yet (docs-ai 084 C3), so it shows no script or
-    // custom command.
     let opensTerminals = actionTargetWorktree?.location.availability(of: .terminalTab).isAvailable != false
-    let runScriptEnabled = hasActiveTerminalTarget && opensTerminals
+    // A remote folder runs no script yet (docs-ai 084 C3c), so it shows no script or custom
+    // command.
+    let runsScripts = actionTargetWorktree?.location.availability(of: .terminalScript).isAvailable != false
+    let runScriptEnabled = hasActiveTerminalTarget && runsScripts
     let runScriptIsRunning =
       actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
-    let customCommands = opensTerminals ? state.selectedCustomCommands : []
+    let customCommands = runsScripts ? state.selectedCustomCommands : []
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
       customTitles: repositories.repositoryCustomTitles
@@ -835,7 +836,6 @@ struct WorktreeDetailView: View {
 
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
-      // A remote folder opens no terminal yet (docs-ai 084 C3).
       newTerminal: opensTerminals ? action(.newTerminal) : nil,
       closeTab: closeTabFocusedAction(
         repositories: repositories, hasActiveWorktree: hasActiveWorktree),

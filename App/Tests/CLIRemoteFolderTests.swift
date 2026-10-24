@@ -145,7 +145,7 @@ struct CLIRemoteFolderTests {
 
     #expect(!response.ok)
     #expect(response.error?.code == CLIErrorCode.createFailed)
-    #expect(response.error?.message == "Terminals cannot open in remote folders yet.")
+    #expect(response.error?.message == "The CLI cannot open tabs in remote folders yet.")
     #expect(created == 0)
   }
 }

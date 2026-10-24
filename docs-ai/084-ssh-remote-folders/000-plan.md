@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982; C3b #983 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -356,3 +356,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: C1c lands the A4b UI gates (disabled controls with reasons, palette filtering, terminal commands refused and hidden), keeps Finder and Copy Path checks in the views, and shows the folder connection in the toolbar status — see [027-c1c-ui-gates.md](027-c1c-ui-gates.md)
 - Updated 2026-10-23: C2 adds the `host` field to CLI worktrees, includes remote folders in the CLI contexts, the `label:path` selector (a bare path matches local only), reachable refusals for remote tabs and workflows; the host-aware workflow `rootKey` is deferred until remote workflows exist — see [028-c2-cli-host.md](028-c2-cli-host.md)
 - Updated 2026-10-23: C3 split into three PRs; C3a adds the remote launcher (staging over `sh -s`, per-shell hand-over, OSC 7501 completion marker), tested with real shells — see [029-c3a-remote-launcher.md](029-c3a-remote-launcher.md)
+- Updated 2026-10-23: C3b opens remote tabs: a deferred local pane types `ssh -t <recipe> -- exec sh <launcher>` once the launcher is staged; the pane keeps a `RemoteLaunchOrigin` (stored recipe, no consent, alias label); launch markers complete the first command, and the outer `ssh` finish completes nothing. Scripts get their own gate until C3c; splits and layout restore stay off for remote folders until C4 and C5 — see [030-c3b-remote-tabs.md](030-c3b-remote-tabs.md)
