@@ -312,12 +312,14 @@ struct RepositorySectionView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(repository.location.displayPath, forType: .string)
       }
-      // Finder shows folders on this Mac; the remote gates come with docs-ai 084 A4b.
-      if let rootURL = repository.localURL {
-        Button("Reveal in Finder") {
-          NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: rootURL.path)
-        }
+      // Finder shows folders on this Mac only (docs-ai 084 A4b).
+      let finderReason = repository.availability(of: .finder).unavailableReason?.message
+      Button("Reveal in Finder") {
+        guard let rootURL = repository.localURL else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: rootURL.path)
       }
+      .disabled(finderReason != nil)
+      .help(finderReason ?? String(localized: "Reveal this folder in Finder"))
     }
     Divider()
     if repository.isWorkspace {

@@ -31,6 +31,9 @@ struct AgentsLauncherItem: Equatable, Identifiable {
   /// false negatives (installed but never run, dedicated-home-only logins),
   /// and a wrong launch fails visibly in the new surface (docs-ai 053/005).
   let availabilityWarning: String?
+  /// Why the profile cannot launch here at all, such as a remote folder (docs-ai 084 A4b);
+  /// unlike a warning, it disables the row.
+  var unavailableReason: String?
 }
 
 /// Leading toolbar entry point for agent-scoped actions.
@@ -174,7 +177,8 @@ struct AgentsQuickLaunchButton: View {
         .font(LeadingToolbarControlMetrics.font)
         .foregroundStyle(.secondary)
     }
-    .help("Launch \(item.name) in this worktree")
+    // Not disabled: a disabled toolbar button shows no tooltip. A click shows the reason.
+    .help(item.unavailableReason.map { Text(verbatim: $0) } ?? Text("Launch \(item.name) in this worktree"))
     .accessibilityLabel("Launch \(item.name)")
     .accessibilityIdentifier("agents-toolbar-quick-launch")
   }
@@ -227,13 +231,14 @@ private struct AgentsPopoverContent: View {
         ForEach(launcherItems) { item in
           AgentsPopoverRow(
             title: item.isRecommended ? "\(item.name) ★" : item.name,
-            subtitle: item.availabilityWarning,
+            subtitle: item.unavailableReason ?? item.availabilityWarning,
             systemImage: "play.circle",
             iconSource: item.iconSource,
             trailingText: item.runtimeName,
-            isDimmed: item.availabilityWarning != nil,
+            isDimmed: item.availabilityWarning != nil || item.unavailableReason != nil,
             action: { onLaunchProfile(item.id) }
           )
+          .disabled(item.unavailableReason != nil)
         }
       }
       if capsule != nil || !launcherItems.isEmpty {
@@ -265,7 +270,13 @@ private struct AgentsPopoverContent: View {
     .task { await AgentRuntimeAvailabilityProbe.refresh() }
     // Workflows re-list on every open so file edits show without a relaunch.
     .task {
-      guard featureFlags.workflowUI, let workflowsWorktreeID else { return }
+      // A remote folder runs no workflow yet (docs-ai 084 A4a), so it lists none.
+      guard featureFlags.workflowUI, let workflowsWorktreeID,
+        RepositoryLocation(id: workflowsWorktreeID)?.availability(of: .workflow).isAvailable != false
+      else {
+        workflowItems = []
+        return
+      }
       workflowItems = workflowStartClient.catalog(workflowsWorktreeID)
     }
   }

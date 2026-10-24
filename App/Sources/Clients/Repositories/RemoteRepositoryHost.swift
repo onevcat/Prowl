@@ -589,6 +589,20 @@ nonisolated func isRemoteHostUnreachable(_ error: Error) -> Bool {
   }
 }
 
+/// Whether `error` says that Prowl could not use its connection to a reachable host for a
+/// reason the user must fix: a refused login, a changed host key, rejected options, or the
+/// side-channel kill switch (docs-ai 084 C1). A changed target is a rebind, not this.
+nonisolated func isRemoteConnectionFailure(_ error: Error) -> Bool {
+  switch error {
+  case RemoteRepositoryHostError.connection(let failure), RemoteRepositoryRefreshError.connection(let failure):
+    !failure.isUnreachable
+  case RemoteRepositoryHostError.configurationRejected, RemoteRepositoryHostError.sideChannelDisabled:
+    true
+  default:
+    false
+  }
+}
+
 /// A folder on a host, as adding it finds it (docs-ai 084 C1).
 nonisolated struct RemoteFolderDiscovery: Equatable, Sendable {
   let rootPath: String
