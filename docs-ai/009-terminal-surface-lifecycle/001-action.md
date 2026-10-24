@@ -13,8 +13,9 @@
 | 2026-04-16 | Fix Canvas split-pane rendering freeze: `isCanvasManaged` flag skips `applySurfaceActivity` while Canvas owns occlusion; new split panes explicitly un-occluded in Canvas | PR #203 |
 | 2026-04-29 | Investigation closed in the tracking doc: no recurrence after #201/#203; most investigation logs removed, low-frequency `[CanvasExit]` / `[TerminalWake]` logs retained | `doc-onevcat/canvas-exit-terminal-blank-tracking.md` |
 | 2026-05-29 | Fix terminal surface leak on tab close (fixes #370): stale SwiftUI renders no longer recreate surfaces for closed tabs; first tab uses Ghostty tab context — see [002-surface-resource-waste.md](002-surface-resource-waste.md) | PR #372 |
+| 2026-10-24 | Fix blank Canvas card for the tab selected on entry (regression from #931's `RemotePaneBadge` overlay, first shipped in 2026.10.21): the leaving normal view's split host built one more terminal wrapper whose `init` took the surface from the Canvas card and never joined a window. A host in a window now takes back a surface that sits outside every window, and the surface asks its live hosts to do so when it leaves the window | PR TBD |
 
-## Outcome & current state (as of 2026-07-12)
+## Outcome & current state (as of 2026-10-24)
 
 - `supacode/Infrastructure/Ghostty/GhosttySurfaceView.swift` — `OcclusionState` struct
   (`desired`/`applied`, `setDesired`, `prepareToApply`, `invalidateForAttachmentChange`).
@@ -22,13 +23,18 @@
   resume until `isReadyToApplyOcclusion` (superview + window), logging
   `[CanvasExit] deferOcclusion` when deferring. `viewDidMoveToWindow` /
   `viewDidMoveToSuperview` call `handleAttachmentChange()`, which invalidates the applied
-  cache, asks the scroll wrapper to `ensureSurfaceAttached()` when orphaned, and reapplies
-  the desired value once attached.
+  cache, asks its hosts to take it back when it is outside every window (2026-10-24: the
+  last scroll wrapper when orphaned, then every registered host that is in a window), and
+  reapplies the desired value once attached. Each scroll wrapper registers itself in the
+  surface's weak `hosts` table from `init`.
 - `supacode/Infrastructure/Ghostty/GhosttySurfaceScrollView.swift` —
-  `ensureSurfaceAttached(requiresLiveHost:)`: terminal-host-only (`hostKind == .terminal`),
-  adopts the surface only when `surfaceView.superview == nil` (comment: "Only adopt an
-  orphaned surface; never steal it from a live host such as Canvas"), with
-  `[CanvasExit] hostReattach` / `hostReattachComplete` logs.
+  `ensureSurfaceAttached(requiresLiveHost:)`: never steals the surface from a host in a
+  window and never adopts a surface pending close. A terminal host adopts an orphaned
+  surface (`superview == nil`); since 2026-10-24 any host in a window (Canvas included)
+  also takes back a surface that is outside every window. `init` still takes the surface
+  unconditionally, so a wrapper that SwiftUI builds in a leaving view tree can strand it;
+  the in-window rule repairs that. `[CanvasExit] hostReattach` / `hostReattachComplete`
+  logs.
 - `supacode/Features/Terminal/BusinessLogic/WorktreeTerminalManager.swift` —
   `setSelectedWorktreeID` handles the leaving-canvas transition (previous selection nil):
   occludes all worktrees except the newly selected one; `[CanvasExit] enteringCanvas` /
@@ -49,7 +55,12 @@
   `occlusionCanRecoverWhenAttachmentCallbackIsMissedAfterReattachment`) and the host
   ownership trio (`terminalHostReattachesSurfaceOnlyAfterItLeavesTheViewTree`,
   `terminalHostDoesNotStealSurfaceFromCanvasHost`,
-  `canvasHostDoesNotStealDetachedSurfaceBack`) — all named in the tracking doc and present.
+  `canvasHostDoesNotStealDetachedSurfaceBack`) — all named in the tracking doc and present —
+  plus the 2026-10-24 window-ownership tests
+  (`canvasHostInWindowReclaimsSurfaceFromHostOutsideWindow`,
+  `surfaceReturnsToLiveHostAfterHostOutsideWindowTakesIt`,
+  `hostInWindowDoesNotStealSurfaceFromAnotherHostInWindow`,
+  `hostInWindowDoesNotReclaimSurfacePendingClose`).
 
 ## Deviations from plan
 
@@ -65,3 +76,8 @@
 - The root cause is the tracking doc's "most likely failure mode", established by
   elimination and non-reproduction rather than a captured repro of the stale-wrapper
   deinit; the entry reflects that confidence level.
+- 2026-10-24: the Canvas-entry blank card was captured with wrapper-level logs. Entering
+  through the sidebar segment or `prowl canvas show` reproduced it every time; `⌘⌥↩` did
+  not, so the trigger depends on SwiftUI update order. Why the overlay makes the leaving
+  `NSHostingView` (inside `TerminalSplitTreeAXContainer`) build a new wrapper instead of
+  updating the old one is not known; the fix does not depend on it.

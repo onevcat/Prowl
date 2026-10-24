@@ -199,6 +199,15 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
     }
   }
+
+  /// Every live scroll wrapper built for this surface. When the surface leaves the
+  /// window, one of them that is still in a window takes it back.
+  private let hosts = NSHashTable<GhosttySurfaceScrollView>.weakObjects()
+
+  func registerHost(_ host: GhosttySurfaceScrollView) {
+    hosts.add(host)
+  }
+
   weak var scrollWrapper: GhosttySurfaceScrollView? {
     didSet {
       if let lastScrollbar {
@@ -846,14 +855,24 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // tree and pause Ghostty's renderer. Invalidate the applied cache so the
     // currently desired occlusion value is sent again after reattachment.
     _ = occlusionState.invalidateForAttachmentChange()
-    if superview == nil, !isPendingClose {
+    if window == nil, !isPendingClose {
       DispatchQueue.main.async { [weak self] in
-        self?.scrollWrapper?.ensureSurfaceAttached()
+        self?.returnToLiveHost()
       }
     }
     guard isReadyToApplyOcclusion else { return }
     DispatchQueue.main.async { [weak self] in
       self?.reapplyOcclusionIfNeeded()
+    }
+  }
+
+  private func returnToLiveHost() {
+    guard window == nil, !isPendingClose else { return }
+    if superview == nil {
+      scrollWrapper?.ensureSurfaceAttached()
+    }
+    for host in hosts.allObjects where window == nil && host.window != nil {
+      host.ensureSurfaceAttached()
     }
   }
 

@@ -50,6 +50,7 @@ final class GhosttySurfaceScrollView: NSView {
     super.init(frame: .zero)
     addSubview(scrollView)
     surfaceView.scrollWrapper = self
+    surfaceView.registerHost(self)
     refreshAppearance()
 
     scrollView.contentView.postsBoundsChangedNotifications = true
@@ -158,13 +159,17 @@ final class GhosttySurfaceScrollView: NSView {
   }
 
   func ensureSurfaceAttached(requiresLiveHost: Bool = true) {
-    guard hostKind == .terminal else { return }
     if requiresLiveHost {
       guard superview != nil || window != nil else { return }
     }
-    guard !isSurfaceAttachedToDocumentView else { return }
-    // Only adopt an orphaned surface; never steal it from a live host such as Canvas.
-    guard surfaceView.superview == nil else { return }
+    guard !isSurfaceAttachedToDocumentView, !surfaceView.isPendingClose else { return }
+    // Never steal the surface from a host in a window, such as Canvas. A terminal host
+    // adopts an orphaned surface. A host in a window also takes the surface back from a
+    // host outside every window: SwiftUI can build a host in a view tree that is
+    // already leaving, and that host's `init` takes the surface out of the window.
+    let isOrphaned = hostKind == .terminal && surfaceView.superview == nil
+    let isStranded = window != nil && surfaceView.window == nil
+    guard isOrphaned || isStranded else { return }
     surfaceLogger.info(
       "[CanvasExit] hostReattach wrapper=\(debugID) host=\(hostKind.rawValue) "
         + "surface=\(surfaceView.debugIdentifierForLogging) "
