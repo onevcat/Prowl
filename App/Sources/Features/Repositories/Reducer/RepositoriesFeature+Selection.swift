@@ -304,10 +304,10 @@ func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> Bool {
 }
 
 func pruneRepositoryOrderIDs(
-  roots: [URL],
+  roots: [RepositoryLocation],
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  let rootIDs = roots.map { RepositoryLocation.local($0.standardizedFileURL).id }
+  let rootIDs = roots.map { $0.standardized.id }
   let availableIDs = Set(rootIDs + state.repositories.map(\.id))
   let pruned = state.repositoryOrderIDs.filter { availableIDs.contains($0) }
   if pruned != state.repositoryOrderIDs {
@@ -318,10 +318,10 @@ func pruneRepositoryOrderIDs(
 }
 
 func pruneWorktreeOrderByRepository(
-  roots: [URL],
+  roots: [RepositoryLocation],
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  let rootIDs = Set(roots.map { RepositoryLocation.local($0.standardizedFileURL).id })
+  let rootIDs = Set(roots.map { $0.standardized.id })
   let repositoriesByID = Dictionary(
     state.repositories.map { ($0.id, $0) },
     uniquingKeysWith: { first, _ in first }

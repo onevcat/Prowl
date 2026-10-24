@@ -207,3 +207,33 @@ struct RepositoryIDNormalizerTests {
     #expect(normalized == [PersistedRepositoryEntry(path: path, kind: .git)])
   }
 }
+
+struct PersistedRepositoryEntryLocationTests {
+  @Test func aLocalEntryOfAnExistingDirectoryKeepsTheTrailingSlashOfItsID() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "prowl-entry-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = PathPolicy.trimmingTrailingSlashes(directory.path(percentEncoded: false))
+    let entry = PersistedRepositoryEntry(path: path, kind: .git)
+
+    #expect(entry.location == .local(URL(fileURLWithPath: path)))
+    #expect(entry.location.id == path + "/")
+  }
+
+  @Test func aMalformedRemoteEntryIsDroppedInsteadOfLoadedAsALocalPath() {
+    let entries = RepositoryEntryNormalizer.normalize([
+      PersistedRepositoryEntry(path: "ssh:NOT-A-UUID:/srv/app", kind: .git),
+      PersistedRepositoryEntry(path: "/tmp/prowl-kept", kind: .git),
+    ])
+
+    #expect(entries.map(\.path) == ["/tmp/prowl-kept"])
+  }
+
+  @Test func aRemoteEntryDecodesItsLocation() {
+    let profile = UUID(uuidString: "5c1f0a8e-7d1b-4c63-9a3e-2f1b6c9d0e42")!
+    let location = RepositoryLocation.remote(hostProfileID: profile, path: "/home/dev/app")
+    let entry = PersistedRepositoryEntry(path: location.id, kind: .git)
+
+    #expect(entry.location == location)
+  }
+}

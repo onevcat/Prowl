@@ -227,6 +227,12 @@ nonisolated enum RepositoryEntryNormalizer {
 
     for entry in entries {
       guard let normalizedPath = RepositoryIDNormalizer.normalizeRoot(entry.path) else { continue }
+      // A string in the remote form that does not decode would otherwise load as a relative
+      // local path that can never be removed again.
+      if RepositoryLocation.hasRemoteForm(normalizedPath), RepositoryLocation(id: normalizedPath) == nil {
+        ProwlLogger("Repositories").warning("Dropping a repository entry with a malformed remote ID")
+        continue
+      }
       if let existing = kindByPath[normalizedPath] {
         kindByPath[normalizedPath] = resolvedKind(existing: existing, incoming: entry.kind)
         continue

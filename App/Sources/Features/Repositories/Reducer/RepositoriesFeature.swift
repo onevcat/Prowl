@@ -246,7 +246,7 @@ struct RepositoriesFeature {
       failures: [LoadFailure],
       invalidRoots: [String],
       openFailures: [String],
-      roots: [URL]
+      roots: [RepositoryLocation]
     )
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
@@ -296,7 +296,7 @@ struct RepositoriesFeature {
   @ObservableState
   struct State: Equatable {
     var repositories: IdentifiedArrayOf<Repository> = []
-    var repositoryRoots: [URL] = []
+    var repositoryRoots: [RepositoryLocation] = []
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
@@ -464,7 +464,7 @@ struct RepositoriesFeature {
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
-    case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
+    case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [RepositoryLocation], animated: Bool)
     case refreshAllCustomTitles
     case refreshCustomTitle(RepositoryLocation)
     case customTitlesLoaded([Repository.ID: String])

@@ -267,7 +267,7 @@ struct AppFeaturePlainFolderTerminalTests {
   ) -> RepositoriesFeature.State {
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.repositoryRoots = [repository.localURL!]
+    repositoriesState.repositoryRoots = [repository.location]
     if selected {
       repositoriesState.selection = .repository(repository.id)
     }
