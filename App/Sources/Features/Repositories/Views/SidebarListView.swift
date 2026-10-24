@@ -383,10 +383,16 @@ struct SidebarListView: View {
           name: model.name,
           path: model.path,
           isGitUnavailable: model.isGitUnavailable,
+          hostStatus: model.hostStatus,
+          rebind: {
+            if case .needsRebind(let hostProfileID) = model.hostStatus {
+              store.send(.remoteHostRebindRequested(hostProfileID))
+            }
+          },
           retry: { store.send(.refreshWorktrees) },
           showFailure: { store.send(.showRepositoryLoadFailure(model.id)) },
           removeRepository: {
-            store.send(.repositoryManagement(.removeFailedRepository(model.id)))
+            store.send(.repositoryManagement(.requestRemoveFailedRepository(model.id)))
           }
         )
         .padding(.horizontal, 12)

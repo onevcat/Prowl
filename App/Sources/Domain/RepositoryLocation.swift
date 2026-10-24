@@ -69,6 +69,12 @@ nonisolated enum RepositoryLocation: Hashable, Sendable {
     localURL?.path ?? path
   }
 
+  /// The host profile of a remote location; nil for a local one.
+  var hostProfileID: UUID? {
+    guard case .remote(let hostProfileID, _) = self else { return nil }
+    return hostProfileID
+  }
+
   /// The path on the location's own host.
   var path: String {
     switch self {
