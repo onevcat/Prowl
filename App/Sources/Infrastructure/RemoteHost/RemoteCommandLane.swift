@@ -5,17 +5,51 @@ import Foundation
 nonisolated struct RemoteCommandLane: Sendable {
   var run: @Sendable (RemoteShellCommand, RemoteCommandLimits) async throws -> RemoteCommandOutcome
   var runScript: @Sendable (RemoteScript, RemoteCommandLimits) async throws -> RemoteCommandOutcome
+  /// Runs a script and hands each line of output and error output to the handler as it
+  /// arrives, such as the progress of a worktree creation.
+  var stream:
+    @Sendable (
+      RemoteScript, RemoteCommandLimits, _ onLine: @escaping @Sendable (RemoteOutputStream, String) -> Void
+    ) async throws -> RemoteCommandOutcome
+
+  /// Without `stream`, a script's lines arrive after it ends, from its whole output.
+  init(
+    run: @escaping @Sendable (RemoteShellCommand, RemoteCommandLimits) async throws -> RemoteCommandOutcome,
+    runScript: @escaping @Sendable (RemoteScript, RemoteCommandLimits) async throws -> RemoteCommandOutcome,
+    stream: (
+      @Sendable (
+        RemoteScript, RemoteCommandLimits, _ onLine: @escaping @Sendable (RemoteOutputStream, String) -> Void
+      ) async throws -> RemoteCommandOutcome
+    )? = nil
+  ) {
+    self.run = run
+    self.runScript = runScript
+    self.stream =
+      stream ?? { script, limits, onLine in
+        let outcome = try await runScript(script, limits)
+        if case .exited(let result) = outcome {
+          let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
+          output.append(result.output)
+          output.finish()
+          let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
+          errorOutput.append(Data(result.errorOutput.utf8))
+          errorOutput.finish()
+        }
+        return outcome
+      }
+  }
 
   /// The lane of an owner that the caller keeps leased.
   static func owner(_ owner: RemoteConnectionOwner) -> Self {
     Self(
       run: { command, limits in try await owner.run(command, limits: limits) },
-      runScript: { script, limits in try await owner.run(script, limits: limits) }
+      runScript: { script, limits in try await owner.run(script, limits: limits) },
+      stream: { script, limits, onLine in try await owner.stream(script, limits: limits, onLine: onLine) }
     )
   }
 
   /// Leases the connection of `profile` for each command. While nothing else holds a
-  /// lease, each command connects again; B3d keeps a lease while a repository is loaded.
+  /// lease, each command connects again; B3e keeps a lease while a repository is loaded.
   ///
   /// Each command first resolves the profile's recipe with `ssh -G`, as panes do. When the
   /// configuration now reaches another user, host name or port, nothing runs: a removal
@@ -27,6 +61,9 @@ nonisolated struct RemoteCommandLane: Sendable {
       },
       runScript: { script, limits in
         try await withLease(profile, registry) { try await $0.run(script, limits: limits) }
+      },
+      stream: { script, limits, onLine in
+        try await withLease(profile, registry) { try await $0.stream(script, limits: limits, onLine: onLine) }
       }
     )
   }

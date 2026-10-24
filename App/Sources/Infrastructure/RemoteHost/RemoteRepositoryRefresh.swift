@@ -213,7 +213,6 @@ nonisolated struct RemoteRepositoryRefresh: Equatable, Sendable {
 
   private func resolvedRecords(in repository: RepositoryLocation) -> [ResolvedRecord] {
     guard case .remote(let hostProfileID, _) = repository else { return [] }
-    let rootURL = URL(filePath: physicalRootPath, directoryHint: .isDirectory)
     var seen = Set<Worktree.ID>()
     let entries = worktrees.enumerated().compactMap { index, record -> ResolvedRecord? in
       guard record.state != .bare else { return nil }
@@ -223,7 +222,7 @@ nonisolated struct RemoteRepositoryRefresh: Equatable, Sendable {
       let url = URL(filePath: record.path, directoryHint: .isDirectory)
       let worktree = Worktree(
         name: record.branch ?? url.lastPathComponent,
-        detail: GitClient.relativePath(from: rootURL, to: url),
+        detail: RemotePaths.relativePath(from: physicalRootPath, to: record.path),
         location: location,
         repositoryLocation: repository,
         createdAt: record.createdAt
@@ -330,4 +329,34 @@ nonisolated struct RemoteRepositoryRefresh: Equatable, Sendable {
     }
     printf 'END\n'
     """#
+}
+
+/// Paths on a remote host, handled as text: this Mac's file system rules (such as
+/// `standardizedFileURL` dropping `/private`) must not apply to them.
+nonisolated enum RemotePaths {
+  /// The path of `target` relative to `base`, as `GitClient.relativePath` builds it for
+  /// local paths: `.` for the same path, `..` for each part of `base` left over.
+  static func relativePath(from base: String, to target: String) -> String {
+    let baseParts = components(base)
+    let targetParts = components(target)
+    var index = 0
+    while index < min(baseParts.count, targetParts.count), baseParts[index] == targetParts[index] {
+      index += 1
+    }
+    let parts = Array(repeating: "..", count: baseParts.count - index) + targetParts[index...]
+    return parts.isEmpty ? "." : parts.joined(separator: "/")
+  }
+
+  /// The parts of an absolute path, without empty parts, `.`, or the parts that `..` removes.
+  static func components(_ path: String) -> [String] {
+    var parts: [String] = []
+    for part in path.split(separator: "/", omittingEmptySubsequences: true) {
+      switch part {
+      case ".": continue
+      case "..": if !parts.isEmpty { parts.removeLast() }
+      default: parts.append(String(part))
+      }
+    }
+    return parts
+  }
 }
