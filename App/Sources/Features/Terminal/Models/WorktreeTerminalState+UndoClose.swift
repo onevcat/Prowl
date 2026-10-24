@@ -222,7 +222,15 @@ extension WorktreeTerminalState {
     if let profile = context?.launchProfile {
       launchProfilesBySurface[view.id] = profile
     }
-    if let origin = context?.remoteLaunchOrigin {
+    if var origin = context?.remoteLaunchOrigin {
+      // While the pane was closed, its launch marker found no origin and was dropped. Its
+      // reactions went with the close, so the first command waits for nothing any more:
+      // later finishes complete as usual, and a CLI waiter for it gets no status instead of
+      // a later command's (docs-ai 084 C3c).
+      if origin.hasFirstCommand, !origin.completed {
+        resumeCommandFinishedWaiter(exitCode: nil, durationNs: 0, surfaceId: view.id)
+      }
+      origin.completed = true
       remoteLaunchOriginBySurface[view.id] = origin
     }
     if let registration = context?.hookRegistration {

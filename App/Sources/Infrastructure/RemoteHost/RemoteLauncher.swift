@@ -138,7 +138,17 @@ nonisolated enum RemoteLauncher {
         /*/\(launchDirectory)/\(launch.nonce)) ;;
         *) echo "prowl: the launcher is not in its launch directory" >&2; exit 1 ;;
       esac
-      cd -- \(quote(launch.workingDirectory)) 2>/dev/null || cd || :
+      # A folder that is gone runs no script elsewhere: the first command reports a failure
+      # (status 1) without running, and the shell opens in the home folder (C3c).
+      if ! cd -- \(quote(launch.workingDirectory)) 2>/dev/null; then
+        printf 'prowl: %s is not available on this host\\n' \(quote(launch.workingDirectory)) >&2
+        cd || :
+        if [ -f "$prowl_dir/command" ]; then
+          rm -f -- "$prowl_dir/command"
+          prowl_state=error; prowl_status=1
+          \(marker(posixMarker))
+        fi
+      fi
       \(exports.joined(separator: "\n"))
       prowl_shell=${SHELL-}
       if [ -z "$prowl_shell" ] || [ ! -x "$prowl_shell" ]; then

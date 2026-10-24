@@ -236,9 +236,9 @@ struct AppFeatureTerminalSetupScriptTests {
   }
 
   /// A new remote worktree opens no local tab: remote terminals come with docs-ai 084 C3.
-  /// A created remote worktree gets its first tab, a remote tab, without the setup script
-  /// (docs-ai 084 C3b; scripts come with C3c).
-  @Test(.dependencies) func aRemoteWorktreeCreatedOpensARemoteTabWithoutTheSetupScript() async {
+  /// A created remote worktree gets its first tab, a remote tab, with its setup script
+  /// (docs-ai 084 C3c).
+  @Test(.dependencies) func aRemoteWorktreeCreatedOpensARemoteTabWithTheSetupScript() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var repositories = RepositoriesFeature.State()
     repositories.pendingSetupScriptWorktreeIDs = [remote.worktrees[0].id]
@@ -254,9 +254,7 @@ struct AppFeatureTerminalSetupScriptTests {
 
     await store.send(.repositories(.delegate(.worktreeCreated(remote.worktrees[0]))))
     await store.finish()
-    #expect(sent.value == [.ensureInitialTab(remote.worktrees[0], runSetupScriptIfNew: false, focusing: false)])
-    // Not kept pending for a later tab once remote scripts run (C3c).
-    #expect(!store.state.repositories.pendingSetupScriptWorktreeIDs.contains(remote.worktrees[0].id))
+    #expect(sent.value == [.ensureInitialTab(remote.worktrees[0], runSetupScriptIfNew: true, focusing: false)])
   }
 
   @Test(.dependencies) func worktreeCreatedTriggersEnsureInitialTabWithSetupScriptFlag() async {

@@ -120,32 +120,43 @@ struct CLIRemoteFolderTests {
     #expect(autoName == "Target 'main' not found as pane, tab, or worktree.")
   }
 
-  /// `create tab` in a remote folder fails with the reason and creates nothing.
-  @Test func creatingATabInARemoteFolderFailsWithTheReason() async {
+  /// `create tab` in a remote folder opens a remote tab (docs-ai 084 C3c). Its path is a host
+  /// path, checked by its text only: inside the folder it is kept as written (normalized, no
+  /// `/private` from this Mac), outside it is refused before any creation.
+  @Test func creatingATabInARemoteFolderChecksTheHostPath() async {
     let target = TabResolvedTarget(
       worktreeID: "ssh:5c1f0a8e-7d1b-4c63-9a3e-2f1b6c9d0e42:/srv/app", worktreeName: "main", worktreePath: "/srv/app",
       worktreeRootPath: "/srv/app", worktreeKind: "git", tabID: "", tabTitle: "", tabSelected: false,
       paneID: "", paneTitle: "", paneCWD: nil, paneFocused: false)
-    var created = 0
+    var paths: [String?] = []
     let handler = LifecycleCommandHandler(
       resolveCreateTarget: { _ in .success(target) },
       resolveCloseTarget: { _ in .success(.init(resource: .pane, target: target)) },
-      createTab: { _, _ in
-        created += 1
-        return nil
+      createTab: { _, path in
+        paths.append(path)
+        return target
       },
       createPane: { _, _ in nil },
       closeTab: { _, _ in false }, closePane: { _, _ in false })
+    func create(_ path: String?) async -> CommandResponse {
+      await handler.handle(
+        envelope: .init(
+          output: .json, command: .create(.init(resource: .tab, selector: .worktree("mini:/srv/app"), path: path))))
+    }
 
-    // The host path is not checked on this Mac; the remote reason comes first.
-    let response = await handler.handle(
-      envelope: .init(
-        output: .json,
-        command: .create(.init(resource: .tab, selector: .worktree("mini:/srv/app"), path: "/elsewhere"))))
+    let outside = await create("/srv/app/../other")
+    #expect(!outside.ok)
+    #expect(outside.error?.code == CLIErrorCode.pathNotAllowed)
+    #expect(await create(nil).ok)
+    #expect(await create("/srv/app/./sub//dir/").ok)
+    #expect(paths == [nil, "/srv/app/sub/dir"])
+  }
 
-    #expect(!response.ok)
-    #expect(response.error?.code == CLIErrorCode.createFailed)
-    #expect(response.error?.message == "The CLI cannot open tabs in remote folders yet.")
-    #expect(created == 0)
+  @Test func aHostPathIsCheckedByItsTextOnly() {
+    #expect(
+      allowedTabPath("/private/tmp/x/../x/./z//", worktreePath: "/private/tmp/x", isRemote: true) == "/private/tmp/x/z")
+    #expect(allowedTabPath("/private/tmp/x", worktreePath: "/private/tmp/x/", isRemote: true) == "/private/tmp/x")
+    #expect(allowedTabPath("/private/tmp/xy", worktreePath: "/private/tmp/x", isRemote: true) == nil)
+    #expect(allowedTabPath(nil, worktreePath: "/private/tmp/x", isRemote: true) == nil)
   }
 }

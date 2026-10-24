@@ -450,6 +450,26 @@ nonisolated struct RemoteLauncherTests {
     }
   }
 
+  /// A working directory that is gone runs no script elsewhere: the first command reports a
+  /// failure (status 1) without running, and the shell opens in the home folder (C3c).
+  @Test(arguments: shells)
+  func aMissingFolderRunsNoScript(_ shell: String) throws {
+    let home = try Home()
+    defer { home.remove() }
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.path + "/gone it's", environment: [],
+      firstCommand: "echo SCRIPT_RAN")
+
+    let (output, launcher) = try Self.launch(launch, shell: shell, home: home, input: "echo \"AT:$PWD\"\nexit\n")
+
+    #expect(output.components(separatedBy: "7501;").count == 2, "\(output)")
+    #expect(output.contains(Self.marker(launch.nonce, state: "error", status: 1)), "\(output)")
+    #expect(!output.contains("SCRIPT_RAN"), "\(output)")
+    #expect(output.contains("is not available on this host"), "\(output)")
+    #expect(output.contains("AT:\(home.path)"), "\(output)")
+    #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+  }
+
   /// A symlinked `~/.cache` keeps the launcher's logical path, which passes its check.
   @Test func aSymlinkedCacheDirectoryStillLaunches() throws {
     let home = try Home()

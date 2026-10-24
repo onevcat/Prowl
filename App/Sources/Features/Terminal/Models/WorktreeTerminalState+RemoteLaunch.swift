@@ -13,7 +13,11 @@ extension WorktreeTerminalState {
 
   /// Stages `launch` on the host, then types the `ssh` line into the deferred pane and
   /// creates its surface. A failure closes the tab (nothing ran in it) and tells the user.
-  func startRemoteLaunch(_ launch: RemoteLaunch, profile: HostProfile, surfaceID: UUID, tabID: TerminalTabID) {
+  /// A launch that carries the pending setup script (`consumesSetupScript`) consumes it only
+  /// once the launcher is staged; otherwise it stays pending for the next tab.
+  func startRemoteLaunch(
+    _ launch: RemoteLaunch, profile: HostProfile, surfaceID: UUID, tabID: TerminalTabID, consumesSetupScript: Bool
+  ) {
     remoteLaunchOriginBySurface[surfaceID] = RemoteLaunchOrigin(
       hostProfileID: profile.id, alias: profile.alias, recipe: profile.recipe, nonce: launch.nonce,
       hasFirstCommand: launch.firstCommand != nil, launchedAt: Date())
@@ -25,20 +29,36 @@ extension WorktreeTerminalState {
       } catch {
         staged = .failure(error)
       }
-      self?.finishRemoteLaunch(staged, profile: profile, nonce: launch.nonce, surfaceID: surfaceID, tabID: tabID)
+      self?.finishRemoteLaunch(
+        staged, profile: profile,
+        pane: StagedRemotePane(surfaceID: surfaceID, tabID: tabID, nonce: launch.nonce),
+        consumesSetupScript: consumesSetupScript)
     }
   }
 
+  /// The pane that a staging result belongs to.
+  private struct StagedRemotePane {
+    let surfaceID: UUID
+    let tabID: TerminalTabID
+    let nonce: String
+  }
+
   private func finishRemoteLaunch(
-    _ staged: Result<String, any Error>, profile: HostProfile, nonce: String, surfaceID: UUID, tabID: TerminalTabID
+    _ staged: Result<String, any Error>, profile: HostProfile, pane: StagedRemotePane, consumesSetupScript: Bool
   ) {
+    let (surfaceID, tabID, nonce) = (pane.surfaceID, pane.tabID, pane.nonce)
     remoteLaunchTasksBySurface.removeValue(forKey: surfaceID)
-    // The tab was closed while the launcher was staged.
-    guard let view = surfaces[surfaceID], remoteLaunchOriginBySurface[surfaceID]?.nonce == nonce else { return }
+    // The tab was closed while the launcher was staged: its setup script never ran.
+    guard let view = surfaces[surfaceID], remoteLaunchOriginBySurface[surfaceID]?.nonce == nonce else {
+      if consumesSetupScript { pendingSetupScript = true }
+      return
+    }
     let failure: any Error
     do {
       view.setInitialInput(try RemoteTerminalLine.typed(recipe: profile.recipe, launcherPath: try staged.get()))
       if view.armSurfaceCreation() {
+        remoteLaunchOriginBySurface[surfaceID]?.launchedAt = Date()
+        if consumesSetupScript { onSetupScriptConsumed?() }
         // The pane took focus while it had no surface, which Ghostty never saw.
         if view.window?.firstResponder === view { view.focusDidChange(true) }
         wakeAgentDetection(for: view, tabId: tabID)
@@ -49,6 +69,7 @@ extension WorktreeTerminalState {
       failure = error
     }
     terminalStateLogger.warning("Remote tab on \(profile.alias) did not start: \(failure.localizedDescription)")
+    if consumesSetupScript { pendingSetupScript = true }
     _ = closeTab(tabID, confirmation: .skip, retainForUndo: false)
     onRemoteTerminalFailed?(
       String(localized: "The terminal on \(profile.alias) did not start: \(failure.localizedDescription)"))
@@ -72,21 +93,37 @@ extension WorktreeTerminalState {
     return true
   }
 
+  /// Whether CLI waiters wait for the launch marker: while the pane's first command runs on
+  /// the host, a local "command finished" is never its end (C3c).
+  func remoteLaunchHoldsWaiters(surfaceID: UUID) -> Bool {
+    guard let origin = remoteLaunchOriginBySurface[surfaceID] else { return false }
+    return origin.hasFirstCommand && !origin.completed
+  }
+
   /// Whether a local "command finished" (OSC 133) completes a command in this pane (the
-  /// custom command toast, Close on Success, the long-command notification; a CLI waiter
-  /// always resumes). In a remote pane, it does not while its `ssh` session lasts: it is the
+  /// custom command toast, Close on Success, the long-command notification). In a remote
+  /// pane, it does not while its `ssh` session lasts: it is the
   /// `ssh` itself ending, or a remote shell's own OSC 133 passing through. After the `ssh`
   /// ended, the pane is a local shell, and its commands complete as in any pane.
   func remoteLaunchTakesCommandFinished(surfaceID: UUID) -> Bool {
     guard var origin = remoteLaunchOriginBySurface[surfaceID] else { return true }
     defer { remoteLaunchOriginBySurface[surfaceID] = origin }
     if origin.sessionEnded {
-      guard origin.swallowsNextFinish else { return true }
-      origin.swallowsNextFinish = false
-      return false
+      if origin.swallowsNextFinish {
+        origin.swallowsNextFinish = false
+        scheduleAbandonFirstCommand(surfaceID: surfaceID)
+        return false
+      }
+      // A first command still within its marker grace keeps its reactions: a local command
+      // that finishes then completes nothing, so it cannot take the script's toast or Close
+      // on Success.
+      return !origin.hasFirstCommand || origin.completed
     }
     if let ssh = origin.ssh {
-      if !isRunning(ssh) { origin.sessionEnded = true }
+      if !isRunning(ssh) {
+        origin.sessionEnded = true
+        scheduleAbandonFirstCommand(surfaceID: surfaceID)
+      }
     } else {
       // No probe saw the `ssh` yet: the next one decides (`activeRemoteLaunchOrigin`).
       origin.unboundFinishSeen = true
@@ -106,9 +143,11 @@ extension WorktreeTerminalState {
     if let bound = origin.ssh {
       if ssh?.generation == bound { return origin }
       // The pane's `ssh` left the foreground. When it exited, the local shell's finish for it
-      // may still come; a suspended one reports none.
+      // is still to come, after any marker the `ssh` printed. A suspended one reports none:
+      // its first command completes nothing, so no later local finish completes it.
       origin.sessionEnded = true
       origin.swallowsNextFinish = !isRunning(bound)
+      if !origin.swallowsNextFinish { abandonFirstCommand(&origin, surfaceID: surfaceID) }
       return nil
     }
     if let ssh, ssh.arguments.contains(where: { $0.contains(origin.nonce) }) {
@@ -117,8 +156,41 @@ extension WorktreeTerminalState {
       return origin
     }
     // Not started yet, unless a finish came: then the `ssh` ended before any probe saw it.
-    if origin.unboundFinishSeen { origin.sessionEnded = true }
+    if origin.unboundFinishSeen {
+      origin.sessionEnded = true
+      scheduleAbandonFirstCommand(surfaceID: surfaceID)
+    }
     return nil
+  }
+
+  /// After the `ssh` ended, a first command still without a marker did not run to its end on
+  /// the host (the launcher reports every command that started, C3a). The decision waits
+  /// `remoteMarkerGrace` after the finish: a remote shell's own OSC 133 can come just before
+  /// the marker, after the `ssh` exited, and the marker must still count. A probe that sees
+  /// the `ssh` exit never decides this.
+  private func scheduleAbandonFirstCommand(surfaceID: UUID) {
+    guard let origin = remoteLaunchOriginBySurface[surfaceID], origin.hasFirstCommand, !origin.completed else {
+      return
+    }
+    let clock = remoteLaunchClock
+    Task { [weak self] in
+      try? await clock.sleep(for: Self.remoteMarkerGrace)
+      guard let self, var origin = self.remoteLaunchOriginBySurface[surfaceID] else { return }
+      self.abandonFirstCommand(&origin, surfaceID: surfaceID)
+      self.remoteLaunchOriginBySurface[surfaceID] = origin
+    }
+  }
+
+  static let remoteMarkerGrace: Duration = .seconds(1)
+
+  /// The first command completes nothing: no success toast, no Close on Success, and a CLI
+  /// waiter gets no status.
+  private func abandonFirstCommand(_ origin: inout RemoteLaunchOrigin, surfaceID: UUID) {
+    guard origin.hasFirstCommand, !origin.completed else { return }
+    origin.completed = true
+    resumeCommandFinishedWaiter(exitCode: nil, durationNs: 0, surfaceId: surfaceID)
+    pendingCustomCommands.removeValue(forKey: surfaceID)
+    autoCloseSurfaceIds.remove(surfaceID)
   }
 
   /// The label of a remote pane's host: the profile alias, while the pane's own `ssh` is

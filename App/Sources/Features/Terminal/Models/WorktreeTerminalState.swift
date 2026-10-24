@@ -279,6 +279,8 @@ final class WorktreeTerminalState {
     return RemoteAgentDetection.mode(
       environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: consent)
   }
+  /// Times the grace before a remote first command without a marker completes nothing.
+  @ObservationIgnored var remoteLaunchClock: any Clock<Duration> = ContinuousClock()
   /// Whether a local process still runs, for the `ssh` of a remote pane.
   @ObservationIgnored var processIsAliveForTesting: ((LocalProcessGeneration) -> Bool)?
   /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
@@ -612,8 +614,7 @@ final class WorktreeTerminalState {
     isEnsuringInitialTab = true
     Task {
       let setupScript: String?
-      // Scripts do not run in a remote folder yet (docs-ai 084 C3c).
-      if pendingSetupScript, worktree.location.availability(of: .terminalScript).isAvailable {
+      if pendingSetupScript {
         setupScript = repositorySettings.setupScript
       } else {
         setupScript = nil
@@ -640,8 +641,6 @@ final class WorktreeTerminalState {
     let context = GHOSTTY_SURFACE_CONTEXT_TAB
     let resolvedInheritanceSurfaceId = inheritingFromSurfaceId ?? currentFocusedSurfaceId()
     let title = title ?? "\(worktree.name) \(nextTabIndex())"
-    // Scripts do not run in a remote folder yet (docs-ai 084 C3c): no setup script there.
-    let setupScript = worktree.location.availability(of: .terminalScript).isAvailable ? setupScript : nil
     let setupInput = setupScriptInput(setupScript: setupScript)
     let commandInput = initialInput.flatMap { runScriptInput($0) }
     let resolvedInput: String?
@@ -669,10 +668,12 @@ final class WorktreeTerminalState {
         selecting: selecting,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
-        workingDirectoryOverride: workingDirectoryOverride
+        workingDirectoryOverride: workingDirectoryOverride,
+        consumesSetupScript: shouldConsumeSetupScript
       )
     )
-    if shouldConsumeSetupScript, tabId != nil {
+    // A remote tab consumes it once its launcher is staged (`finishRemoteLaunch`).
+    if shouldConsumeSetupScript, tabId != nil, worktree.location.localURL != nil {
       onSetupScriptConsumed?()
     }
     return tabId
@@ -986,7 +987,7 @@ final class WorktreeTerminalState {
     let title: String
     let icon: String?
     let isTitleLocked: Bool
-    let initialInput: String?
+    var initialInput: String?
     let focusing: Bool
     var selecting: Bool = true
     let inheritingFromSurfaceId: UUID?
@@ -994,6 +995,8 @@ final class WorktreeTerminalState {
     var workingDirectoryOverride: URL?
     var additionalEnvironment: [String: String] = [:]
     var defersSurfaceCreation = false
+    /// The input carries the pending setup script.
+    var consumesSetupScript = false
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
@@ -1008,18 +1011,19 @@ final class WorktreeTerminalState {
   /// A remote folder's tab: a deferred local pane, which types
   /// `ssh -t <recipe> -- exec sh <launcher>` once the launcher is staged on the host.
   /// Its local working directory is the recipe's, so relative `-F` and `-i` options resolve
-  /// as when the host was added. A first command (a script) waits for C3c.
+  /// as when the host was added. The tab's input (a setup, run or custom script) is the
+  /// launch's first command on the host, never typed into the local shell (C3c); a working
+  /// directory override (CLI `create tab --path`) is a host path inside the folder.
   private func createRemoteTab(_ creation: TabCreation, hostProfileID: UUID, path: String) -> TerminalTabID? {
-    guard creation.initialInput == nil else {
-      terminalStateLogger.warning("Remote tab with a first command refused: scripts come with docs-ai 084 C3c")
-      return nil
-    }
     let stager = remoteTerminalStager
     guard let profile = stager.profile(hostProfileID) else {
       onRemoteTerminalFailed?(RepositoryHostError.hostProfileMissing(hostProfileID).localizedDescription)
       return nil
     }
+    let remoteDirectory =
+      creation.workingDirectoryOverride.map { Self.hostPath($0.path(percentEncoded: false)) } ?? path
     var remote = creation
+    remote.initialInput = nil
     remote.defersSurfaceCreation = true
     remote.workingDirectoryOverride =
       profile.recipe.workingDirectory.map { URL(filePath: $0, directoryHint: .isDirectory) }
@@ -1028,15 +1032,21 @@ final class WorktreeTerminalState {
     guard let surfaceID = inserted.surfaceID else { return inserted.tabID }
     startRemoteLaunch(
       RemoteLaunch(
-        nonce: RemoteLaunch.makeNonce(), workingDirectory: path,
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: remoteDirectory,
         environment: [
           RemoteLaunchVariable(name: "PROWL_WORKTREE_PATH", value: path),
           RemoteLaunchVariable(name: "PROWL_ROOT_PATH", value: worktree.repositoryLocation.path),
           RemoteLaunchVariable(name: GhosttySurfaceView.remotePaneIdentityEnvironmentKey, value: surfaceID.uuidString),
         ],
-        firstCommand: nil),
-      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID)
+        firstCommand: creation.initialInput),
+      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID,
+      consumesSetupScript: creation.consumesSetupScript)
     return inserted.tabID
+  }
+
+  /// A host path from a `URL`, without the trailing slash of a directory URL.
+  private static func hostPath(_ path: String) -> String {
+    path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
   }
 
   private func insertTab(_ creation: TabCreation) -> (tabID: TerminalTabID, surfaceID: UUID?) {

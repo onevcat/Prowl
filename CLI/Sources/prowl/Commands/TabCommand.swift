@@ -38,8 +38,12 @@ struct TabCreateCommand: ParsableCommand {
     }
   }
 
+  /// An absolute path goes to the app as typed: in a remote folder it is a path on the host,
+  /// which nothing on this Mac may resolve. The app normalizes a local one. A relative path
+  /// is resolved against this directory.
   private func normalizedPath() -> String? {
     guard let path else { return nil }
+    guard !path.hasPrefix("/") else { return path.trimmingTrailingSlash() }
     return URL(fileURLWithPath: path, isDirectory: true)
       .standardizedFileURL
       .path(percentEncoded: false)

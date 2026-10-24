@@ -1,3 +1,4 @@
+import Clocks
 import ConcurrencyExtras
 import Foundation
 import GhosttyKit
@@ -60,12 +61,12 @@ struct RemoteTerminalTabTests {
   /// The tab opens at once; once the launcher is staged, the pane types the `ssh` line
   /// (the stored recipe, quoted where needed) and starts. The launch exports the host paths
   /// and the pane id; the local pane gets neither host path, and starts in the recipe's
-  /// directory. A setup script does not run in a remote folder yet (C3c).
+  /// directory. A tab without a script has no first command.
   @Test func aRemoteTabTypesTheSSHLineOnceTheLauncherIsStaged() async throws {
     let staging = Staging()
     let state = makeState(staging)
 
-    let tabID = try #require(state.createTab(setupScript: "echo setup"))
+    let tabID = try #require(state.createTab())
     let surface = try onlySurface(state, tabID)
     await waitUntil { surface.surfaceCreationArmed }
 
@@ -140,18 +141,53 @@ struct RemoteTerminalTabTests {
     #expect(messages.count == 1)
   }
 
-  /// A script and a split in a remote folder would be local shells: refused until C3c and
-  /// C4.
-  @Test func aRemoteFolderRefusesAScriptAndASplit() throws {
-    let staging = Staging()
-    let state = makeState(staging)
+  /// A split in a remote folder would be a local shell: refused until C4.
+  @Test func aRemoteFolderRefusesASplit() throws {
+    let state = makeState(Staging())
 
-    #expect(state.runScript("echo run") == nil)
-    #expect(state.tabManager.tabs.isEmpty)
     let tabID = try #require(state.createTab())
     let surface = try onlySurface(state, tabID)
     #expect(state.createSplit(of: surface.id, direction: .right, initialInput: nil) == .failure(.remoteFolder))
     #expect(state.trees[tabID]?.leaves().count == 1)
+  }
+
+  /// A script in a remote folder (C3c) is the launch's first command on the host, byte for
+  /// byte; the local shell gets only the `ssh` line. The run script tab keeps its run state.
+  @Test func aRemoteScriptIsTheLaunchsFirstCommand() async throws {
+    let staging = Staging()
+    let state = makeState(staging)
+    let script = "printf '%s\\n' \"${(U)value}\" $HOME\nnpm run dev"
+
+    let tabID = try #require(state.runScript(script))
+    let surface = try onlySurface(state, tabID)
+    await waitUntil { surface.surfaceCreationArmed }
+
+    let launch = try #require(staging.launches.value.first)
+    #expect(launch.firstCommand == script + "\n")
+    #expect(surface.initialInputForTesting?.hasPrefix(" /usr/bin/ssh -t ") == true)
+    #expect(surface.initialInputForTesting?.contains("npm") == false)
+    #expect(state.runScriptTabId == tabID)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.hasFirstCommand == true)
+  }
+
+  /// A setup script runs first, then the command, in one first command; a working directory
+  /// (CLI `create tab --path`) is a host path inside the folder.
+  @Test func aRemoteTabTakesTheSetupScriptAndAHostDirectory() async throws {
+    let staging = Staging()
+    let state = makeState(staging)
+    state.pendingSetupScript = true
+
+    let tabID = try #require(
+      state.createTab(
+        setupScript: "make setup", initialInput: "make test",
+        workingDirectoryOverride: URL(fileURLWithPath: "/home/dev/app/sub", isDirectory: true)))
+    let surface = try onlySurface(state, tabID)
+    await waitUntil { surface.surfaceCreationArmed }
+
+    let launch = try #require(staging.launches.value.first)
+    #expect(launch.firstCommand == "make setup\nmake test\n")
+    #expect(launch.workingDirectory == "/home/dev/app/sub")
+    #expect(!state.pendingSetupScript)
   }
 
   /// A pane that waits for its launcher has no native surface: an occlusion request (the
@@ -335,6 +371,179 @@ struct RemoteTerminalTabTests {
     state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
 
     #expect(succeeded == ["Build"])
+  }
+
+  /// While a remote pane's first command runs, a CLI waiter waits for its marker: a remote
+  /// shell's OSC 133 is not the script's end (C3c).
+  @Test(.timeLimit(.minutes(1))) func aWaiterInAScriptPaneWaitsForTheMarker() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in true }
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+    #expect(state.commandFinishedWaiters[surface.id] != nil)
+    state.handleProgramStatus(marker("prowl-launch/\(nonce)/4", state: .error), surfaceID: surface.id)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [4])
+  }
+
+  /// A script that sent no marker before its `ssh` ended did not run to its end: no success
+  /// toast, no Close on Success, no notification, and the CLI waiter gets no status. The
+  /// decision waits for the `ssh`'s finish, then for the marker grace.
+  @Test(.timeLimit(.minutes(1))) func aScriptWithoutAMarkerCompletesNothing() async throws {
+    let state = makeState(Staging())
+    let clock = TestClock()
+    state.remoteLaunchClock = clock
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    let ssh = Self.ssh(4_242, nonce: nonce)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: ssh)
+    state.processIsAliveForTesting = { _ in false }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    state.markSurfaceForAutoClose(surface.id)
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
+    #expect(state.commandFinishedWaiters[surface.id] != nil)
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surface.id)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == false)
+    // A local command that finishes within the grace takes none of the script's reactions.
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surface.id)
+    #expect(succeeded.isEmpty)
+    #expect(state.isMarkedForAutoClose(surface.id))
+    await clock.advance(by: WorktreeTerminalState.remoteMarkerGrace)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [nil])
+    #expect(succeeded.isEmpty)
+    #expect(!state.isMarkedForAutoClose(surface.id))
+    #expect(state.notifications.isEmpty)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == true)
+  }
+
+  /// A remote shell's own OSC 133 can arrive after the `ssh` exited and just before the
+  /// marker: the marker still counts within the grace.
+  @Test(.timeLimit(.minutes(1))) func aMarkerRightAfterARemoteFinishStillCounts() async throws {
+    let state = makeState(Staging())
+    let clock = TestClock()
+    state.remoteLaunchClock = clock
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in false }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+    // The main thread runs other work before the marker's action.
+    for _ in 0..<20 { await Task.yield() }
+    state.handleProgramStatus(marker("prowl-launch/\(nonce)/0"), surfaceID: surface.id)
+    await clock.advance(by: WorktreeTerminalState.remoteMarkerGrace)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [0])
+    #expect(succeeded == ["Build"])
+  }
+
+  /// A suspended `ssh` ends the session for Prowl: its script completes nothing, so a later
+  /// local command does not take its toast or its Close on Success.
+  @Test(.timeLimit(.minutes(1))) func aSuspendedSSHAbandonsItsScript() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in true }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    state.markSurfaceForAutoClose(surface.id)
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+
+    #expect(results == [nil])
+    #expect(succeeded.isEmpty)
+    #expect(!state.isMarkedForAutoClose(surface.id))
+  }
+
+  /// A remote tab that carries the pending setup script consumes it once its launcher is
+  /// staged; a staging failure keeps it pending for the next tab.
+  @Test func theSetupScriptIsConsumedOnlyOnceStaged() async throws {
+    let failing = makeState(Staging(failure: RemoteRepositoryHostError.timedOut))
+    var consumed = 0
+    failing.onSetupScriptConsumed = { consumed += 1 }
+    var messages: [String] = []
+    failing.onRemoteTerminalFailed = { messages.append($0) }
+    failing.pendingSetupScript = true
+    _ = try #require(failing.createTab(setupScript: "make setup"))
+    await waitUntil { !messages.isEmpty }
+    #expect(consumed == 0)
+    #expect(failing.pendingSetupScript)
+
+    let state = makeState(Staging())
+    state.onSetupScriptConsumed = { consumed += 1 }
+    state.pendingSetupScript = true
+    let tabID = try #require(state.createTab(setupScript: "make setup"))
+    let surface = try onlySurface(state, tabID)
+    #expect(consumed == 0)
+    await waitUntil { surface.surfaceCreationArmed }
+    #expect(consumed == 1)
+    #expect(!state.pendingSetupScript)
+  }
+
+  /// A marker that arrives after a probe saw the `ssh` exit (the script ended with `exit`)
+  /// still completes the script: Close on Success and the toast; the `ssh`'s finish after it
+  /// completes nothing more.
+  @Test func aMarkerAfterTheProbeSawTheSSHExitStillCounts() async throws {
+    let state = makeState(Staging())
+    let (surface, nonce) = try await startedRemotePane(state, hasFirstCommand: true)
+    _ = state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: Self.ssh(4_242, nonce: nonce))
+    state.processIsAliveForTesting = { _ in false }
+    var succeeded: [String] = []
+    state.onCustomCommandSucceeded = { name, _ in succeeded.append(name) }
+    state.markSurfaceForCustomCommand(surface.id, name: "Build")
+    state.markSurfaceForAutoClose(surface.id)
+
+    #expect(state.activeRemoteLaunchOrigin(surfaceID: surface.id, foregroundSSH: nil) == nil)
+    state.handleProgramStatus(marker("prowl-launch/\(nonce)/0"), surfaceID: surface.id)
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+
+    #expect(succeeded == ["Build"])
+    #expect(!state.isMarkedForAutoClose(surface.id))
+  }
+
+  /// A remote script tab closed and brought back by Undo waits for no marker any more: the
+  /// marker found no origin while the pane was closed, so a later finish completes as usual.
+  /// A CLI waiter for the script gets no status, never a later command's.
+  @Test(.timeLimit(.minutes(1))) func undoBringsBackAScriptPaneThatWaitsForNoMarker() async throws {
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(), undoCloseClock: TestClock(), skipsSurfaceCreationForTesting: true)
+    let state = manager.state(for: RemoteRepositoryFixtures.gitRepository().worktrees[0])
+    state.remoteTerminalStagerForTesting = Staging().stager(profile: Self.profile)
+    let (surface, _) = try await startedRemotePane(state, hasFirstCommand: true)
+    let tabID = try #require(state.tabID(containing: surface.id))
+    let waiter = state.waitForCommandFinished(surfaceID: surface.id)
+
+    #expect(state.closeTab(tabID, confirmation: .skip))
+    #expect(manager.undoClose())
+    state.handleCommandFinished(exitCode: 0, durationNs: 1, surfaceId: surface.id)
+
+    var results: [Int?] = []
+    for await result in waiter { results.append(result.exitCode) }
+    #expect(results == [nil])
+    #expect(state.surfaceView(for: surface.id) === surface)
+    #expect(state.remoteLaunchOriginBySurface[surface.id]?.completed == true)
+    #expect(!state.remoteLaunchHoldsWaiters(surfaceID: surface.id))
   }
 
   /// A remote folder's tabs are not saved in the layout, and a saved layout is not applied
