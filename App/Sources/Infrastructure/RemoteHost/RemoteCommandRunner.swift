@@ -7,6 +7,18 @@ nonisolated struct RemoteCommandLimits: Equatable, Sendable {
   var deadline: TimeInterval = 5
   var outputBytes = 256 * 1024
   var errorBytes = 16 * 1024
+
+  /// The command lane (docs-ai 084 B1): `wt ls`, git reads and polling need more room than
+  /// the probe's 5 s and 256 KiB.
+  static let commandLane = RemoteCommandLimits(deadline: 30, outputBytes: 8 * 1024 * 1024, errorBytes: 64 * 1024)
+  /// Streamed work such as a worktree creation, which checks out and copies files.
+  static let longRunning = RemoteCommandLimits(deadline: 600, outputBytes: 8 * 1024 * 1024, errorBytes: 1024 * 1024)
+}
+
+/// Which pipe an output chunk came from.
+nonisolated enum RemoteOutputStream: Equatable, Sendable {
+  case standardOutput
+  case standardError
 }
 
 nonisolated struct RemoteCommandResult: Equatable, Sendable {
@@ -31,16 +43,44 @@ nonisolated enum RemoteCommandOutcome: Equatable, Sendable {
 /// suspension and never wait for a shared pool: a busy app must not turn a finished probe
 /// into a timeout.
 nonisolated struct RemoteCommandRunner: Sendable {
+  typealias OutputHandler = @Sendable (RemoteOutputStream, Data) -> Void
+
   var execute:
     @Sendable (
       _ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits,
       _ workingDirectory: String?
     ) async -> RemoteCommandOutcome
+  /// Like `execute`, and also hands each chunk of output and error output to `onOutput` as
+  /// it arrives, up to their budgets (docs-ai 084 B1, worktree creation progress).
+  var executeStreaming:
+    @Sendable (
+      _ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits,
+      _ workingDirectory: String?, _ onOutput: @escaping OutputHandler
+    ) async -> RemoteCommandOutcome
 
+  /// A runner without real streaming: each whole output arrives in one chunk at the end.
   init(
     execute: @escaping @Sendable (URL, [String], Data, RemoteCommandLimits, String?) async -> RemoteCommandOutcome
   ) {
     self.execute = execute
+    executeStreaming = { executable, arguments, input, limits, workingDirectory, onOutput in
+      let outcome = await execute(executable, arguments, input, limits, workingDirectory)
+      if case .exited(let result) = outcome {
+        if !result.output.isEmpty { onOutput(.standardOutput, result.output) }
+        if !result.errorOutput.isEmpty { onOutput(.standardError, Data(result.errorOutput.utf8)) }
+      }
+      return outcome
+    }
+  }
+
+  init(
+    execute: @escaping @Sendable (URL, [String], Data, RemoteCommandLimits, String?) async -> RemoteCommandOutcome,
+    executeStreaming:
+      @escaping @Sendable (URL, [String], Data, RemoteCommandLimits, String?, @escaping OutputHandler) async ->
+      RemoteCommandOutcome
+  ) {
+    self.execute = execute
+    self.executeStreaming = executeStreaming
   }
 
   /// Runs in `workingDirectory` when it names an existing directory, else in the app's.
@@ -51,13 +91,35 @@ nonisolated struct RemoteCommandRunner: Sendable {
     await execute(executable, arguments, input, limits, workingDirectory)
   }
 
-  static let live = RemoteCommandRunner { executable, arguments, input, limits, workingDirectory in
+  func runStreaming(
+    _ executable: URL, _ arguments: [String], _ input: Data, _ limits: RemoteCommandLimits,
+    workingDirectory: String? = nil, onOutput: @escaping OutputHandler
+  ) async -> RemoteCommandOutcome {
+    await executeStreaming(executable, arguments, input, limits, workingDirectory, onOutput)
+  }
+
+  static let live = RemoteCommandRunner(
+    execute: { executable, arguments, input, limits, workingDirectory in
+      await RemoteProcess.run(
+        RemoteProcess.Command(
+          executable: executable, arguments: arguments, input: input,
+          workingDirectory: existingDirectory(workingDirectory)),
+        limits: limits, onOutput: nil)
+    },
+    executeStreaming: { executable, arguments, input, limits, workingDirectory, onOutput in
+      await RemoteProcess.run(
+        RemoteProcess.Command(
+          executable: executable, arguments: arguments, input: input,
+          workingDirectory: existingDirectory(workingDirectory)),
+        limits: limits, onOutput: onOutput)
+    }
+  )
+
+  private static func existingDirectory(_ path: String?) -> String? {
     var isDirectory: ObjCBool = false
-    let directory = workingDirectory.flatMap {
+    return path.flatMap {
       FileManager.default.fileExists(atPath: $0, isDirectory: &isDirectory) && isDirectory.boolValue ? $0 : nil
     }
-    return await RemoteProcess.run(
-      executable: executable, arguments: arguments, input: input, limits: limits, workingDirectory: directory)
   }
 
   /// Grace period between SIGTERM and SIGKILL.
@@ -126,9 +188,19 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     if let (continuation, outcome) = ready { continuation.resume(returning: outcome) }
   }
 
+  struct Command {
+    let executable: URL
+    let arguments: [String]
+    let input: Data
+    let workingDirectory: String?
+  }
+
   static func run(
-    executable: URL, arguments: [String], input: Data, limits: RemoteCommandLimits, workingDirectory: String?
+    _ command: Command, limits: RemoteCommandLimits, onOutput: RemoteCommandRunner.OutputHandler?
   ) async -> RemoteCommandOutcome {
+    let (executable, arguments, input, workingDirectory) = (
+      command.executable, command.arguments, command.input, command.workingDirectory
+    )
     let pipes = Pipes()
     let pid: pid_t
     switch spawn(executable: executable, arguments: arguments, pipes: pipes, workingDirectory: workingDirectory) {
@@ -141,7 +213,7 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     let process = RemoteProcess(processGroup: pid)
     // Every thread starts here, before the first suspension, so the exit is recorded
     // when it happens even while the caller's executor is busy.
-    process.start(pid: pid, pipes: pipes, input: input, limits: limits)
+    process.start(pid: pid, pipes: pipes, input: input, limits: limits, onOutput: onOutput)
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         process.finish { $0.continuation = continuation }
@@ -151,18 +223,25 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     }
   }
 
-  private func start(pid: pid_t, pipes: Pipes, input: Data, limits: RemoteCommandLimits) {
+  private func start(
+    pid: pid_t, pipes: Pipes, input: Data, limits: RemoteCommandLimits, onOutput: RemoteCommandRunner.OutputHandler?
+  ) {
     Thread.detachNewThread {
       let handle = pipes.input.fileHandleForWriting
       try? handle.write(contentsOf: input)
       try? handle.close()
     }
     Thread.detachNewThread { [self] in
-      let output = read(pipes.output.fileHandleForReading, limit: limits.outputBytes) { self.stop() }
+      let onChunk = onOutput.map { handler in { @Sendable (chunk: Data) in handler(.standardOutput, chunk) } }
+      let output = read(pipes.output.fileHandleForReading, limit: limits.outputBytes, onChunk: onChunk) {
+        self.stop()
+      }
       finish { $0.output = output }
     }
     Thread.detachNewThread { [self] in
-      let (errorOutput, _) = read(pipes.error.fileHandleForReading, limit: limits.errorBytes, onLimit: nil)
+      let onChunk = onOutput.map { handler in { @Sendable (chunk: Data) in handler(.standardError, chunk) } }
+      let (errorOutput, _) = read(
+        pipes.error.fileHandleForReading, limit: limits.errorBytes, onChunk: onChunk, onLimit: nil)
       finish { $0.errorOutput = errorOutput }
     }
     Thread.detachNewThread { [self] in
@@ -219,9 +298,12 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
     return .success(pid)
   }
 
-  /// Reads until EOF or abandonment, keeping at most `limit` bytes. Reaching the limit
-  /// calls `onLimit` once and keeps draining, so the writer never blocks on a full pipe.
-  private func read(_ handle: FileHandle, limit: Int, onLimit: (() -> Void)?) -> (Data, Bool) {
+  /// Reads until EOF or abandonment, keeping at most `limit` bytes; `onChunk` gets each
+  /// kept chunk as it arrives. Reaching the limit calls `onLimit` once and keeps draining,
+  /// so the writer never blocks on a full pipe.
+  private func read(
+    _ handle: FileHandle, limit: Int, onChunk: (@Sendable (Data) -> Void)?, onLimit: (() -> Void)?
+  ) -> (Data, Bool) {
     let descriptor = handle.fileDescriptor
     var data = Data()
     var truncated = false
@@ -240,12 +322,15 @@ private nonisolated final class RemoteProcess: @unchecked Sendable {
       default:
         guard !truncated else { continue }
         let room = limit - data.count
+        let kept = min(count, room)
+        if kept > 0 {
+          data.append(contentsOf: buffer[..<kept])
+          // Copies the chunk only for a caller that streams.
+          onChunk?(Data(buffer[..<kept]))
+        }
         if count > room {
-          data.append(contentsOf: buffer[..<room])
           truncated = true
           onLimit?()
-        } else {
-          data.append(contentsOf: buffer[..<count])
         }
       }
     }
