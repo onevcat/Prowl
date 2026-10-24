@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -266,7 +266,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | Two PRs: root lists by location (B2a, see 017); `hosts.json`, remote entries, snapshot v3 per entry (B2b, see 018) (amended 2026-10-23) | None (unused) |
 | B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output. Six PRs: the refresh script, its reply parser and the mapping to worktrees (B3a, see 019); `RemoteRepositoryHost` with the other git operations on the command lane, as the remote input of `RepositoryHost` (B3b, see 020); worktree creation on the host with the bundled `wt` script (B3c, see 021); the creation flow in the reducer by location, remote worktree placement and the end of the creation gate (B3d, see 022); repository loading through the host with an unreachable mark (B3e, see 023); the refresh cadence with backoff, held connection leases, branch and line changes from the refresh, pull request refresh, and the last state kept through a failed poll (B3f, see 024) (amended 2026-10-23) | None (unused) |
-| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder | Behind the flag |
+| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder. Three PRs: the flag, the add sheet, validation on the host and the stored profile and entry (C1a, see 025); the unreachable state, the rebind prompt with restarted connection holds, and what removal does to data (C1b); the A4b UI gates and the toolbar status for folder connections, with the visual check (C1c) (amended 2026-10-23) | Behind the flag |
 | C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
 | C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
 | C4 | Tracker cwd accessor, remote splits, remote agent cwd | Behind the flag |
@@ -343,3 +343,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: B3d moves the worktree creation flow to locations, places remote worktrees under the host's `~/.prowl/repos/<repository>`, and ends the creation gate for remote folders — see [022-b3d-creation-by-location.md](022-b3d-creation-by-location.md)
 - Updated 2026-10-23: B3 grows to six PRs; B3e loads remote folders through their host and marks load failures that come from the connection — see [023-b3e-load-through-host.md](023-b3e-load-through-host.md)
 - Updated 2026-10-23: B3f polls remote repositories on a cadence with backoff, applies branch, line and remote changes, holds a connection lease per loaded remote repository, and refreshes their pull requests; B3 ends here — see [024-b3f-refresh-cadence.md](024-b3f-refresh-cadence.md)
+- Updated 2026-10-23: C1 split into three PRs; C1a adds the flag, the Add Remote Folder sheet with validation on the host, and the stored host profile and entry — see [025-c1a-add-remote-folder.md](025-c1a-add-remote-folder.md)

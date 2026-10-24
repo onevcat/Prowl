@@ -16,6 +16,8 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
   case outputTooLarge
   /// The operation has no remote implementation yet.
   case unsupported
+  /// `PROWL_REMOTE_AGENT_DETECTION=0` turns off every side-channel connection.
+  case sideChannelDisabled
   /// The app bundle lacks a script that runs on the host, such as `wt`.
   case bundledScriptMissing
 
@@ -29,6 +31,8 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
     case .gitMissing: String(localized: "Git was not found on the remote host.")
     case .outputTooLarge: String(localized: "The remote host sent more output than Prowl reads.")
     case .unsupported: String(localized: "Remote folders do not support this yet.")
+    case .sideChannelDisabled:
+      String(localized: "Remote connections are turned off (PROWL_REMOTE_AGENT_DETECTION=0).")
     case .bundledScriptMissing:
       String(localized: "A script that Prowl runs on the remote host is missing from the app.")
     }

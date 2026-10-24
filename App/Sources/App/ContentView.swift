@@ -95,6 +95,9 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
+    .sheet(item: $repositoriesStore.scope(state: \.addRemoteFolder, action: \.addRemoteFolder)) { sheetStore in
+      AddRemoteFolderView(store: sheetStore)
+    }
     .sheet(item: $repositoriesStore.scope(state: \.workspaceEditor, action: \.workspaceEditor)) {
       promptStore in
       WorkspaceEditorView(store: promptStore)

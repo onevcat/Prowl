@@ -8,6 +8,19 @@ extension RepositoriesFeature {
     action: RepositoryManagementAction
   ) -> Effect<Action> {
     switch action {
+    case .openRemoteRepository(let location, let kind):
+      analyticsClient.capture("remote_folder_added", [String: Any]?.none)
+      state.alert = nil
+      let knownRemoteRepositories = state.retainedRemoteRepositories
+      return .run { send in
+        let existingEntries = await loadPersistedRepositoryEntries()
+        await send(
+          await openEntries(
+            [PersistedRepositoryEntry(path: location.id, kind: kind)], existingEntries: existingEntries,
+            invalidRoots: [], openFailures: [], knownRemoteRepositories: knownRemoteRepositories))
+      }
+      .cancellable(id: CancelID.load, cancelInFlight: true)
+
     case .openRepositories(let urls):
       analyticsClient.capture("repository_added", ["count": urls.count])
       state.alert = nil
@@ -57,23 +70,10 @@ extension RepositoriesFeature {
             }
           }
         }
-        let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
-        let mergedRoots = mergedEntries.map(\.location)
-        await repositoryPersistence.saveRepositoryEntries(mergedEntries)
-        let (repositories, failures) = await loadRepositoriesData(
-          mergedEntries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
-          .repositoryManagement(
-            .openRepositoriesFinished(
-              repositories,
-              failures: failures,
-              invalidRoots: invalidRoots,
-              openFailures: openFailures,
-              roots: mergedRoots,
-              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
-            )
-          )
-        )
+          await openEntries(
+            resolvedEntries, existingEntries: existingEntries, invalidRoots: invalidRoots,
+            openFailures: openFailures, knownRemoteRepositories: knownRemoteRepositories))
       }
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
@@ -352,9 +352,10 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map(\.location)
+          let shownEntries = await shownEntries(remainingEntries)
+          let roots = shownEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(
-            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
+            shownEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -390,9 +391,10 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map(\.location)
+          let shownEntries = await shownEntries(remainingEntries)
+          let roots = shownEntries.map(\.location)
           let (repositories, failures) = await loadRepositoriesData(
-            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
+            shownEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -484,4 +486,30 @@ nonisolated private func isSameRepositoryPath(_ lhs: String, _ rhs: String) -> B
 
 nonisolated private func comparableRepositoryPath(_ path: String) -> String {
   PathPolicy.trimmingTrailingSlashes(path)
+}
+
+extension RepositoriesFeature {
+  /// Adds `resolvedEntries` to the stored entries, saves them, and loads every repository,
+  /// for the local and the remote add flows.
+  func openEntries(
+    _ resolvedEntries: [PersistedRepositoryEntry], existingEntries: [PersistedRepositoryEntry],
+    invalidRoots: [String], openFailures: [String], knownRemoteRepositories: [Repository]
+  ) async -> Action {
+    let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
+    await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+    let shownEntries = shownEntries(mergedEntries)
+    let mergedRoots = shownEntries.map(\.location)
+    let (repositories, failures) = await loadRepositoriesData(
+      shownEntries, knownRemoteRepositories: knownRemoteRepositories)
+    return .repositoryManagement(
+      .openRepositoriesFinished(
+        repositories,
+        failures: failures,
+        invalidRoots: invalidRoots,
+        openFailures: openFailures,
+        roots: mergedRoots,
+        reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
+      )
+    )
+  }
 }

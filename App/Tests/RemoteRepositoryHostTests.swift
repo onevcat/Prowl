@@ -1213,6 +1213,72 @@ struct RemoteRepositoryHostTests {
     await store.finish(timeout: .seconds(10))
   }
 
+  // MARK: - Adding a folder (C1)
+
+  /// A path on the host is found as the add flow needs it: a repository adds its main
+  /// worktree, from a subfolder or a linked worktree too; any other folder is plain.
+  @Test func aFolderOnTheHostIsFoundAsItsRepositoryRootOrAPlainFolder() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let linked = try await fixture.addWorktree("linked", branch: "side")
+    let subfolder = fixture.main.appending(path: "sub", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: subfolder, withIntermediateDirectories: false)
+    let plain = fixture.root.appending(path: "plain", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: false)
+    let host = RemoteRepositoryHost(hostProfileID: UUID(), lane: GitFixture.localLane.printingAGreetingFirst())
+    let main = fixture.main.path(percentEncoded: false).trimmingSuffix("/")
+
+    for path in [main, subfolder.path(percentEncoded: false), linked.path(percentEncoded: false)] {
+      #expect(try await host.discoverFolder(path) == RemoteFolderDiscovery(rootPath: main, kind: .git), "\(path)")
+    }
+    let plainPath = plain.path(percentEncoded: false).trimmingSuffix("/")
+    #expect(try await host.discoverFolder(plainPath) == RemoteFolderDiscovery(rootPath: plainPath, kind: .plain))
+    await #expect(throws: RemoteFolderValidationError.folderNotFound(plainPath + "/none")) {
+      _ = try await host.discoverFolder(plainPath + "/none")
+    }
+    let home = try #require(ProcessInfo.processInfo.environment["HOME"])
+    let resolvedHome = try #require(realpath(home, nil))
+    defer { free(resolvedHome) }
+    #expect(try await host.discoverFolder("~").rootPath == String(cString: resolvedHome))
+  }
+
+  /// A worktree of a bare repository adds the bare repository, as `wt root` finds it.
+  @Test func aWorktreeOfABareRepositoryAddsTheBareRepository() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let bare = try await fixture.makeUpstream()
+    let worktree = fixture.root.appending(path: "bare-wt", directoryHint: .isDirectory)
+    _ = try await fixture.executable.run(["worktree", "add", "-q", worktree.path, "trunk"], in: bare, shell: .live)
+    let host = RemoteRepositoryHost(hostProfileID: UUID(), lane: GitFixture.localLane)
+    let barePath = bare.path(percentEncoded: false).trimmingSuffix("/")
+
+    #expect(
+      try await host.discoverFolder(worktree.path(percentEncoded: false))
+        == RemoteFolderDiscovery(rootPath: barePath, kind: .git))
+    #expect(try await host.discoverFolder(barePath) == RemoteFolderDiscovery(rootPath: barePath, kind: .git))
+  }
+
+  /// A git error other than "not a repository" is reported, and an empty root is refused.
+  @Test func aGitErrorIsReportedAndAnEmptyRootIsRefused() async {
+    func host(replying reply: String) -> RemoteRepositoryHost {
+      let outcome = RemoteCommandOutcome.exited(
+        RemoteCommandResult(exitCode: 0, output: Data(reply.utf8), outputTruncated: false, errorOutput: ""))
+      return RemoteRepositoryHost(
+        hostProfileID: UUID(), lane: RemoteCommandLane(run: { _, _ in outcome }, runScript: { _, _ in outcome }))
+    }
+
+    await #expect(throws: RemoteRepositoryRefreshError.gitFailed("fatal: detected dubious ownership")) {
+      _ = try await host(replying: "PROWL_FOLDER\tgit-error\tfatal: detected dubious ownership\n").discoverFolder(
+        "/srv/app")
+    }
+    await #expect(throws: RemoteFolderValidationError.invalidPath) {
+      _ = try await host(replying: "PROWL_FOLDER\tgit\t\n").discoverFolder("/srv/app")
+    }
+    await #expect(throws: RemoteFolderValidationError.folderInaccessible("/srv/app")) {
+      _ = try await host(replying: "PROWL_FOLDER\tinaccessible\n").discoverFolder("/srv/app")
+    }
+  }
+
   // MARK: - A real host (opt-in)
 
   /// Runs against a real SSH host when `PROWL_REMOTE_LANE_HOST` names one, such as
@@ -1251,6 +1317,17 @@ struct RemoteRepositoryHostTests {
     let remote = RemoteRepositoryHost(hostProfileID: hostProfileID, lane: lane)
     let host = RepositoryHost(
       local: .testValue, remote: RemoteRepositoryHostClient(host: { $0 == hostProfileID ? remote : nil }))
+
+    // The add flow (C1a) finds the main worktree from a linked one, and the fixture's
+    // parent as a plain folder.
+    let main = RemoteFolderDiscovery(rootPath: physicalRoot + "/app", kind: .git)
+    #expect(try await remote.discoverFolder(physicalRoot + "/app-side") == main)
+    #expect(
+      try await remote.discoverFolder(physicalRoot) == RemoteFolderDiscovery(rootPath: physicalRoot, kind: .plain))
+    await #expect(throws: RemoteFolderValidationError.folderNotFound(physicalRoot + "/none")) {
+      _ = try await remote.discoverFolder(physicalRoot + "/none")
+    }
+    #expect(try await remote.discoverFolder("~").rootPath.hasPrefix("/"))
 
     let worktrees = try await host.worktrees(in: location)
     #expect(Set(worktrees.map(\.name)) == ["trunk", "side"])
