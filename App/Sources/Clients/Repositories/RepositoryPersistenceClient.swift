@@ -40,7 +40,7 @@ extension RepositoryPersistenceClient: DependencyKey {
       },
       saveRoots: { roots in
         @Shared(.repositoryEntries) var sharedEntries: [PersistedRepositoryEntry]
-        let entries = RepositoryPathNormalizer.normalize(roots).map {
+        let entries = RepositoryIDNormalizer.normalizeRoots(roots).map {
           PersistedRepositoryEntry(path: $0, kind: .git)
         }
         $sharedEntries.withLock {
@@ -64,7 +64,7 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
         // One-time migration from legacy format
         @Shared(.appStorage("archivedWorktreeIDs")) var legacyArchived: [Worktree.ID] = []
-        let legacyIDs = RepositoryPathNormalizer.normalize(legacyArchived)
+        let legacyIDs = RepositoryIDNormalizer.normalize(legacyArchived)
         guard !legacyIDs.isEmpty else { return [] }
         let now = Date()
         let migrated = legacyIDs.map { ArchivedWorktree(id: $0, archivedAt: now) }
@@ -357,7 +357,9 @@ private nonisolated func normalizeArchivedWorktrees(_ worktrees: [ArchivedWorktr
   var result: [ArchivedWorktree] = []
   result.reserveCapacity(worktrees.count)
   for entry in worktrees {
-    guard let normalized = normalizePath(entry.id), seen.insert(normalized).inserted else {
+    guard let normalized = RepositoryIDNormalizer.normalize(entry.id, resolvingSymlinks: true),
+      seen.insert(normalized).inserted
+    else {
       continue
     }
     result.append(ArchivedWorktree(id: normalized, archivedAt: entry.archivedAt))
@@ -371,7 +373,7 @@ private nonisolated func normalizePath(_ path: String) -> String? {
 
 nonisolated enum RepositoryOrderNormalizer {
   static func normalizeRepositoryIDs(_ ids: [Repository.ID]) -> [Repository.ID] {
-    RepositoryPathNormalizer.normalize(ids)
+    RepositoryIDNormalizer.normalize(ids)
   }
 
   static func normalizeWorktreeOrderByRepository(
@@ -379,8 +381,8 @@ nonisolated enum RepositoryOrderNormalizer {
   ) -> [Repository.ID: [Worktree.ID]] {
     var normalized: [Repository.ID: [Worktree.ID]] = [:]
     for (repoID, worktreeIDs) in order {
-      guard let normalizedRepoID = normalizePath(repoID) else { continue }
-      let normalizedWorktreeIDs = RepositoryPathNormalizer.normalize(worktreeIDs)
+      guard let normalizedRepoID = normalizeKey(repoID) else { continue }
+      let normalizedWorktreeIDs = RepositoryIDNormalizer.normalize(worktreeIDs)
       guard !normalizedWorktreeIDs.isEmpty else { continue }
       if var existing = normalized[normalizedRepoID] {
         for id in normalizedWorktreeIDs where !existing.contains(id) {
@@ -394,9 +396,12 @@ nonisolated enum RepositoryOrderNormalizer {
     return normalized
   }
 
-  private static func normalizePath(_ path: String) -> String? {
-    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+  /// Local keys keep their own normalization (no tilde expansion, the trailing
+  /// slash kept); other IDs are kept as stored.
+  private static func normalizeKey(_ key: String) -> String? {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
+    guard RepositoryLocation.isLocalPathForm(key) else { return key }
     return URL(fileURLWithPath: trimmed)
       .standardizedFileURL
       .path(percentEncoded: false)

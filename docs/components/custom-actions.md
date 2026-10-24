@@ -82,7 +82,7 @@ key, and you choose Replace / Cancel.
 **Where they appear:** enabled commands appear in the window toolbar, the Worktrees
 menu, and the [Command Palette](command-palette.md). Global commands are stored in
 `~/.prowl/global.user.json`; local commands remain in
-`~/.prowl/repo/<repo-name>/prowl.user.json`.
+`~/.prowl/repo/<repo-name>-<hash>/prowl.user.json`.
 
 ## Example uses
 

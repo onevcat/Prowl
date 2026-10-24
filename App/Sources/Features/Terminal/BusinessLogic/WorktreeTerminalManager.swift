@@ -1276,7 +1276,13 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>, preservingRepositoryIDs: Set<Repository.ID> = []) {
-    let failedRoots = Set(preservingRepositoryIDs.map { URL(fileURLWithPath: $0).standardizedFileURL })
+    // Local IDs keep the filesystem-dependent trailing slash of `URL(fileURLWithPath:)`,
+    // so the comparison with each state's root is unchanged.
+    let failedRoots = Set(
+      preservingRepositoryIDs
+        .filter { RepositoryLocation(id: $0)?.localURL != nil }
+        .map { URL(fileURLWithPath: $0).standardizedFileURL }
+    )
     // A failed load is not evidence that its terminal sessions were removed.
     let preservedIDs = states.compactMap { id, state in
       failedRoots.contains(state.repositoryRootURL.standardizedFileURL) ? id : nil

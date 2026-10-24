@@ -346,6 +346,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
+                    repositoryRootURL: repository.rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -365,6 +366,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
+                    repositoryRootURL: repository.rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -381,6 +383,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
+                    repositoryRootURL: repository.rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -397,6 +400,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
+                    repositoryRootURL: repository.rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -413,6 +417,7 @@ extension RepositoriesFeature {
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
+                    repositoryRootURL: repository.rootURL,
                     name: nil,
                     worktreeDirectory: nil
                   )
@@ -595,6 +600,7 @@ extension RepositoriesFeature {
                 pendingID: pendingID,
                 previousSelection: previousSelection,
                 repositoryID: repository.id,
+                repositoryRootURL: repository.rootURL,
                 name: newWorktreeName,
                 worktreeDirectory: createdWorktreeDirectory
               )
@@ -638,6 +644,7 @@ extension RepositoriesFeature {
       let pendingID,
       let previousSelection,
       let repositoryID,
+      let repositoryRootURL,
       let name,
       let worktreeDirectory
     ):
@@ -646,6 +653,7 @@ extension RepositoriesFeature {
       restoreSelection(previousSelection, pendingID: pendingID, state: &state)
       let cleanup = cleanupFailedWorktree(
         repositoryID: repositoryID,
+        repositoryRootURL: repositoryRootURL,
         name: name,
         worktreeDirectory: worktreeDirectory,
         state: &state

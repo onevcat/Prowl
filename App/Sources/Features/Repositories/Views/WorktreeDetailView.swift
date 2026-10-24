@@ -538,22 +538,7 @@ struct WorktreeDetailView: View {
     else {
       return nil
     }
-    if let worktree = repositories.worktree(for: worktreeID) {
-      return worktree
-    }
-    guard let repository = repositories.repositories[id: worktreeID],
-      repository.capabilities.supportsRunnableFolderActions,
-      !repository.capabilities.supportsWorktrees
-    else {
-      return nil
-    }
-    return Worktree(
-      id: repository.id,
-      name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
-    )
+    return repositories.terminalWorktree(for: worktreeID)
   }
 
   @ViewBuilder

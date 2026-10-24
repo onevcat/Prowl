@@ -608,11 +608,8 @@ struct WorktreeRowsView: View {
     if row.isPending {
       return row.detail
     }
-    if row.id.contains("/") {
-      let pathName = URL(fileURLWithPath: row.id).lastPathComponent
-      if !pathName.isEmpty {
-        return pathName
-      }
+    if let pathName = row.workingDirectory?.lastPathComponent, !pathName.isEmpty {
+      return pathName
     }
     if !row.detail.isEmpty, row.detail != "." {
       let detailName = URL(fileURLWithPath: row.detail).lastPathComponent

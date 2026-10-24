@@ -981,7 +981,7 @@ struct AppFeature {
       case .canvasFocusedWorktreeChanged(let worktreeID):
         guard state.repositories.isShowingCanvas,
           let worktreeID,
-          let worktree = terminalWorktree(for: worktreeID, repositories: state.repositories)
+          let worktree = state.repositories.terminalWorktree(for: worktreeID)
         else {
           state.openActionSelection = .finder
           state.openActionIsAutomatic = true

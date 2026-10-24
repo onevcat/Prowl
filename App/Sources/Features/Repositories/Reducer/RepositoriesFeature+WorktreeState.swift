@@ -86,6 +86,7 @@ func comparableWorktreePath(_ url: URL) -> String {
 
 func cleanupFailedWorktree(
   repositoryID: Repository.ID,
+  repositoryRootURL: URL,
   name: String?,
   worktreeDirectory: URL?,
   state: inout RepositoriesFeature.State
@@ -98,9 +99,8 @@ func cleanupFailedWorktree(
       worktree: nil
     )
   }
-  let repositoryRootURL = URL(fileURLWithPath: repositoryID).standardizedFileURL
   let worktreeURL = worktreeDirectory.standardizedFileURL
-  let worktreeID = worktreeURL.path(percentEncoded: false)
+  let worktreeID = RepositoryLocation.local(worktreeURL).id
   let knownWorktree = state.repositories[id: repositoryID]?.worktrees[id: worktreeID]
   // A known worktree on another branch belongs to another creation.
   if let knownWorktree, knownWorktree.name != name {
@@ -118,7 +118,7 @@ func cleanupFailedWorktree(
       name: name,
       detail: "",
       workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL
+      repositoryRootURL: repositoryRootURL.standardizedFileURL
     )
   let cleanup = cleanupWorktreeState(
     worktreeID,

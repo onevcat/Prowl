@@ -170,8 +170,7 @@ extension RepositoriesFeature {
               return WorktreesFetchResult(
                 entry: entry,
                 repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
+                  location: .local(rootURL),
                   name: Repository.name(for: rootURL),
                   kind: .git,
                   worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })
@@ -194,8 +193,7 @@ extension RepositoriesFeature {
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
-                id: rootURL.path(percentEncoded: false),
-                rootURL: rootURL,
+                location: .local(rootURL),
                 name: workspace?.title ?? Repository.name(for: rootURL),
                 kind: .plain,
                 worktrees: IdentifiedArray(),
@@ -209,7 +207,7 @@ extension RepositoriesFeature {
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
+        let rootID = RepositoryLocation.local(URL(fileURLWithPath: result.entry.path).standardizedFileURL).id
         resultsByRootID[rootID] = result
       }
       return resultsByRootID
@@ -219,7 +217,7 @@ extension RepositoriesFeature {
     var failures: [LoadFailure] = []
     for entry in entries {
       let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
-      let rootID = normalizedRoot.path(percentEncoded: false)
+      let rootID = RepositoryLocation.local(normalizedRoot).id
       guard let result = fetchResults[rootID] else { continue }
       if let repository = result.repository {
         loaded.append(repository)

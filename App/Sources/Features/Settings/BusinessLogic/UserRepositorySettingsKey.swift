@@ -15,7 +15,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
     @Dependency(\.repositoryLocalSettingsStorage) var storage
     let rootURL = rootURL.standardizedFileURL
     self.rootURL = rootURL
-    repositoryID = rootURL.path(percentEncoded: false)
+    repositoryID = RepositoryLocation.local(rootURL).id
     file = UserSettingsFile(
       url: ProwlPaths.userRepositorySettingsURL(for: rootURL),
       legacyURLs: ProwlPaths.legacyUserRepositorySettingsURLs(for: rootURL),

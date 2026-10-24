@@ -60,8 +60,8 @@ struct GitClient {
       let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
       let name = entry.branch.isEmpty ? worktreeURL.lastPathComponent : entry.branch
       let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-      let id = worktreeURL.path(percentEncoded: false)
-      guard seenWorktreeIDs.insert(id).inserted else {
+      let location = RepositoryLocation.local(worktreeURL)
+      guard seenWorktreeIDs.insert(location.id).inserted else {
         return nil
       }
       let resourceValues = try? worktreeURL.resourceValues(forKeys: [
@@ -71,11 +71,10 @@ struct GitClient {
       let sortDate = createdAt ?? .distantPast
       return WorktreeSortEntry(
         worktree: Worktree(
-          id: id,
           name: name,
           detail: detail,
-          workingDirectory: worktreeURL,
-          repositoryRootURL: repositoryRootURL,
+          location: location,
+          repositoryLocation: .local(repositoryRootURL),
           createdAt: createdAt
         ),
         createdAt: sortDate,
@@ -335,17 +334,15 @@ struct GitClient {
                 }
                 let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
                 let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-                let id = worktreeURL.path(percentEncoded: false)
                 let resourceValues = try? worktreeURL.resourceValues(forKeys: [
                   .creationDateKey, .contentModificationDateKey,
                 ])
                 let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
                 let worktree = Worktree(
-                  id: id,
                   name: request.name,
                   detail: detail,
-                  workingDirectory: worktreeURL,
-                  repositoryRootURL: repositoryRootURL,
+                  location: .local(worktreeURL),
+                  repositoryLocation: .local(repositoryRootURL),
                   createdAt: createdAt
                 )
                 continuation.yield(.finished(worktree))

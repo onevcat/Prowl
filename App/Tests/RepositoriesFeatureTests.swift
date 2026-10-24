@@ -3267,6 +3267,59 @@ struct RepositoriesFeatureTests {
     return removedPaths.value
   }
 
+  @Test func failedWorktreeCreationCleansUpWithCarriedRootAfterRepositoryRemoval() async {
+    // The repository left the list while the creation ran, and its ID is not
+    // read as a path: cleanup uses the root URL that the action carries.
+    let repositoryRootURL = URL(fileURLWithPath: "/tmp/removed-repo").standardizedFileURL
+    let worktreeDirectory = URL(fileURLWithPath: "/tmp/removed-repo-worktrees/feature")
+    let registered = Worktree(
+      id: worktreeDirectory.path(percentEncoded: false),
+      name: "feature",
+      detail: "",
+      workingDirectory: worktreeDirectory,
+      repositoryRootURL: repositoryRootURL
+    )
+    let listedRoots = LockIsolated<[URL]>([])
+    let removedRoots = LockIsolated<[URL]>([])
+    let prunedRoots = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: makeState(repositories: [])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.worktrees = { root in
+        listedRoots.withValue { $0.append(root) }
+        return [registered]
+      }
+      $0.gitClient.removeWorktree = { worktree, _ in
+        let (root, directory) = await MainActor.run { (worktree.repositoryRootURL, worktree.workingDirectory) }
+        removedRoots.withValue { $0.append(root) }
+        return directory
+      }
+      $0.gitClient.pruneWorktrees = { root in
+        prunedRoots.withValue { $0.append(root) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreation(
+        .createRandomWorktreeFailed(
+          title: "Unable to create worktree",
+          message: "boom",
+          pendingID: "pending",
+          previousSelection: nil,
+          repositoryID: "removed-repository-id",
+          repositoryRootURL: repositoryRootURL,
+          name: "feature",
+          worktreeDirectory: worktreeDirectory
+        ))
+    )
+    await store.finish()
+
+    #expect(listedRoots.value == [repositoryRootURL])
+    #expect(removedRoots.value == [repositoryRootURL])
+    #expect(prunedRoots.value == [repositoryRootURL])
+  }
+
   private func makeTemporaryWorktreeBaseDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
       .appending(path: "prowl-worktree-cleanup-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -3847,6 +3900,7 @@ struct RepositoriesFeatureTests {
           pendingID: pendingID,
           previousSelection: nil,
           repositoryID: repository.id,
+          repositoryRootURL: repository.rootURL,
           name: nil,
           worktreeDirectory: nil
         ))

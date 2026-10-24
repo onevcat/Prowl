@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import ProwlCLIShared
 
@@ -291,7 +292,15 @@ nonisolated enum ProwlPaths {
   /// per-repo so cleanup is automatic when the per-repo settings
   /// directory is removed.
   static func repositoryIconsDirectory(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: rootURL)
+    repositorySettingsDirectory(for: .local(rootURL))
+      .appending(path: "icons", directoryHint: .isDirectory)
+  }
+
+  /// Icons imported before the settings directory was keyed by location. They
+  /// are read in place, never moved: two repositories with one basename may
+  /// share them.
+  static func legacyRepositoryIconsDirectory(for rootURL: URL) -> URL {
+    basenameRepositorySettingsDirectory(for: rootURL)
       .appending(path: "icons", directoryHint: .isDirectory)
   }
 
@@ -299,8 +308,23 @@ nonisolated enum ProwlPaths {
   /// only thing persisted in `RepositoryAppearance` so that moving a
   /// repository (or renaming its directory) leaves the artifact alone.
   static func repositoryIconFileURL(filename: String, repositoryRootURL rootURL: URL) -> URL {
-    repositoryIconsDirectory(for: rootURL)
-      .appending(path: filename, directoryHint: .notDirectory)
+    iconFileURL(
+      filename: filename,
+      in: repositoryIconsDirectory(for: rootURL),
+      fallback: legacyRepositoryIconsDirectory(for: rootURL)
+    )
+  }
+
+  /// The file in `directory`, or in `fallback` when only `fallback` holds it.
+  static func iconFileURL(filename: String, in directory: URL, fallback: URL?) -> URL {
+    let primary = directory.appending(path: filename, directoryHint: .notDirectory)
+    guard let fallback,
+      !FileManager.default.fileExists(atPath: primary.path(percentEncoded: false))
+    else {
+      return primary
+    }
+    let secondary = fallback.appending(path: filename, directoryHint: .notDirectory)
+    return FileManager.default.fileExists(atPath: secondary.path(percentEncoded: false)) ? secondary : primary
   }
 
   static func migrateLegacyCacheFilesIfNeeded(
@@ -336,13 +360,24 @@ nonisolated enum ProwlPaths {
   }
 
   static func repositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: rootURL)
+    repositorySettingsDirectory(for: .local(rootURL))
       .appending(path: "prowl.json", directoryHint: .notDirectory)
   }
 
   static func userRepositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: rootURL)
+    repositorySettingsDirectory(for: .local(rootURL))
       .appending(path: "prowl.user.json", directoryHint: .notDirectory)
+  }
+
+  /// Repository settings files of earlier builds, in load order. They live in
+  /// the directory named after the basename only, which two repositories with
+  /// one name share, so loading copies them and never moves them.
+  static func legacyRepositorySettingsURLs(for rootURL: URL) -> [URL] {
+    [
+      basenameRepositorySettingsDirectory(for: rootURL)
+        .appending(path: "prowl.json", directoryHint: .notDirectory),
+      legacyRepositorySettingsURL(for: rootURL),
+    ]
   }
 
   static func legacyUserGlobalSettingsURLs(for url: URL) -> [URL] {
@@ -351,23 +386,26 @@ nonisolated enum ProwlPaths {
     return [url.deletingLastPathComponent().appending(path: "global.onevcat.json", directoryHint: .notDirectory)]
   }
 
+  /// User repository settings files of earlier builds, in load order (see
+  /// `legacyRepositorySettingsURLs(for:)`).
   static func legacyUserRepositorySettingsURLs(for rootURL: URL) -> [URL] {
-    [
-      repositorySettingsDirectory(for: rootURL)
-        .appending(path: "prowl.onevcat.json", directoryHint: .notDirectory),
+    let directory = basenameRepositorySettingsDirectory(for: rootURL)
+    return [
+      directory.appending(path: "prowl.user.json", directoryHint: .notDirectory),
+      directory.appending(path: "prowl.onevcat.json", directoryHint: .notDirectory),
       legacyUserRepositorySettingsURL(for: rootURL),
     ]
   }
 
   /// Legacy location: ~/.prowl/repo/<name>/supacode.json (pre-rename)
   static func legacyRepositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: rootURL)
+    basenameRepositorySettingsDirectory(for: rootURL)
       .appending(path: "supacode.json", directoryHint: .notDirectory)
   }
 
   /// Legacy location: ~/.prowl/repo/<name>/supacode.onevcat.json (pre-rename)
   static func legacyUserRepositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: rootURL)
+    basenameRepositorySettingsDirectory(for: rootURL)
       .appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
   }
 
@@ -381,7 +419,38 @@ nonisolated enum ProwlPaths {
     rootURL.standardizedFileURL.appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
   }
 
-  private static func repositorySettingsDirectory(for rootURL: URL) -> URL {
+  /// `~/.prowl/repo/<basename>-<hash>`. The basename keeps the folder
+  /// readable; the hash of the location keeps two repositories with one
+  /// basename apart (docs-ai 084 D8).
+  static func repositorySettingsDirectory(for location: RepositoryLocation) -> URL {
+    let key: String
+    let basename: String
+    switch location {
+    case .local(let url):
+      let standardized = url.standardizedFileURL
+      key = PathPolicy.trimmingTrailingSlashes(standardized.path(percentEncoded: false))
+      basename = standardized.lastPathComponent
+    case .remote(_, let path):
+      key = location.id
+      basename = path.split(separator: "/").last.map(String.init) ?? ""
+    }
+    let digest = SHA256.hash(data: Data(key.utf8))
+    let hash = digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+    let name = basename.isEmpty || basename == "/" ? "_" : truncatedToUTF8Count(basename, maxCount: 200)
+    return repositorySettingsDirectory.appending(path: "\(name)-\(hash)", directoryHint: .isDirectory)
+  }
+
+  /// Keeps `<name>-<hash>` under the 255-byte file name limit.
+  private static func truncatedToUTF8Count(_ name: String, maxCount: Int) -> String {
+    var name = name
+    while name.utf8.count > maxCount {
+      name.removeLast()
+    }
+    return name
+  }
+
+  /// The directory of earlier builds, named after the basename only.
+  private static func basenameRepositorySettingsDirectory(for rootURL: URL) -> URL {
     let name = repositorySettingsDirectoryName(for: rootURL)
     return repositorySettingsDirectory.appending(path: name, directoryHint: .isDirectory)
   }

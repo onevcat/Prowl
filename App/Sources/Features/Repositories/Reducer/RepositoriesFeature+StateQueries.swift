@@ -32,13 +32,7 @@ extension RepositoriesFeature.State {
     if let selectedWorktreeID {
       return worktree(for: selectedWorktreeID)
     }
-    guard let selectedRepository,
-      selectedRepository.capabilities.supportsRunnableFolderActions,
-      !selectedRepository.capabilities.supportsWorktrees
-    else {
-      return nil
-    }
-    return Self.plainFolderWorktree(for: selectedRepository)
+    return selectedRepository?.terminalWorktree
   }
 
   /// The single answer to "which worktree does a worktree-scoped action
@@ -57,38 +51,13 @@ extension RepositoriesFeature.State {
   /// or the synthesized worktree representing a runnable plain-folder
   /// repository (whose repository ID doubles as its terminal target ID).
   func terminalWorktree(for id: Worktree.ID) -> Worktree? {
-    if let worktree = worktree(for: id) {
-      return worktree
-    }
-    guard let repository = repositories[id: id],
-      repository.capabilities.supportsRunnableFolderActions,
-      !repository.capabilities.supportsWorktrees
-    else {
-      return nil
-    }
-    return Self.plainFolderWorktree(for: repository)
-  }
-
-  static func plainFolderWorktree(for repository: Repository) -> Worktree {
-    Worktree(
-      id: repository.id,
-      name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
-    )
+    worktree(for: id) ?? repositories[id: id]?.terminalWorktree
   }
 
   var terminalStateIDs: Set<Worktree.ID> {
     Set(
       repositories.flatMap { repository -> [Worktree.ID] in
-        if repository.capabilities.supportsWorktrees {
-          repository.worktrees.map(\.id)
-        } else if repository.capabilities.supportsRunnableFolderActions {
-          [repository.id]
-        } else {
-          []
-        }
+        repository.terminalWorktree.map { [$0.id] } ?? repository.worktrees.map(\.id)
       }
     )
   }
@@ -252,6 +221,7 @@ extension RepositoriesFeature.State {
       return worktree(for: worktreeID).map(DiffTarget.init(worktree:))
     case .workspaceChild(let workspaceID, let path):
       guard let workspaceRepository = repositories[id: workspaceID],
+        let terminalHost = workspaceRepository.terminalWorktree,
         let child = resolvedWorkspaceChildren(in: workspaceRepository).first(where: { $0.id == path })
       else {
         return nil
@@ -264,7 +234,7 @@ extension RepositoriesFeature.State {
         workingDirectory: child.workingDirectory,
         branchName: workspaceChildBranchByID[child.id] ?? child.metadataBranch ?? child.repositoryName,
         repositoryRootURL: child.repositoryRootURL,
-        terminalHost: Self.plainFolderWorktree(for: workspaceRepository),
+        terminalHost: terminalHost,
         terminalWorkingDirectory: child.workingDirectory
       )
     }
@@ -363,8 +333,7 @@ extension RepositoriesFeature.State {
         .compactMap { worktree(for: $0.id) }
         .first
     }
-    guard repository.capabilities.supportsRunnableFolderActions else { return nil }
-    return Self.plainFolderWorktree(for: repository)
+    return repository.terminalWorktree
   }
 
   func pendingWorktree(for id: Worktree.ID?) -> PendingWorktree? {
@@ -388,6 +357,7 @@ extension RepositoriesFeature.State {
       repositoryID: pending.repositoryID,
       name: pending.progress.titleText,
       detail: pending.progress.detailText,
+      workingDirectory: nil,
       info: worktreeInfo(for: pending.id),
       isPinned: false,
       isMainWorktree: false,
@@ -413,6 +383,7 @@ extension RepositoriesFeature.State {
       repositoryID: repositoryID,
       name: worktree.name,
       detail: worktree.detail,
+      workingDirectory: worktree.workingDirectory,
       info: worktreeInfo(for: worktree.id),
       isPinned: isPinned,
       isMainWorktree: isMainWorktree,
@@ -451,7 +422,7 @@ extension RepositoriesFeature.State {
   func orderedRepositoryRoots() -> [URL] {
     let rootsByID = Dictionary(
       repositoryRoots.map {
-        ($0.standardizedFileURL.path(percentEncoded: false), $0.standardizedFileURL)
+        (RepositoryLocation.local($0.standardizedFileURL).id, $0.standardizedFileURL)
       },
       uniquingKeysWith: { first, _ in first }
     )
@@ -463,7 +434,7 @@ extension RepositoriesFeature.State {
       }
     }
     for rootURL in repositoryRoots {
-      let id = rootURL.standardizedFileURL.path(percentEncoded: false)
+      let id = RepositoryLocation.local(rootURL.standardizedFileURL).id
       if seen.insert(id).inserted {
         ordered.append(rootURL.standardizedFileURL)
       }
@@ -475,7 +446,7 @@ extension RepositoriesFeature.State {
   }
 
   func orderedRepositoryIDs() -> [Repository.ID] {
-    orderedRepositoryRoots().map { $0.standardizedFileURL.path(percentEncoded: false) }
+    orderedRepositoryRoots().map { RepositoryLocation.local($0.standardizedFileURL).id }
   }
 
   func repositoryID(for worktreeID: Worktree.ID?) -> Repository.ID? {

@@ -41,11 +41,18 @@ nonisolated struct RepositoryIconAssetStore: Sendable {
 
 nonisolated extension RepositoryIconAssetStore {
   static var liveValue: RepositoryIconAssetStore {
-    fileSystemValue(repositoryIconsDirectory: ProwlPaths.repositoryIconsDirectory(for:))
+    fileSystemValue(
+      repositoryIconsDirectory: ProwlPaths.repositoryIconsDirectory(for:),
+      legacyRepositoryIconsDirectory: ProwlPaths.legacyRepositoryIconsDirectory(for:)
+    )
   }
 
+  /// Imports and removals use `repositoryIconsDirectory`. `exists` also reads
+  /// `legacyRepositoryIconsDirectory`, whose files are never moved or removed:
+  /// two repositories with one basename may share them.
   static func fileSystemValue(
-    repositoryIconsDirectory: @escaping @Sendable (_ repositoryRootURL: URL) -> URL
+    repositoryIconsDirectory: @escaping @Sendable (_ repositoryRootURL: URL) -> URL,
+    legacyRepositoryIconsDirectory: (@Sendable (_ repositoryRootURL: URL) -> URL)? = nil
   ) -> RepositoryIconAssetStore {
     RepositoryIconAssetStore(
       importImage: { sourceURL, rootURL in
@@ -76,8 +83,11 @@ nonisolated extension RepositoryIconAssetStore {
         }
       },
       exists: { filename, rootURL in
-        let url = repositoryIconsDirectory(rootURL)
-          .appending(path: filename, directoryHint: .notDirectory)
+        let url = ProwlPaths.iconFileURL(
+          filename: filename,
+          in: repositoryIconsDirectory(rootURL),
+          fallback: legacyRepositoryIconsDirectory?(rootURL)
+        )
         return FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
       }
     )
