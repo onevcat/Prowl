@@ -1,0 +1,3 @@
+PROWL_REFRESH	1
+ERROR	not-git
+END

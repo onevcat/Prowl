@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -171,7 +171,9 @@ One batched command per remote repository returns: HEAD and branch per worktree,
 worktree list, worktree creation times, a hash of the remote URLs, and `isBare`. The row
 shows tracked line counts and the untracked file count; the tooltip says that untracked
 lines are not counted. The focused worktree polls faster than background ones. A failed
-poll keeps the last state and shows the host as unreachable.
+poll keeps the last state and shows the host as unreachable. (Amended 2026-10-23: the reply carries a fingerprint of the remote URLs, and
+the untracked file count reuses `skippedUntrackedFileCount` and its tooltip, see
+[019](019-b3a-refresh-parser.md).)
 
 ### Consent (D2)
 
@@ -263,7 +265,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | Two PRs: root lists by location (B2a, see 017); `hosts.json`, remote entries, snapshot v3 per entry (B2b, see 018) (amended 2026-10-23) | None (unused) |
-| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
+| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output. Three PRs: the refresh script, its reply parser and the mapping to worktrees (B3a, see 019); `RemoteRepositoryHost` with the other git operations on the command lane, as the remote input of `RepositoryHost` (B3b); the refresh cadence, connection leases and the unreachable state (B3c) (amended 2026-10-23) | None (unused) |
 | C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder | Behind the flag |
 | C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
 | C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
@@ -329,4 +331,5 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A6e deletes `Repository.rootURL`, `Worktree.workingDirectory` and `Worktree.repositoryRootURL` — see [014-a6e-delete-forwards.md](014-a6e-delete-forwards.md)
 - Updated 2026-10-23: B1 adds the command lane (budgets, concurrency limit, `bash -s` scripts with arguments on stdin, line streaming, login PATH); folder users lease through the existing registry — see [016-b1-command-lane.md](016-b1-command-lane.md)
 - Updated 2026-10-23: B2 split; B2a moves the repository root lists to `RepositoryLocation` — see [017-b2a-roots-by-location.md](017-b2a-roots-by-location.md)
-- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 per entry — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
+- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 (one failing entry still drops the snapshot until P0) — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
+- Updated 2026-10-23: B3 split into three PRs; B3a adds the batched refresh script, its reply parser and the mapping to worktrees, tested with replies recorded on macOS and Linux — see [019-b3a-refresh-parser.md](019-b3a-refresh-parser.md)

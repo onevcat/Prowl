@@ -1363,7 +1363,9 @@ struct GitClient {
     }
   }
 
-  nonisolated private static func relativePath(from base: URL, to target: URL) -> String {
+  /// The path of `target` relative to `base`, from path components only. The remote
+  /// host uses it for paths on another machine (docs-ai 084 B3).
+  nonisolated static func relativePath(from base: URL, to target: URL) -> String {
     let baseComponents = base.standardizedFileURL.pathComponents
     let targetComponents = target.standardizedFileURL.pathComponents
     var index = 0
