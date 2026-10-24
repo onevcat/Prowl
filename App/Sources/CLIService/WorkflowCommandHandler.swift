@@ -118,6 +118,13 @@ final class WorkflowCommandHandler: CommandHandler {
       guard case .success(let focused) = resolver.resolve(.none),
         let worktree = snapshot.resolution.worktrees.first(where: { $0.id == focused.worktreeID })
       else {
+        // A focused remote folder has no pane, but it is the source the user chose.
+        if let focusedID = snapshot.resolution.focusedWorktreeID,
+          snapshot.resolution.remoteFolders.contains(where: { $0.id == focusedID })
+        {
+          return .failure(
+            refusal(code: CLIErrorCode.remoteAgentUnsupported, message: WorkflowRunAdmission.remoteFolderMessage))
+        }
         return .failure(
           refusal(
             code: CLIErrorCode.sourceRequired,
@@ -128,6 +135,14 @@ final class WorkflowCommandHandler: CommandHandler {
     }
     switch resolver.resolve(selector) {
     case .failure(.notFound(let message)):
+      // A remote folder has no pane yet, so the resolver cannot find it. A selector that
+      // names it gets the workflow refusal instead (docs-ai 084 A4a, C2).
+      if let value = Self.worktreeSelectorValue(selector),
+        snapshot.resolution.remoteFolders.contains(where: { $0.matchesExactly(value) })
+      {
+        return .failure(
+          refusal(code: CLIErrorCode.remoteAgentUnsupported, message: WorkflowRunAdmission.remoteFolderMessage))
+      }
       return .failure(refusal(code: CLIErrorCode.targetNotFound, message: message))
     case .failure(.notUnique(let message)):
       return .failure(refusal(code: CLIErrorCode.targetNotUnique, message: message))
@@ -144,6 +159,14 @@ final class WorkflowCommandHandler: CommandHandler {
         WorkflowRunSource(
           worktree: worktree, paneID: paneID,
           paneIsCaller: paneID != nil && paneID == callerPane?.surfaceID))
+    }
+  }
+
+  /// The text of a selector that can name a worktree.
+  private static func worktreeSelectorValue(_ selector: TargetSelector) -> String? {
+    switch selector {
+    case .worktree(let value), .auto(let value): value
+    default: nil
     }
   }
 
