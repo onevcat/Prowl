@@ -129,10 +129,10 @@ extension AppFeature {
 
   /// Pins a repository's "Open in" app. An open repository Settings pane writes its whole
   /// snapshot back on its next edit, so its copy is updated too (#623).
-  func setRepositoryOpenActionID(_ actionID: String, rootURL: URL, into state: inout State) {
-    @Shared(.repositorySettings(rootURL)) var repositorySettings
+  func setRepositoryOpenActionID(_ actionID: String, location: RepositoryLocation, into state: inout State) {
+    @Shared(.repositorySettings(location)) var repositorySettings
     $repositorySettings.withLock { $0.openActionID = actionID }
-    if state.settings.repositorySettings?.rootURL == rootURL {
+    if state.settings.repositorySettings?.location == location {
       state.settings.repositorySettings?.settings.openActionID = actionID
     }
   }

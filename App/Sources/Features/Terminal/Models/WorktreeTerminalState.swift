@@ -461,7 +461,7 @@ final class WorktreeTerminalState {
     self.tabManager = TerminalTabManager(titleFlushClock: titleFlushClock)
     _repositorySettings = SharedReader(
       wrappedValue: RepositorySettings.default,
-      .repositorySettings(worktree.repositoryRootURL)
+      .repositorySettings(worktree.repositoryLocation)
     )
     self.tabManager.onCoalescedTitlesFlushed = { [weak self] tabIDs in
       for tabID in tabIDs {
@@ -473,6 +473,8 @@ final class WorktreeTerminalState {
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
   var repositoryRootURL: URL { worktree.repositoryRootURL }
+  /// The `Repository.ID` of the worktree's repository.
+  var repositoryID: Repository.ID { worktree.repositoryLocation.id }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
     targetHandleRegistry.register(tabID: tabID)

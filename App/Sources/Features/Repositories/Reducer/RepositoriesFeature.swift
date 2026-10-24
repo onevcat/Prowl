@@ -67,7 +67,7 @@ struct DeleteWorktreeConfirmation: Equatable, Identifiable {
 
 struct ForceDeleteBranchRequest: Equatable {
   let branchName: String
-  let repositoryRootURL: URL
+  let repositoryLocation: RepositoryLocation
   let errorMessage: String
 }
 
@@ -217,7 +217,7 @@ struct RepositoriesFeature {
   @CasePathable
   enum GithubIntegrationAction: Equatable {
     case delayedPullRequestRefresh(Worktree.ID)
-    case repositoryPullRequestRefreshRequested(repositoryRootURL: URL, worktreeIDs: [Worktree.ID])
+    case repositoryPullRequestRefreshRequested(repositoryLocation: RepositoryLocation, worktreeIDs: [Worktree.ID])
     case refreshGithubIntegrationAvailability
     case githubIntegrationAvailabilityUpdated(Bool)
     case repositoryPullRequestRefreshCompleted(Repository.ID)
@@ -427,7 +427,7 @@ struct RepositoriesFeature {
   }
 
   struct PendingPullRequestRefresh: Equatable {
-    var repositoryRootURL: URL
+    var repositoryLocation: RepositoryLocation
     var worktreeIDs: [Worktree.ID]
   }
 
@@ -466,7 +466,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case refreshAllCustomTitles
-    case refreshCustomTitle(URL)
+    case refreshCustomTitle(RepositoryLocation)
     case customTitlesLoaded([Repository.ID: String])
     case customTitleUpdated(Repository.ID, String?)
     case codeHostsDetected([Repository.ID: CodeHost])
@@ -605,6 +605,9 @@ struct RepositoriesFeature {
   @Dependency(AnalyticsClient.self) var analyticsClient
   @Dependency(GitClientDependency.self) var gitClient
   @Dependency(GithubCLIClient.self) var githubCLI
+  /// Repository-scoped git operations go through the host (docs-ai 084);
+  /// `gitClient` stays for local URLs that are not a repository's location.
+  var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient) }
   @Dependency(PullRequestRefreshCoordinatorClient.self) var pullRequestRefreshCoordinator
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(OpenURLClient.self) var openURLClient

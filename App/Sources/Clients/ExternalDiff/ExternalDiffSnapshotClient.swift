@@ -33,7 +33,7 @@ extension DependencyValues {
 private nonisolated struct ExternalDiffSnapshotBuilder {
   func makeSnapshotPair(at workingDirectory: URL) async throws -> ExternalDiffSnapshotPair {
     let git = try await GitExecutableResolver.shared.resolve()
-    let gitClient = GitClient()
+    let gitClient = GitClient.local
     async let trackedOutput = gitClient.diffNameStatus(at: workingDirectory)
     async let untrackedPaths = gitClient.untrackedFilePaths(at: workingDirectory)
     let trackedFiles = DiffChangedFile.parseNameStatus(await trackedOutput)

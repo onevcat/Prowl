@@ -8,11 +8,15 @@ nonisolated struct RepositorySettingsKeyID: Hashable, Sendable {
 
 nonisolated struct RepositorySettingsKey: SharedKey {
   let repositoryID: String
-  let rootURL: URL
+  let location: RepositoryLocation
+
+  init(location: RepositoryLocation) {
+    self.location = location.standardized
+    repositoryID = self.location.id
+  }
 
   init(rootURL: URL) {
-    self.rootURL = rootURL.standardizedFileURL
-    repositoryID = RepositoryLocation.local(self.rootURL).id
+    self.init(location: .local(rootURL))
   }
 
   var id: RepositorySettingsKeyID {
@@ -24,7 +28,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: LoadContinuation<RepositorySettings>
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: location)
     let decoder = JSONDecoder()
     let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL)
     if let localData {
@@ -38,7 +42,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
       )
     }
 
-    for legacySettingsURL in ProwlPaths.legacyRepositorySettingsURLs(for: rootURL) {
+    for legacySettingsURL in ProwlPaths.legacyRepositorySettingsURLs(for: location) {
       guard let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) else { continue }
       if let legacySettings = try? decoder.decode(RepositorySettings.self, from: legacyData) {
         do {
@@ -95,11 +99,11 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: location)
     // A legacy source also selects the repository file: load reads it before the
     // global file, so an edit stored globally would be lost on the next load
     // (for example, after the first copy failed).
-    let usesRepositoryFile = ([repositorySettingsURL] + ProwlPaths.legacyRepositorySettingsURLs(for: rootURL))
+    let usesRepositoryFile = ([repositorySettingsURL] + ProwlPaths.legacyRepositorySettingsURLs(for: location))
       .contains { (try? repositoryLocalSettingsStorage.load($0)) != nil }
     if usesRepositoryFile {
       do {
@@ -123,7 +127,12 @@ nonisolated struct RepositorySettingsKey: SharedKey {
 }
 
 nonisolated extension SharedReaderKey where Self == RepositorySettingsKey.Default {
+  static func repositorySettings(_ location: RepositoryLocation) -> Self {
+    Self[RepositorySettingsKey(location: location), default: .default]
+  }
+
+  /// The settings of the local repository at `rootURL`.
   static func repositorySettings(_ rootURL: URL) -> Self {
-    Self[RepositorySettingsKey(rootURL: rootURL), default: .default]
+    repositorySettings(.local(rootURL))
   }
 }

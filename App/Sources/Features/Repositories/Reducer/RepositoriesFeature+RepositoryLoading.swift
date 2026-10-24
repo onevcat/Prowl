@@ -11,15 +11,15 @@ extension RepositoriesFeature {
     let targets =
       repositories
       .filter { $0.capabilities.supportsCodeHost }
-      .map { (id: $0.id, rootURL: $0.rootURL) }
+      .map { (id: $0.id, location: $0.location) }
     guard !targets.isEmpty else { return nil }
-    let gitClient = gitClient
+    let repositoryHost = repositoryHost
     return .run { send in
       var detected: [Repository.ID: CodeHost] = [:]
       await withTaskGroup(of: (Repository.ID, CodeHost).self) { group in
         for target in targets {
           group.addTask {
-            let host = await gitClient.repositoryWebURL(target.rootURL)?.host
+            let host = await repositoryHost.repositoryWebURL(for: target.location)?.host
             return (target.id, CodeHost.from(host: host))
           }
         }
@@ -130,12 +130,12 @@ extension RepositoriesFeature {
     fallbackRoots: [URL] = [],
     animated: Bool = false
   ) -> Effect<Action> {
-    let gitClient = gitClient
+    let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
       let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
       let roots = entries.map { URL(fileURLWithPath: $0.path) }
       for entry in entries where entry.kind == .git {
-        _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
+        _ = try? await repositoryHost.pruneWorktrees(in: .local(URL(fileURLWithPath: entry.path)))
       }
       let (repositories, failures) = await loadRepositoriesData(entries)
       await send(
@@ -160,13 +160,13 @@ extension RepositoriesFeature {
   func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
-        let gitClient = self.gitClient
+        let repositoryHost = self.repositoryHost
         group.addTask {
           let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
           switch entry.kind {
           case .git:
             do {
-              let worktrees = try await gitClient.worktrees(rootURL)
+              let worktrees = try await repositoryHost.worktrees(in: .local(rootURL))
               return WorktreesFetchResult(
                 entry: entry,
                 repository: Repository(

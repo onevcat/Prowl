@@ -12,7 +12,9 @@ import SwiftUI
 /// Symbol so a deleted file on disk doesn't turn into a blank slot.
 struct RepositoryIconImage: View {
   let icon: RepositoryIconSource
-  let repositoryRootURL: URL
+  /// The local root whose settings folder holds imported images. Nil for a
+  /// remote repository: its images fall back like a missing file.
+  let repositoryRootURL: URL?
   /// Color used for tintable artwork. Pass `nil` to keep the
   /// renderer's natural foreground (`.primary` / template default).
   let tintColor: Color?
@@ -22,7 +24,7 @@ struct RepositoryIconImage: View {
 
   init(
     icon: RepositoryIconSource,
-    repositoryRootURL: URL,
+    repositoryRootURL: URL?,
     tintColor: Color? = nil,
     size: CGFloat = 16
   ) {
@@ -60,10 +62,10 @@ struct RepositoryIconImage: View {
 
   @ViewBuilder
   private func userImage(filename: String) -> some View {
-    let url = ProwlPaths.repositoryIconFileURL(
-      filename: filename, repositoryRootURL: repositoryRootURL
-    )
-    if let nsImage = Self.loadImage(at: url, asTemplate: icon.isTintable) {
+    let url = repositoryRootURL.map {
+      ProwlPaths.repositoryIconFileURL(filename: filename, repositoryRootURL: $0)
+    }
+    if let url, let nsImage = Self.loadImage(at: url, asTemplate: icon.isTintable) {
       if icon.isTintable {
         Image(nsImage: nsImage)
           .resizable()

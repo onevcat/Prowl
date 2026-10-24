@@ -446,7 +446,7 @@ struct ProwlApp: App {
     var client = BranchNameSuggestionClient.liveValue
     client.gatherContext = { repositoryName, repositoryRootURL, existingBranchNames in
       let allStates = terminalManager.activeWorktreeStates
-      let sameRepoStates = allStates.filter { $0.repositoryRootURL == repositoryRootURL }
+      let sameRepoStates = allStates.filter { $0.worktree.repositoryLocalURL == repositoryRootURL }
 
       let selectedID = terminalManager.selectedWorktreeID
       let sorted = sameRepoStates.sorted { lhs, rhs in
@@ -1383,22 +1383,25 @@ struct ProwlApp: App {
     let normalized = URL(fileURLWithPath: path, isDirectory: true)
       .standardizedFileURL.path(percentEncoded: false)
     // Exact match: worktree working directory or repository root
+    // A local path never resolves to a worktree on another host.
     for repository in repositories.repositories {
+      guard let repositoryRootURL = repository.localURL else { continue }
       let kind = repository.kind.rawValue
       for worktree in repository.worktrees {
-        let wtPath = worktree.workingDirectory
+        guard let worktreeURL = worktree.localURL else { continue }
+        let wtPath = worktreeURL
           .standardizedFileURL.path(percentEncoded: false)
         if wtPath == normalized {
           return OpenResolverResult(
             resolution: .exactRoot, worktreeID: worktree.id,
             worktreeName: worktree.name, worktreePath: wtPath,
-            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            rootPath: repositoryRootURL.standardizedFileURL.path(percentEncoded: false),
             worktreeKind: kind, resolvedPath: normalized
           )
         }
       }
-      if let terminalWorktree = repository.terminalWorktree {
-        let repoRoot = terminalWorktree.workingDirectory
+      if let terminalWorktree = repository.terminalWorktree, let terminalURL = terminalWorktree.localURL {
+        let repoRoot = terminalURL
           .standardizedFileURL.path(percentEncoded: false)
         if repoRoot == normalized {
           return OpenResolverResult(
@@ -1411,23 +1414,26 @@ struct ProwlApp: App {
     }
     // Inside-root: path is inside an existing worktree/repo root
     let normalizedSlash = normalized.hasSuffix("/") ? normalized : normalized + "/"
+    // A local path never resolves to a worktree on another host.
     for repository in repositories.repositories {
+      guard let repositoryRootURL = repository.localURL else { continue }
       let kind = repository.kind.rawValue
       for worktree in repository.worktrees {
-        let wtPath = worktree.workingDirectory
+        guard let worktreeURL = worktree.localURL else { continue }
+        let wtPath = worktreeURL
           .standardizedFileURL.path(percentEncoded: false)
         let wtSlash = wtPath.hasSuffix("/") ? wtPath : wtPath + "/"
         if normalizedSlash.hasPrefix(wtSlash) {
           return OpenResolverResult(
             resolution: .insideRoot, worktreeID: worktree.id,
             worktreeName: worktree.name, worktreePath: wtPath,
-            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            rootPath: repositoryRootURL.standardizedFileURL.path(percentEncoded: false),
             worktreeKind: kind, resolvedPath: normalized
           )
         }
       }
-      if let terminalWorktree = repository.terminalWorktree {
-        let repoRoot = terminalWorktree.workingDirectory
+      if let terminalWorktree = repository.terminalWorktree, let terminalURL = terminalWorktree.localURL {
+        let repoRoot = terminalURL
           .standardizedFileURL.path(percentEncoded: false)
         let repoSlash = repoRoot.hasSuffix("/") ? repoRoot : repoRoot + "/"
         if normalizedSlash.hasPrefix(repoSlash) {

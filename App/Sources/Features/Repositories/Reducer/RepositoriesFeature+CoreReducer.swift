@@ -304,7 +304,7 @@ extension RepositoriesFeature {
       return .run { send in
         var dict: [Repository.ID: String] = [:]
         for repository in repositoriesForTitleRefresh {
-          @Shared(.repositorySettings(repository.rootURL)) var settings
+          @Shared(.repositorySettings(repository.location)) var settings
           let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
           if let trimmed, !trimmed.isEmpty {
             dict[repository.id] = trimmed
@@ -313,13 +313,13 @@ extension RepositoriesFeature {
         await send(.customTitlesLoaded(dict))
       }
 
-    case .refreshCustomTitle(let rootURL):
-      guard let repository = state.repositories.first(where: { $0.rootURL == rootURL }) else {
+    case .refreshCustomTitle(let location):
+      guard let repository = state.repositories.first(where: { $0.location == location }) else {
         return .none
       }
       let repositoryID = repository.id
       return .run { send in
-        @Shared(.repositorySettings(rootURL)) var settings
+        @Shared(.repositorySettings(location)) var settings
         let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
         await send(.customTitleUpdated(repositoryID, normalized))
@@ -782,9 +782,11 @@ extension RepositoriesFeature {
         return .none
       }
       analyticsClient.capture("branch_renamed", nil)
+      let repositoryHost = repositoryHost
+      let worktreeLocation = worktree.location
       return .run { send in
         do {
-          try await gitClient.renameBranch(worktree.workingDirectory, trimmed)
+          try await repositoryHost.renameBranch(in: worktreeLocation, to: trimmed)
           await send(.reloadRepositories(animated: true))
         } catch {
           await send(
@@ -950,26 +952,28 @@ extension RepositoriesFeature {
         guard let worktree = state.worktree(for: worktreeID) else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         return .run { send in
-          if let name = await gitClient.branchName(worktreeURL) {
+          if let name = await repositoryHost.branchName(of: worktreeLocation) {
             await send(.worktreeBranchNameLoaded(worktreeID: worktreeID, name: name))
           }
         }
       case .filesChanged(let worktreeID):
-        guard let worktree = state.worktree(for: worktreeID) else {
+        guard let worktree = state.worktree(for: worktreeID),
+          worktree.availability(of: .lineCounts).isAvailable
+        else {
           return .none
         }
-        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
         guard repositorySettings.observesLineDiffsAutomatically else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
         return .run { send in
-          if let changes = await gitClient.lineChanges(worktreeURL) {
+          if let changes = await repositoryHost.lineChanges(in: worktreeLocation) {
             let nextLineChanges = normalizedLineChanges(changes)
             guard nextLineChanges != previousLineChanges else {
               return
@@ -984,10 +988,11 @@ extension RepositoriesFeature {
         }
       case .repositoryWorktreesChanged:
         return .send(.reloadRepositories(animated: true))
-      case .repositoryRemoteConfigurationChanged(let repositoryRootURL):
+      case .repositoryRemoteConfigurationChanged(let location):
         guard
+          let changedRoot = location.localURL?.standardizedFileURL,
           let repository = state.repositories.first(where: {
-            $0.rootURL.standardizedFileURL == repositoryRootURL.standardizedFileURL
+            $0.location.localURL?.standardizedFileURL == changedRoot
           })
         else {
           return .none
@@ -1002,7 +1007,7 @@ extension RepositoriesFeature {
             .send(
               .githubIntegration(
                 .repositoryPullRequestRefreshRequested(
-                  repositoryRootURL: repository.rootURL,
+                  repositoryLocation: repository.location,
                   worktreeIDs: worktreeIDs
                 )
               ))
@@ -1012,11 +1017,11 @@ extension RepositoriesFeature {
           effects.append(effect)
         }
         return effects.isEmpty ? .none : .concatenate(effects)
-      case .repositoryPullRequestRefresh(let repositoryRootURL, let worktreeIDs):
+      case .repositoryPullRequestRefresh(let location, let worktreeIDs):
         return .send(
           .githubIntegration(
             .repositoryPullRequestRefreshRequested(
-              repositoryRootURL: repositoryRootURL,
+              repositoryLocation: location,
               worktreeIDs: worktreeIDs
             )
           )

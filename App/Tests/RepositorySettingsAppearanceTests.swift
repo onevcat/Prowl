@@ -13,7 +13,7 @@ struct RepositorySettingsAppearanceTests {
 
   private func makeState(repositoryID: Repository.ID = "repo-1") -> RepositorySettingsFeature.State {
     RepositorySettingsFeature.State(
-      rootURL: URL(fileURLWithPath: "/tmp/\(repositoryID)"),
+      location: .local(URL(fileURLWithPath: "/tmp/\(repositoryID)")),
       repositoryID: repositoryID,
       repositoryKind: .plain,
       settings: .default,

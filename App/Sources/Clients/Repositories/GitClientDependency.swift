@@ -42,22 +42,22 @@ struct GitClientDependency: Sendable {
 
 extension GitClientDependency: DependencyKey {
   static let liveValue = GitClientDependency(
-    repoRoot: { try await GitClient().repoRoot(for: $0) },
-    worktrees: { try await GitClient().worktrees(for: $0) },
-    pruneWorktrees: { try await GitClient().pruneWorktrees(for: $0) },
-    localBranchNames: { try await GitClient().localBranchNames(for: $0) },
+    repoRoot: { try await GitClient.local.repoRoot(for: $0) },
+    worktrees: { try await GitClient.local.worktrees(for: $0) },
+    pruneWorktrees: { try await GitClient.local.pruneWorktrees(for: $0) },
+    localBranchNames: { try await GitClient.local.localBranchNames(for: $0) },
     isValidBranchName: { branchName, repoRoot in
-      await GitClient().isValidBranchName(branchName, for: repoRoot)
+      await GitClient.local.isValidBranchName(branchName, for: repoRoot)
     },
-    branchRefs: { try await GitClient().branchRefs(for: $0) },
-    branchRefOptions: { try await GitClient().branchRefOptions(for: $0) },
-    remoteBranchRefs: { try await GitClient().remoteBranchRefs(for: $0) },
-    defaultRemoteBranchRef: { try await GitClient().defaultRemoteBranchRef(for: $0) },
-    automaticWorktreeBaseRef: { await GitClient().automaticWorktreeBaseRef(for: $0) },
-    ignoredFileCount: { try await GitClient().ignoredFileCount(for: $0) },
-    untrackedFileCount: { try await GitClient().untrackedFileCount(for: $0) },
+    branchRefs: { try await GitClient.local.branchRefs(for: $0) },
+    branchRefOptions: { try await GitClient.local.branchRefOptions(for: $0) },
+    remoteBranchRefs: { try await GitClient.local.remoteBranchRefs(for: $0) },
+    defaultRemoteBranchRef: { try await GitClient.local.defaultRemoteBranchRef(for: $0) },
+    automaticWorktreeBaseRef: { await GitClient.local.automaticWorktreeBaseRef(for: $0) },
+    ignoredFileCount: { try await GitClient.local.ignoredFileCount(for: $0) },
+    untrackedFileCount: { try await GitClient.local.untrackedFileCount(for: $0) },
     createWorktree: { name, repoRoot, baseDirectory, copyIgnored, copyUntracked, baseRef in
-      try await GitClient().createWorktree(
+      try await GitClient.local.createWorktree(
         named: name,
         in: repoRoot,
         baseDirectory: baseDirectory,
@@ -66,36 +66,36 @@ extension GitClientDependency: DependencyKey {
       )
     },
     createWorktreeStream: { request in
-      GitClient().createWorktreeStream(request)
+      GitClient.local.createWorktreeStream(request)
     },
     removeWorktree: { worktree, deleteBranch in
-      try await GitClient().removeWorktree(worktree, deleteBranch: deleteBranch)
+      try await GitClient.local.removeWorktree(worktree, deleteBranch: deleteBranch)
     },
     deleteLocalBranch: { branchName, repoRoot, force in
-      try await GitClient().deleteLocalBranch(named: branchName, for: repoRoot, force: force)
+      try await GitClient.local.deleteLocalBranch(named: branchName, for: repoRoot, force: force)
     },
     isBareRepository: { repoRoot in
-      try await GitClient().isBareRepository(for: repoRoot)
+      try await GitClient.local.isBareRepository(for: repoRoot)
     },
-    branchName: { await GitClient().branchName(for: $0) },
-    lineChanges: { await GitClient().lineChanges(at: $0) },
+    branchName: { await GitClient.local.branchName(for: $0) },
+    lineChanges: { await GitClient.local.lineChanges(at: $0) },
     renameBranch: { worktreeURL, branchName in
-      try await GitClient().renameBranch(in: worktreeURL, to: branchName)
+      try await GitClient.local.renameBranch(in: worktreeURL, to: branchName)
     },
     repositoryWebURL: { repositoryRoot in
-      await GitClient().repositoryWebURL(for: repositoryRoot)
+      await GitClient.local.repositoryWebURL(for: repositoryRoot)
     },
     githubRemoteInfos: { repositoryRoot in
-      await GitClient().githubRemoteInfos(for: repositoryRoot)
+      await GitClient.local.githubRemoteInfos(for: repositoryRoot)
     },
     remoteInfo: { repositoryRoot in
-      await GitClient().remoteInfo(for: repositoryRoot)
+      await GitClient.local.remoteInfo(for: repositoryRoot)
     },
     remoteNames: { repoRoot in
-      try await GitClient().remoteNames(for: repoRoot)
+      try await GitClient.local.remoteNames(for: repoRoot)
     },
     fetchRemote: { remote, repoRoot in
-      try await GitClient().fetchRemote(remote, for: repoRoot)
+      try await GitClient.local.fetchRemote(remote, for: repoRoot)
     }
   )
   static let testValue = liveValue

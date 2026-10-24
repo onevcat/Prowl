@@ -83,6 +83,25 @@ struct UserRepositorySettingsKeyTests {
     #expect(localStorage.data(at: basenameURL) == storedData)
   }
 
+  @Test(.dependencies) func remoteLocationIgnoresTheBasenameDirectoryOfALocalRepository() throws {
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    let basenameURL = ProwlPaths.legacyUserRepositorySettingsURLs(for: URL(fileURLWithPath: "/home/dev/app"))[0]
+    let stored = UserRepositorySettings(customCommands: [], disabledGlobalCommandIDs: ["global-build"])
+    try localStorage.save(try JSONEncoder().encode(stored), at: basenameURL)
+    #expect(ProwlPaths.legacyUserRepositorySettingsURLs(for: remote).isEmpty)
+
+    let loaded = withDependencies {
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.userRepositorySettings(remote)) var settings: UserRepositorySettings
+      return settings
+    }
+
+    #expect(loaded == UserRepositorySettings.default.normalized())
+    #expect(localStorage.data(at: ProwlPaths.userRepositorySettingsURL(for: remote)) != nil)
+  }
+
   @Test(.dependencies) func loadMigratesLegacyRepositoryRootUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")

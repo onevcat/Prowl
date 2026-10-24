@@ -17,6 +17,9 @@ extension AppFeature {
       profile.isEnabled,
       let worktree = actionTargetWorktree(repositories: state.repositories)
     else { return .none }
+    if let reason = worktree.availability(of: .profileLaunch).unavailableReason {
+      return .send(.repositories(.showToast(.warning(reason.message))))
+    }
 
     let plan: AgentProfileLaunchPlan
     do {

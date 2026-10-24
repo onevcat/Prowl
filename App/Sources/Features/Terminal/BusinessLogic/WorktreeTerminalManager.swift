@@ -136,13 +136,21 @@ final class WorktreeTerminalManager {
     _ request: AgentProfileLaunchRequest,
     in worktree: Worktree
   ) -> Result<LaunchedSurface, AgentProfileLaunchError> {
-    state(for: worktree).launchAgentProfile(request)
+    if let reason = worktree.availability(of: .profileLaunch).unavailableReason {
+      return .failure(.unavailable(reason))
+    }
+    return state(for: worktree).launchAgentProfile(request)
   }
 
   func prepareAgentProfileLaunch(
     _ request: AgentProfileLaunchRequest,
     in worktree: Worktree
   ) async -> Result<PreparedAgentProfileLaunch, AgentProfileLaunchError> {
+    // Every launch path (Agents menu, palette, CLI, workflows) converges here;
+    // the check runs before a terminal state exists for the target.
+    if let reason = worktree.availability(of: .profileLaunch).unavailableReason {
+      return .failure(.unavailable(reason))
+    }
     let terminalState = state(for: worktree)
     guard terminalState.provisionAgentProfileHome(for: request.plan) else {
       return .failure(.homeProvisioningFailed)
@@ -1117,7 +1125,7 @@ final class WorktreeTerminalManager {
     // Skip setup injection when auto-close is requested so the setup script's
     // own exit code cannot trigger the close before the user's command runs.
     if !autoCloseOnSuccess, state.needsSetupScript() {
-      @SharedReader(.repositorySettings(worktree.repositoryRootURL))
+      @SharedReader(.repositorySettings(worktree.repositoryLocation))
       var settings = RepositorySettings.default
       setupScript = settings.setupScript
     } else {
@@ -1276,16 +1284,13 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>, preservingRepositoryIDs: Set<Repository.ID> = []) {
-    // Local IDs keep the filesystem-dependent trailing slash of `URL(fileURLWithPath:)`,
-    // so the comparison with each state's root is unchanged.
-    let failedRoots = Set(
-      preservingRepositoryIDs
-        .filter { RepositoryLocation(id: $0)?.localURL != nil }
-        .map { URL(fileURLWithPath: $0).standardizedFileURL }
-    )
+    // IDs are compared without trailing slashes: a failed repository's ID comes
+    // from its entry path, which lacks the slash that a path URL gains while the
+    // directory exists.
+    let failedIDs = Set(preservingRepositoryIDs.map(PathPolicy.trimmingTrailingSlashes))
     // A failed load is not evidence that its terminal sessions were removed.
     let preservedIDs = states.compactMap { id, state in
-      failedRoots.contains(state.repositoryRootURL.standardizedFileURL) ? id : nil
+      failedIDs.contains(PathPolicy.trimmingTrailingSlashes(state.repositoryID)) ? id : nil
     }
     let worktreeIDs = worktreeIDs.union(preservedIDs)
     var removed: [WorktreeTerminalState] = []

@@ -24,7 +24,7 @@ struct RepositorySettingsFeatureTests {
     settings.customTitle = "Workflow Repo"
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryID: "repo-id",
         repositoryKind: .git,
         settings: settings,
@@ -82,7 +82,7 @@ struct RepositorySettingsFeatureTests {
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -125,7 +125,7 @@ struct RepositorySettingsFeatureTests {
 
   @Test func plainFolderVisibilityHidesGitOnlySections() {
     let state = RepositorySettingsFeature.State(
-      rootURL: URL(fileURLWithPath: "/tmp/folder"),
+      location: .local(URL(fileURLWithPath: "/tmp/folder")),
       repositoryKind: .plain,
       settings: .default,
       userSettings: .default
@@ -147,7 +147,7 @@ struct RepositorySettingsFeatureTests {
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -191,7 +191,7 @@ struct RepositorySettingsFeatureTests {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -233,7 +233,7 @@ struct RepositorySettingsFeatureTests {
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -268,7 +268,7 @@ struct RepositorySettingsFeatureTests {
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -323,7 +323,7 @@ struct RepositorySettingsFeatureTests {
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .git,
         settings: .default,
         userSettings: .default

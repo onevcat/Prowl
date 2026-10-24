@@ -360,13 +360,32 @@ nonisolated enum ProwlPaths {
   }
 
   static func repositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: .local(rootURL))
+    repositorySettingsURL(for: .local(rootURL))
+  }
+
+  static func repositorySettingsURL(for location: RepositoryLocation) -> URL {
+    repositorySettingsDirectory(for: location)
       .appending(path: "prowl.json", directoryHint: .notDirectory)
   }
 
   static func userRepositorySettingsURL(for rootURL: URL) -> URL {
-    repositorySettingsDirectory(for: .local(rootURL))
+    userRepositorySettingsURL(for: .local(rootURL))
+  }
+
+  static func userRepositorySettingsURL(for location: RepositoryLocation) -> URL {
+    repositorySettingsDirectory(for: location)
       .appending(path: "prowl.user.json", directoryHint: .notDirectory)
+  }
+
+  /// Settings files of earlier builds for `location`. Remote repositories
+  /// have none: they did not exist before the settings directory was keyed
+  /// by location.
+  static func legacyRepositorySettingsURLs(for location: RepositoryLocation) -> [URL] {
+    location.localURL.map(legacyRepositorySettingsURLs(for:)) ?? []
+  }
+
+  static func legacyUserRepositorySettingsURLs(for location: RepositoryLocation) -> [URL] {
+    location.localURL.map(legacyUserRepositorySettingsURLs(for:)) ?? []
   }
 
   /// Repository settings files of earlier builds, in load order. They live in

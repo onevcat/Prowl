@@ -66,6 +66,50 @@ struct RepositorySettingsKeyTests {
     #expect(reloaded.repositories[rootURL.path(percentEncoded: false)] == updated)
   }
 
+  @Test func localLocationAndRootURLNameTheSameKey() {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo/../repo")
+
+    #expect(RepositorySettingsKey(location: .local(rootURL)).id == RepositorySettingsKey(rootURL: rootURL).id)
+    #expect(RepositorySettingsKey(location: .local(rootURL)).repositoryID == "/tmp/repo")
+  }
+
+  @Test(.dependencies) func remoteLocationReadsItsOwnFileAndNoBasenameLegacyFile() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let remote = RemoteRepositoryFixtures.location("/home/dev/app")
+    // A local repository with the same basename left a legacy file behind.
+    var legacySettings = RepositorySettings.default
+    legacySettings.runScript = "echo legacy"
+    let legacyURLs = ProwlPaths.legacyRepositorySettingsURLs(for: URL(fileURLWithPath: "/home/dev/app"))
+    try localStorage.save(encode(legacySettings), at: legacyURLs[0])
+    #expect(ProwlPaths.legacyRepositorySettingsURLs(for: remote).isEmpty)
+
+    let first = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.repositorySettings(remote)) var repositorySettings: RepositorySettings
+      return repositorySettings
+    }
+    #expect(first == .default)
+
+    var remoteSettings = RepositorySettings.default
+    remoteSettings.runScript = "echo remote"
+    try localStorage.save(encode(remoteSettings), at: ProwlPaths.repositorySettingsURL(for: remote))
+    let second = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.repositorySettings(remote)) var repositorySettings: RepositorySettings
+      return repositorySettings
+    }
+    #expect(second == remoteSettings)
+    #expect(RepositorySettingsKey(location: remote).repositoryID == remote.id)
+  }
+
   @Test func decodeMissingArchiveScriptDefaultsToEmpty() throws {
     let data = Data(
       """

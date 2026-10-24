@@ -78,18 +78,18 @@ extension RepositoriesFeature {
           )
         )
       }
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let selectedBaseRef = repositorySettings.worktreeBaseRef
-      let gitClient = gitClient
-      let rootURL = repository.rootURL
+      let repositoryHost = repositoryHost
+      let repositoryLocation = repository.location
       return .run { send in
-        let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+        let automaticBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: repositoryLocation) ?? "HEAD"
         guard !Task.isCancelled else {
           return
         }
         let baseRefOptions: [String]
         do {
-          let refs = try await gitClient.branchRefs(rootURL)
+          let refs = try await repositoryHost.branchRefs(in: repositoryLocation)
           guard !Task.isCancelled else {
             return
           }
@@ -140,7 +140,7 @@ extension RepositoriesFeature {
         return .none
       }
       @Shared(.settingsFile) var settingsFile
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let defaultWorktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,
         globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
@@ -169,11 +169,12 @@ extension RepositoriesFeature {
       let branchNameSuggestionClient = branchNameSuggestionClient
       let repositoryName = repository.name
       let repositoryRootURL = repository.rootURL
-      let gitClient = gitClient
+      let repositoryLocation = repository.location
+      let repositoryHost = repositoryHost
       return .run { send in
         // Base ref options mix local and remote-tracking refs; without the remote part,
         // `origin/` would look like the repository's branch prefix.
-        let remotes = (try? await gitClient.remoteNames(repositoryRootURL)) ?? []
+        let remotes = (try? await repositoryHost.remoteNames(in: repositoryLocation)) ?? []
         let context = await branchNameSuggestionClient.gatherContext(
           repositoryName,
           repositoryRootURL,
@@ -204,10 +205,10 @@ extension RepositoriesFeature {
         state.worktreeCreationPrompt?.validationMessage = String(localized: "Branch name already exists.")
         return .none
       }
-      let gitClient = gitClient
-      let rootURL = repository.rootURL
+      let repositoryHost = repositoryHost
+      let repositoryLocation = repository.location
       return .run { send in
-        let localBranchNames = (try? await gitClient.localBranchNames(rootURL)) ?? []
+        let localBranchNames = (try? await repositoryHost.localBranchNames(in: repositoryLocation)) ?? []
         let duplicateMessage =
           localBranchNames.contains(normalizedBranchName)
           ? String(localized: "Branch name already exists.")
@@ -275,7 +276,7 @@ extension RepositoriesFeature {
       let previousSelection = state.selectedWorktreeID
       let pendingID = "pending:\(uuid().uuidString)"
       @Shared(.settingsFile) var settingsFile
-      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      @Shared(.repositorySettings(repository.location)) var repositorySettings
       let globalDefaultWorktreeBaseDirectoryPath = settingsFile.global.defaultWorktreeBaseDirectoryPath
       let worktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,
@@ -296,8 +297,8 @@ extension RepositoriesFeature {
       )
       setSingleWorktreeSelection(pendingID, state: &state, recordHistory: true)
       let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
-      let createWorktreeStream = gitClient.createWorktreeStream
-      let isValidBranchName = gitClient.isValidBranchName
+      let repositoryHost = repositoryHost
+      let repositoryLocation = repository.location
       return .run { send in
         var newWorktreeName: String?
         var createdWorktreeDirectory: URL?
@@ -314,7 +315,7 @@ extension RepositoriesFeature {
               )
             )
           )
-          let branchNames = try await gitClient.localBranchNames(repository.rootURL)
+          let branchNames = try await repositoryHost.localBranchNames(in: repositoryLocation)
           let existing = existingNames.union(branchNames)
           let name: String
           switch nameSource {
@@ -391,7 +392,7 @@ extension RepositoriesFeature {
               )
               return
             }
-            guard await isValidBranchName(trimmed, repository.rootURL) else {
+            guard await repositoryHost.isValidBranchName(trimmed, in: repositoryLocation) else {
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
@@ -438,7 +439,7 @@ extension RepositoriesFeature {
               )
             )
           )
-          let isBareRepository = (try? await gitClient.isBareRepository(repository.rootURL)) ?? false
+          let isBareRepository = (try? await repositoryHost.isBareRepository(repositoryLocation)) ?? false
           let copyIgnored = isBareRepository ? false : copyIgnoredOnWorktreeCreate
           let copyUntracked = isBareRepository ? false : copyUntrackedOnWorktreeCreate
           progress.stage = .resolvingBaseReference
@@ -454,7 +455,7 @@ extension RepositoriesFeature {
           switch baseRefSource {
           case .repositorySetting:
             if (selectedBaseRef ?? "").isEmpty {
-              resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              resolvedBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: repositoryLocation) ?? ""
             } else {
               resolvedBaseRef = selectedBaseRef ?? ""
             }
@@ -462,13 +463,13 @@ extension RepositoriesFeature {
             if let explicitBaseRef, !explicitBaseRef.isEmpty {
               resolvedBaseRef = explicitBaseRef
             } else {
-              resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              resolvedBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: repositoryLocation) ?? ""
             }
           }
           progress.baseRef = resolvedBaseRef
           if fetchRemote, !resolvedBaseRef.isEmpty {
             do {
-              let remotes = try await gitClient.remoteNames(repository.rootURL)
+              let remotes = try await repositoryHost.remoteNames(in: repositoryLocation)
               if let matchedRemote = GitRemoteMatcher.matchingRemote(for: resolvedBaseRef, from: remotes) {
                 progress.fetchRemoteName = matchedRemote
                 progress.stage = .fetchingRemote
@@ -480,7 +481,7 @@ extension RepositoriesFeature {
                     )
                   )
                 )
-                try await gitClient.fetchRemote(matchedRemote, repository.rootURL)
+                try await repositoryHost.fetchRemote(matchedRemote, in: repositoryLocation)
               }
             } catch {
               let errorMessage = "git fetch failed: \(error.localizedDescription)"
@@ -491,9 +492,9 @@ extension RepositoriesFeature {
           progress.copyIgnored = copyIgnored
           progress.copyUntracked = copyUntracked
           progress.ignoredFilesToCopyCount =
-            copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+            copyIgnored ? ((try? await repositoryHost.ignoredFileCount(in: repositoryLocation)) ?? 0) : 0
           progress.untrackedFilesToCopyCount =
-            copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+            copyUntracked ? ((try? await repositoryHost.untrackedFileCount(in: repositoryLocation)) ?? 0) : 0
           // Resolve an explicit destination from the dialog's name / parent-folder
           // overrides; nil keeps `wt`'s default `base/<branch>` placement.
           let directoryOverride = ProwlPaths.resolvedWorktreeDirectory(
@@ -526,7 +527,8 @@ extension RepositoriesFeature {
               )
             )
           )
-          let stream = createWorktreeStream(
+          let stream = repositoryHost.createWorktreeStream(
+            in: repositoryLocation,
             GitWorktreeCreateRequest(
               name: name,
               repoRoot: repository.rootURL,
@@ -690,20 +692,21 @@ extension RepositoriesFeature {
         )
       }
       if let cleanupWorktree = cleanup.worktree {
-        let repositoryRootURL = cleanupWorktree.repositoryRootURL
+        let repositoryLocation = cleanupWorktree.repositoryLocation
         let destination = comparableWorktreePath(cleanupWorktree.workingDirectory)
         let branch = cleanupWorktree.name
+        let repositoryHost = repositoryHost
         effects.append(
           .run { send in
             // Another creation can register this destination first; its worktree is not ours.
-            let registered = (try? await gitClient.worktrees(repositoryRootURL)) ?? []
+            let registered = (try? await repositoryHost.worktrees(in: repositoryLocation)) ?? []
             let ownsDestination = await MainActor.run {
               registered.contains { comparableWorktreePath($0.workingDirectory) == destination && $0.name == branch }
             }
             if ownsDestination {
-              _ = try? await gitClient.removeWorktree(cleanupWorktree, false)
+              _ = try? await repositoryHost.removeWorktree(cleanupWorktree, deleteBranch: false)
             }
-            _ = try? await gitClient.pruneWorktrees(repositoryRootURL)
+            _ = try? await repositoryHost.pruneWorktrees(in: repositoryLocation)
             await send(.reloadRepositories(animated: true))
           }
         )

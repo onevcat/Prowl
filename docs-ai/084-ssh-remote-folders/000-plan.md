@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -123,7 +123,7 @@ assert the arguments of all six calls, including a non-github.com host. The loca
 the index header that sets watcher timing, local untracked line counts, creation times, and
 the move-then-prune worktree removal. `observeChanges` wraps the five local monitor roles
 (four classes in `WorktreeInfoMonitors.swift`) into one host stream that keeps today's six watcher events;
-cadence logic stays in `WorktreeInfoWatcherManager`.
+cadence logic stays in `WorktreeInfoWatcherManager`. (Amended 2026-10-23: no stream; the manager reads repositories by location, runs the local monitors only for local repositories, and starts the remote pull request cadence in A6c, see [011](011-a6b-watcher-locations.md).)
 
 ### Remote command lane
 
@@ -254,16 +254,16 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | P0 | Load failures do not prune pins or `prowlCreatedWorktreeIDs` (independent fix from `main`) | Pins survive an unavailable repository |
 | A1 | One `Repository.terminalWorktree`; ID → path reversals become lookups | None |
 | A2 | `RepositoryLocation`, the ID codec (normalizers keep non-local IDs unchanged), `localURL`, `.local` initializers, deprecated forwards | None |
-| A3 | Call-site migration by category: identity and settings keys (with the basename fix and copy migration), git and file reads, terminal cwd and cwd matching, CLI; then delete the forwards. Two or three PRs | Settings directory key changes (migrated) |
-| A4 | Capabilities with location and reasons (including Profile launch), enforced at the reducer, launch and admission boundary | None |
-| A5 | `GitClient(executor:)`, ad-hoc instances and bypasses routed, `gh --repo` | None |
-| A6 | Repository state reads and `observeChanges` as host operations; local fast paths kept | None |
+| A3 | Call-site migration by category, two PRs: identity and settings keys with the basename fix and copy migration (A3a); terminal cwd and cwd matching (A3b). CLI output moves with its `host` field in C2; git and file reads move in A5–A6 (amended 2026-10-23) | Settings directory key changes (migrated) |
+| A4 | Capabilities with location and reasons (including Profile launch), two PRs: the model and enforcement at the reducer, launch and admission boundary (A4a); disabled controls with the reason as tooltip, palette filtering, and the view-level Finder and copy-path actions routed through the reducer (A4b, lands with C1, when a remote folder exists for the toolbar visual check) (amended 2026-10-23) | None |
+| A5 | Two or three PRs: `gh` commands name their repository instead of inferring it from a cwd (A5a); `GitClient(executor:)` with the ad-hoc instances and bypasses routed (A5b); git reads move off the forwards (A5c, may join A6) (amended 2026-10-23) | None |
+| A6 | Five PRs: `RepositoryHost` and repository git operations by location, with A5c (A6a); the watcher keyed by location, with local monitors only for local repositories (A6b, see 011); settings keys and `RepositorySettingsFeature` by location (A6c, see 012); the pull request and code host path by location (A6d, see 013); remaining forward reads, then delete the forwards (A6e) (amended 2026-10-23) | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
 | B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
-| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state | Behind the flag |
-| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag |
+| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder | Behind the flag |
+| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
 | C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
 | C4 | Tracker cwd accessor, remote splits, remote agent cwd | Behind the flag |
 | C5 | Snapshot origin, reconnect on restore, `docs/` update; flag on | Remote folders ship |
@@ -316,3 +316,11 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-22: A1 landed (`Repository.terminalWorktree`; ID → path reversals with a model become lookups; the rest is listed for A2–A3) — see [003-a1-terminal-worktree.md](003-a1-terminal-worktree.md)
 - Updated 2026-10-22: A2 landed (`RepositoryLocation`, the ID codec, location-backed models with local forwards, ID normalizers that keep non-local IDs) — see [004-a2-location-codec.md](004-a2-location-codec.md)
 - Updated 2026-10-23: A3a landed (IDs minted and decoded through the codec; settings directory `<basename>-<hash>` with copy-on-load from the basename directory) — see [005-a3a-identity-and-settings-keys.md](005-a3a-identity-and-settings-keys.md)
+- Updated 2026-10-23: A3b landed (terminal cwd, cwd matching); A3 ends with two PRs and the forwards are deleted at the end of A6, after git and file reads move to the host — see [006-a3b-cwd-matching-cli.md](006-a3b-cwd-matching-cli.md)
+- Updated 2026-10-23: A4a landed (`RepositoryFeature` availability by location with reasons; enforcement at the reducer and the Profile launch boundary); A4 split into A4a and A4b — see [007-a4a-capability-enforcement.md](007-a4a-capability-enforcement.md)
+- Updated 2026-10-23: A5a landed (`gh run` and pull request commands pass `--repo` and run without a repository cwd; dead `defaultBranch` removed; `gh repo view` remote fallback keeps its cwd); A4b moves to C1; A5 split — see [008-a5a-gh-repository-target.md](008-a5a-gh-repository-target.md)
+- Updated 2026-10-23: A5b landed (`GitCommandExecutor`, `GitClient(executor:)`, shared `GitClient.local`; no default shell) — see [009-a5b-git-executor.md](009-a5b-git-executor.md)
+- Updated 2026-10-23: A6 split into A6a–A6d, A5c folded into A6a; A6a landed (`RepositoryHost`) — see [010-a6a-repository-host.md](010-a6a-repository-host.md)
+- Updated 2026-10-23: A6b keys the info watcher by location; there is no `observeChanges` stream, because the monitors have no remote counterpart (remote changes come from the B3 refresh) — see [011-a6b-watcher-locations.md](011-a6b-watcher-locations.md)
+- Updated 2026-10-23: A6 re-split into A6a–A6e; A6c keys repository settings by location — see [012-a6c-settings-by-location.md](012-a6c-settings-by-location.md)
+- Updated 2026-10-23: A6d moves the pull request and code host path to locations — see [013-a6d-pull-requests-by-location.md](013-a6d-pull-requests-by-location.md)

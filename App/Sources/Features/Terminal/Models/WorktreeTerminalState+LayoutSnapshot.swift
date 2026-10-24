@@ -235,10 +235,9 @@ extension WorktreeTerminalState {
         return nil
       }
       let context: ghostty_surface_context_e = isRoot ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
-      let restoredWorkingDirectory = Self.resolveSnapshotWorkingDirectory(
-        from: snapshotNode.cwdPath,
-        worktreeRoot: worktree.workingDirectory
-      )
+      let restoredWorkingDirectory = worktree.localURL.flatMap { worktreeRoot in
+        Self.resolveSnapshotWorkingDirectory(from: snapshotNode.cwdPath, worktreeRoot: worktreeRoot)
+      }
       let view = createSurface(
         tabId: tabID,
         initialInput: nil,

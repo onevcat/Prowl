@@ -604,7 +604,7 @@ func agentProfileLaunchItems(
   let profiles = globalSettings.agentProfiles
   let enabled = profiles.filter(\.isEnabled)
   guard !enabled.isEmpty else { return [] }
-  @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repositorySettings
+  @Shared(.userRepositorySettings(worktree.repositoryLocation)) var repositorySettings
   let recommendedID = AgentProfileRecommendation.recommendedProfile(
     profiles: profiles,
     designatedID: repositorySettings.defaultAgentProfileID,

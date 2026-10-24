@@ -263,7 +263,7 @@ struct AgentProfilesFeatureTests {
     let profileID = UUID()
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default
@@ -301,7 +301,7 @@ struct AgentProfilesFeatureTests {
     } operation: {
       let store = TestStore(
         initialState: RepositorySettingsFeature.State(
-          rootURL: rootURL,
+          location: .local(rootURL),
           repositoryKind: .plain,
           settings: .default,
           userSettings: .default

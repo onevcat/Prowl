@@ -307,7 +307,7 @@ struct SettingsFeatureTests {
     var state = SettingsFeature.State()
     state.selection = selection
     state.repositorySettings = RepositorySettingsFeature.State(
-      rootURL: rootURL,
+      location: .local(rootURL),
       repositoryKind: .git,
       settings: .default,
       userSettings: .default
@@ -350,7 +350,7 @@ struct SettingsFeatureTests {
       $0.promptForWorktreeCreation = false
       $0.selection = selection
       $0.repositorySettings = RepositorySettingsFeature.State(
-        rootURL: rootURL,
+        location: .local(rootURL),
         repositoryKind: .git,
         settings: .default,
         userSettings: .default
@@ -386,7 +386,7 @@ struct SettingsFeatureTests {
     $settingsFile.withLock { $0.global = .default }
     var state = SettingsFeature.State()
     state.repositorySettings = RepositorySettingsFeature.State(
-      rootURL: rootURL,
+      location: .local(rootURL),
       repositoryKind: .git,
       settings: .default,
       userSettings: .default
@@ -425,7 +425,7 @@ struct SettingsFeatureTests {
     $settingsFile.withLock { $0.global = .default }
     var state = SettingsFeature.State()
     state.repositorySettings = RepositorySettingsFeature.State(
-      rootURL: rootURL,
+      location: .local(rootURL),
       repositoryKind: .git,
       settings: .default,
       userSettings: .default

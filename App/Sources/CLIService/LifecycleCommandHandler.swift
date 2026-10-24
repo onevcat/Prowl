@@ -101,6 +101,8 @@ enum CLIProfileLaunchFailure: Error, Equatable, Sendable {
         "The terminal surface for Agent Profile “\(profile.name)” could not be created."
       case .preparationCancelled:
         "Agent Profile “\(profile.name)” launch preparation was cancelled."
+      case .unavailable:
+        "Agent Profile “\(profile.name)” cannot launch in a remote folder yet."
       }
     return .createFailed(message)
   }

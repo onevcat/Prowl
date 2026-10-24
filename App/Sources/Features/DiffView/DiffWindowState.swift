@@ -356,7 +356,7 @@ final class DiffWindowState {
     worktreeURL: URL,
     comparison: DiffComparison
   ) async throws -> [DiffChangedFile] {
-    let gitClient = GitClient()
+    let gitClient = GitClient.local
     switch comparison {
     case .workingTree:
       async let trackedOutput = gitClient.diffNameStatus(at: worktreeURL)
@@ -378,7 +378,7 @@ final class DiffWindowState {
     worktreeURL: URL,
     comparison: DiffComparison
   ) async -> DiffDocument {
-    let gitClient = GitClient()
+    let gitClient = GitClient.local
     let oldContents: String
     let newContents: String
 

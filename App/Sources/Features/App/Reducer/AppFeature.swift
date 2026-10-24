@@ -249,7 +249,7 @@ struct AppFeature {
             }
           )
         }
-        let rootURL = worktree.repositoryRootURL
+        let repositoryLocation = worktree.repositoryLocation
         let worktreeID = worktree.id
         state.selectedCustomCommands = []
         state.resolvedKeybindings = resolvedKeybindings(
@@ -258,8 +258,8 @@ struct AppFeature {
         )
         state.runScriptDraft = ""
         state.isRunScriptPromptPresented = false
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.repositorySettings(repositoryLocation)) var repositorySettings
+        @Shared(.userRepositorySettings(repositoryLocation)) var userRepositorySettings
         let settings = repositorySettings
         let userSettings = userRepositorySettings
         var effects: [Effect<Action>] = []
@@ -449,10 +449,10 @@ struct AppFeature {
             state.settings.repositorySettings = nil
             return .none
           }
-          @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
-          @Shared(.userRepositorySettings(repository.rootURL)) var userRepositorySettings
+          @Shared(.repositorySettings(repository.location)) var repositorySettings
+          @Shared(.userRepositorySettings(repository.location)) var userRepositorySettings
           var repoSettingsState = RepositorySettingsFeature.State(
-            rootURL: repository.rootURL,
+            location: repository.location,
             repositoryID: repository.id,
             repositoryKind: repository.kind,
             settings: repositorySettings,
@@ -481,7 +481,7 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userRepositorySettings
+        @Shared(.userRepositorySettings(worktree.repositoryLocation)) var userRepositorySettings
         return applyWorktreeUserSettings(
           userRepositorySettings,
           globalSettings: globalSettings,
@@ -499,8 +499,7 @@ struct AppFeature {
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
         state.repositories.activeAgents.isIslandEnabled = settings.agentIslandEnabled
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
-          let rootURL = selectedWorktree.repositoryRootURL
-          @Shared(.repositorySettings(rootURL)) var repositorySettings
+          @Shared(.repositorySettings(selectedWorktree.repositoryLocation)) var repositorySettings
           state.openActionSelection = OpenWorktreeAction.fromSettingsID(
             repositorySettings.openActionID,
             defaultEditorID: settings.defaultEditorID,
@@ -710,25 +709,31 @@ struct AppFeature {
         )
 
       case .openActionSelectionChanged(let action):
-        state.openActionSelection = action
-        state.openActionIsAutomatic = false
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
+        if let reason = worktree.availability(of: .openInEditor).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
+        state.openActionSelection = action
+        state.openActionIsAutomatic = false
         setRepositoryOpenActionID(
-          action.settingsID, rootURL: worktree.repositoryRootURL, into: &state)
+          action.settingsID, location: worktree.repositoryLocation, into: &state)
         return .none
 
       case .openActionResetToAutomatic:
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
+        if let reason = worktree.availability(of: .openInEditor).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
         // Clearing the pin only matters when the repo isn't already automatic;
         // re-resolve and reopen unconditionally so the entry behaves like the
         // concrete app rows, where selecting always opens.
         if !state.openActionIsAutomatic {
           setRepositoryOpenActionID(
-            OpenWorktreeAction.automaticSettingsID, rootURL: worktree.repositoryRootURL,
+            OpenWorktreeAction.automaticSettingsID, location: worktree.repositoryLocation,
             into: &state)
         }
         @Shared(.settingsFile) var settingsFile
@@ -753,6 +758,10 @@ struct AppFeature {
       case .openWorktree(let action):
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
+        }
+        let feature: RepositoryFeature = action == .finder ? .finder : .openInEditor
+        if let reason = worktree.availability(of: feature).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
         if action == .editor {
@@ -997,9 +1006,8 @@ struct AppFeature {
             await customShortcutRegistryClient.setShortcuts([])
           }
         }
-        let rootURL = worktree.repositoryRootURL
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
+        @Shared(.userRepositorySettings(worktree.repositoryLocation)) var userRepositorySettings
         @Shared(.userGlobalSettings) var userGlobalSettings
         // Apply both settings in this single reduce pass instead of dispatching
         // follow-up `.send`s. The Canvas focus ID (an `@Observable` on the
@@ -1040,10 +1048,10 @@ struct AppFeature {
         guard !trimmed.isEmpty else {
           return .none
         }
-        let rootURL = worktree.repositoryRootURL
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
+        let repositoryLocation = worktree.repositoryLocation
+        @Shared(.repositorySettings(repositoryLocation)) var repositorySettings
         $repositorySettings.withLock { $0.runScript = script }
-        if state.settings.repositorySettings?.rootURL == rootURL {
+        if state.settings.repositorySettings?.location == repositoryLocation {
           state.settings.repositorySettings?.settings.runScript = script
         }
         state.selectedRunScript = script
@@ -1116,20 +1124,20 @@ struct AppFeature {
           await terminalClient.send(.endSearch(worktree))
         }
 
-      case .settings(.repositorySettings(.delegate(.settingsChanged(let rootURL)))):
+      case .settings(.repositorySettings(.delegate(.settingsChanged(let location)))):
         // Always refresh the repo's custom title cache — display sites
         // (sidebar, shelf, canvas, toolbar, settings list) read it from
         // `RepositoriesFeature.State.repositoryCustomTitles` rather
         // than subscribing to the per-repo settings file directly.
-        let refreshCustomTitle = Effect<Action>.send(.repositories(.refreshCustomTitle(rootURL)))
+        let refreshCustomTitle = Effect<Action>.send(.repositories(.refreshCustomTitle(location)))
         guard let selectedWorktree = state.repositories.selectedTerminalWorktree,
-          selectedWorktree.repositoryRootURL == rootURL
+          selectedWorktree.repositoryLocation == location
         else {
           return refreshCustomTitle
         }
         let worktreeID = selectedWorktree.id
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.repositorySettings(location)) var repositorySettings
+        @Shared(.userRepositorySettings(location)) var userRepositorySettings
         return .concatenate(
           refreshCustomTitle,
           .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
