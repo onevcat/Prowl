@@ -59,7 +59,7 @@ struct AppFeature {
 
   enum Action {
     case appLaunched
-    case scenePhaseChanged(ScenePhase)
+    case appActivityChanged(isActive: Bool)
     case repositories(RepositoriesFeature.Action)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
@@ -178,40 +178,29 @@ struct AppFeature {
           }
         )
 
-      case .scenePhaseChanged(let phase):
-        switch phase {
-        case .active:
-          return .merge(
-            .send(.repositories(.setRemoteRefreshActive(true))),
-            .send(.repositories(.refreshWorktrees)),
-            .run { _ in
-              await worktreeInfoWatcher.send(.refreshLineChanges)
-            },
-            .run { send in
-              while !Task.isCancelled {
-                try? await ContinuousClock().sleep(for: .seconds(30))
-                guard !Task.isCancelled else { return }
-                await send(.repositories(.refreshWorktrees))
-              }
-            }
-            .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
-          )
-        case .inactive, .background:
-          var effects: [Effect<Action>] = [
-            .cancel(id: CancelID.periodicRefresh), .send(.repositories(.setRemoteRefreshActive(false))),
-          ]
+      // Driven by `NSApplication` activation, not the SwiftUI scene phase: on macOS a
+      // scene stays `.active` while its window is visible, also when Prowl is in the
+      // background.
+      case .appActivityChanged(let isActive):
+        guard isActive else {
+          var effects: [Effect<Action>] = [.send(.repositories(.setRemoteRefreshActive(false)))]
           if state.settings.restoreTerminalLayoutOnLaunch,
             !state.suppressLayoutSaveUntilRelaunch,
             state.launchRestoreMode != .restoreLayout
           {
-            appLogger.info(
-              "[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
+            appLogger.info("[LayoutRestore] app resigned active, saving layout snapshot")
             effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
           }
           return .merge(effects)
-        @unknown default:
-          return .cancel(id: CancelID.periodicRefresh)
         }
+        // Catch up with changes that the watchers may have missed while Prowl was in the
+        // background. Before the first live load, that load is the catch-up.
+        var effects: [Effect<Action>] = [.send(.repositories(.setRemoteRefreshActive(true)))]
+        if state.repositories.isInitialLoadComplete {
+          effects.append(.send(.repositories(.reloadRepositories(animated: false))))
+        }
+        effects.append(.run { _ in await worktreeInfoWatcher.send(.refreshLineChanges) })
+        return .concatenate(effects)
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
         let lastFocusedWorktreeID = state.repositories.selectedWorktreeID

@@ -120,8 +120,9 @@ new worktree (see [custom-actions](custom-actions.md)).
 
 Prowl watches Git's worktree registry for worktrees added, removed, or moved by
 external commands such as `git worktree move`. Changes trigger a sidebar refresh
-after a two-second debounce, including while Prowl is in the background. While
-active, Prowl also refreshes every 30 seconds as a fallback.
+after a two-second debounce, including while Prowl is in the background. When
+Prowl becomes the active app, it also reloads every repository once, to catch a
+change that a watcher missed.
 
 ## Selecting & switching worktrees
 

@@ -225,7 +225,9 @@ no in-app Ghostty theme picker; change Ghostty colors via its config file.
 
 If `restoreTerminalLayoutOnLaunch` is enabled, Prowl saves the tab/split layout
 (which worktrees, tabs, split trees, titles, icons) and restores it on next
-launch. Notification bodies are not persisted. If a repository fails to load at
+launch. It saves when you quit and each time Prowl stops being the active app, so
+a crash loses only the changes made since you last switched away. Notification
+bodies are not persisted. If a repository fails to load at
 launch (for example, its folder is gone), Prowl still restores the layout of the
 other repositories and applies the default view mode; the worktrees of the
 failed repository are skipped.
