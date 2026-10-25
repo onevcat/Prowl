@@ -86,7 +86,7 @@ extension RepositoriesFeature {
         return .none
       }
       state.isRefreshingWorktrees = false
-      let roots = repositories.compactMap(\.localURL)
+      let roots = repositories.map(\.location)
       let previousSelection = state.selectedWorktreeID
       let previousSelectedWorktree = state.worktree(for: previousSelection)
       let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
@@ -184,7 +184,7 @@ extension RepositoriesFeature {
       state.isRefreshingWorktrees = false
       return .run { send in
         let entries = await loadPersistedRepositoryEntries()
-        let roots = entries.map { URL(fileURLWithPath: $0.path) }
+        let roots = entries.map(\.location)
         let (repositories, failures) = await loadRepositoriesData(entries)
         await send(
           .repositoriesLoaded(

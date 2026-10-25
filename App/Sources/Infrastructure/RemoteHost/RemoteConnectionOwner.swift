@@ -16,6 +16,9 @@ actor RemoteConnectionOwner {
     var controlPersistSeconds = 60
     var limits = RemoteCommandLimits()
     var backoff = Backoff()
+    /// Command lane processes that may run at once on the shared connection (docs-ai 084 B1);
+    /// `sshd` allows ten sessions per connection by default, and the probe needs one.
+    var maxConcurrentCommands = 4
 
     init(controlDirectory: String = RemoteConnectionOwner.defaultControlDirectory()) {
       self.controlDirectory = controlDirectory
@@ -50,6 +53,13 @@ actor RemoteConnectionOwner {
   private var connectionEpoch: UInt64 = 0
   private var consecutiveFailures = 0
   private(set) var latest: RemoteProbeSnapshot?
+  // Command lane state.
+  private var isShutDown = false
+  private var commandsInFlight = 0
+  private var commandWaiters: [(id: UUID, continuation: CheckedContinuation<Void, Never>)] = []
+  private var grantedWaiters: Set<UUID> = []
+  private var activeCommands: [UUID: Task<RemoteCommandOutcome, Never>] = [:]
+  private var loginPathTask: Task<String?, Never>?
 
   init(
     connection: ConnectionKey,
@@ -102,9 +112,18 @@ actor RemoteConnectionOwner {
     }
   }
 
-  /// Stops the probe in flight, finishes every subscription, and closes the shared
-  /// connection, so no `ssh` process outlives the owner for longer than its own exit.
+  /// Stops the probe and the lane commands in flight, finishes every subscription, and
+  /// closes the shared connection, so no `ssh` process outlives the owner for longer than
+  /// its own exit.
   func shutdown() async {
+    // A lane command after `-O exit` would start a new master that outlives the owner; so
+    // would one that is still connecting, whose master does not exist yet for `-O exit`.
+    isShutDown = true
+    for waiter in commandWaiters { waiter.continuation.resume() }
+    commandWaiters.removeAll()
+    let commands = Array(activeCommands.values)
+    for command in commands { command.cancel() }
+    for command in commands { _ = await command.value }
     refreshPending = false
     running?.cancel()
     await waitUntilIdle()
@@ -219,4 +238,178 @@ actor RemoteConnectionOwner {
       ], .unreachable
     ),
   ]
+}
+
+// MARK: - Command lane
+
+/// The command lane (docs-ai 084 B1): general remote commands on the owner's shared
+/// connection, next to the probe lane. Each command has its own deadline and output budget,
+/// at most `Configuration.maxConcurrentCommands` run at once, and commands get the user's
+/// login `PATH` for tools such as `git`. After `shutdown`, commands fail without connecting.
+extension RemoteConnectionOwner {
+  /// Runs `command` with `sh -s`.
+  func run(
+    _ command: RemoteShellCommand, limits: RemoteCommandLimits = .commandLane
+  ) async throws(RemoteShellCommand.ValidationError) -> RemoteCommandOutcome {
+    var command = command
+    if !command.environment.contains(where: { $0.name == "PATH" }), let path = await loginPath() {
+      command.environment.insert((name: "PATH", value: path), at: 0)
+    }
+    let input = try command.script()
+    return await runOnLane(remoteCommand: ["sh", "-s"], input: input, limits: limits, onOutput: nil)
+  }
+
+  /// Runs `script` with `bash -s`.
+  func run(
+    _ script: RemoteScript, limits: RemoteCommandLimits = .commandLane
+  ) async throws(RemoteShellCommand.ValidationError) -> RemoteCommandOutcome {
+    let input = try script.standardInput(path: await loginPath())
+    return await runOnLane(remoteCommand: ["bash", "-s"], input: input, limits: limits, onOutput: nil)
+  }
+
+  /// Runs `script` with `bash -s` and hands each line of output and error output to
+  /// `onLine` as it arrives, such as the progress of a worktree creation (git and `wt`
+  /// report progress on stderr). The outcome still holds both whole outputs.
+  func stream(
+    _ script: RemoteScript, limits: RemoteCommandLimits = .longRunning,
+    onLine: @escaping @Sendable (RemoteOutputStream, String) -> Void
+  ) async throws(RemoteShellCommand.ValidationError) -> RemoteCommandOutcome {
+    let input = try script.standardInput(path: await loginPath())
+    let output = RemoteOutputLineSplitter { onLine(.standardOutput, $0) }
+    let errorOutput = RemoteOutputLineSplitter { onLine(.standardError, $0) }
+    let outcome = await runOnLane(
+      remoteCommand: ["bash", "-s"], input: input, limits: limits,
+      onOutput: { stream, chunk in
+        switch stream {
+        case .standardOutput: output.append(chunk)
+        case .standardError: errorOutput.append(chunk)
+        }
+      })
+    output.finish()
+    errorOutput.finish()
+    return outcome
+  }
+
+  /// The `PATH` of the user's login shell on the host, read once per owner; concurrent
+  /// callers share one read. Nil when it cannot be read, and that result is kept too:
+  /// commands then run with the default `PATH` of a non-login session.
+  func loginPath() async -> String? {
+    if let loginPathTask { return await loginPathTask.value }
+    let task = Task { await self.readLoginPath() }
+    loginPathTask = task
+    return await task.value
+  }
+
+  private func readLoginPath() async -> String? {
+    let outcome = await runOnLane(
+      remoteCommand: ["sh", "-s"], input: Self.loginPathScript,
+      limits: RemoteCommandLimits(deadline: 10, outputBytes: 64 * 1024, errorBytes: 16 * 1024), onOutput: nil)
+    guard case .exited(let result) = outcome, result.exitCode == 0 else { return nil }
+    return Self.parseLoginPath(result.output)
+  }
+
+  /// Prints the login shell's `PATH` between two U+0001 markers, so that output from the
+  /// login files (a banner, `echo` in a profile) cannot be mistaken for it. Like the local
+  /// `ShellClient.loginShellInvocation`, it also reads the interactive rc file, where tools
+  /// such as Homebrew, mise or nvm often extend `PATH`, and it uses zsh for a shell it
+  /// cannot drive. zsh finds its rc file after its login files ran, so a `ZDOTDIR` set in
+  /// `.zshenv` applies.
+  static let loginPathScript = """
+    print_path='printf "\\001%s\\001" "$PATH"'
+    zsh_rc='prowl_rc="${ZDOTDIR:-$HOME}/.zshrc"; [ -f "$prowl_rc" ] && . "$prowl_rc" >/dev/null 2>&1'
+    fish_rc='test -f ~/.config/fish/config.fish; and source ~/.config/fish/config.fish >/dev/null 2>&1'
+    case "${SHELL##*/}" in
+      zsh|bash|fish) prowl_shell=$SHELL ;;
+      *) prowl_shell=$(command -v zsh || command -v bash || echo /bin/sh) ;;
+    esac
+    case "${prowl_shell##*/}" in
+      fish) exec "$prowl_shell" -l -c "$fish_rc; $print_path" ;;
+      bash) exec "$prowl_shell" -l -c "[ -f ~/.bashrc ] && . ~/.bashrc >/dev/null 2>&1; $print_path" ;;
+      zsh) exec "$prowl_shell" -l -c "$zsh_rc; $print_path" ;;
+      *) exec "$prowl_shell" -l -c "$print_path" ;;
+    esac
+
+    """
+
+  static func parseLoginPath(_ output: Data) -> String? {
+    let text = String(bytes: output, encoding: .utf8) ?? ""
+    let parts = text.split(separator: "\u{1}", omittingEmptySubsequences: false)
+    guard parts.count >= 3 else { return nil }
+    let path = parts[parts.count - 2].trimmingCharacters(in: .whitespacesAndNewlines)
+    return path.isEmpty ? nil : path
+  }
+
+  /// The number of lane commands running now; for tests.
+  var runningCommandCount: Int { commandsInFlight }
+
+  /// Runs one lane command in a task the owner tracks, so `shutdown` can stop it and wait
+  /// for it; the caller's cancellation reaches it too.
+  private func runOnLane(
+    remoteCommand: [String], input: String, limits: RemoteCommandLimits,
+    onOutput: RemoteCommandRunner.OutputHandler?
+  ) async -> RemoteCommandOutcome {
+    guard await acquireCommandSlot() else { return .launchFailed(Self.laneClosedReason) }
+    defer { releaseCommandSlot() }
+    prepareControlDirectory()
+    let arguments = SSHSideChannel.scriptArguments(
+      recipe: recipe, controlPath: controlPath, persist: configuration.controlPersistSeconds,
+      remoteCommand: remoteCommand)
+    let (runner, executable, directory) = (runner, configuration.sshExecutable, recipe.workingDirectory)
+    let id = UUID()
+    let command = Task {
+      if let onOutput {
+        return await runner.runStreaming(
+          executable, arguments, Data(input.utf8), limits, workingDirectory: directory, onOutput: onOutput)
+      }
+      return await runner.run(executable, arguments, Data(input.utf8), limits, workingDirectory: directory)
+    }
+    activeCommands[id] = command
+    defer { activeCommands.removeValue(forKey: id) }
+    return await withTaskCancellationHandler {
+      await command.value
+    } onCancel: {
+      command.cancel()
+    }
+  }
+
+  static let laneClosedReason = "The remote connection was closed or the command was cancelled."
+
+  /// Waits for a lane slot, in order. False when the owner shut down or the caller was
+  /// cancelled while it waited; a cancelled waiter leaves the queue at once.
+  private func acquireCommandSlot() async -> Bool {
+    guard !isShutDown, !Task.isCancelled else { return false }
+    if commandsInFlight < configuration.maxConcurrentCommands {
+      commandsInFlight += 1
+      return true
+    }
+    let id = UUID()
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { commandWaiters.append((id, $0)) }
+    } onCancel: {
+      Task { await self.cancelWaiter(id) }
+    }
+    guard grantedWaiters.remove(id) != nil else { return false }
+    // The owner can shut down, or the caller be cancelled, between the grant and this resume.
+    if isShutDown || Task.isCancelled {
+      releaseCommandSlot()
+      return false
+    }
+    return true
+  }
+
+  private func cancelWaiter(_ id: UUID) {
+    guard let index = commandWaiters.firstIndex(where: { $0.id == id }) else { return }
+    commandWaiters.remove(at: index).continuation.resume()
+  }
+
+  /// Hands the slot to the next waiter, or frees it.
+  private func releaseCommandSlot() {
+    guard !isShutDown, !commandWaiters.isEmpty else {
+      commandsInFlight -= 1
+      return
+    }
+    let next = commandWaiters.removeFirst()
+    grantedWaiters.insert(next.id)
+    next.continuation.resume()
+  }
 }

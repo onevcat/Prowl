@@ -284,6 +284,42 @@ struct RepositoryHostTests {
     await store.receive(\.showToast)
   }
 
+  @Test(.dependencies) func remoteRepositoriesStayInTheRootListsAfterASnapshotLoad() async {
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let local = Repository(location: .local(URL(fileURLWithPath: "/tmp/local-app/")), name: "local-app", worktrees: [])
+    var state = RepositoriesFeature.State()
+    state.repositoryOrderIDs = [remote.id, local.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient = Self.failingGitClient
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositorySnapshotLoaded([local, remote]))
+
+    #expect(store.state.repositoryRoots == [local.location, remote.location])
+    #expect(store.state.repositoryOrderIDs == [remote.id, local.id])
+    #expect(store.state.orderedRepositoryIDs() == [remote.id, local.id])
+  }
+
+  @Test(.dependencies) func aRemoteEntryFailsToLoadUnderItsOwnIDAndIsNeverRewrittenAsLocal() async {
+    let remote = RemoteRepositoryFixtures.location("/srv/app")
+    let entries = [PersistedRepositoryEntry(path: remote.id, kind: .git)]
+    let feature = withDependencies {
+      $0.gitClient = Self.failingGitClient
+    } operation: {
+      RepositoriesFeature()
+    }
+
+    let upgraded = await feature.upgradedRepositoryEntriesIfNeeded(entries)
+    let (loaded, failures) = await feature.loadRepositoriesData(entries)
+
+    #expect(upgraded == entries)
+    #expect(loaded.isEmpty)
+    #expect(failures.map(\.rootID) == [remote.id])
+  }
+
   @Test(.dependencies) func remoteBranchChangesReadNoLocalHead() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()

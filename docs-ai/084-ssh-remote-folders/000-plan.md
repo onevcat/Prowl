@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -132,8 +132,8 @@ connection (`ConnectionKey`, private `ControlPath`):
 
 - A general `run(RemoteShellCommand)` with its own deadline and output budget (the 5 s and
   256 KiB probe limits are too small for `wt ls` and polling).
-- Line streaming for worktree creation; a bundled script with arguments sent as
-  `bash -s -- <args>` on stdin (the `wt` script is bash 3.2 compatible and branches on
+- Line streaming for worktree creation; a bundled script with arguments sent on stdin
+  (amended 2026-10-23: `set -- <args>` before the script, not `bash -s -- <args>`, see 016) (the `wt` script is bash 3.2 compatible and branches on
   `uname` for copies).
 - The remote login PATH for user tools, as `GitExecutableResolver` does locally.
 - Folder users take leases from the existing `RemoteConnectionRegistry` (no parallel
@@ -154,7 +154,9 @@ connection (`ConnectionKey`, private `ControlPath`):
   an existence check (`RepositoriesFeature+RepositoryLoading.swift`). Remote IDs and entries
   must bypass both.
 - The snapshot cache moves to version 3 and skips a single entry instead of dropping the
-  snapshot; remote entries skip the `fileExists` check.
+  snapshot; remote entries skip the `fileExists` check. (Amended 2026-10-23: version 3
+  stores location IDs and remote entries skip the check, but one failing entry still drops
+  the snapshot until P0 lands, see 018.)
 - The repository settings directory key includes the location, which also fixes today's
   basename collision. Migration copies (never moves) the old directory, because two
   repositories may share it.
@@ -260,7 +262,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | A6 | Five PRs: `RepositoryHost` and repository git operations by location, with A5c (A6a); the watcher keyed by location, with local monitors only for local repositories (A6b, see 011); settings keys and `RepositorySettingsFeature` by location (A6c, see 012); the pull request and code host path by location (A6d, see 013); remaining forward reads, then delete the forwards (A6e, see 014) (amended 2026-10-23) | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
-| B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
+| B2 | Two PRs: root lists by location (B2a, see 017); `hosts.json`, remote entries, snapshot v3 per entry (B2b, see 018) (amended 2026-10-23) | None (unused) |
 | B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
 | C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder | Behind the flag |
 | C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
@@ -325,3 +327,6 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A6 re-split into A6a–A6e; A6c keys repository settings by location — see [012-a6c-settings-by-location.md](012-a6c-settings-by-location.md)
 - Updated 2026-10-23: A6d moves the pull request and code host path to locations — see [013-a6d-pull-requests-by-location.md](013-a6d-pull-requests-by-location.md)
 - Updated 2026-10-23: A6e deletes `Repository.rootURL`, `Worktree.workingDirectory` and `Worktree.repositoryRootURL` — see [014-a6e-delete-forwards.md](014-a6e-delete-forwards.md)
+- Updated 2026-10-23: B1 adds the command lane (budgets, concurrency limit, `bash -s` scripts with arguments on stdin, line streaming, login PATH); folder users lease through the existing registry — see [016-b1-command-lane.md](016-b1-command-lane.md)
+- Updated 2026-10-23: B2 split; B2a moves the repository root lists to `RepositoryLocation` — see [017-b2a-roots-by-location.md](017-b2a-roots-by-location.md)
+- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 per entry — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)

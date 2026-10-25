@@ -185,7 +185,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -614,7 +614,8 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false)
     ) {
       $0.pullRequestRefreshCheckpointByWorktreeID = [worktree.id: kept]
       $0.pullRequestRefreshForcedWorktreeIDs = []
@@ -635,7 +636,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -683,7 +684,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.repositorySnapshotLoaded) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: repoRoot))]
       $0.selection = .worktree(worktreeID)
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
@@ -732,7 +733,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: repoRoot))]
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
@@ -777,7 +778,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [gitRepository, plainRepository]
-      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRoot, plainRoot].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -852,7 +853,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: rootPath)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: rootPath))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1427,7 +1428,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [upgradedRepository]
-      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: root))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1480,7 +1481,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [realRoot.standardizedFileURL]
+      $0.repositoryRoots = [.local(realRoot.standardizedFileURL)]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1524,7 +1525,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [plainRepository]
-      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: root))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1569,7 +1570,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [downgradedRepository]
-      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: root))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1611,7 +1612,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: root))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1674,7 +1675,7 @@ struct RepositoriesFeatureTests {
     )
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [gitRepository, plainRepository]
-      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRoot, plainRoot].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1713,11 +1714,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.localURL!, newRepository.localURL!]
+          roots: [existingRepository.location, newRepository.location]
         ))
     ) {
       $0.repositories = [existingRepository, newRepository]
-      $0.repositoryRoots = [existingRepository.localURL!, newRepository.localURL!]
+      $0.repositoryRoots = [existingRepository.location, newRepository.location]
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.selectWorktree) {
@@ -1757,11 +1758,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.localURL!, plainRepository.localURL!]
+          roots: [existingRepository.location, plainRepository.location]
         ))
     ) {
       $0.repositories = [existingRepository, plainRepository]
-      $0.repositoryRoots = [existingRepository.localURL!, plainRepository.localURL!]
+      $0.repositoryRoots = [existingRepository.location, plainRepository.location]
       $0.pendingTerminalFocusWorktreeIDs = [plainRepository.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -1790,11 +1791,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [repository.localURL!]
+          roots: [repository.location]
         ))
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [repository.localURL!]
+      $0.repositoryRoots = [repository.location]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -1824,11 +1825,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [existingRepository.localURL!, newRepository.localURL!]
+          roots: [existingRepository.location, newRepository.location]
         ))
     ) {
       $0.repositories = [existingRepository, newRepository]
-      $0.repositoryRoots = [existingRepository.localURL!, newRepository.localURL!]
+      $0.repositoryRoots = [existingRepository.location, newRepository.location]
       $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -1966,7 +1967,7 @@ struct RepositoriesFeatureTests {
     )
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [repoRoot].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRoot].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true
       $0.alert = expectedAlert
       $0.snapshotPersistencePhase = .active
@@ -2001,12 +2002,12 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [URL(fileURLWithPath: repoRoot)],
+        roots: [URL(fileURLWithPath: repoRoot)].map(RepositoryLocation.local),
         animated: false
       )
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: repoRoot))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -2039,12 +2040,12 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [RepositoriesFeature.LoadFailure(rootID: missingRoot, message: "boom")],
-        roots: roots,
+        roots: roots.map(RepositoryLocation.local),
         animated: false
       )
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = roots
+      $0.repositoryRoots = roots.map(RepositoryLocation.local)
       $0.isInitialLoadComplete = true
       $0.loadFailuresByID = [missingRoot: "boom"]
       $0.snapshotPersistencePhase = .withheld
@@ -2055,9 +2056,9 @@ struct RepositoriesFeatureTests {
     #expect(savedSnapshots.value.isEmpty)
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [roots[0]], animated: false)
+      .repositoriesLoaded([repository], failures: [], roots: [roots[0]].map(RepositoryLocation.local), animated: false)
     ) {
-      $0.repositoryRoots = [roots[0]]
+      $0.repositoryRoots = [.local(roots[0])]
       $0.loadFailuresByID = [:]
       $0.snapshotPersistencePhase = .active
     }
@@ -2084,12 +2085,12 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [],
-        roots: [URL(fileURLWithPath: repoRoot)],
+        roots: [URL(fileURLWithPath: repoRoot)].map(RepositoryLocation.local),
         animated: false
       )
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: repoRoot))]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -2118,12 +2119,12 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [repository],
         failures: [.init(rootID: repoRoot, message: "wt failed")],
-        roots: [URL(fileURLWithPath: repoRoot)],
+        roots: [URL(fileURLWithPath: repoRoot)].map(RepositoryLocation.local),
         animated: false
       )
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.repositoryRoots = [.local(URL(fileURLWithPath: repoRoot))]
       $0.isInitialLoadComplete = true
       $0.loadFailuresByID = [repoRoot: "wt failed"]
     }
@@ -4570,7 +4571,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     )
@@ -4610,7 +4611,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     )
@@ -4647,7 +4648,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [reloadedRepository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -5005,7 +5006,7 @@ struct RepositoriesFeatureTests {
     state.repositoryOrderIDs = [repoB.id]
 
     expectNoDifference(
-      state.orderedRepositoryRoots().map { $0.path(percentEncoded: false) },
+      state.orderedRepositoryRoots().map(\.path),
       [
         repoB.id,
         repoA.id,
@@ -5088,7 +5089,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -5117,7 +5118,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -5148,7 +5149,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [],
         failures: [RepositoriesFeature.LoadFailure(rootID: repository.id, message: "boom")],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -5180,7 +5181,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [updatedRepository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -5209,7 +5210,7 @@ struct RepositoriesFeatureTests {
       .repositoriesLoaded(
         [updatedRepository],
         failures: [],
-        roots: [repository.localURL!],
+        roots: [repository.location],
         animated: false
       )
     ) {
@@ -7755,7 +7756,8 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false)
     )
     await store.receive(\.workspaceChildrenInfoLoaded)
     await store.finish()
@@ -7823,11 +7825,11 @@ struct RepositoriesFeatureTests {
           failures: [],
           invalidRoots: [],
           openFailures: [],
-          roots: [repository.localURL!]
+          roots: [repository.location]
         ))
     ) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [repository.localURL!]
+      $0.repositoryRoots = [repository.location]
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -7880,7 +7882,8 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(
-      .repositoriesLoaded([repository], failures: [], roots: [repository.localURL!], animated: false)
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false)
     )
     await store.receive(\.workspaceChildrenInfoLoaded)
     await store.finish()
@@ -7955,7 +7958,7 @@ struct RepositoriesFeatureTests {
   private func makeState(repositories: [Repository]) -> RepositoriesFeature.State {
     var state = RepositoriesFeature.State()
     state.repositories = IdentifiedArray(uniqueElements: repositories)
-    state.repositoryRoots = repositories.map(\.localURL!)
+    state.repositoryRoots = repositories.map(\.location)
     return state
   }
 
@@ -8042,7 +8045,7 @@ struct RepositoriesFeatureTests {
 
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repoA, repoB]
-      $0.repositoryRoots = [repoRootA, repoRootB].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRootA, repoRootB].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true
       $0.snapshotPersistencePhase = .active
     }
@@ -8092,7 +8095,7 @@ struct RepositoriesFeatureTests {
     await store.send(.loadPersistedRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repoA, repoB]
-      $0.repositoryRoots = [repoRootA, repoRootB].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRootA, repoRootB].map { .local(URL(fileURLWithPath: $0)) }
       $0.selection = .worktree(worktreeB.id)
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
@@ -8156,7 +8159,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.repositorySnapshotLoaded) {
       $0.repositories = [repoA, repoB]
-      $0.repositoryRoots = [repoRootA, repoRootB].map { URL(fileURLWithPath: $0) }
+      $0.repositoryRoots = [repoRootA, repoRootB].map { .local(URL(fileURLWithPath: $0)) }
       $0.selection = nil
       $0.isInitialLoadComplete = true
     }

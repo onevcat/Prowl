@@ -227,7 +227,10 @@ private nonisolated func discardRepositorySnapshot(at url: URL) {
 }
 
 nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
-  nonisolated static let currentVersion = 2
+  /// Version 3 (docs-ai 084 B2): repositories and worktrees are stored by location ID. A
+  /// local location's ID is its path, so a version 2 snapshot reads the same way.
+  nonisolated static let currentVersion = 3
+  nonisolated static let readableVersions = 2...3
   nonisolated static let maxSnapshotFileBytes = 2 * 1024 * 1024
   nonisolated static let maxRepositories = 256
   nonisolated static let maxWorktreesPerRepository = 512
@@ -237,54 +240,61 @@ nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable 
 
   init(repositories: [Repository]) {
     version = Self.currentVersion
-    // Snapshot version 2 stores local paths only; remote entries come with version 3 (docs-ai 084 B2).
-    self.repositories = repositories.compactMap { SnapshotRepository(repository: $0) }
+    self.repositories = repositories.map { SnapshotRepository(repository: $0) }
   }
 
   func restoreRepositories(
     pathExists: @Sendable (String) -> Bool
   ) -> [Repository]? {
-    guard version == Self.currentVersion, !repositories.isEmpty else {
+    guard Self.readableVersions.contains(version), !repositories.isEmpty else {
       return nil
     }
     guard repositories.count <= Self.maxRepositories else {
       return nil
     }
 
+    // One repository that cannot be restored still discards the whole snapshot. A partial
+    // snapshot would prune the left-out repository's pins, archives and order on load, and
+    // spend the one-time restore of the last focused worktree (docs-ai 084 018).
     var restored: [Repository] = []
     restored.reserveCapacity(repositories.count)
-
     for repository in repositories {
       guard let restoredRepository = repository.restore(pathExists: pathExists) else {
         return nil
       }
       restored.append(restoredRepository)
     }
-
     return restored
   }
 }
 
 extension RepositorySnapshotCachePayload {
   nonisolated struct SnapshotRepository: Codable, Equatable, Sendable {
+    /// The repository's location ID: a local path, or an encoded remote location.
     let rootPath: String
     let name: String
     let kind: Repository.Kind
     let worktrees: [SnapshotWorktree]
     let workspace: ProjectWorkspace?
 
-    init?(repository: Repository) {
-      guard let rootURL = repository.localURL else { return nil }
-      rootPath = rootURL.path(percentEncoded: false)
+    init(repository: Repository) {
+      rootPath = repository.location.id
       name = repository.name
       kind = repository.kind
-      worktrees = repository.worktrees.compactMap { SnapshotWorktree(worktree: $0) }
+      worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
       workspace = repository.workspace
     }
 
+    /// Nil when the repository cannot be restored: a local folder that is gone, a worktree
+    /// that is gone, or a stored value that does not decode. Remote locations are not
+    /// checked on this Mac, so they never fail on a missing local path; their host reloads
+    /// them.
     func restore(
       pathExists: @Sendable (String) -> Bool
     ) -> Repository? {
+      if RepositoryLocation.hasRemoteForm(rootPath) {
+        return restoreRemote()
+      }
       guard let normalizedRootPath = normalizePath(rootPath), pathExists(normalizedRootPath) else {
         return nil
       }
@@ -318,19 +328,43 @@ extension RepositorySnapshotCachePayload {
         workspace: workspace?.normalized(relativeTo: rootURL)
       )
     }
+
+    private func restoreRemote() -> Repository? {
+      guard let location = RepositoryLocation(id: rootPath), case .remote(let hostProfileID, _) = location,
+        worktrees.count <= RepositorySnapshotCachePayload.maxWorktreesPerRepository
+      else { return nil }
+      var restoredWorktrees: [Worktree] = []
+      for worktree in worktrees {
+        // A remote repository's worktrees live on the same host.
+        guard let worktreeLocation = RepositoryLocation(id: worktree.workingDirectoryPath),
+          case .remote(hostProfileID, _) = worktreeLocation
+        else { return nil }
+        restoredWorktrees.append(
+          Worktree(
+            name: worktree.name, detail: worktree.detail, location: worktreeLocation, repositoryLocation: location,
+            createdAt: worktree.createdAt))
+      }
+      let repositoryName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      return Repository(
+        location: location,
+        name: repositoryName.isEmpty ? Repository.name(for: location) : repositoryName,
+        kind: kind,
+        worktrees: IdentifiedArray(restoredWorktrees, uniquingIDsWith: { current, _ in current })
+      )
+    }
   }
 
   nonisolated struct SnapshotWorktree: Codable, Equatable, Sendable {
     let name: String
     let detail: String
+    /// The worktree's location ID: a local path, or an encoded remote location.
     let workingDirectoryPath: String
     let createdAt: Date?
 
-    init?(worktree: Worktree) {
-      guard let workingDirectory = worktree.localURL else { return nil }
+    init(worktree: Worktree) {
       name = worktree.name
       detail = worktree.detail
-      workingDirectoryPath = workingDirectory.path(percentEncoded: false)
+      workingDirectoryPath = worktree.location.id
       createdAt = worktree.createdAt
     }
 

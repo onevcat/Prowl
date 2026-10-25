@@ -47,8 +47,8 @@ struct SidebarPresentationTests {
     let repoA = makeRepository(id: "/tmp/a", worktrees: [])
     var state = makeState(repositories: [repoA])
     state.repositoryRoots = [
-      URL(fileURLWithPath: "/tmp/missing"),
-      repoA.localURL!,
+      .local(URL(fileURLWithPath: "/tmp/missing")),
+      repoA.location,
     ]
     state.repositoryOrderIDs = ["/tmp/missing", repoA.id]
     state.loadFailuresByID["/tmp/missing"] = "missing"
@@ -192,7 +192,7 @@ struct SidebarPresentationTests {
   private func makeState(repositories: [Repository]) -> RepositoriesFeature.State {
     var state = RepositoriesFeature.State()
     state.repositories = IdentifiedArray(uniqueElements: repositories)
-    state.repositoryRoots = repositories.map(\.localURL!)
+    state.repositoryRoots = repositories.map(\.location)
     return state
   }
 }

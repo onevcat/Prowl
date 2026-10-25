@@ -140,7 +140,7 @@ extension RepositoriesFeature.State {
       repositories.map { ($0.id, $0) },
       uniquingKeysWith: { first, _ in first }
     )
-    let roots = sidebarPresentationRoots()
+    let roots = orderedRepositoryRoots()
     let repositoryCount = roots.count
     var items: [SidebarItem] = []
 
@@ -148,16 +148,15 @@ extension RepositoriesFeature.State {
       items.append(.listHeader(SidebarListHeaderModel(repositoryCount: repositoryCount)))
     }
 
-    for rootURL in roots {
-      let standardizedRootURL = rootURL.standardizedFileURL
-      let repositoryID = RepositoryLocation.local(standardizedRootURL).id
+    for standardizedRoot in roots {
+      let repositoryID = standardizedRoot.id
       if let failureMessage = loadFailuresByID[repositoryID] {
-        let path = standardizedRootURL.path(percentEncoded: false)
+        let path = standardizedRoot.path
         items.append(
           .failedRepository(
             FailedRepositoryModel(
               id: repositoryID,
-              name: Repository.name(for: standardizedRootURL),
+              name: Repository.name(for: standardizedRoot),
               path: path,
               failureMessage: failureMessage,
               isGitUnavailable: gitUnavailableRepositoryIDs.contains(repositoryID),
@@ -192,15 +191,6 @@ extension RepositoriesFeature.State {
     }
 
     return SidebarPresentation(items: items)
-  }
-
-  private func sidebarPresentationRoots() -> [URL] {
-    let orderedRoots = orderedRepositoryRoots()
-    if !orderedRoots.isEmpty {
-      return orderedRoots
-    }
-    // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
-    return repositories.compactMap(\.localURL)
   }
 }
 
