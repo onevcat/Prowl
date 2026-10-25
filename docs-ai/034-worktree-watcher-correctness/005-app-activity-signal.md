@@ -38,6 +38,9 @@ it is delivered.
   reads the scene phase, and `scenePhaseChanged` is gone.
 - **Becoming active:** resume remote polls, reload every repository once (`reloadRepositories`,
   not animated, after the first live load only), and refresh line diffs once.
+- **Launch seeds the pause.** `applicationDidFinishLaunching` sets the remote poll pause from
+  `NSApplication.isActive` before the first load. A launch in the background (`open -g`)
+  never resigns active, so without the seed it would poll until Prowl first became active.
 - **Resigning active:** pause remote polls, and save the layout under the existing guards
   (restore enabled, no pending restore, not cleared).
 - **The 30 s reload is removed.** The git registry watcher of the plan above already reports

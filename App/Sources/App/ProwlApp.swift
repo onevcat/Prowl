@@ -60,6 +60,9 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     AgentProfileSeeder.seedIfNeeded()
     Task { await AgentRuntimeAvailabilityProbe.refresh() }
     agentIslandWindowController?.activate()
+    // A launch in the background never resigns active, so seed the pause before the first
+    // load. A normal launch becomes active right after this and resumes the polls.
+    appStore?.send(.repositories(.setRemoteRefreshActive(NSApplication.shared.isActive)))
     appStore?.send(.appLaunched)
   }
 
