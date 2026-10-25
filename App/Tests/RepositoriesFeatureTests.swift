@@ -5163,6 +5163,260 @@ struct RepositoriesFeatureTests {
       store.state.archivedWorktrees == [ArchivedWorktree(id: worktree.id, archivedAt: fixedDate)])
   }
 
+  @Test func pinnedAndProwlCreatedWorktreesPreservedWhenRepositoryLoadFails() async {
+    let fixture = makeLoadFailureFixture()
+    var initialState = makeState(repositories: [fixture.loadedRepository])
+    initialState.repositoryRoots = fixture.roots
+    initialState.pinnedWorktreeIDs = [fixture.loadedWorktree.id, fixture.failedWorktreeID]
+    initialState.$prowlCreatedWorktreeIDs.withLock {
+      $0 = [fixture.loadedWorktree.id, fixture.failedWorktreeID]
+    }
+    let savedPinnedIDs = LockIsolated<[[Worktree.ID]]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.savePinnedWorktreeIDs = { ids in
+        savedPinnedIDs.withValue { $0.append(ids) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [fixture.loadedRepository],
+        failures: [RepositoriesFeature.LoadFailure(rootID: fixture.failedRoot, message: "boom")],
+        roots: fixture.roots,
+        animated: false
+      )
+    ) {
+      $0.loadFailuresByID = [fixture.failedRoot: "boom"]
+      $0.isInitialLoadComplete = true
+    }
+    await store.finish()
+
+    #expect(store.state.pinnedWorktreeIDs == [fixture.loadedWorktree.id, fixture.failedWorktreeID])
+    #expect(store.state.prowlCreatedWorktreeIDs == [fixture.loadedWorktree.id, fixture.failedWorktreeID])
+    #expect(savedPinnedIDs.value.isEmpty)
+  }
+
+  @Test func pinnedWorktreesDropMainAndArchivedWhenRepositoryLoadFails() async {
+    let fixture = makeLoadFailureFixture()
+    let archivedWorktree = makeWorktree(
+      id: "\(fixture.loadedRoot)/archived", name: "archived", repoRoot: fixture.loadedRoot)
+    let loadedRepository = makeRepository(
+      id: fixture.loadedRoot,
+      worktrees: [fixture.loadedMainWorktree, fixture.loadedWorktree, archivedWorktree]
+    )
+    let archivedAt = Date(timeIntervalSince1970: 1_000_000)
+    var initialState = makeState(repositories: [loadedRepository])
+    initialState.repositoryRoots = fixture.roots
+    initialState.archivedWorktrees = [ArchivedWorktree(id: archivedWorktree.id, archivedAt: archivedAt)]
+    initialState.pinnedWorktreeIDs = [
+      fixture.loadedMainWorktree.id,
+      archivedWorktree.id,
+      fixture.failedWorktreeID,
+    ]
+    let savedPinnedIDs = LockIsolated<[[Worktree.ID]]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.savePinnedWorktreeIDs = { ids in
+        savedPinnedIDs.withValue { $0.append(ids) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [loadedRepository],
+        failures: [RepositoriesFeature.LoadFailure(rootID: fixture.failedRoot, message: "boom")],
+        roots: fixture.roots,
+        animated: false
+      )
+    ) {
+      $0.pinnedWorktreeIDs = [fixture.failedWorktreeID]
+      $0.loadFailuresByID = [fixture.failedRoot: "boom"]
+      $0.isInitialLoadComplete = true
+    }
+    await store.finish()
+
+    #expect(savedPinnedIDs.value == [[fixture.failedWorktreeID]])
+  }
+
+  @Test func repositoriesLoadedWithoutFailuresPrunesUnavailablePinnedAndProwlCreatedWorktrees() async {
+    let fixture = makeLoadFailureFixture()
+    var initialState = makeState(repositories: [fixture.loadedRepository])
+    initialState.pinnedWorktreeIDs = [fixture.loadedWorktree.id, fixture.failedWorktreeID]
+    initialState.$prowlCreatedWorktreeIDs.withLock {
+      $0 = [fixture.loadedWorktree.id, fixture.failedWorktreeID]
+    }
+    let savedPinnedIDs = LockIsolated<[[Worktree.ID]]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.savePinnedWorktreeIDs = { ids in
+        savedPinnedIDs.withValue { $0.append(ids) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [fixture.loadedRepository],
+        failures: [],
+        roots: [fixture.loadedRepository.location],
+        animated: false
+      )
+    ) {
+      $0.pinnedWorktreeIDs = [fixture.loadedWorktree.id]
+      $0.$prowlCreatedWorktreeIDs.withLock { $0 = [fixture.loadedWorktree.id] }
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.finish()
+
+    #expect(savedPinnedIDs.value == [[fixture.loadedWorktree.id]])
+  }
+
+  @Test func openRepositoriesFinishedWithFailurePreservesPinnedAndProwlCreatedWorktrees() async {
+    let fixture = makeLoadFailureFixture()
+    var initialState = makeState(repositories: [fixture.loadedRepository])
+    initialState.repositoryRoots = fixture.roots
+    initialState.isInitialLoadComplete = true
+    initialState.pinnedWorktreeIDs = [fixture.failedWorktreeID]
+    initialState.$prowlCreatedWorktreeIDs.withLock { $0 = [fixture.failedWorktreeID] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoryManagement(
+        .openRepositoriesFinished(
+          [fixture.loadedRepository],
+          failures: [RepositoriesFeature.LoadFailure(rootID: fixture.failedRoot, message: "boom")],
+          invalidRoots: [],
+          openFailures: [],
+          roots: fixture.roots
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(store.state.pinnedWorktreeIDs == [fixture.failedWorktreeID])
+    #expect(store.state.prowlCreatedWorktreeIDs == [fixture.failedWorktreeID])
+  }
+
+  @Test func repositorySnapshotLoadedKeepsWorktreeMembershipMissingFromSnapshot() async {
+    // A snapshot is not rewritten while a repository fails to load, so it can
+    // miss worktrees that the live load still has.
+    let fixture = makeLoadFailureFixture()
+    let archivedAt = Date(timeIntervalSince1970: 1_000_000)
+    let archived = [ArchivedWorktree(id: "\(fixture.failedRoot)/archived", archivedAt: archivedAt)]
+    let laterWorktreeID = "\(fixture.loadedRoot)/later"
+    let worktreeOrder = [
+      fixture.loadedRoot: [laterWorktreeID],
+      fixture.failedRoot: [fixture.failedWorktreeID],
+    ]
+    var initialState = RepositoriesFeature.State()
+    initialState.pinnedWorktreeIDs = [fixture.failedWorktreeID]
+    initialState.archivedWorktrees = archived
+    initialState.repositoryOrderIDs = [fixture.failedRoot, fixture.loadedRoot]
+    initialState.worktreeOrderByRepository = worktreeOrder
+    initialState.$prowlCreatedWorktreeIDs.withLock { $0 = [fixture.failedWorktreeID] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositorySnapshotLoaded([fixture.loadedRepository]))
+    await store.finish()
+
+    #expect(store.state.repositories == [fixture.loadedRepository])
+    #expect(store.state.pinnedWorktreeIDs == [fixture.failedWorktreeID])
+    #expect(store.state.archivedWorktrees == archived)
+    #expect(store.state.prowlCreatedWorktreeIDs == [fixture.failedWorktreeID])
+    #expect(store.state.repositoryOrderIDs == [fixture.failedRoot, fixture.loadedRoot])
+    #expect(store.state.worktreeOrderByRepository == worktreeOrder)
+  }
+
+  @Test func repositoriesLoadedWithFailurePrunesWorktreeThatLeftLoadedRepository() async {
+    let fixture = makeLoadFailureFixture()
+    let removedWorktree = makeWorktree(
+      id: "\(fixture.loadedRoot)/removed", name: "removed", repoRoot: fixture.loadedRoot)
+    let previousRepository = makeRepository(
+      id: fixture.loadedRoot,
+      worktrees: [fixture.loadedMainWorktree, fixture.loadedWorktree, removedWorktree]
+    )
+    let archivedAt = Date(timeIntervalSince1970: 1_000_000)
+    let failedArchived = ArchivedWorktree(id: "\(fixture.failedRoot)/archived", archivedAt: archivedAt)
+    var initialState = makeState(repositories: [previousRepository])
+    initialState.repositoryRoots = fixture.roots
+    initialState.pinnedWorktreeIDs = [removedWorktree.id, fixture.failedWorktreeID]
+    initialState.archivedWorktrees = [
+      ArchivedWorktree(id: removedWorktree.id, archivedAt: archivedAt),
+      failedArchived,
+    ]
+    initialState.$prowlCreatedWorktreeIDs.withLock {
+      $0 = [removedWorktree.id, fixture.failedWorktreeID]
+    }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded(
+        [fixture.loadedRepository],
+        failures: [RepositoriesFeature.LoadFailure(rootID: fixture.failedRoot, message: "boom")],
+        roots: fixture.roots,
+        animated: false
+      )
+    )
+    await store.finish()
+
+    #expect(store.state.pinnedWorktreeIDs == [fixture.failedWorktreeID])
+    #expect(store.state.archivedWorktrees == [failedArchived])
+    #expect(store.state.prowlCreatedWorktreeIDs == [fixture.failedWorktreeID])
+  }
+
+  @Test func repositoriesLoadedWithFailurePrunesRemovedRepositoryWorktrees() async {
+    let fixture = makeLoadFailureFixture()
+    let removedRoot = "/tmp/repo-removed"
+    let removedWorktree = makeWorktree(id: "\(removedRoot)/feature", name: "feature", repoRoot: removedRoot)
+    let removedRepository = makeRepository(
+      id: removedRoot,
+      worktrees: [makeWorktree(id: removedRoot, name: "main", repoRoot: removedRoot), removedWorktree]
+    )
+    var initialState = makeState(repositories: [fixture.loadedRepository, removedRepository])
+    initialState.pinnedWorktreeIDs = [removedWorktree.id, fixture.failedWorktreeID]
+    initialState.$prowlCreatedWorktreeIDs.withLock {
+      $0 = [removedWorktree.id, fixture.failedWorktreeID]
+    }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded(
+        [fixture.loadedRepository],
+        failures: [RepositoriesFeature.LoadFailure(rootID: fixture.failedRoot, message: "boom")],
+        roots: fixture.roots,
+        animated: false
+      )
+    )
+    await store.finish()
+
+    #expect(store.state.pinnedWorktreeIDs == [fixture.failedWorktreeID])
+    #expect(store.state.prowlCreatedWorktreeIDs == [fixture.failedWorktreeID])
+  }
+
   @Test func repositoriesLoadedSkipsSelectionChangeWhenOnlyDisplayDataChanges() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
@@ -7952,6 +8206,31 @@ struct RepositoriesFeatureTests {
       kind: kind,
       worktrees: IdentifiedArray(uniqueElements: worktrees),
       workspace: workspace
+    )
+  }
+
+  private struct LoadFailureFixture {
+    let loadedRoot: String
+    let failedRoot: String
+    let loadedMainWorktree: Worktree
+    let loadedWorktree: Worktree
+    let loadedRepository: Repository
+    let failedWorktreeID: Worktree.ID
+    var roots: [RepositoryLocation] { [loadedRoot, failedRoot].map { .local(URL(fileURLWithPath: $0)) } }
+  }
+
+  private func makeLoadFailureFixture() -> LoadFailureFixture {
+    let loadedRoot = "/tmp/repo-loaded"
+    let failedRoot = "/tmp/repo-failed"
+    let mainWorktree = makeWorktree(id: loadedRoot, name: "main", repoRoot: loadedRoot)
+    let worktree = makeWorktree(id: "\(loadedRoot)/feature", name: "feature", repoRoot: loadedRoot)
+    return LoadFailureFixture(
+      loadedRoot: loadedRoot,
+      failedRoot: failedRoot,
+      loadedMainWorktree: mainWorktree,
+      loadedWorktree: worktree,
+      loadedRepository: makeRepository(id: loadedRoot, worktrees: [mainWorktree, worktree]),
+      failedWorktreeID: "\(failedRoot)/feature"
     )
   }
 

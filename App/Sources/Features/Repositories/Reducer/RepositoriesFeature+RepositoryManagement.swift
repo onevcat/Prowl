@@ -97,7 +97,7 @@ extension RepositoriesFeature {
       let applyResult = applyRepositories(
         repositories,
         roots: roots,
-        shouldPruneArchivedWorktrees: failures.isEmpty,
+        origin: .live(failedRootIDs: Set(failures.map(\.rootID))),
         state: &state,
         animated: false
       )
