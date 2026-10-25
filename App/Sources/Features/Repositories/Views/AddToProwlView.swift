@@ -8,6 +8,8 @@ struct AddToProwlView: View {
   let onCloneCompleted: (URL) -> Void
   let onWorkspace: () -> Void
   let onDrop: ([URL]) -> Void
+  /// Shown while `PROWL_REMOTE_FOLDERS=1` (docs-ai 084 C1).
+  var onRemoteFolder: (() -> Void)?
   @State private var isDragTargeted = false
   @State private var isWorkspaceHovered = false
   @State private var showCloneForm = false
@@ -98,6 +100,15 @@ struct AddToProwlView: View {
           showCloneForm = true
         }
         .controlSize(.small)
+
+        if let onRemoteFolder, RemoteFolders.isEnabledInThisProcess {
+          Button("Remote…") {
+            dismiss()
+            onRemoteFolder()
+          }
+          .controlSize(.small)
+          .help("Add a folder on another machine over SSH")
+        }
       }
       .padding(.top, 14)
     }

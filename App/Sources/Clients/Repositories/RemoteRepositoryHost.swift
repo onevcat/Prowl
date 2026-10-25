@@ -60,6 +60,73 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     return try RemoteRepositoryRefresh.parse(outcome)
   }
 
+  // MARK: - Adding a folder
+
+  /// What a path on the host is, for adding it as a remote folder (docs-ai 084 C1): the root
+  /// of its repository (the main worktree, or the bare repository), or the folder itself.
+  /// `~` and a relative path resolve against the host's home, as `ssh` starts there.
+  func discoverFolder(_ path: String) async throws -> RemoteFolderDiscovery {
+    let outcome: RemoteCommandOutcome
+    do {
+      outcome = try await lane.runScript(RemoteScript(text: Self.discoveryScript, arguments: [path]), .commandLane)
+    } catch is RemoteShellCommand.ValidationError {
+      throw RemoteFolderValidationError.invalidPath
+    }
+    let display = RemoteShellCommand(executable: "sh", arguments: ["discover", path])
+    let output = try RemoteGitShell.output(of: outcome, command: display)
+    for line in output.stdout.split(separator: "\n").reversed() {
+      let fields = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+      guard fields.first == "PROWL_FOLDER", fields.count >= 2 else { continue }
+      let value = fields.count == 3 ? fields[2] : ""
+      switch fields[1] {
+      case "git", "plain":
+        // An empty or unusual root would be dropped as a malformed ID after the sheet closed.
+        guard RepositoryLocation.isCanonicalRemotePath(value) else { throw RemoteFolderValidationError.invalidPath }
+        return RemoteFolderDiscovery(rootPath: value, kind: fields[1] == "git" ? .git : .plain)
+      case "missing": throw RemoteFolderValidationError.folderNotFound(path)
+      case "git-error": throw RemoteRepositoryRefreshError.gitFailed(value)
+      default: throw RemoteFolderValidationError.folderInaccessible(path)
+      }
+    }
+    throw RemoteRepositoryRefreshError.incompleteOutput
+  }
+
+  /// A linked worktree adds its main worktree, as a local folder does: git's common
+  /// directory is `<main>/.git`, or the bare repository itself, as `wt root` finds it. A
+  /// folder that git says is not in a repository, or a host without git, is plain; any
+  /// other git error (such as `safe.directory`) is reported.
+  static let discoveryScript = #"""
+    case $1 in
+      '~') prowl_path=$HOME ;;
+      '~/'*) prowl_path=$HOME/${1#\~/} ;;
+      *) prowl_path=$1 ;;
+    esac
+    [ -e "$prowl_path" ] || { printf 'PROWL_FOLDER\tmissing\n'; exit 0; }
+    cd -- "$prowl_path" 2>/dev/null || { printf 'PROWL_FOLDER\tinaccessible\n'; exit 0; }
+    if ! command -v git >/dev/null 2>&1; then
+      printf 'PROWL_FOLDER\tplain\t%s\n' "$(pwd -P)"
+      exit 0
+    fi
+    if ! prowl_error=$(LC_ALL=C git rev-parse --git-dir 2>&1 >/dev/null); then
+      case $prowl_error in
+        *'not a git repository'*) printf 'PROWL_FOLDER\tplain\t%s\n' "$(pwd -P)" ;;
+        *) printf 'PROWL_FOLDER\tgit-error\t%s\n' "$(printf '%s\n' "$prowl_error" | tail -n 1)" ;;
+      esac
+      exit 0
+    fi
+    prowl_common=$(cd -- "$(git rev-parse --git-common-dir)" && pwd -P)
+    if [ "$(git --git-dir="$prowl_common" rev-parse --is-bare-repository 2>/dev/null)" = true ]; then
+      prowl_root=$prowl_common
+    else
+      case $prowl_common in
+        /.git) prowl_root=/ ;;
+        */.git) prowl_root=${prowl_common%/.git} ;;
+        *) prowl_root=$(cd -- "$(git rev-parse --show-toplevel)" && pwd -P) ;;
+      esac
+    fi
+    printf 'PROWL_FOLDER\tgit\t%s\n' "$prowl_root"
+    """#
+
   // MARK: - Repository
 
   func worktrees(in repository: RepositoryLocation) async throws -> [Worktree] {
@@ -390,6 +457,7 @@ extension RemoteRepositoryHostClient: DependencyKey {
         }
       },
       holdConnection: { hostProfileID in
+        try RemoteCommandLane.requireSideChannel()
         let profile = try Self.profile(hostProfileID)
         let registry = RemoteConnectionRegistry.shared
         // The same authority check as each leased command (RemoteCommandLane.leased).
@@ -506,4 +574,10 @@ nonisolated func isRemoteHostUnreachable(_ error: Error) -> Bool {
   default:
     false
   }
+}
+
+/// A folder on a host, as adding it finds it (docs-ai 084 C1).
+nonisolated struct RemoteFolderDiscovery: Equatable, Sendable {
+  let rootPath: String
+  let kind: Repository.Kind
 }

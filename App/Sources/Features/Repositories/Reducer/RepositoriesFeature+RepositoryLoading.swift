@@ -35,6 +35,33 @@ extension RepositoriesFeature {
     }
   }
 
+  /// The entries that load and show. While remote folders are off (`PROWL_REMOTE_FOLDERS`),
+  /// a stored remote folder stays stored but does not load, show or connect (docs-ai 084
+  /// D7); the prunes keep its pins and orders (`keepsHiddenRemoteID`).
+  func shownEntries(_ entries: [PersistedRepositoryEntry]) -> [PersistedRepositoryEntry] {
+    remoteFoldersEnabled ? entries : entries.filter { !RepositoryLocation.hasRemoteForm($0.path) }
+  }
+
+  /// Whether a prune keeps `id` although it is not loaded: the ID of a remote folder, or
+  /// of its worktree, while remote folders are off.
+  var keepsHiddenRemoteID: @Sendable (String) -> Bool {
+    let hidesRemoteFolders = !remoteFoldersEnabled
+    return { hidesRemoteFolders && RepositoryLocation.hasRemoteForm($0) }
+  }
+
+  /// `visibleOrder` with the hidden IDs of `storedOrder` put back at their places, so a
+  /// reorder while remote folders are off keeps the hidden folders' places.
+  nonisolated static func mergingHiddenRepositoryIDs(
+    _ visibleOrder: [Repository.ID], into storedOrder: [Repository.ID], isHidden: (Repository.ID) -> Bool
+  ) -> [Repository.ID] {
+    let visible = Set(visibleOrder)
+    var merged = visibleOrder
+    for (index, id) in storedOrder.enumerated() where isHidden(id) && !visible.contains(id) {
+      merged.insert(id, at: min(index, merged.count))
+    }
+    return merged
+  }
+
   func loadPersistedRepositoryEntries(
     fallbackRoots: [RepositoryLocation] = []
   ) async -> [PersistedRepositoryEntry] {
@@ -138,7 +165,7 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
-      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+      let entries = await shownEntries(await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots))
       let roots = entries.map(\.location)
       // A remote prune would add a connection per entry to every reload; the refresh lists
       // a worktree whose folder is gone, so remote entries skip it (docs-ai 084 B3e).
@@ -307,6 +334,9 @@ extension RepositoriesFeature {
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
   }
 
+  /// While remote folders are off, the prunes keep the hidden remote-form IDs
+  /// (`keepsHiddenRemoteID`). A snapshot prunes nothing (`origin`), so a snapshot that a
+  /// session without the flag wrote keeps them too; the live load that follows decides.
   func applyRepositories(
     _ repositories: [Repository],
     roots: [RepositoryLocation],
@@ -338,8 +368,10 @@ extension RepositoriesFeature {
       return false
     }
     let availableWorktreeIDs = Set(repositories.flatMap { $0.worktrees.map(\.id) })
-    let isRemoved = removedWorktreeIDFilter(
+    let isKept = keepsHiddenRemoteID
+    let isRemovedByLoad = removedWorktreeIDFilter(
       origin: origin, availableWorktreeIDs: availableWorktreeIDs, state: state)
+    let isRemoved: (Worktree.ID) -> Bool = { isRemovedByLoad($0) && !isKept($0) }
     let filteredDeletingIDs = state.deletingWorktreeIDs.intersection(availableWorktreeIDs)
     let filteredSetupScriptIDs = state.pendingSetupScriptWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
@@ -380,8 +412,9 @@ extension RepositoriesFeature {
     }
     let didPrunePinned = prunePinnedWorktreeIDs(where: isRemoved, state: &state)
     let prunesOrder = origin != .snapshot
-    let didPruneRepositoryOrder = prunesOrder && pruneRepositoryOrderIDs(roots: roots, state: &state)
-    let didPruneWorktreeOrder = prunesOrder && pruneWorktreeOrderByRepository(roots: roots, state: &state)
+    let didPruneRepositoryOrder = prunesOrder && pruneRepositoryOrderIDs(roots: roots, state: &state, keeping: isKept)
+    let didPruneWorktreeOrder =
+      prunesOrder && pruneWorktreeOrderByRepository(roots: roots, state: &state, keeping: isKept)
     let didPruneArchivedWorktrees = pruneArchivedWorktrees(where: isRemoved, state: &state)
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSidebarSelectionValid(state.selection, state: state)

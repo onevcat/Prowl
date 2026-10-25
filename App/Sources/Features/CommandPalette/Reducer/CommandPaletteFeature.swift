@@ -38,6 +38,7 @@ struct CommandPaletteFeature {
     case newWorktree
     case openRepository
     case newWorkspace
+    case addRemoteFolder
     case deleteWorktree(Worktree.ID, Repository.ID)
     case viewArchivedWorktrees
     case refreshWorktrees
@@ -420,6 +421,18 @@ private func globalCommandItems(
       keywords: ["New Workspace", "workspace", "multi repo", "many repos", "工作区", "多仓库"]
     ),
   ]
+  if RemoteFolders.isEnabledInThisProcess {
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.globalAddRemoteFolder,
+        title: String(localized: "Add Remote Folder"),
+        subtitle: nil,
+        kind: .addRemoteFolder,
+        category: .app,
+        defaultSuggestion: true,
+        keywords: ["Add Remote Folder", "remote", "ssh", "server", "远程", "远程文件夹"]
+      ))
+  }
   if showsNewWorktreeAction {
     items.append(
       .appShortcut(

@@ -203,6 +203,9 @@ struct SidebarListView: View {
               },
               onDrop: { urls in
                 store.send(.repositoryManagement(.openRepositories(urls)))
+              },
+              onRemoteFolder: {
+                store.send(.addRemoteFolderRequested)
               }
             )
           }

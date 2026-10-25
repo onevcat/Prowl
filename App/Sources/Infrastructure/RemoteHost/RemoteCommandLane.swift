@@ -68,10 +68,19 @@ nonisolated struct RemoteCommandLane: Sendable {
     )
   }
 
+  /// `PROWL_REMOTE_AGENT_DETECTION=0` is the kill switch for every side-channel connection
+  /// (docs-ai 084 D2), so remote folders open none either: not to load, poll, add or hold.
+  static func requireSideChannel(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) throws(RemoteRepositoryHostError) {
+    if environment[RemoteAgentDetection.environmentKey] == "0" { throw .sideChannelDisabled }
+  }
+
   private static func withLease(
     _ profile: HostProfile, _ registry: RemoteConnectionRegistry,
     _ body: (RemoteConnectionOwner) async throws -> RemoteCommandOutcome
   ) async throws -> RemoteCommandOutcome {
+    try requireSideChannel()
     guard let key = await registry.resolve(profile.recipe) else {
       throw RemoteRepositoryHostError.configurationRejected
     }

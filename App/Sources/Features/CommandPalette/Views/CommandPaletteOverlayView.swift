@@ -516,7 +516,8 @@ private struct CommandPaletteRowView: View {
 
   private var badge: String? {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .newWorkspace, .openSettings, .newWorktree, .viewArchivedWorktrees,
+    case .checkForUpdates, .openRepository, .newWorkspace, .addRemoteFolder, .openSettings, .newWorktree,
+      .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -546,6 +547,8 @@ private struct CommandPaletteRowView: View {
       return "folder"
     case .newWorkspace:
       return "folder.badge.person.crop"
+    case .addRemoteFolder:
+      return "network"
     case .openSettings:
       return "gearshape"
     case .newWorktree:
@@ -641,7 +644,8 @@ private struct CommandPaletteRowView: View {
 
   private var emphasis: Bool {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .newWorkspace, .openSettings, .newWorktree, .viewArchivedWorktrees,
+    case .checkForUpdates, .openRepository, .newWorkspace, .addRemoteFolder, .openSettings, .newWorktree,
+      .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -748,6 +752,8 @@ private struct CommandPaletteRowView: View {
       base = String(localized: "Open Repository")
     case .newWorkspace:
       base = String(localized: "New Workspace")
+    case .addRemoteFolder:
+      base = String(localized: "Add Remote Folder")
     case .openSettings:
       base = String(localized: "Open Settings")
     case .newWorktree:
