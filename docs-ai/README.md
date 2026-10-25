@@ -115,7 +115,7 @@ keep the old paths. Use this table to find a file that an old entry names:
 | 031 | [command-palette-architecture](031-command-palette-architecture/000-plan.md) | 2026-05-16 | Palette rebuild: categories, suggestions, action factories |
 | 032 | [performance-hardening](032-performance-hardening/000-plan.md) | 2026-05-21 | App-hang storm fix; event coalescing; render cost reductions |
 | 033 | [ui-refresh-2026-05](033-ui-refresh-2026-05/000-plan.md) | 2026-05-24 | Community UI refresh: tab bar, sidebar, chrome tint |
-| 034 | [worktree-watcher-correctness](034-worktree-watcher-correctness/000-plan.md) | 2026-05-25 | Watcher/discovery correctness incl. symlinked roots |
+| 034 | [worktree-watcher-correctness](034-worktree-watcher-correctness/000-plan.md) | 2026-05-25 | Watcher/discovery correctness incl. symlinked roots and the app activity signal |
 | 035 | [protected-terminal-close](035-protected-terminal-close/000-plan.md) | 2026-05-25 | Confirm-before-close for protected terminal work |
 | 036 | [window-management-hardening](036-window-management-hardening/000-plan.md) | 2026-05-26 | Main-window surfacing, fullscreen edge cases, stall diagnostics |
 | 037 | [line-diff-tracking](037-line-diff-tracking/000-plan.md) | 2026-05-28 | Sidebar line-diff badge pipeline and adaptive debounce |

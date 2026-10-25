@@ -42,8 +42,9 @@ show or connect to a remote folder. While the flag is off:
   removed remote folder can leave its ID in that list; it is never shown.
 
 A session without the flag writes a snapshot without remote repositories. The snapshot
-restore therefore keeps every remote-form ID through its prunes, also with the flag on,
-and the live load that follows decides for them. With the flag on again, the folders come
+restore therefore keeps every remote-form ID, also with the flag on, and the live load
+that follows decides for them. Since P0 ([002](002-p0-load-failure-prune.md)) the restore
+prunes nothing, which covers this. With the flag on again, the folders come
 back with their pins and orders.
 
 ### Entry points

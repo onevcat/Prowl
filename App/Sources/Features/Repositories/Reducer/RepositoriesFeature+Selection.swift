@@ -284,9 +284,9 @@ func repositoryForWorktreeCreation(
 }
 
 func prunePinnedWorktreeIDs(
-  state: inout RepositoriesFeature.State, keeping isKept: (Worktree.ID) -> Bool = { _ in false }
+  where isRemoved: (Worktree.ID) -> Bool,
+  state: inout RepositoriesFeature.State
 ) -> Bool {
-  let availableIDs = Set(state.repositories.flatMap { $0.worktrees.map(\.id) })
   let mainIDs = Set(
     state.repositories.compactMap { repository in
       repository.worktrees.first(where: { state.isMainWorktree($0) })?.id
@@ -294,10 +294,9 @@ func prunePinnedWorktreeIDs(
   )
   let archivedSet = state.archivedWorktreeIDSet
   let pruned = state.pinnedWorktreeIDs.filter {
-    isKept($0)
-      || (availableIDs.contains($0)
-        && !mainIDs.contains($0)
-        && !archivedSet.contains($0))
+    !isRemoved($0)
+      && !mainIDs.contains($0)
+      && !archivedSet.contains($0)
   }
   if pruned != state.pinnedWorktreeIDs {
     state.pinnedWorktreeIDs = pruned
@@ -367,16 +366,25 @@ func pruneWorktreeOrderByRepository(
 }
 
 func pruneArchivedWorktrees(
-  availableWorktreeIDs: Set<Worktree.ID>,
-  state: inout RepositoriesFeature.State,
-  keeping isKept: (Worktree.ID) -> Bool = { _ in false }
+  where isRemoved: (Worktree.ID) -> Bool,
+  state: inout RepositoriesFeature.State
 ) -> Bool {
-  let pruned = state.archivedWorktrees.filter { availableWorktreeIDs.contains($0.id) || isKept($0.id) }
+  let pruned = state.archivedWorktrees.filter { !isRemoved($0.id) }
   if pruned != state.archivedWorktrees {
     state.archivedWorktrees = pruned
     return true
   }
   return false
+}
+
+func pruneProwlCreatedWorktreeIDs(
+  where isRemoved: (Worktree.ID) -> Bool,
+  state: inout RepositoriesFeature.State
+) {
+  guard state.prowlCreatedWorktreeIDs.contains(where: isRemoved) else { return }
+  state.$prowlCreatedWorktreeIDs.withLock {
+    $0.removeAll(where: isRemoved)
+  }
 }
 
 func firstAvailableWorktreeID(

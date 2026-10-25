@@ -16,8 +16,9 @@ struct WindowTabbingDisabler: NSViewRepresentable {
   }
 }
 
-final class WindowTabbingView: NSView, NSWindowDelegate {
+final class WindowTabbingView: NSView {
   private var undoKeyMonitor: TerminalCloseUndoKeyMonitor?
+  private let delegateProxy = MainWindowDelegateProxy()
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -32,8 +33,12 @@ final class WindowTabbingView: NSView, NSWindowDelegate {
     // re-associating the same autosave name on later passes is a no-op.
     window.setFrameAutosaveName(NSWindow.FrameAutosaveName(WindowID.main))
     window.isExcludedFromWindowsMenu = true
-    if window.delegate !== self {
-      window.delegate = self
+    if window.delegate !== delegateProxy {
+      // A proxy of an earlier view forwards to SwiftUI's delegate; take that one over
+      // instead of chaining proxies.
+      let current = window.delegate
+      delegateProxy.forwardee = (current as? MainWindowDelegateProxy)?.forwardee ?? current
+      window.delegate = delegateProxy
     }
   }
 
@@ -47,14 +52,34 @@ final class WindowTabbingView: NSView, NSWindowDelegate {
     )
   }
 
+  static func shouldOrderOutOnClose(styleMask: NSWindow.StyleMask) -> Bool {
+    !styleMask.contains(.fullScreen)
+  }
+}
+
+/// Keeps the main window open when the user closes it, and forwards every other delegate
+/// message to the delegate that SwiftUI installed. SwiftUI derives the scene phase and
+/// other window state from that delegate, so it must keep receiving them.
+final class MainWindowDelegateProxy: NSObject, NSWindowDelegate {
+  // `NSWindow` sends delegate messages on the main thread only. The overrides below
+  // inherit `NSObject`'s nonisolated declarations, so they cannot be main actor-isolated.
+  nonisolated(unsafe) weak var forwardee: (any NSWindowDelegate)?
+
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    if Self.shouldOrderOutOnClose(styleMask: sender.styleMask) {
+    if WindowTabbingView.shouldOrderOutOnClose(styleMask: sender.styleMask) {
       sender.orderOut(nil)
     }
     return false
   }
 
-  static func shouldOrderOutOnClose(styleMask: NSWindow.StyleMask) -> Bool {
-    !styleMask.contains(.fullScreen)
+  nonisolated override func responds(to aSelector: Selector!) -> Bool {
+    super.responds(to: aSelector) || forwardee?.responds(to: aSelector) == true
+  }
+
+  nonisolated override func forwardingTarget(for aSelector: Selector!) -> Any? {
+    if let forwardee, forwardee.responds(to: aSelector) {
+      return forwardee
+    }
+    return super.forwardingTarget(for: aSelector)
   }
 }

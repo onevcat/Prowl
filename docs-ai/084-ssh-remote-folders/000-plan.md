@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978 |
+| **Primary PRs** | #952 (this plan); P0 #954; A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -322,6 +322,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 
 ## Amendments
 
+- Updated 2026-10-22: P0 landed (partial loads prune only worktrees that left a loaded repository; snapshot restore prunes nothing) — see [002-p0-load-failure-prune.md](002-p0-load-failure-prune.md)
 - Updated 2026-10-22: A1 landed (`Repository.terminalWorktree`; ID → path reversals with a model become lookups; the rest is listed for A2–A3) — see [003-a1-terminal-worktree.md](003-a1-terminal-worktree.md)
 - Updated 2026-10-22: A2 landed (`RepositoryLocation`, the ID codec, location-backed models with local forwards, ID normalizers that keep non-local IDs) — see [004-a2-location-codec.md](004-a2-location-codec.md)
 - Updated 2026-10-23: A3a landed (IDs minted and decoded through the codec; settings directory `<basename>-<hash>` with copy-on-load from the basename directory) — see [005-a3a-identity-and-settings-keys.md](005-a3a-identity-and-settings-keys.md)
@@ -344,3 +345,4 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: B3 grows to six PRs; B3e loads remote folders through their host and marks load failures that come from the connection — see [023-b3e-load-through-host.md](023-b3e-load-through-host.md)
 - Updated 2026-10-23: B3f polls remote repositories on a cadence with backoff, applies branch, line and remote changes, holds a connection lease per loaded remote repository, and refreshes their pull requests; B3 ends here — see [024-b3f-refresh-cadence.md](024-b3f-refresh-cadence.md)
 - Updated 2026-10-23: C1 split into three PRs; C1a adds the flag, the Add Remote Folder sheet with validation on the host, and the stored host profile and entry — see [025-c1a-add-remote-folder.md](025-c1a-add-remote-folder.md)
+- Updated 2026-10-25: B3f's pause and resume of remote polls now follows `NSApplication` activation, and the 30 s reload that B3f kept remote repositories through is gone — see [034.005](../034-worktree-watcher-correctness/005-app-activity-signal.md)

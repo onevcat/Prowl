@@ -60,11 +60,15 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     AgentProfileSeeder.seedIfNeeded()
     Task { await AgentRuntimeAvailabilityProbe.refresh() }
     agentIslandWindowController?.activate()
+    // A launch in the background never resigns active, so seed the pause before the first
+    // load. A normal launch becomes active right after this and resumes the polls.
+    appStore?.send(.repositories(.setRemoteRefreshActive(NSApplication.shared.isActive)))
     appStore?.send(.appLaunched)
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
     appStore?.send(.settings(.refreshAppLanguage))
+    appStore?.send(.appActivityChanged(isActive: true))
     let app = NSApplication.shared
     let hasVisibleMainWindow = MainWindowSurface.hasVisibleMainWindow(in: app.windows)
     WindowLifecycleDiagnostics.logWithWindows(
@@ -73,6 +77,10 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     guard !hasVisibleMainWindow else { return }
     WindowLifecycleDiagnostics.log("applicationDidBecomeActive -> surfaceMainWindow()")
     app.surfaceMainWindow()
+  }
+
+  func applicationDidResignActive(_ notification: Notification) {
+    appStore?.send(.appActivityChanged(isActive: false))
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

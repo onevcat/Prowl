@@ -49,12 +49,6 @@ extension RepositoriesFeature {
     return { hidesRemoteFolders && RepositoryLocation.hasRemoteForm($0) }
   }
 
-  /// The IDs that the prunes keep although they are not loaded.
-  private func keptIDs(keepsRemoteIDs: Bool) -> @Sendable (String) -> Bool {
-    let keepsHidden = keepsHiddenRemoteID
-    return { keepsRemoteIDs ? RepositoryLocation.hasRemoteForm($0) : keepsHidden($0) }
-  }
-
   /// `visibleOrder` with the hidden IDs of `storedOrder` put back at their places, so a
   /// reorder while remote folders are off keeps the hidden folders' places.
   nonisolated static func mergingHiddenRepositoryIDs(
@@ -340,14 +334,13 @@ extension RepositoriesFeature {
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
   }
 
-  /// `keepsRemoteIDs` keeps every remote-form ID through the prunes. The snapshot sets it:
-  /// a snapshot that a session without the flag wrote has no remote repositories, and the
-  /// live load that follows decides for them.
+  /// While remote folders are off, the prunes keep the hidden remote-form IDs
+  /// (`keepsHiddenRemoteID`). A snapshot prunes nothing (`origin`), so a snapshot that a
+  /// session without the flag wrote keeps them too; the live load that follows decides.
   func applyRepositories(
     _ repositories: [Repository],
     roots: [RepositoryLocation],
-    shouldPruneArchivedWorktrees: Bool,
-    keepsRemoteIDs: Bool = false,
+    origin: RepositoryListOrigin,
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
@@ -375,6 +368,10 @@ extension RepositoriesFeature {
       return false
     }
     let availableWorktreeIDs = Set(repositories.flatMap { $0.worktrees.map(\.id) })
+    let isKept = keepsHiddenRemoteID
+    let isRemovedByLoad = removedWorktreeIDFilter(
+      origin: origin, availableWorktreeIDs: availableWorktreeIDs, state: state)
+    let isRemoved: (Worktree.ID) -> Bool = { isRemovedByLoad($0) && !isKept($0) }
     let filteredDeletingIDs = state.deletingWorktreeIDs.intersection(availableWorktreeIDs)
     let filteredSetupScriptIDs = state.pendingSetupScriptWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
@@ -390,10 +387,7 @@ extension RepositoriesFeature {
       availableWorktreeIDs.contains($0.key)
     }
     state.forgetPullRequestRefreshHistory(keeping: availableWorktreeIDs)
-    let isKept = keptIDs(keepsRemoteIDs: keepsRemoteIDs)
-    state.$prowlCreatedWorktreeIDs.withLock {
-      $0.removeAll { !availableWorktreeIDs.contains($0) && !isKept($0) }
-    }
+    pruneProwlCreatedWorktreeIDs(where: isRemoved, state: &state)
     let identifiedRepositories = IdentifiedArray(uniqueElements: repositories)
     if animated {
       withAnimation {
@@ -416,13 +410,12 @@ extension RepositoriesFeature {
       state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
       state.worktreeInfoByID = filteredWorktreeInfo
     }
-    let didPrunePinned = prunePinnedWorktreeIDs(state: &state, keeping: isKept)
-    let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state, keeping: isKept)
-    let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state, keeping: isKept)
-    let didPruneArchivedWorktrees =
-      shouldPruneArchivedWorktrees
-      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state, keeping: isKept)
-      : false
+    let didPrunePinned = prunePinnedWorktreeIDs(where: isRemoved, state: &state)
+    let prunesOrder = origin != .snapshot
+    let didPruneRepositoryOrder = prunesOrder && pruneRepositoryOrderIDs(roots: roots, state: &state, keeping: isKept)
+    let didPruneWorktreeOrder =
+      prunesOrder && pruneWorktreeOrderByRepository(roots: roots, state: &state, keeping: isKept)
+    let didPruneArchivedWorktrees = pruneArchivedWorktrees(where: isRemoved, state: &state)
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSidebarSelectionValid(state.selection, state: state)
     {
@@ -451,6 +444,28 @@ extension RepositoriesFeature {
       didPruneWorktreeOrder: didPruneWorktreeOrder,
       didPruneArchivedWorktrees: didPruneArchivedWorktrees
     )
+  }
+
+  /// The test for a worktree ID that pins, archived worktrees and Prowl-created
+  /// marks drop. Call it before the new list replaces `state.repositories`.
+  func removedWorktreeIDFilter(
+    origin: RepositoryListOrigin,
+    availableWorktreeIDs: Set<Worktree.ID>,
+    state: State
+  ) -> (Worktree.ID) -> Bool {
+    switch origin {
+    case .snapshot:
+      return { _ in false }
+    case .live(let failedRootIDs) where failedRootIDs.isEmpty:
+      return { !availableWorktreeIDs.contains($0) }
+    case .live(let failedRootIDs):
+      let removedIDs = Set(
+        state.repositories
+          .filter { !failedRootIDs.contains($0.id) }
+          .flatMap { $0.worktrees.map(\.id) }
+      ).subtracting(availableWorktreeIDs)
+      return { removedIDs.contains($0) }
+    }
   }
 
   func messageAlert(title: String, message: String) -> AlertState<Alert> {

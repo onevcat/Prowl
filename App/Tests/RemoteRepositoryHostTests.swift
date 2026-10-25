@@ -1123,6 +1123,36 @@ struct RemoteRepositoryHostTests {
     await store.finish(timeout: .seconds(10))
   }
 
+  /// A launch in the background pauses polls before the first load: the loaded repository
+  /// gets no poll until the app becomes active.
+  @Test(.dependencies) func aRepositoryLoadedWhilePausedWaitsForActivation() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let clock = TestClock()
+    let repository = try await fixture.loadedRepository()
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0[RemoteRepositoryHostClient.self] = fixture.remoteClient
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off
+    await store.send(.setRemoteRefreshActive(false))
+    await store.send(.repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+
+    await clock.advance(by: .seconds(600))
+    await Task.megaYield()
+    #expect(store.state.remoteRefreshInFlightIDs.isEmpty)
+    #expect(store.state.remoteRefreshFailureCounts.isEmpty)
+
+    await store.send(.setRemoteRefreshActive(true))
+    await store.receive(\.remoteRepositoryRefreshDue)
+    await store.receive(\.remoteRepositoryRefreshed, timeout: .seconds(30))
+
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    await store.finish(timeout: .seconds(10))
+  }
+
   /// A reload that keeps a remote repository does not clear the mark that its poll set,
   /// and the failures it passes on carry only load marks.
   @Test(.dependencies) func aReloadThatKeepsARemoteRepositoryKeepsItsPollMark() async throws {
