@@ -65,6 +65,7 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidBecomeActive(_ notification: Notification) {
     appStore?.send(.settings(.refreshAppLanguage))
+    appStore?.send(.appActivityChanged(isActive: true))
     let app = NSApplication.shared
     let hasVisibleMainWindow = MainWindowSurface.hasVisibleMainWindow(in: app.windows)
     WindowLifecycleDiagnostics.logWithWindows(
@@ -73,6 +74,10 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     guard !hasVisibleMainWindow else { return }
     WindowLifecycleDiagnostics.log("applicationDidBecomeActive -> surfaceMainWindow()")
     app.surfaceMainWindow()
+  }
+
+  func applicationDidResignActive(_ notification: Notification) {
+    appStore?.send(.appActivityChanged(isActive: false))
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

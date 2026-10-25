@@ -417,7 +417,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.finish()
   }
 
-  @Test(.dependencies) func scenePhaseInactiveSavesLayoutSnapshotAfterRestoreConsumed() async {
+  @Test(.dependencies) func resigningActiveSavesLayoutSnapshotAfterRestoreConsumed() async {
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
@@ -446,14 +446,14 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.finish()
     sentCommands.withValue { $0.removeAll() }
 
-    // Now scenePhase inactive should trigger save
-    await store.send(.scenePhaseChanged(.inactive))
+    // Now resigning active should trigger save
+    await store.send(.appActivityChanged(isActive: false))
     await store.finish()
 
     #expect(sentCommands.value == [.saveLayoutSnapshot])
   }
 
-  @Test(.dependencies) func scenePhaseInactiveSkipsSaveDuringPendingRestore() async {
+  @Test(.dependencies) func resigningActiveSkipsSaveDuringPendingRestore() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
     settings.restoreTerminalLayoutOnLaunch = true
@@ -468,13 +468,13 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
     // launchRestoreMode is .restoreLayout — save must be skipped
     // to prevent clearing a snapshot before restore has a chance to load it
-    await store.send(.scenePhaseChanged(.inactive))
+    await store.send(.appActivityChanged(isActive: false))
     await store.finish()
 
     #expect(!sentCommands.value.contains(.saveLayoutSnapshot))
   }
 
-  @Test(.dependencies) func scenePhaseInactiveSkipsSaveWhenRestoreDisabled() async {
+  @Test(.dependencies) func resigningActiveSkipsSaveWhenRestoreDisabled() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
@@ -485,13 +485,13 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.scenePhaseChanged(.inactive))
+    await store.send(.appActivityChanged(isActive: false))
     await store.finish()
 
     #expect(!sentCommands.value.contains(.saveLayoutSnapshot))
   }
 
-  @Test(.dependencies) func clearLayoutSuppressesSaveOnScenePhaseInactive() async {
+  @Test(.dependencies) func clearLayoutSuppressesSaveOnResigningActive() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
     settings.restoreTerminalLayoutOnLaunch = true
@@ -513,14 +513,14 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
     sentCommands.withValue { $0.removeAll() }
 
-    // Scene phase inactive should NOT save because layout was cleared
-    await store.send(.scenePhaseChanged(.inactive))
+    // Resigning active should NOT save because layout was cleared
+    await store.send(.appActivityChanged(isActive: false))
     await store.finish()
 
     #expect(!sentCommands.value.contains(.saveLayoutSnapshot))
   }
 
-  @Test(.dependencies) func suppressLayoutSavePersistsAcrossMultipleScenePhaseChanges() async {
+  @Test(.dependencies) func suppressLayoutSavePersistsAcrossMultipleActivityChanges() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
     settings.restoreTerminalLayoutOnLaunch = true
@@ -540,10 +540,10 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
     await store.finish()
 
-    // Multiple inactive/active cycles should all skip saving
+    // Multiple resign cycles should all skip saving
     for _ in 0..<3 {
       sentCommands.withValue { $0.removeAll() }
-      await store.send(.scenePhaseChanged(.inactive))
+      await store.send(.appActivityChanged(isActive: false))
       await store.finish()
       #expect(!sentCommands.value.contains(.saveLayoutSnapshot))
     }

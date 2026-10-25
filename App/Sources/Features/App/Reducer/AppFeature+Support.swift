@@ -5,10 +5,6 @@ import ProwlCLIShared
 let appLogger = ProwlLogger("App")
 let notificationJumpLogger = ProwlLogger("NotificationJump")
 
-enum CancelID {
-  static let periodicRefresh = "app.periodicRefresh"
-}
-
 /// Every directory a workflow run directory can live under (docs-ai 063 B3): each worktree, and
 /// the root of a plain repository, which the CLI resolves as its own worktree. Workflows run
 /// only in local folders (docs-ai 084 A4a).
