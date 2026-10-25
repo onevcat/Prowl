@@ -494,6 +494,10 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
       panes: tree.visibleLeaves()
     )
   }
+
+  static func dismantleNSView(_ nsView: TerminalSplitAXContainerView, coordinator: ()) {
+    nsView.detachHostingView()
+  }
 }
 
 @MainActor
@@ -502,6 +506,14 @@ final class TerminalSplitAXContainerView: NSView {
   private var panes: [GhosttySurfaceView] = []
   private var panesLabel = String(localized: "Terminal split: 0 panes")
   private var lastPaneIDs: [UUID] = []
+
+  /// SwiftUI dismantles this view before AppKit takes it out of the window. Until then, the
+  /// inner hosting view can build its root view again and make new terminal hosts in a tree
+  /// that is leaving. Those hosts take the surface from the host that replaces this tree.
+  func detachHostingView() {
+    hostingView?.removeFromSuperview()
+    hostingView = nil
+  }
 
   func update(rootView: TerminalSplitTreeView, panes: [GhosttySurfaceView]) {
     if let hostingView {
