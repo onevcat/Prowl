@@ -8,11 +8,15 @@ nonisolated struct RepositorySettingsKeyID: Hashable, Sendable {
 
 nonisolated struct RepositorySettingsKey: SharedKey {
   let repositoryID: String
-  let rootURL: URL
+  let location: RepositoryLocation
+
+  init(location: RepositoryLocation) {
+    self.location = location.standardized
+    repositoryID = self.location.id
+  }
 
   init(rootURL: URL) {
-    self.rootURL = rootURL.standardizedFileURL
-    repositoryID = self.rootURL.path(percentEncoded: false)
+    self.init(location: .local(rootURL))
   }
 
   var id: RepositorySettingsKeyID {
@@ -24,9 +28,10 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: LoadContinuation<RepositorySettings>
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: location)
     let decoder = JSONDecoder()
-    if let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL) {
+    let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL)
+    if let localData {
       if let settings = try? decoder.decode(RepositorySettings.self, from: localData) {
         continuation.resume(returning: settings)
         return
@@ -37,14 +42,23 @@ nonisolated struct RepositorySettingsKey: SharedKey {
       )
     }
 
-    let legacySettingsURL = ProwlPaths.legacyRepositorySettingsURL(for: rootURL)
-    if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
+    for legacySettingsURL in ProwlPaths.legacyRepositorySettingsURLs(for: location) {
+      guard let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) else { continue }
       if let legacySettings = try? decoder.decode(RepositorySettings.self, from: legacyData) {
         do {
           let encoder = JSONEncoder()
           encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
           let data = try encoder.encode(legacySettings)
-          try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
+          // A missing file is created as a copy that keeps a symlink to the
+          // user's dotfiles. When that fails, or an unreadable file is in the
+          // way, a plain write still keeps later saves out of the global file,
+          // which this chain reads last.
+          let created =
+            localData == nil
+            && (try? repositoryLocalSettingsStorage.create?(data, repositorySettingsURL, legacySettingsURL)) != nil
+          if !created {
+            try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
+          }
         } catch {
           let path = repositorySettingsURL.path(percentEncoded: false)
           ProwlLogger("Settings").warning(
@@ -56,7 +70,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
       }
       let path = legacySettingsURL.path(percentEncoded: false)
       ProwlLogger("Settings").warning(
-        "Unable to decode legacy repository settings at \(path); migrating from global settings."
+        "Unable to decode legacy repository settings at \(path); trying the next source."
       )
     }
 
@@ -85,8 +99,13 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
-    if (try? repositoryLocalSettingsStorage.load(repositorySettingsURL)) != nil {
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: location)
+    // A legacy source also selects the repository file: load reads it before the
+    // global file, so an edit stored globally would be lost on the next load
+    // (for example, after the first copy failed).
+    let usesRepositoryFile = ([repositorySettingsURL] + ProwlPaths.legacyRepositorySettingsURLs(for: location))
+      .contains { (try? repositoryLocalSettingsStorage.load($0)) != nil }
+    if usesRepositoryFile {
       do {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -108,7 +127,12 @@ nonisolated struct RepositorySettingsKey: SharedKey {
 }
 
 nonisolated extension SharedReaderKey where Self == RepositorySettingsKey.Default {
+  static func repositorySettings(_ location: RepositoryLocation) -> Self {
+    Self[RepositorySettingsKey(location: location), default: .default]
+  }
+
+  /// The settings of the local repository at `rootURL`.
   static func repositorySettings(_ rootURL: URL) -> Self {
-    Self[RepositorySettingsKey(rootURL: rootURL), default: .default]
+    repositorySettings(.local(rootURL))
   }
 }

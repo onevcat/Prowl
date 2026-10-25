@@ -60,11 +60,15 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     AgentProfileSeeder.seedIfNeeded()
     Task { await AgentRuntimeAvailabilityProbe.refresh() }
     agentIslandWindowController?.activate()
+    // A launch in the background never resigns active, so seed the pause before the first
+    // load. A normal launch becomes active right after this and resumes the polls.
+    appStore?.send(.repositories(.setRemoteRefreshActive(NSApplication.shared.isActive)))
     appStore?.send(.appLaunched)
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
     appStore?.send(.settings(.refreshAppLanguage))
+    appStore?.send(.appActivityChanged(isActive: true))
     let app = NSApplication.shared
     let hasVisibleMainWindow = MainWindowSurface.hasVisibleMainWindow(in: app.windows)
     WindowLifecycleDiagnostics.logWithWindows(
@@ -73,6 +77,10 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
     guard !hasVisibleMainWindow else { return }
     WindowLifecycleDiagnostics.log("applicationDidBecomeActive -> surfaceMainWindow()")
     app.surfaceMainWindow()
+  }
+
+  func applicationDidResignActive(_ notification: Notification) {
+    appStore?.send(.appActivityChanged(isActive: false))
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -444,9 +452,9 @@ struct ProwlApp: App {
     terminalManager: WorktreeTerminalManager
   ) -> BranchNameSuggestionClient {
     var client = BranchNameSuggestionClient.liveValue
-    client.gatherContext = { repositoryName, repositoryRootURL, existingBranchNames in
+    client.gatherContext = { repositoryName, repository, existingBranchNames in
       let allStates = terminalManager.activeWorktreeStates
-      let sameRepoStates = allStates.filter { $0.repositoryRootURL == repositoryRootURL }
+      let sameRepoStates = allStates.filter { $0.worktree.repositoryLocation.standardized == repository.standardized }
 
       let selectedID = terminalManager.selectedWorktreeID
       let sorted = sameRepoStates.sorted { lhs, rhs in
@@ -1383,60 +1391,63 @@ struct ProwlApp: App {
     let normalized = URL(fileURLWithPath: path, isDirectory: true)
       .standardizedFileURL.path(percentEncoded: false)
     // Exact match: worktree working directory or repository root
+    // A local path never resolves to a worktree on another host.
     for repository in repositories.repositories {
+      guard let repositoryRootURL = repository.localURL else { continue }
       let kind = repository.kind.rawValue
       for worktree in repository.worktrees {
-        let wtPath = worktree.workingDirectory
+        guard let worktreeURL = worktree.localURL else { continue }
+        let wtPath = worktreeURL
           .standardizedFileURL.path(percentEncoded: false)
         if wtPath == normalized {
           return OpenResolverResult(
             resolution: .exactRoot, worktreeID: worktree.id,
             worktreeName: worktree.name, worktreePath: wtPath,
-            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            rootPath: repositoryRootURL.standardizedFileURL.path(percentEncoded: false),
             worktreeKind: kind, resolvedPath: normalized
           )
         }
       }
-      let repoRoot = repository.rootURL
-        .standardizedFileURL.path(percentEncoded: false)
-      if repoRoot == normalized,
-        !repository.capabilities.supportsWorktrees,
-        repository.capabilities.supportsRunnableFolderActions
-      {
-        return OpenResolverResult(
-          resolution: .exactRoot, worktreeID: repository.id,
-          worktreeName: repository.name, worktreePath: repoRoot,
-          rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
-        )
+      if let terminalWorktree = repository.terminalWorktree, let terminalURL = terminalWorktree.localURL {
+        let repoRoot = terminalURL
+          .standardizedFileURL.path(percentEncoded: false)
+        if repoRoot == normalized {
+          return OpenResolverResult(
+            resolution: .exactRoot, worktreeID: terminalWorktree.id,
+            worktreeName: terminalWorktree.name, worktreePath: repoRoot,
+            rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
+          )
+        }
       }
     }
     // Inside-root: path is inside an existing worktree/repo root
     let normalizedSlash = normalized.hasSuffix("/") ? normalized : normalized + "/"
+    // A local path never resolves to a worktree on another host.
     for repository in repositories.repositories {
+      guard let repositoryRootURL = repository.localURL else { continue }
       let kind = repository.kind.rawValue
       for worktree in repository.worktrees {
-        let wtPath = worktree.workingDirectory
+        guard let worktreeURL = worktree.localURL else { continue }
+        let wtPath = worktreeURL
           .standardizedFileURL.path(percentEncoded: false)
         let wtSlash = wtPath.hasSuffix("/") ? wtPath : wtPath + "/"
         if normalizedSlash.hasPrefix(wtSlash) {
           return OpenResolverResult(
             resolution: .insideRoot, worktreeID: worktree.id,
             worktreeName: worktree.name, worktreePath: wtPath,
-            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            rootPath: repositoryRootURL.standardizedFileURL.path(percentEncoded: false),
             worktreeKind: kind, resolvedPath: normalized
           )
         }
       }
-      if !repository.capabilities.supportsWorktrees,
-        repository.capabilities.supportsRunnableFolderActions
-      {
-        let repoRoot = repository.rootURL
+      if let terminalWorktree = repository.terminalWorktree, let terminalURL = terminalWorktree.localURL {
+        let repoRoot = terminalURL
           .standardizedFileURL.path(percentEncoded: false)
         let repoSlash = repoRoot.hasSuffix("/") ? repoRoot : repoRoot + "/"
         if normalizedSlash.hasPrefix(repoSlash) {
           return OpenResolverResult(
-            resolution: .insideRoot, worktreeID: repository.id,
-            worktreeName: repository.name, worktreePath: repoRoot,
+            resolution: .insideRoot, worktreeID: terminalWorktree.id,
+            worktreeName: terminalWorktree.name, worktreePath: repoRoot,
             rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
           )
         }
@@ -1477,17 +1488,8 @@ struct ProwlApp: App {
       if let worktree = repository.worktrees[id: id] {
         return worktree
       }
-      if repository.id == id,
-        repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        return Worktree(
-          id: repository.id,
-          name: repository.name,
-          detail: repository.rootURL.path(percentEncoded: false),
-          workingDirectory: repository.rootURL,
-          repositoryRootURL: repository.rootURL
-        )
+      if repository.id == id, let terminalWorktree = repository.terminalWorktree {
+        return terminalWorktree
       }
     }
     return nil

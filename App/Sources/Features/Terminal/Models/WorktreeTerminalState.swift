@@ -461,7 +461,7 @@ final class WorktreeTerminalState {
     self.tabManager = TerminalTabManager(titleFlushClock: titleFlushClock)
     _repositorySettings = SharedReader(
       wrappedValue: RepositorySettings.default,
-      .repositorySettings(worktree.repositoryRootURL)
+      .repositorySettings(worktree.repositoryLocation)
     )
     self.tabManager.onCoalescedTitlesFlushed = { [weak self] tabIDs in
       for tabID in tabIDs {
@@ -472,7 +472,10 @@ final class WorktreeTerminalState {
 
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
-  var repositoryRootURL: URL { worktree.repositoryRootURL }
+  /// The repository root on this Mac. Nil for a remote worktree.
+  var repositoryLocalURL: URL? { worktree.repositoryLocalURL }
+  /// The `Repository.ID` of the worktree's repository.
+  var repositoryID: Repository.ID { worktree.repositoryLocation.id }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
     targetHandleRegistry.register(tabID: tabID)
@@ -590,6 +593,8 @@ final class WorktreeTerminalState {
   }
 
   func ensureInitialTab(focusing: Bool) {
+    // A remote worktree gets no automatic local shell or setup script (docs-ai 084 C3).
+    guard worktree.location.availability(of: .terminalTab).isAvailable else { return }
     guard tabManager.tabs.isEmpty else { return }
     guard !isEnsuringInitialTab else { return }
     isEnsuringInitialTab = true
@@ -661,6 +666,10 @@ final class WorktreeTerminalState {
   func freezeAgentProfileLaunchContext(
     _ request: AgentProfileLaunchRequest
   ) -> Result<FrozenAgentProfileLaunchContext, AgentProfileLaunchError> {
+    // Profiles launch in local worktrees only (docs-ai 084 A4a; remote launches come with 082 L1f).
+    guard let worktreeDirectory = worktree.localURL else {
+      return .failure(.unavailable(.remoteFolder(.profileLaunch)))
+    }
     let anchor: UUID?
     let context: ghostty_surface_context_e
     let tracksFocusedAnchor: Bool
@@ -680,7 +689,7 @@ final class WorktreeTerminalState {
     let inheritedCWD =
       request.workingDirectoryOverride
       ?? inheritedSurfaceConfig(fromSurfaceId: anchor, context: context).workingDirectory
-      ?? worktree.workingDirectory
+      ?? worktreeDirectory
     let frozenPlacement: AgentProfileLaunchRequest.Placement =
       switch request.placement {
       case .tab(let background): .tab(background: background)
@@ -708,6 +717,7 @@ final class WorktreeTerminalState {
     _ context: FrozenAgentProfileLaunchContext,
     inheritedCWDOverride: URL? = nil
   ) -> Bool {
+    guard let worktreeDirectory = worktree.localURL else { return false }
     if let anchor = context.anchorSurfaceID, surfaces[anchor] == nil { return false }
     if context.tracksFocusedAnchor, currentFocusedSurfaceId() != context.anchorSurfaceID { return false }
     guard context.tracksInheritedCWD else { return true }
@@ -722,7 +732,7 @@ final class WorktreeTerminalState {
         fromSurfaceId: context.anchorSurfaceID,
         context: surfaceContext
       ).workingDirectory
-      ?? worktree.workingDirectory
+      ?? worktreeDirectory
     return AgentProfileLaunchPlanner.pathString(currentCWD)
       == AgentProfileLaunchPlanner.pathString(context.inheritedCWD)
   }

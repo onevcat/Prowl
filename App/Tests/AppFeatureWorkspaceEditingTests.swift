@@ -62,7 +62,7 @@ struct AppFeatureWorkspaceEditingTests {
   @Test(.dependencies) func repositorySettingsEditTappedBubblesToSettingsDelegate() async {
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
-        rootURL: URL(fileURLWithPath: "/tmp/ws"),
+        location: .local(URL(fileURLWithPath: "/tmp/ws")),
         repositoryID: "/tmp/ws",
         repositoryKind: .plain,
         workspace: ProjectWorkspace(title: "Workspace"),

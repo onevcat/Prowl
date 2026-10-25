@@ -176,7 +176,8 @@ struct WorktreeDetailView: View {
       onCopyPath: {
         guard let actionTargetWorktree else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(actionTargetWorktree.workingDirectory.path, forType: .string)
+        NSPasteboard.general.setString(
+          actionTargetWorktree.location.displayPath, forType: .string)
       },
       onSelectNotification: selectToolbarNotification,
       onDismissAllNotifications: {
@@ -462,7 +463,7 @@ struct WorktreeDetailView: View {
     @Shared(.userGlobalSettings) var globalSettings
     let profiles = globalSettings.agentProfiles
     guard let worktree, !profiles.isEmpty else { return [] }
-    @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repositorySettings
+    @Shared(.userRepositorySettings(worktree.repositoryLocation)) var repositorySettings
     let recommendedID =
       AgentProfileRecommendation.recommendedProfile(
         profiles: profiles,
@@ -538,22 +539,7 @@ struct WorktreeDetailView: View {
     else {
       return nil
     }
-    if let worktree = repositories.worktree(for: worktreeID) {
-      return worktree
-    }
-    guard let repository = repositories.repositories[id: worktreeID],
-      repository.capabilities.supportsRunnableFolderActions,
-      !repository.capabilities.supportsWorktrees
-    else {
-      return nil
-    }
-    return Worktree(
-      id: repository.id,
-      name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
-    )
+    return repositories.terminalWorktree(for: worktreeID)
   }
 
   @ViewBuilder
@@ -635,6 +621,15 @@ struct WorktreeDetailView: View {
       MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
     } else if let loadingInfo {
       WorktreeLoadingView(info: loadingInfo)
+    } else if let selectedTerminalWorktree,
+      let reason = selectedTerminalWorktree.location.availability(of: .terminalTab).unavailableReason
+    {
+      // Remote terminals come with docs-ai 084 C3; a remote worktree gets no local shell.
+      ContentUnavailableView(
+        selectedTerminalWorktree.name,
+        systemImage: "network",
+        description: Text(reason.message)
+      )
     } else if let selectedTerminalWorktree {
       let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(
         selectedTerminalWorktree.id)

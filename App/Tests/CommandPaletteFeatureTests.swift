@@ -1038,7 +1038,7 @@ struct CommandPaletteFeatureTests {
     let repoA = makeRepository(rootPath: repoAPath, name: "Repo A", worktrees: [mainA])
     let repoB = makeRepository(rootPath: repoBPath, name: "Repo B", worktrees: [mainB])
     var state = RepositoriesFeature.State(repositories: [repoA, repoB])
-    state.repositoryRoots = [repoB.rootURL, repoA.rootURL]
+    state.repositoryRoots = [repoB.location, repoA.location]
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let selectIDs = items.compactMap { item in

@@ -5,7 +5,6 @@ import Foundation
 final class PullRequestRefreshCoordinator {
   nonisolated struct Request: Equatable, Sendable {
     let repositoryID: Repository.ID
-    let repositoryRootURL: URL
     let host: String
     let repositories: [GithubRemoteInfo]
     let accountOverride: GithubAccountOverride?
@@ -24,7 +23,6 @@ final class PullRequestRefreshCoordinator {
 
     init(
       repositoryID: Repository.ID,
-      repositoryRootURL: URL,
       host: String,
       owner: String,
       repo: String,
@@ -35,7 +33,6 @@ final class PullRequestRefreshCoordinator {
     ) {
       self.init(
         repositoryID: repositoryID,
-        repositoryRootURL: repositoryRootURL,
         host: host,
         repositories: [GithubRemoteInfo(host: host, owner: owner, repo: repo)],
         accountOverride: accountOverride,
@@ -47,7 +44,6 @@ final class PullRequestRefreshCoordinator {
 
     init(
       repositoryID: Repository.ID,
-      repositoryRootURL: URL,
       host: String,
       repositories: [GithubRemoteInfo],
       accountOverride: GithubAccountOverride?,
@@ -56,7 +52,6 @@ final class PullRequestRefreshCoordinator {
       detailBranches: [String] = []
     ) {
       self.repositoryID = repositoryID
-      self.repositoryRootURL = repositoryRootURL
       self.host = host
       self.repositories = Self.deduplicateRepositories(repositories)
       self.accountOverride = accountOverride
@@ -76,7 +71,6 @@ final class PullRequestRefreshCoordinator {
     // found pull requests are real, but nothing is confirmed absent and the answer is not complete.
     case refreshed(
       repositoryID: Repository.ID,
-      repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
       prsByBranch: [String: GithubPullRequest],
       confirmedNoPrBranches: Set<String>,
@@ -138,7 +132,6 @@ final class PullRequestRefreshCoordinator {
     }
     let normalized = Request(
       repositoryID: request.repositoryID,
-      repositoryRootURL: request.repositoryRootURL,
       host: request.host,
       repositories: request.repositories.filter { $0.host == request.host },
       accountOverride: request.accountOverride,
@@ -204,7 +197,6 @@ final class PullRequestRefreshCoordinator {
       }
       hostBucket[request.repositoryID] = Request(
         repositoryID: request.repositoryID,
-        repositoryRootURL: request.repositoryRootURL,
         host: request.host,
         repositories: combinedRepositories,
         accountOverride: request.accountOverride,
@@ -414,7 +406,6 @@ final class PullRequestRefreshCoordinator {
         resultHandler(
           .refreshed(
             repositoryID: request.repositoryID,
-            repositoryRootURL: request.repositoryRootURL,
             worktreeIDs: request.worktreeIDs,
             prsByBranch: prsByBranch,
             confirmedNoPrBranches: confirmedNoPrBranches,

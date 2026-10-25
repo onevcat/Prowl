@@ -5,19 +5,16 @@ import ProwlCLIShared
 let appLogger = ProwlLogger("App")
 let notificationJumpLogger = ProwlLogger("NotificationJump")
 
-enum CancelID {
-  static let periodicRefresh = "app.periodicRefresh"
-}
-
 /// Every directory a workflow run directory can live under (docs-ai 063 B3): each worktree, and
-/// the root of a plain repository, which the CLI resolves as its own worktree.
+/// the root of a plain repository, which the CLI resolves as its own worktree. Workflows run
+/// only in local folders (docs-ai 084 A4a).
 func workflowRunRoots(of repositories: [Repository]) -> [String] {
   var roots: [String] = []
   for repository in repositories {
-    if repository.capabilities.supportsRunnableFolderActions, !repository.capabilities.supportsWorktrees {
-      roots.append(repository.rootURL.path(percentEncoded: false))
+    if let terminalDirectory = repository.terminalWorktree?.localURL {
+      roots.append(terminalDirectory.path(percentEncoded: false))
     }
-    roots += repository.worktrees.map { $0.workingDirectory.path(percentEncoded: false) }
+    roots += repository.worktrees.compactMap { $0.localURL?.path(percentEncoded: false) }
   }
   return roots
 }
@@ -30,16 +27,8 @@ func makeTerminalRestorableWorktrees(from repositories: [Repository]) -> [Worktr
       worktrees.append(contentsOf: repository.worktrees)
       continue
     }
-    if repository.capabilities.supportsRunnableFolderActions {
-      worktrees.append(
-        Worktree(
-          id: repository.id,
-          name: repository.name,
-          detail: repository.rootURL.path(percentEncoded: false),
-          workingDirectory: repository.rootURL,
-          repositoryRootURL: repository.rootURL
-        )
-      )
+    if let terminalWorktree = repository.terminalWorktree {
+      worktrees.append(terminalWorktree)
     }
   }
   return worktrees
@@ -137,10 +126,10 @@ extension AppFeature {
 
   /// Pins a repository's "Open in" app. An open repository Settings pane writes its whole
   /// snapshot back on its next edit, so its copy is updated too (#623).
-  func setRepositoryOpenActionID(_ actionID: String, rootURL: URL, into state: inout State) {
-    @Shared(.repositorySettings(rootURL)) var repositorySettings
+  func setRepositoryOpenActionID(_ actionID: String, location: RepositoryLocation, into state: inout State) {
+    @Shared(.repositorySettings(location)) var repositorySettings
     $repositorySettings.withLock { $0.openActionID = actionID }
-    if state.settings.repositorySettings?.rootURL == rootURL {
+    if state.settings.repositorySettings?.location == location {
       state.settings.repositorySettings?.settings.openActionID = actionID
     }
   }
@@ -149,34 +138,12 @@ extension AppFeature {
     guard let worktreeID = canvasFocusedWorktreeID(repositories: repositories) else {
       return nil
     }
-    return terminalWorktree(for: worktreeID, repositories: repositories)
+    return repositories.terminalWorktree(for: worktreeID)
   }
 
   private func canvasFocusedWorktreeID(repositories: RepositoriesFeature.State) -> Worktree.ID? {
     guard repositories.isShowingCanvas else { return nil }
     return terminalClient.canvasFocusedWorktreeID()
-  }
-
-  func terminalWorktree(
-    for worktreeID: Worktree.ID,
-    repositories: RepositoriesFeature.State
-  ) -> Worktree? {
-    if let worktree = repositories.worktree(for: worktreeID) {
-      return worktree
-    }
-    guard let repository = repositories.repositories[id: worktreeID],
-      repository.capabilities.supportsRunnableFolderActions,
-      !repository.capabilities.supportsWorktrees
-    else {
-      return nil
-    }
-    return Worktree(
-      id: repository.id,
-      name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
-    )
   }
 
   static func sessionDurationSeconds(launchedAt: Date?, now: Date) -> Int? {

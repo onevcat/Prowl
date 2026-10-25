@@ -165,6 +165,7 @@ enum WorkflowRunAdmission {
           code: CLIErrorCode.targetNotFound, message: "The source worktree is no longer available.")
       )
     }
+    if let failure = remoteFolderFailure(worktree) { return .failure(failure) }
     let arguments: Arguments
     switch parseArguments(input, definition: definition) {
     case .failure(let failure): return .failure(failure)
@@ -204,6 +205,12 @@ enum WorkflowRunAdmission {
     let environment: WorkflowAdmissionEnvironment
   }
 
+  /// Run history and role launches are rooted in the local worktree directory (docs-ai 084 C2).
+  private static func remoteFolderFailure(_ worktree: Worktree) -> WorkflowAdmissionFailure? {
+    guard worktree.localURL == nil else { return nil }
+    return .init(code: CLIErrorCode.remoteAgentUnsupported, message: "Workflows cannot run in a remote folder yet.")
+  }
+
   private static func start(_ admission: Admission) -> Result<
     WorkflowAdmittedRun, WorkflowAdmissionFailure
   > {
@@ -216,7 +223,7 @@ enum WorkflowRunAdmission {
       definitionPath: entry.file.url.path(percentEncoded: false),
       worktree: WorkflowRunWorktree(
         id: worktree.id, name: worktree.name, branch: environment.branchName(worktree),
-        path: worktree.workingDirectory.path(percentEncoded: false)),
+        path: worktree.location.path),
       sourceSessionIdentity: source.paneID.flatMap { environment.detectedAgent($0)?.sessionIdentity })
     context.sourcePaneID = source.paneID
     context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
@@ -642,7 +649,7 @@ enum WorkflowRunAdmission {
     switch scope {
     case .bundle: .bundle
     case .user: .user
-    case .repo: .repo(repositoryID: worktree.repositoryRootURL.path(percentEncoded: false))
+    case .repo: .repo(repositoryID: worktree.repositoryLocation.id)
     }
   }
 

@@ -75,7 +75,8 @@ struct SidebarRepositoryContainerModel: Equatable, Identifiable {
 
   var repositoryID: Repository.ID
   var title: String
-  var rootURL: URL
+  /// The root on this Mac. Nil for a remote repository.
+  var rootURL: URL?
   var kind: Repository.Kind
   var isExpanded: Bool
   var isRemoving: Bool
@@ -139,7 +140,7 @@ extension RepositoriesFeature.State {
       repositories.map { ($0.id, $0) },
       uniquingKeysWith: { first, _ in first }
     )
-    let roots = sidebarPresentationRoots()
+    let roots = orderedRepositoryRoots()
     let repositoryCount = roots.count
     var items: [SidebarItem] = []
 
@@ -147,16 +148,15 @@ extension RepositoriesFeature.State {
       items.append(.listHeader(SidebarListHeaderModel(repositoryCount: repositoryCount)))
     }
 
-    for rootURL in roots {
-      let standardizedRootURL = rootURL.standardizedFileURL
-      let repositoryID = standardizedRootURL.path(percentEncoded: false)
+    for standardizedRoot in roots {
+      let repositoryID = standardizedRoot.id
       if let failureMessage = loadFailuresByID[repositoryID] {
-        let path = standardizedRootURL.path(percentEncoded: false)
+        let path = standardizedRoot.path
         items.append(
           .failedRepository(
             FailedRepositoryModel(
               id: repositoryID,
-              name: Repository.name(for: standardizedRootURL),
+              name: Repository.name(for: standardizedRoot),
               path: path,
               failureMessage: failureMessage,
               isGitUnavailable: gitUnavailableRepositoryIDs.contains(repositoryID),
@@ -171,7 +171,7 @@ extension RepositoriesFeature.State {
             SidebarRepositoryContainerModel(
               repositoryID: repository.id,
               title: repository.name,
-              rootURL: repository.rootURL,
+              rootURL: repository.localURL,
               kind: repository.kind,
               isExpanded: isExpanded,
               isRemoving: isRemovingRepository(repository),
@@ -191,14 +191,6 @@ extension RepositoriesFeature.State {
     }
 
     return SidebarPresentation(items: items)
-  }
-
-  private func sidebarPresentationRoots() -> [URL] {
-    let orderedRoots = orderedRepositoryRoots()
-    if !orderedRoots.isEmpty {
-      return orderedRoots
-    }
-    return repositories.map(\.rootURL)
   }
 }
 

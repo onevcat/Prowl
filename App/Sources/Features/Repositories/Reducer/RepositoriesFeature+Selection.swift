@@ -3,7 +3,7 @@ import Foundation
 
 func queuePullRequestRefresh(
   repositoryID: Repository.ID,
-  repositoryRootURL: URL,
+  repositoryLocation: RepositoryLocation,
   worktreeIDs: [Worktree.ID],
   refreshesByRepositoryID: inout [Repository.ID: RepositoriesFeature.PendingPullRequestRefresh]
 ) {
@@ -15,7 +15,7 @@ func queuePullRequestRefresh(
     refreshesByRepositoryID[repositoryID] = pending
   } else {
     refreshesByRepositoryID[repositoryID] = RepositoriesFeature.PendingPullRequestRefresh(
-      repositoryRootURL: repositoryRootURL,
+      repositoryLocation: repositoryLocation,
       worktreeIDs: worktreeIDs
     )
   }
@@ -306,10 +306,10 @@ func prunePinnedWorktreeIDs(
 }
 
 func pruneRepositoryOrderIDs(
-  roots: [URL],
+  roots: [RepositoryLocation],
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  let rootIDs = roots.map { $0.standardizedFileURL.path(percentEncoded: false) }
+  let rootIDs = roots.map { $0.standardized.id }
   let availableIDs = Set(rootIDs + state.repositories.map(\.id))
   let pruned = state.repositoryOrderIDs.filter { availableIDs.contains($0) }
   if pruned != state.repositoryOrderIDs {
@@ -320,10 +320,10 @@ func pruneRepositoryOrderIDs(
 }
 
 func pruneWorktreeOrderByRepository(
-  roots: [URL],
+  roots: [RepositoryLocation],
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  let rootIDs = Set(roots.map { $0.standardizedFileURL.path(percentEncoded: false) })
+  let rootIDs = Set(roots.map { $0.standardized.id })
   let repositoriesByID = Dictionary(
     state.repositories.map { ($0.id, $0) },
     uniquingKeysWith: { first, _ in first }

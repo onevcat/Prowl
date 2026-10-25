@@ -41,11 +41,46 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
   }
 
   let id: String
-  let rootURL: URL
+  let location: RepositoryLocation
   let name: String
   let kind: Kind
   let worktrees: IdentifiedArrayOf<Worktree>
   let workspace: ProjectWorkspace?
+
+  init(
+    id: String,
+    location: RepositoryLocation,
+    name: String,
+    kind: Kind = .git,
+    worktrees: IdentifiedArrayOf<Worktree>,
+    workspace: ProjectWorkspace? = nil
+  ) {
+    self.id = id
+    self.location = location
+    self.name = name
+    // A workspace is always a plain runnable folder; git capabilities stay per-repository.
+    self.kind = workspace == nil ? kind : .plain
+    self.worktrees = worktrees
+    self.workspace = workspace
+  }
+
+  /// The ID is the encoded location (docs-ai 084 D1).
+  init(
+    location: RepositoryLocation,
+    name: String,
+    kind: Kind = .git,
+    worktrees: IdentifiedArrayOf<Worktree>,
+    workspace: ProjectWorkspace? = nil
+  ) {
+    self.init(
+      id: location.id,
+      location: location,
+      name: name,
+      kind: kind,
+      worktrees: worktrees,
+      workspace: workspace
+    )
+  }
 
   init(
     id: String,
@@ -55,13 +90,19 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     worktrees: IdentifiedArrayOf<Worktree>,
     workspace: ProjectWorkspace? = nil
   ) {
-    self.id = id
-    self.rootURL = rootURL
-    self.name = name
-    // A workspace is always a plain runnable folder; git capabilities stay per-repository.
-    self.kind = workspace == nil ? kind : .plain
-    self.worktrees = worktrees
-    self.workspace = workspace
+    self.init(
+      id: id,
+      location: .local(rootURL),
+      name: name,
+      kind: kind,
+      worktrees: worktrees,
+      workspace: workspace
+    )
+  }
+
+  /// The root folder on this Mac. Nil for a remote repository.
+  var localURL: URL? {
+    location.localURL
   }
 
   var initials: String {
@@ -79,6 +120,27 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
 
   var isWorkspace: Bool {
     workspace != nil
+  }
+
+  /// The worktree that terminals, scripts and selection use for a repository
+  /// without worktrees of its own (a plain folder or a workspace): the root
+  /// folder, under the repository's ID. Nil for a repository with worktrees.
+  var terminalWorktree: Worktree? {
+    guard capabilities.supportsRunnableFolderActions, !capabilities.supportsWorktrees else {
+      return nil
+    }
+    return Worktree(
+      id: id,
+      name: name,
+      detail: location.path,
+      location: location,
+      repositoryLocation: location
+    )
+  }
+
+  /// The folder name of a repository at `location`, on its own host.
+  static func name(for location: RepositoryLocation) -> String {
+    name(for: location.localURL ?? URL(filePath: location.path, directoryHint: .isDirectory))
   }
 
   static func name(for rootURL: URL) -> String {

@@ -955,7 +955,7 @@ extension WorktreeTerminalState {
     {
       return URL(fileURLWithPath: pwd, isDirectory: true)
     }
-    return surface.launchWorkingDirectory ?? worktree.workingDirectory
+    return surface.launchWorkingDirectory ?? worktree.localURL
   }
 
   func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {

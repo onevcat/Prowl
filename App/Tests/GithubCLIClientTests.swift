@@ -104,7 +104,6 @@ struct GithubCLIClientTests {
   }
 
   @Test func pullRequestMutationsUseResolvedRemoteInfo() async throws {
-    let repoRoot = URL(fileURLWithPath: "/tmp/fork")
     let remoteInfo = GithubRemoteInfo(host: "github.enterprise.test", owner: "octo", repo: "repo")
     let probe = GithubCommandProbe()
     let shell = ShellClient(
@@ -124,9 +123,9 @@ struct GithubCLIClientTests {
     )
     let client = GithubCLIClient.live(shell: shell)
 
-    try await client.mergePullRequest(repoRoot, remoteInfo, 12, .squash, nil)
-    try await client.closePullRequest(repoRoot, remoteInfo, 13, nil)
-    try await client.markPullRequestReady(repoRoot, remoteInfo, 14, nil)
+    try await client.mergePullRequest(remoteInfo, 12, .squash, nil)
+    try await client.closePullRequest(remoteInfo, 13, nil)
+    try await client.markPullRequestReady(remoteInfo, 14, nil)
 
     let calls = await probe.snapshot()
     #expect(
@@ -135,11 +134,78 @@ struct GithubCLIClientTests {
         ["pr", "close", "13", "--repo", "github.enterprise.test/octo/repo"],
         ["pr", "ready", "14", "--repo", "github.enterprise.test/octo/repo"],
       ])
-    #expect(calls.allSatisfy { $0.currentDirectoryURL == repoRoot })
+    #expect(calls.allSatisfy { $0.currentDirectoryURL == nil })
+  }
+
+  @Test func runCommandsNameTheRepositoryWithoutAWorkingDirectory() async throws {
+    let remoteInfo = GithubRemoteInfo(host: "github.enterprise.test", owner: "octo", repo: "repo")
+    let probe = GithubCommandProbe()
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        await probe.record(arguments: arguments, currentDirectoryURL: currentDirectoryURL)
+        return ShellOutput(
+          stdout: arguments.first == "run" && arguments[1] == "list" ? "[]" : "", stderr: "", exitCode: 0)
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    _ = try await client.latestRun(remoteInfo, "feature", nil)
+    try await client.rerunFailedJobs(remoteInfo, 7, nil)
+    _ = try await client.failedRunLogs(remoteInfo, 7, nil)
+    _ = try await client.runLogs(remoteInfo, 7, nil)
+
+    let calls = await probe.snapshot()
+    let target = ["--repo", "github.enterprise.test/octo/repo"]
+    #expect(
+      calls.map(\.arguments) == [
+        [
+          "run", "list", "--branch", "feature", "--limit", "1", "--json",
+          "databaseId,workflowName,name,displayTitle,status,conclusion,createdAt,updatedAt",
+        ] + target,
+        ["run", "rerun", "7", "--failed"] + target,
+        ["run", "view", "7", "--log-failed"] + target,
+        ["run", "view", "7", "--log"] + target,
+      ])
+    #expect(calls.allSatisfy { $0.currentDirectoryURL == nil })
+  }
+
+  @Test func runCommandsRefuseAnAccountOverrideForAnotherHost() async throws {
+    let remoteInfo = GithubRemoteInfo(host: "ghe.example", owner: "octo", repo: "repo")
+    let account = GithubAccountOverride(host: "github.com", login: "work")
+    let probe = GithubCommandProbe()
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        await probe.record(arguments: arguments, currentDirectoryURL: currentDirectoryURL)
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    await #expect(throws: GithubCLIError.self) { try await client.rerunFailedJobs(remoteInfo, 7, account) }
+    await #expect(throws: GithubCLIError.self) { _ = try await client.latestRun(remoteInfo, "feature", account) }
+
+    #expect(await probe.snapshot().isEmpty)
   }
 
   @Test func pullRequestMutationChecksExpectedAccountBeforeCommand() async throws {
-    let repoRoot = URL(fileURLWithPath: "/tmp/private")
     let remoteInfo = GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo")
     let account = GithubAccountOverride(host: "github.com", login: "work")
     let probe = GithubCommandProbe()
@@ -167,7 +233,7 @@ struct GithubCLIClientTests {
     )
     let client = GithubCLIClient.live(shell: shell)
 
-    try await client.mergePullRequest(repoRoot, remoteInfo, 12, .squash, account)
+    try await client.mergePullRequest(remoteInfo, 12, .squash, account)
 
     let calls = await probe.snapshot()
     #expect(
@@ -178,7 +244,6 @@ struct GithubCLIClientTests {
   }
 
   @Test func pullRequestMutationSwitchesAndRestoresExpectedAccount() async throws {
-    let repoRoot = URL(fileURLWithPath: "/tmp/private")
     let remoteInfo = GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo")
     let account = GithubAccountOverride(host: "github.com", login: "work")
     let probe = GithubCommandProbe()
@@ -203,7 +268,7 @@ struct GithubCLIClientTests {
     )
     let client = GithubCLIClient.live(shell: shell)
 
-    try await client.mergePullRequest(repoRoot, remoteInfo, 12, .squash, account)
+    try await client.mergePullRequest(remoteInfo, 12, .squash, account)
 
     let calls = await probe.snapshot()
     #expect(

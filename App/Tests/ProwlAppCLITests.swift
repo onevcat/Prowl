@@ -128,7 +128,7 @@ struct ProwlAppCLITests {
     #expect(resolved?.id == repository.id)
     #expect(resolved?.name == "PlainFolder")
     #expect(
-      resolved?.workingDirectory.standardizedFileURL.path(percentEncoded: false)
+      resolved?.localURL!.standardizedFileURL.path(percentEncoded: false)
         == URL(fileURLWithPath: "/Users/test/PlainFolder", isDirectory: true)
         .standardizedFileURL.path(percentEncoded: false)
     )

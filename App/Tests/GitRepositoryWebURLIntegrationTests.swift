@@ -8,7 +8,7 @@ struct GitRepositoryWebURLIntegrationTests {
     let repoURL = try makeTemporaryRepo(namePrefix: "prowl-weburl-no-remote")
     defer { try? FileManager.default.removeItem(at: repoURL) }
 
-    let url = await GitClient().repositoryWebURL(for: repoURL)
+    let url = await GitClient.local.repositoryWebURL(for: repoURL)
 
     #expect(url == nil)
   }
@@ -22,7 +22,7 @@ struct GitRepositoryWebURLIntegrationTests {
       "remote", "add", "origin", "/tmp/local-only/repo.git",
     ])
 
-    let url = await GitClient().repositoryWebURL(for: repoURL)
+    let url = await GitClient.local.repositoryWebURL(for: repoURL)
 
     #expect(url == nil)
   }
@@ -36,7 +36,7 @@ struct GitRepositoryWebURLIntegrationTests {
       "remote", "add", "origin", "ssh://git@git.example.com:8443/scm/platform/repo.git",
     ])
 
-    let url = await GitClient().repositoryWebURL(for: repoURL)
+    let url = await GitClient.local.repositoryWebURL(for: repoURL)
 
     #expect(url == URL(string: "https://git.example.com:8443/scm/platform/repo"))
   }

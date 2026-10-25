@@ -2,6 +2,7 @@ import ConcurrencyExtras
 import DependenciesTestSupport
 import Foundation
 import GhosttyKit
+import IdentifiedCollections
 import ProwlCLIShared
 import Testing
 
@@ -18,7 +19,7 @@ struct WorktreeTerminalManagerTests {
       id: otherRoot.path, name: "removed", detail: "", workingDirectory: otherRoot, repositoryRootURL: otherRoot)
     _ = manager.state(for: removed)
 
-    manager.prune(keeping: [], preservingRepositoryIDs: [failed.repositoryRootURL.path])
+    manager.prune(keeping: [], preservingRepositoryIDs: [failed.repositoryLocalURL!.path])
     #expect(manager.stateIfExists(for: failed.id) === original)
     #expect(manager.stateIfExists(for: removed.id) == nil)
 
@@ -26,6 +27,46 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.stateIfExists(for: failed.id) === original)
     manager.prune(keeping: [])
     #expect(manager.stateIfExists(for: failed.id) == nil)
+  }
+
+  @Test func prunePreservesFailedRepositorySessionsWhenOnlyATrailingSlashDiffers() {
+    // A failed repository's ID comes from its entry path, without the slash that
+    // path URLs add while the directory exists.
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let root = URL(fileURLWithPath: "/tmp/prowl-prune-\(UUID().uuidString)/", isDirectory: true)
+    let worktree = Worktree(
+      id: root.path(percentEncoded: false), name: "main", detail: "", workingDirectory: root, repositoryRootURL: root)
+    let original = manager.state(for: worktree)
+
+    manager.prune(keeping: [], preservingRepositoryIDs: [PathPolicy.trimmingTrailingSlashes(root.path)])
+
+    #expect(manager.stateIfExists(for: worktree.id) === original)
+    manager.prune(keeping: [])
+  }
+
+  @Test func profileLaunchInARemoteWorktreeIsRefusedBeforeAStateExists() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = RemoteRepositoryFixtures.gitRepository().worktrees[0]
+    let plan = AgentProfileLaunchPlan(
+      profileID: UUID(),
+      profileName: "Codex",
+      runtime: .codex,
+      invocation: AgentInvocation(executable: "codex", arguments: []),
+      commandEnvironmentTokens: [],
+      placement: .tab,
+      splitDirection: .right,
+      surfaceEnvironment: [:],
+      dedicatedHome: nil
+    )
+    let request = AgentProfileLaunchRequest(plan: plan, placement: .tab(background: false))
+    let expected = AgentProfileLaunchError.unavailable(.remoteFolder(.profileLaunch))
+
+    let prepared = await manager.prepareAgentProfileLaunch(request, in: worktree)
+    let launched = manager.launchAgentProfile(request, in: worktree)
+
+    #expect(prepared.failure == expected)
+    #expect(launched.failure == expected)
+    #expect(manager.stateIfExists(for: worktree.id) == nil)
   }
 
   @Test func buffersEventsUntilStreamCreated() async {
@@ -390,7 +431,7 @@ struct WorktreeTerminalManagerTests {
         argumentValues: [1: "notify=[]"]
       ),
       resources: AgentHookResources(bundledCLIPath: "/bundle/prowl", socketPath: "/tmp/prowl.sock"),
-      launchCWD: worktree.workingDirectory,
+      launchCWD: worktree.localURL!,
       token: "token",
       nativeEvents: ["agent-turn-complete": .turnEnded],
       coveredEvents: [.turnEnded]
@@ -405,15 +446,15 @@ struct WorktreeTerminalManagerTests {
     let target = TabResolvedTarget(
       worktreeID: worktree.id,
       worktreeName: worktree.name,
-      worktreePath: worktree.workingDirectory.path,
-      worktreeRootPath: worktree.repositoryRootURL.path,
+      worktreePath: worktree.localURL!.path,
+      worktreeRootPath: worktree.repositoryLocalURL!.path,
       worktreeKind: "git",
       tabID: launched.tabID.rawValue.uuidString,
       tabTitle: "Codex",
       tabSelected: true,
       paneID: launched.surfaceID.uuidString,
       paneTitle: "codex",
-      paneCWD: worktree.workingDirectory.path,
+      paneCWD: worktree.localURL!.path,
       paneFocused: true
     )
 
@@ -1117,5 +1158,12 @@ private final class FocusChanger {
   func change() {
     calls += 1
     action()
+  }
+}
+
+extension Result {
+  fileprivate var failure: Failure? {
+    guard case .failure(let error) = self else { return nil }
+    return error
   }
 }

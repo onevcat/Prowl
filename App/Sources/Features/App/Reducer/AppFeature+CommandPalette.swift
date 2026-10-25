@@ -182,7 +182,7 @@ extension AppFeature {
       guard let worktree = state.repositories.selectedTerminalWorktree else {
         return .none
       }
-      let path = worktree.workingDirectory.path
+      let path = worktree.location.displayPath
       return .run { _ in
         await MainActor.run {
           NSPasteboard.general.clearContents()

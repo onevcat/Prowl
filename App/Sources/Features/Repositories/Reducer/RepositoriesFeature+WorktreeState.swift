@@ -52,7 +52,7 @@ func insertWorktree(
   worktrees.insert(worktree, at: 0)
   state.repositories[index] = Repository(
     id: repository.id,
-    rootURL: repository.rootURL,
+    location: repository.location,
     name: repository.name,
     worktrees: worktrees
   )
@@ -71,7 +71,7 @@ func removeWorktree(
   worktrees.remove(id: worktreeID)
   state.repositories[index] = Repository(
     id: repository.id,
-    rootURL: repository.rootURL,
+    location: repository.location,
     name: repository.name,
     worktrees: worktrees
   )
@@ -86,11 +86,12 @@ func comparableWorktreePath(_ url: URL) -> String {
 
 func cleanupFailedWorktree(
   repositoryID: Repository.ID,
+  repositoryLocation: RepositoryLocation,
   name: String?,
-  worktreeDirectory: URL?,
+  worktreeLocation: RepositoryLocation?,
   state: inout RepositoriesFeature.State
 ) -> FailedWorktreeCleanup {
-  guard let name, !name.isEmpty, let worktreeDirectory else {
+  guard let name, !name.isEmpty, let worktreeLocation else {
     return FailedWorktreeCleanup(
       didRemoveWorktree: false,
       didUpdatePinned: false,
@@ -98,9 +99,8 @@ func cleanupFailedWorktree(
       worktree: nil
     )
   }
-  let repositoryRootURL = URL(fileURLWithPath: repositoryID).standardizedFileURL
-  let worktreeURL = worktreeDirectory.standardizedFileURL
-  let worktreeID = worktreeURL.path(percentEncoded: false)
+  let location = worktreeLocation.standardized
+  let worktreeID = location.id
   let knownWorktree = state.repositories[id: repositoryID]?.worktrees[id: worktreeID]
   // A known worktree on another branch belongs to another creation.
   if let knownWorktree, knownWorktree.name != name {
@@ -117,8 +117,8 @@ func cleanupFailedWorktree(
       id: worktreeID,
       name: name,
       detail: "",
-      workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL
+      location: location,
+      repositoryLocation: repositoryLocation.standardized
     )
   let cleanup = cleanupWorktreeState(
     worktreeID,
@@ -236,13 +236,13 @@ func updateWorktreeName(
       id: worktree.id,
       name: name,
       detail: worktree.detail,
-      workingDirectory: worktree.workingDirectory,
-      repositoryRootURL: worktree.repositoryRootURL,
+      location: worktree.location,
+      repositoryLocation: worktree.repositoryLocation,
       createdAt: worktree.createdAt
     )
     repository = Repository(
       id: repository.id,
-      rootURL: repository.rootURL,
+      location: repository.location,
       name: repository.name,
       worktrees: worktrees
     )

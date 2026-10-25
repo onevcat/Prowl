@@ -8,21 +8,24 @@ nonisolated struct UserRepositorySettingsKeyID: Hashable, Sendable {
 
 nonisolated struct UserRepositorySettingsKey: SharedKey {
   let repositoryID: String
-  let rootURL: URL
+  let location: RepositoryLocation
   private let file: UserSettingsFile<UserRepositorySettings>
 
-  init(rootURL: URL) {
+  init(location: RepositoryLocation) {
     @Dependency(\.repositoryLocalSettingsStorage) var storage
-    let rootURL = rootURL.standardizedFileURL
-    self.rootURL = rootURL
-    repositoryID = rootURL.path(percentEncoded: false)
+    self.location = location.standardized
+    repositoryID = self.location.id
     file = UserSettingsFile(
-      url: ProwlPaths.userRepositorySettingsURL(for: rootURL),
-      legacyURLs: ProwlPaths.legacyUserRepositorySettingsURLs(for: rootURL),
+      url: ProwlPaths.userRepositorySettingsURL(for: self.location),
+      legacyURLs: ProwlPaths.legacyUserRepositorySettingsURLs(for: self.location),
       loadData: storage.load,
       saveData: storage.save,
       createData: storage.create
     )
+  }
+
+  init(rootURL: URL) {
+    self.init(location: .local(rootURL))
   }
 
   var id: UserRepositorySettingsKeyID {
@@ -65,7 +68,12 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
 }
 
 nonisolated extension SharedReaderKey where Self == UserRepositorySettingsKey.Default {
+  static func userRepositorySettings(_ location: RepositoryLocation) -> Self {
+    Self[UserRepositorySettingsKey(location: location), default: .default]
+  }
+
+  /// The user settings of the local repository at `rootURL`.
   static func userRepositorySettings(_ rootURL: URL) -> Self {
-    Self[UserRepositorySettingsKey(rootURL: rootURL), default: .default]
+    userRepositorySettings(.local(rootURL))
   }
 }

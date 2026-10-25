@@ -251,7 +251,7 @@ struct DiffWindowStateTests {
     try runDiffWindowStateGit(["-C", repositoryURL.path(percentEncoded: false), "add", "copy.txt"])
     try runDiffWindowStateGit(["-C", repositoryURL.path(percentEncoded: false), "commit", "-m", "copy"])
 
-    let gitClient = GitClient()
+    let gitClient = GitClient.local
     let resolution = try await gitClient.outgoingBaseResolution(
       pullRequest: nil,
       configuredBaseRef: "main",

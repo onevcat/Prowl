@@ -77,13 +77,18 @@ all agents and their statuses is the
 ## Where Prowl stores things
 
 - **Global settings:** `~/.prowl/settings.json`
-- **Per-repository settings:** `~/.prowl/repo/<repo-name>/prowl.json`
-- **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.user.json`
+- **Per-repository settings:** `~/.prowl/repo/<repo-name>-<hash>/prowl.json`
+- **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>-<hash>/prowl.user.json`
 - **Per-workspace metadata:** `<workspace>/.prowl/workspace.json`
 - **Workflow files:** `~/.prowl/workflows/*.pwlworkflow` and `<repo root>/.prowl/workflows/*.pwlworkflow`;
   runs leave `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`
 - **CLI socket:** `~/Library/Application Support/com.onevcat.prowl/cli.sock`
   (overridable with `PROWL_CLI_SOCKET`)
+- `<hash>` is the first 8 hex digits of the SHA-256 of the repository path, so two
+  repositories with one name keep separate settings. A moved repository does not take
+  along edits made at its old path. Files from an earlier version in `~/.prowl/repo/<repo-name>/` are
+  copied (not moved) the first time Prowl reads them; a symlinked file stays a link to
+  the same target.
 - Legacy `~/.supacode` is migrated to `~/.prowl` on first launch. (Prowl is a fork
   of Supacode; a few stored values, such as the `supacodeClassic` sound, keep the old name.)
 

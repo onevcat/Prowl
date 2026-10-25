@@ -11,6 +11,7 @@ extension RepositoriesFeature {
     case .openRepositories(let urls):
       analyticsClient.capture("repository_added", ["count": urls.count])
       state.alert = nil
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
         let existingEntries = await loadPersistedRepositoryEntries()
         var resolvedEntries: [PersistedRepositoryEntry] = []
@@ -57,9 +58,10 @@ extension RepositoriesFeature {
           }
         }
         let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
-        let mergedRoots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+        let mergedRoots = mergedEntries.map(\.location)
         await repositoryPersistence.saveRepositoryEntries(mergedEntries)
-        let (repositories, failures) = await loadRepositoriesData(mergedEntries)
+        let (repositories, failures) = await loadRepositoriesData(
+          mergedEntries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
           .repositoryManagement(
             .openRepositoriesFinished(
@@ -67,7 +69,8 @@ extension RepositoriesFeature {
               failures: failures,
               invalidRoots: invalidRoots,
               openFailures: openFailures,
-              roots: mergedRoots
+              roots: mergedRoots,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         )
@@ -75,12 +78,14 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
     case .openRepositoriesFinished(
-      let repositories,
+      let loadedRepositories,
       let failures,
       let invalidRoots,
       let openFailures,
-      let roots
+      let roots,
+      let reusedIDs
     ):
+      let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
       state.snapshotPersistencePhase = state.snapshotPersistencePhase.afterLiveLoad(
@@ -98,11 +103,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      state.loadFailuresByID = Dictionary(
-        failures.map { ($0.rootID, $0.message) },
-        uniquingKeysWith: { first, _ in first }
-      )
-      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+      recordLoadFailures(failures, state: &state)
       let invalidRootMessages = invalidRoots.map { String(localized: "\($0) is not a Git repository.") }
       let openFailureMessages = invalidRootMessages + openFailures
       if !openFailureMessages.isEmpty {
@@ -177,6 +178,7 @@ extension RepositoriesFeature {
         }
         allEffects.append(contentsOf: iconDetectionEffects(for: Array(newRepos)))
       }
+      allEffects.append(syncRemoteRefreshSchedules(state: &state))
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):
@@ -198,7 +200,7 @@ extension RepositoriesFeature {
         state.removeWorkspaceConfirmation = RemoveWorkspaceConfirmation(
           repositoryID: repositoryID,
           workspaceTitle: repository.name,
-          rootPath: repository.rootURL.path(percentEncoded: false),
+          rootPath: repository.location.path,
           branchOptions: branchOptions
         )
         return .none
@@ -248,7 +250,14 @@ extension RepositoriesFeature {
         )
       }
       let repositoryID = repository.id
-      let rootURL = repository.rootURL
+      // Workspaces are local folders (docs-ai 084 A4a).
+      guard let rootURL = repository.localURL else {
+        return .send(
+          .repositoryManagement(
+            .repositoryRemoved(repository.id, selectionWasRemoved: selectionWasRemoved)
+          )
+        )
+      }
       // Resolve the (source repo, branch) pairs the user opted to delete. The
       // deletion itself is routed through GitClient's guarded entry point so a
       // protected branch (main/master/default) can never be force-deleted.
@@ -327,13 +336,14 @@ extension RepositoriesFeature {
       state.loadFailuresByID.removeValue(forKey: repositoryID)
       state.gitUnavailableRepositoryIDs.remove(repositoryID)
       state.repositoryRoots.removeAll {
-        isSameRepositoryPath($0.standardizedFileURL.path(percentEncoded: false), repositoryID)
+        isSameRepositoryPath($0.standardized.id, repositoryID)
       }
       let failedIconCleanup = iconDetectionRemovalEffect(
         repositoryID: repositoryID,
-        rootURL: state.repositories[id: repositoryID]?.rootURL
+        rootURL: state.repositories[id: repositoryID]?.localURL
       )
       let remainingRoots = state.repositoryRoots
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .merge(
         failedIconCleanup,
         // Failed roots are absent from the loaded models, so a reload may not emit this delegate.
@@ -342,14 +352,16 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
-          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
+          let roots = remainingEntries.map(\.location)
+          let (repositories, failures) = await loadRepositoriesData(
+            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
               failures: failures,
               roots: roots,
-              animated: true
+              animated: true,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         }
@@ -366,10 +378,11 @@ extension RepositoriesFeature {
       }
       let iconCleanup = iconDetectionRemovalEffect(
         repositoryID: repositoryID,
-        rootURL: state.repositories[id: repositoryID]?.rootURL
+        rootURL: state.repositories[id: repositoryID]?.localURL
       )
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let remainingRoots = state.repositoryRoots
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .merge(
         iconCleanup,
         .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
@@ -377,14 +390,16 @@ extension RepositoriesFeature {
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
-          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
-          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
+          let roots = remainingEntries.map(\.location)
+          let (repositories, failures) = await loadRepositoriesData(
+            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
               failures: failures,
               roots: roots,
-              animated: true
+              animated: true,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         }
@@ -468,9 +483,5 @@ nonisolated private func isSameRepositoryPath(_ lhs: String, _ rhs: String) -> B
 }
 
 nonisolated private func comparableRepositoryPath(_ path: String) -> String {
-  var path = path
-  while path.count > 1, path.hasSuffix("/") {
-    path.removeLast()
-  }
-  return path
+  PathPolicy.trimmingTrailingSlashes(path)
 }

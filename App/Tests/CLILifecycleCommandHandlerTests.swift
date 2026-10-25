@@ -615,6 +615,10 @@ struct CLILifecycleCommandHandlerTests {
       CLIProfileLaunchFailure.creation(.splitAnchorUnavailable, profile: profile)
         == .createFailed("The split anchor for Agent Profile “Reviewer” is no longer available.")
     )
+    #expect(
+      CLIProfileLaunchFailure.creation(.unavailable(.remoteFolder(.profileLaunch)), profile: profile)
+        == .createFailed("Agent Profile “Reviewer” cannot launch in a remote folder yet.")
+    )
   }
 
   @Test func profileLaunchFailurePreservesTheCreationReason() async {

@@ -86,7 +86,7 @@ extension RepositoriesFeature {
         return .none
       }
       state.isRefreshingWorktrees = false
-      let roots = repositories.map(\.rootURL)
+      let roots = repositories.map(\.location)
       let previousSelection = state.selectedWorktreeID
       let previousSelectedWorktree = state.worktree(for: previousSelection)
       let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
@@ -182,16 +182,19 @@ extension RepositoriesFeature {
     case .loadPersistedRepositories:
       state.alert = nil
       state.isRefreshingWorktrees = false
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
         let entries = await loadPersistedRepositoryEntries()
-        let roots = entries.map { URL(fileURLWithPath: $0.path) }
-        let (repositories, failures) = await loadRepositoriesData(entries)
+        let roots = entries.map(\.location)
+        let (repositories, failures) = await loadRepositoriesData(
+          entries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
           .repositoriesLoaded(
             repositories,
             failures: failures,
             roots: roots,
-            animated: false
+            animated: false,
+            reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
           )
         )
       }
@@ -207,9 +210,11 @@ extension RepositoriesFeature {
         state.isRefreshingWorktrees = false
         return .none
       }
-      return loadRepositories(fallbackRoots: roots, animated: animated)
+      return loadRepositories(
+        fallbackRoots: roots, animated: animated, knownRemoteRepositories: state.retainedRemoteRepositories)
 
-    case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
+    case .repositoriesLoaded(let loadedRepositories, let failures, let roots, let animated, let reusedIDs):
+      let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
       state.snapshotPersistencePhase = state.snapshotPersistencePhase.afterLiveLoad(
@@ -227,11 +232,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      state.loadFailuresByID = Dictionary(
-        failures.map { ($0.rootID, $0.message) },
-        uniquingKeysWith: { first, _ in first }
-      )
-      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+      recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,
@@ -292,7 +293,17 @@ extension RepositoriesFeature {
         allEffects.append(effect)
       }
       allEffects.append(refreshWorkspaceChildrenEffect(state: state))
+      allEffects.append(syncRemoteRefreshSchedules(state: &state))
       return .merge(allEffects)
+
+    case .remoteRepositoryRefreshDue(let repositoryID):
+      return reduceRemoteRefreshDue(repositoryID, state: &state)
+
+    case .remoteRepositoryRefreshed(let repositoryID, let result):
+      return reduceRemoteRefreshed(repositoryID, result, state: &state)
+
+    case .setRemoteRefreshActive(let isActive):
+      return setRemoteRefreshActive(isActive, state: &state)
 
     case .refreshAllCustomTitles:
       // Fan out across the current repository list, reading each
@@ -304,7 +315,7 @@ extension RepositoriesFeature {
       return .run { send in
         var dict: [Repository.ID: String] = [:]
         for repository in repositoriesForTitleRefresh {
-          @Shared(.repositorySettings(repository.rootURL)) var settings
+          @Shared(.repositorySettings(repository.location)) var settings
           let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
           if let trimmed, !trimmed.isEmpty {
             dict[repository.id] = trimmed
@@ -313,13 +324,13 @@ extension RepositoriesFeature {
         await send(.customTitlesLoaded(dict))
       }
 
-    case .refreshCustomTitle(let rootURL):
-      guard let repository = state.repositories.first(where: { $0.rootURL == rootURL }) else {
+    case .refreshCustomTitle(let location):
+      guard let repository = state.repositories.first(where: { $0.location == location }) else {
         return .none
       }
       let repositoryID = repository.id
       return .run { send in
-        @Shared(.repositorySettings(rootURL)) var settings
+        @Shared(.repositorySettings(location)) var settings
         let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
         await send(.customTitleUpdated(repositoryID, normalized))
@@ -587,7 +598,7 @@ extension RepositoriesFeature {
 
     case .openWorkspaceChild(let childID):
       guard let child = state.allResolvedWorkspaceChildren().first(where: { $0.id == childID }),
-        let workspaceRepository = state.repositories[id: child.workspaceID]
+        let workspaceWorktree = state.repositories[id: child.workspaceID]?.terminalWorktree
       else {
         return .none
       }
@@ -597,13 +608,6 @@ extension RepositoriesFeature {
       state.sidebarSelectedWorktreeIDs = []
       state.openedWorktreeIDs.insert(child.workspaceID)
       state.pendingTerminalFocusWorktreeIDs.insert(child.workspaceID)
-      let workspaceWorktree = Worktree(
-        id: workspaceRepository.id,
-        name: workspaceRepository.name,
-        detail: workspaceRepository.rootURL.path(percentEncoded: false),
-        workingDirectory: workspaceRepository.rootURL,
-        repositoryRootURL: workspaceRepository.rootURL
-      )
       return .merge(
         .send(.delegate(.selectedWorktreeChanged(workspaceWorktree))),
         .run { _ in
@@ -631,12 +635,17 @@ extension RepositoriesFeature {
 
     case .newTerminalTab(let worktreeID):
       guard let worktree = state.worktree(for: worktreeID) else { return .none }
+      // Remote tabs come with the remote launcher (docs-ai 084 C3).
+      guard let worktreeDirectory = worktree.localURL else {
+        let reason = FeatureUnavailableReason.remoteFolder(.terminalTab)
+        return .send(.showToast(.warning(reason.message)))
+      }
       // Pin the new tab's cwd to the worktree root: Ghostty's default new-tab
       // behavior inherits the focused surface's cwd, which is wrong when the
       // user targets a worktree from the sidebar.
       let createTab: Effect<Action> = .run { _ in
         await terminalClient.send(
-          .createTabInDirectory(worktree, directory: worktree.workingDirectory))
+          .createTabInDirectory(worktree, directory: worktreeDirectory))
       }
       // Canvas focuses and reveals the new card itself when it appears, like
       // every other tab created while Canvas is showing.
@@ -789,9 +798,11 @@ extension RepositoriesFeature {
         return .none
       }
       analyticsClient.capture("branch_renamed", nil)
+      let repositoryHost = repositoryHost
+      let worktreeLocation = worktree.location
       return .run { send in
         do {
-          try await gitClient.renameBranch(worktree.workingDirectory, trimmed)
+          try await repositoryHost.renameBranch(in: worktreeLocation, to: trimmed)
           await send(.reloadRepositories(animated: true))
         } catch {
           await send(
@@ -957,26 +968,28 @@ extension RepositoriesFeature {
         guard let worktree = state.worktree(for: worktreeID) else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         return .run { send in
-          if let name = await gitClient.branchName(worktreeURL) {
+          if let name = await repositoryHost.branchName(of: worktreeLocation) {
             await send(.worktreeBranchNameLoaded(worktreeID: worktreeID, name: name))
           }
         }
       case .filesChanged(let worktreeID):
-        guard let worktree = state.worktree(for: worktreeID) else {
+        guard let worktree = state.worktree(for: worktreeID),
+          worktree.availability(of: .lineCounts).isAvailable
+        else {
           return .none
         }
-        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
         guard repositorySettings.observesLineDiffsAutomatically else {
           return .none
         }
-        let worktreeURL = worktree.workingDirectory
-        let gitClient = gitClient
+        let worktreeLocation = worktree.location
+        let repositoryHost = repositoryHost
         let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
         return .run { send in
-          if let changes = await gitClient.lineChanges(worktreeURL) {
+          if let changes = await repositoryHost.lineChanges(in: worktreeLocation) {
             let nextLineChanges = normalizedLineChanges(changes)
             guard nextLineChanges != previousLineChanges else {
               return
@@ -991,39 +1004,21 @@ extension RepositoriesFeature {
         }
       case .repositoryWorktreesChanged:
         return .send(.reloadRepositories(animated: true))
-      case .repositoryRemoteConfigurationChanged(let repositoryRootURL):
+      case .repositoryRemoteConfigurationChanged(let location):
         guard
+          let changedRoot = location.localURL?.standardizedFileURL,
           let repository = state.repositories.first(where: {
-            $0.rootURL.standardizedFileURL == repositoryRootURL.standardizedFileURL
+            $0.location.localURL?.standardizedFileURL == changedRoot
           })
         else {
           return .none
         }
-        let repositories = IdentifiedArrayOf(uniqueElements: [repository])
-        var effects: [Effect<Action>] = []
-        let worktreeIDs = repository.worktrees.map(\.id)
-        // A changed remote can point every branch at different pull requests.
-        state.pullRequestRefreshForcedWorktreeIDs.formUnion(worktreeIDs)
-        if repository.capabilities.supportsPullRequests, !worktreeIDs.isEmpty {
-          effects.append(
-            .send(
-              .githubIntegration(
-                .repositoryPullRequestRefreshRequested(
-                  repositoryRootURL: repository.rootURL,
-                  worktreeIDs: worktreeIDs
-                )
-              ))
-          )
-        }
-        if let effect = detectCodeHostsEffect(for: repositories, includeUnknown: true) {
-          effects.append(effect)
-        }
-        return effects.isEmpty ? .none : .concatenate(effects)
-      case .repositoryPullRequestRefresh(let repositoryRootURL, let worktreeIDs):
+        return remoteConfigurationChanged(repository, state: &state)
+      case .repositoryPullRequestRefresh(let location, let worktreeIDs):
         return .send(
           .githubIntegration(
             .repositoryPullRequestRefreshRequested(
-              repositoryRootURL: repositoryRootURL,
+              repositoryLocation: location,
               worktreeIDs: worktreeIDs
             )
           )

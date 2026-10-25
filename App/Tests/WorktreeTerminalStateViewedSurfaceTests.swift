@@ -279,7 +279,7 @@ struct WorktreeTerminalStateViewedSurfaceTests {
     )
     let surface = GhosttySurfaceView(
       runtime: state.runtime,
-      workingDirectory: state.worktree.workingDirectory,
+      workingDirectory: state.worktree.localURL!,
       fontSize: nil,
       context: GHOSTTY_SURFACE_CONTEXT_TAB,
       skipsSurfaceCreationForTesting: true

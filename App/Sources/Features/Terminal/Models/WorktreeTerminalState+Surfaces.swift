@@ -479,7 +479,7 @@ extension WorktreeTerminalState {
     )
     let view = GhosttySurfaceView(
       runtime: runtime,
-      workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
+      workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.localURL,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context,

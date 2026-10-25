@@ -54,7 +54,7 @@ extension AppFeature.State: CustomDumpRepresentable {
 extension RepositorySettingsFeature.State: CustomDumpRepresentable {
   var customDumpValue: Any {
     (
-      rootURL: rootURL.lastPathComponent,
+      repository: Repository.name(for: location),
       isBare: isBareRepository,
       branchOptions: branchOptions.count
     )

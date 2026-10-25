@@ -68,8 +68,9 @@ and its `worktrees/` registry subdirectory, resolving `.git`-file `gitdir:` and
 are debounced per repository root (2 s `KeyedDebouncer`) into a
 `.repositoryWorktreesChanged` watcher event, which the reducer turns into the existing
 `reloadRepositories(animated: true)` path — no separate incremental-update path. The
-same PR also sends the current scene phase when `ContentView` first appears, so the
-active refresh loop starts even when no phase transition ever fires.
+same PR also sent the current scene phase when `ContentView` first appeared, so that the
+active refresh loop would start without a phase transition. It sent `.background`, so the
+loop never started; [005](005-app-activity-signal.md) found the cause and removed the loop.
 
 **Later waves** (see Amendments): canonicalizing the worktree-removal guard for
 `/private`-style symlinks (#406), hardening `setWorktrees` against duplicate IDs plus a
@@ -111,3 +112,4 @@ migrating symlinked repository roots to the Git-reported canonical root (#555).
   [003-duplicate-watcher-crash.md](003-duplicate-watcher-crash.md)
 - Updated 2026-09-18: per-entry registry monitoring and vnode identity checks after
   file replacement — see [004-registry-vnode-lifecycle.md](004-registry-vnode-lifecycle.md)
+- Updated 2026-10-25: the scene phase was frozen by a window delegate takeover; app activity now comes from `NSApplication`, the 30 s reload is removed, and the Design text about the `.task` scene phase send is corrected — see [005-app-activity-signal.md](005-app-activity-signal.md)

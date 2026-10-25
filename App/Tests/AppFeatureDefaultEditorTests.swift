@@ -53,7 +53,7 @@ struct AppFeatureDefaultEditorTests {
     let settingsFileURL = URL(
       fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
-    let repositoryID = worktree.repositoryRootURL.standardizedFileURL.path(percentEncoded: false)
+    let repositoryID = worktree.repositoryLocalURL!.standardizedFileURL.path(percentEncoded: false)
     var globalRepositorySettings = RepositorySettings.default
     globalRepositorySettings.openActionID = OpenWorktreeAction.finder.settingsID
     var localRepositorySettings = RepositorySettings.default
@@ -75,7 +75,7 @@ struct AppFeatureDefaultEditorTests {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try localStorage.save(
       encoder.encode(localRepositorySettings),
-      at: ProwlPaths.repositorySettingsURL(for: worktree.repositoryRootURL)
+      at: ProwlPaths.repositorySettingsURL(for: worktree.repositoryLocalURL!)
     )
 
     let store = TestStore(
@@ -106,11 +106,11 @@ struct AppFeatureDefaultEditorTests {
     let worktree = makeWorktree()
     let fileManager = FileManager.default
     try fileManager.createDirectory(
-      at: worktree.workingDirectory,
+      at: worktree.localURL!,
       withIntermediateDirectories: true
     )
-    defer { try? fileManager.removeItem(at: worktree.repositoryRootURL) }
-    try Data().write(to: worktree.workingDirectory.appending(path: "Package.swift"))
+    defer { try? fileManager.removeItem(at: worktree.repositoryLocalURL!) }
+    try Data().write(to: worktree.localURL!.appending(path: "Package.swift"))
     let repositoriesState = makeRepositoriesState(worktree: worktree)
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
@@ -251,7 +251,7 @@ struct AppFeatureDefaultEditorTests {
       settings: SettingsFeature.State()
     )
     initialState.settings.repositorySettings = RepositorySettingsFeature.State(
-      rootURL: worktree.repositoryRootURL,
+      location: .local(worktree.repositoryLocalURL!),
       repositoryKind: .git,
       settings: .default,
       userSettings: .default
@@ -281,7 +281,7 @@ struct AppFeatureDefaultEditorTests {
       $0.settingsFileURL = settingsFileURL
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      @Shared(.repositorySettings(worktree.repositoryLocalURL!)) var repositorySettings
       return repositorySettings.openActionID
     }
     #expect(storedOpenActionID == OpenWorktreeAction.terminal.settingsID)
@@ -302,7 +302,7 @@ struct AppFeatureDefaultEditorTests {
       $0.settingsFileURL = settingsFileURL
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      @Shared(.repositorySettings(worktree.repositoryLocalURL!)) var repositorySettings
       $repositorySettings.withLock { $0 = pinnedSettings }
       var initialState = AppFeature.State(
         repositories: repositoriesState,
@@ -311,7 +311,7 @@ struct AppFeatureDefaultEditorTests {
       initialState.openActionSelection = .terminal
       initialState.openActionIsAutomatic = false
       initialState.settings.repositorySettings = RepositorySettingsFeature.State(
-        rootURL: worktree.repositoryRootURL,
+        location: .local(worktree.repositoryLocalURL!),
         repositoryKind: .git,
         settings: pinnedSettings,
         userSettings: .default
@@ -337,7 +337,7 @@ struct AppFeatureDefaultEditorTests {
       $0.settingsFileURL = settingsFileURL
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      @Shared(.repositorySettings(worktree.repositoryLocalURL!)) var repositorySettings
       return repositorySettings.openActionID
     }
     #expect(storedOpenActionID == OpenWorktreeAction.automaticSettingsID)
@@ -357,8 +357,8 @@ struct AppFeatureDefaultEditorTests {
 
   private func makeRepositoriesState(worktree: Worktree) -> RepositoriesFeature.State {
     let repository = Repository(
-      id: worktree.repositoryRootURL.path(percentEncoded: false),
-      rootURL: worktree.repositoryRootURL,
+      id: worktree.repositoryLocalURL!.path(percentEncoded: false),
+      rootURL: worktree.repositoryLocalURL!,
       name: "repo",
       worktrees: [worktree]
     )

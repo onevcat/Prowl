@@ -101,7 +101,18 @@ extension RepositoriesFeature {
         return .none
       }
       state.alert = nil
-      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+      if let reason = worktree.availability(of: .archiveScript).unavailableReason {
+        repositoriesLogger.info("Archiving \(worktreeID) without its archive script: \(reason.message)")
+        return .merge(
+          .send(.showToast(.warning(reason.message))),
+          .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
+        )
+      }
+      // The archive script is available only for a local worktree (checked above).
+      guard let worktreeDirectory = worktree.localURL else {
+        return .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
+      }
+      @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
       let script = repositorySettings.archiveScript
       let commandText = archiveScriptCommand(script)
       let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,7 +138,7 @@ extension RepositoriesFeature {
           for try await event in shellClient.runLoginStream(
             envURL,
             ["bash", "-lc", scriptWithEnv],
-            worktree.workingDirectory,
+            worktreeDirectory,
             log: false
           ) {
             switch event {
@@ -382,21 +393,20 @@ extension RepositoriesFeature {
         selectionWasRemoved
         ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
         : nil
+      let repositoryHost = repositoryHost
       return .run { send in
         do {
-          _ = try await gitClient.removeWorktree(
-            worktree,
-            false
-          )
+          try await repositoryHost.removeWorktree(worktree, deleteBranch: false)
           let forceDeleteBranchRequest: ForceDeleteBranchRequest?
           if deleteBranch {
             do {
-              _ = try await gitClient.deleteLocalBranch(worktree.name, worktree.repositoryRootURL, false)
+              _ = try await repositoryHost.deleteLocalBranch(
+                named: worktree.name, in: worktree.repositoryLocation, force: false)
               forceDeleteBranchRequest = nil
             } catch {
               forceDeleteBranchRequest = ForceDeleteBranchRequest(
                 branchName: worktree.name,
-                repositoryRootURL: worktree.repositoryRootURL,
+                repositoryLocation: worktree.repositoryLocation,
                 errorMessage: error.localizedDescription
               )
             }
@@ -463,7 +473,6 @@ extension RepositoriesFeature {
           state.selectedWorkspaceChildID = nil
         }
       }
-      let roots = state.repositories.map(\.rootURL)
       let repositories = state.repositories
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
@@ -479,7 +488,7 @@ extension RepositoriesFeature {
         immediateEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
       }
       var followupEffects: [Effect<Action>] = [
-        roots.isEmpty ? .none : .send(.reloadRepositories(animated: true))
+        state.repositories.isEmpty ? .none : .send(.reloadRepositories(animated: true))
       ]
       if wasPinned {
         let pinnedWorktreeIDs = state.pinnedWorktreeIDs
@@ -523,9 +532,11 @@ extension RepositoriesFeature {
       state.alert = nil
       removePendingForceDeleteBranchRequest(request, state: &state)
       presentNextForceDeleteBranchAlert(state: &state)
+      let repositoryHost = repositoryHost
       return .run { send in
         do {
-          _ = try await gitClient.deleteLocalBranch(request.branchName, request.repositoryRootURL, true)
+          _ = try await repositoryHost.deleteLocalBranch(
+            named: request.branchName, in: request.repositoryLocation, force: true)
         } catch {
           await send(.worktreeLifecycle(.forceDeleteBranchFailed(error.localizedDescription)))
         }

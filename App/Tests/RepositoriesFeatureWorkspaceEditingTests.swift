@@ -147,7 +147,7 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     initialState.repositories = [
       Repository(id: repositoryID, rootURL: rootURL, name: "Before", kind: .plain, worktrees: [], workspace: loaded)
     ]
-    initialState.repositoryRoots = [rootURL]
+    initialState.repositoryRoots = [.local(rootURL)]
     initialState.workspaceEditor = WorkspaceEditorFeature.State(
       editing: loaded, rootURL: rootURL, repositoryID: repositoryID)
     let store = TestStore(initialState: initialState) {
@@ -212,7 +212,7 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     initialState.repositories = [
       Repository(id: repositoryID, rootURL: rootURL, name: "Cleanup", kind: .plain, worktrees: [], workspace: loaded)
     ]
-    initialState.repositoryRoots = [rootURL]
+    initialState.repositoryRoots = [.local(rootURL)]
     initialState.workspaceEditor = WorkspaceEditorFeature.State(
       editing: loaded, rootURL: rootURL, repositoryID: repositoryID)
     let store = TestStore(initialState: initialState) {
@@ -268,7 +268,7 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     initialState.repositories = [
       Repository(id: repositoryID, rootURL: rootURL, name: "Branches", kind: .plain, worktrees: [], workspace: loaded)
     ]
-    initialState.repositoryRoots = [rootURL]
+    initialState.repositoryRoots = [.local(rootURL)]
     initialState.workspaceEditor = WorkspaceEditorFeature.State(
       editing: loaded, rootURL: rootURL, repositoryID: repositoryID)
     let deleteAttempts = LockIsolated(0)

@@ -171,7 +171,7 @@ struct RepositoryPersistenceClientTests {
     let payloadData = Data(
       """
       {
-        "version": 2,
+        "version": 3,
         "repositories": [
           {
             "rootPath": "/tmp/repo",

@@ -4,14 +4,17 @@ import Foundation
 extension RepositoriesFeature.State {
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
     repositories.compactMap { repository in
-      guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id) else {
+      guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id),
+        repository.availability(of: .workspace).isAvailable,
+        let rootURL = repository.localURL
+      else {
         return nil
       }
       let name = repositoryCustomTitles[repository.id] ?? repository.name
       return ProjectWorkspaceCreationRepository(
         id: repository.id,
         name: name,
-        rootURL: repository.rootURL
+        rootURL: rootURL
       )
     }
   }

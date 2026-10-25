@@ -15,6 +15,46 @@ struct WorktreeDirectoryIndexTests {
     )
   }
 
+  @Test func remoteWorktreesAreNotMatchedByLocalDirectories() throws {
+    let hostProfileID = try #require(UUID(uuidString: "5c1f0a8e-7d1b-4c63-9a3e-2f1b6c9d0e42"))
+    let remoteRoot = RepositoryLocation.remote(hostProfileID: hostProfileID, path: "/tmp/remote-repo")
+    let remoteFeature = RepositoryLocation.remote(hostProfileID: hostProfileID, path: "/tmp/remote-repo/feature")
+    let remoteRepository = Repository(
+      location: remoteRoot,
+      name: "remote-repo",
+      worktrees: [
+        Worktree(name: "main", detail: "", location: remoteRoot, repositoryLocation: remoteRoot),
+        Worktree(name: "feature", detail: "", location: remoteFeature, repositoryLocation: remoteRoot),
+      ]
+    )
+    let remoteFolder = RepositoryLocation.remote(hostProfileID: hostProfileID, path: "/tmp/remote-notes")
+    let remotePlainFolder = Repository(location: remoteFolder, name: "remote-notes", kind: .plain, worktrees: [])
+    let localWorktree = makeWorktree(repoRoot: "/tmp/local-repo", path: "/tmp/local-repo", branch: "main")
+    let repositories: IdentifiedArrayOf<Repository> = [
+      remoteRepository,
+      remotePlainFolder,
+      makeRepository(id: "/tmp/local-repo", worktrees: [localWorktree]),
+    ]
+
+    let index = WorktreeDirectoryIndex(repositories: repositories)
+
+    #expect(index.worktreeID(forWorkingDirectory: URL(fileURLWithPath: "/tmp/remote-repo/feature")) == nil)
+    #expect(index.worktreeID(forWorkingDirectory: URL(fileURLWithPath: "/tmp/remote-notes")) == nil)
+    #expect(index.worktreeID(forWorkingDirectory: URL(fileURLWithPath: "/tmp/local-repo/src")) == localWorktree.id)
+    WorktreeDirectoryIndexCache.reset()
+    #expect(
+      WorktreeDirectoryIndexCache.worktreeID(
+        forWorkingDirectory: URL(fileURLWithPath: "/tmp/local-repo/src"), in: repositories
+      ) == localWorktree.id
+    )
+    #expect(
+      WorktreeDirectoryIndexCache.worktreeID(
+        forWorkingDirectory: URL(fileURLWithPath: "/tmp/remote-repo/feature"), in: repositories
+      ) == nil
+    )
+    WorktreeDirectoryIndexCache.reset()
+  }
+
   @Test func prefersTheDeepestContainingWorktree() {
     let mainWorktree = makeWorktree(repoRoot: "/tmp/repo", path: "/tmp/repo", branch: "main")
     let nestedWorktree = makeWorktree(

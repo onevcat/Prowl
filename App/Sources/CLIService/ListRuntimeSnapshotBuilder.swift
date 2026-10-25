@@ -82,7 +82,9 @@ enum ListRuntimeSnapshotBuilder {
     )
 
     for repositoryID in repositoriesState.orderedRepositoryIDs() {
-      guard let repository = repositoriesByID[repositoryID] else {
+      // The CLI contexts carry local paths only; remote worktrees join with the `host`
+      // field (docs-ai 084 C2), so a local path never matches a worktree on another host.
+      guard let repository = repositoriesByID[repositoryID], repository.localURL != nil else {
         continue
       }
 
@@ -92,8 +94,8 @@ enum ListRuntimeSnapshotBuilder {
             WorktreeContext(
               id: worktree.id,
               name: worktree.name,
-              path: worktree.workingDirectory.path(percentEncoded: false),
-              rootPath: worktree.repositoryRootURL.path(percentEncoded: false),
+              path: worktree.location.path,
+              rootPath: worktree.repositoryLocation.path,
               kind: listCommandKind(for: repository)
             )
           )
@@ -101,14 +103,13 @@ enum ListRuntimeSnapshotBuilder {
         continue
       }
 
-      if repository.capabilities.supportsRunnableFolderActions {
-        let rootPath = repository.rootURL.path(percentEncoded: false)
+      if let terminalWorktree = repository.terminalWorktree {
         contexts.append(
           WorktreeContext(
-            id: repository.id,
-            name: repository.name,
-            path: rootPath,
-            rootPath: rootPath,
+            id: terminalWorktree.id,
+            name: terminalWorktree.name,
+            path: terminalWorktree.location.path,
+            rootPath: terminalWorktree.repositoryLocation.path,
             kind: listCommandKind(for: repository)
           )
         )

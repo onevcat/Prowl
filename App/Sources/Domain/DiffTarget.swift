@@ -32,12 +32,16 @@ nonisolated struct DiffTarget: Equatable, Sendable {
 }
 
 extension DiffTarget {
-  init(worktree: Worktree) {
+  /// Nil for a remote worktree: diffs read the working tree on this Mac (docs-ai 084 A4a).
+  init?(worktree: Worktree) {
+    guard let workingDirectory = worktree.localURL, let repositoryRootURL = worktree.repositoryLocalURL else {
+      return nil
+    }
     self.init(
       id: .worktree(worktree.id),
-      workingDirectory: worktree.workingDirectory,
+      workingDirectory: workingDirectory,
       branchName: worktree.name,
-      repositoryRootURL: worktree.repositoryRootURL,
+      repositoryRootURL: repositoryRootURL,
       terminalHost: worktree,
       terminalWorkingDirectory: nil
     )

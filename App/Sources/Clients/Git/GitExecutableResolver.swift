@@ -26,7 +26,7 @@ nonisolated struct GitExecutable: Sendable, Equatable {
     return arguments
   }
 
-  func run(_ arguments: [String], in directory: URL? = nil, shell: ShellClient = .live) async throws
+  func run(_ arguments: [String], in directory: URL? = nil, shell: ShellClient) async throws
     -> ShellOutput
   {
     try await shell.run(

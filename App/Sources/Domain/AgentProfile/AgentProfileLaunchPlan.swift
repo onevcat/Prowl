@@ -395,6 +395,8 @@ nonisolated enum AgentProfileLaunchError: Error, Equatable, Sendable {
   case hookRegistrationFailed
   case surfaceCreationFailed
   case preparationCancelled
+  /// The target cannot run Agent Profiles (docs-ai 084 D3).
+  case unavailable(FeatureUnavailableReason)
 }
 
 /// Which env variable names a profile override may set, shared by the planner

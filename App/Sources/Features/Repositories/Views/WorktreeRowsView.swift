@@ -437,6 +437,20 @@ struct WorktreeRowsView: View {
   }
 
   @ViewBuilder
+  private func pathContextMenuItems(for worktree: Worktree) -> some View {
+    Button("Copy Path") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(worktree.location.displayPath, forType: .string)
+    }
+    // Finder shows folders on this Mac; the remote gates come with docs-ai 084 A4b.
+    if let worktreeDirectory = worktree.localURL {
+      Button("Reveal in Finder") {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktreeDirectory.path)
+      }
+    }
+  }
+
+  @ViewBuilder
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let contextRows = contextActionRows(for: row)
@@ -493,13 +507,7 @@ struct WorktreeRowsView: View {
       }
     }
     Divider()
-    Button("Copy Path") {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
-    }
-    Button("Reveal in Finder") {
-      NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktree.workingDirectory.path)
-    }
+    pathContextMenuItems(for: worktree)
     Button("Copy Branch Name") {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(row.name, forType: .string)
@@ -608,11 +616,8 @@ struct WorktreeRowsView: View {
     if row.isPending {
       return row.detail
     }
-    if row.id.contains("/") {
-      let pathName = URL(fileURLWithPath: row.id).lastPathComponent
-      if !pathName.isEmpty {
-        return pathName
-      }
+    if let pathName = row.folderName, !pathName.isEmpty {
+      return pathName
     }
     if !row.detail.isEmpty, row.detail != "." {
       let detailName = URL(fileURLWithPath: row.detail).lastPathComponent
