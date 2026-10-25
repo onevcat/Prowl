@@ -473,8 +473,6 @@ extension RepositoriesFeature {
           state.selectedWorkspaceChildID = nil
         }
       }
-      // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
-      let roots = state.repositories.compactMap(\.localURL)
       let repositories = state.repositories
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
