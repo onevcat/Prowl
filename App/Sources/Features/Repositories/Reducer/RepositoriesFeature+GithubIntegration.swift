@@ -65,8 +65,8 @@ extension RepositoriesFeature {
     {
       return remoteInfo
     }
-    await send(.dismissToast)
-    await send(
+    send(.dismissToast)
+    send(
       .presentAlert(
         title: String(localized: "GitHub repository not resolved"),
         message: unresolvedGithubRepositoryMessage
@@ -1145,8 +1145,8 @@ extension GithubCLIClient {
     send: Send<RepositoriesFeature.Action>
   ) async throws -> GithubWorkflowRun? {
     guard let run = try await latestRun(remoteInfo, branchName, accountOverride) else {
-      await send(.dismissToast)
-      await send(
+      send(.dismissToast)
+      send(
         .presentAlert(
           title: String(localized: "No workflow runs found"),
           message: String(localized: "Prowl could not find any workflow runs for this branch.")
@@ -1155,8 +1155,8 @@ extension GithubCLIClient {
       return nil
     }
     guard run.conclusion?.lowercased() == "failure" else {
-      await send(.dismissToast)
-      await send(.presentAlert(title: String(localized: "No failing workflow run"), message: noFailureMessage))
+      send(.dismissToast)
+      send(.presentAlert(title: String(localized: "No failing workflow run"), message: noFailureMessage))
       return nil
     }
     return run
