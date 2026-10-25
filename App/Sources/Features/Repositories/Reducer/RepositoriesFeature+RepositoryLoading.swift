@@ -193,6 +193,7 @@ extension RepositoriesFeature {
     let errorMessage: String?
     var isGitUnavailable: Bool = false
     var isHostUnreachable: Bool = false
+    var authority: RemoteAuthorityCheck = .unknown
   }
 
   /// How long a load waits for a remote host before it reports the host unreachable, so a
@@ -246,7 +247,8 @@ extension RepositoriesFeature {
             rootID: rootID,
             message: result.errorMessage ?? String(localized: "Unknown error"),
             isGitUnavailable: result.isGitUnavailable,
-            isHostUnreachable: result.isHostUnreachable
+            isHostUnreachable: result.isHostUnreachable,
+            authority: result.authority
           )
         )
       }
@@ -294,7 +296,8 @@ extension RepositoriesFeature {
           if case GitClientError.unavailable = error { return true }
           return false
         }(),
-        isHostUnreachable: isRemoteHostUnreachable(error))
+        isHostUnreachable: isRemoteHostUnreachable(error),
+        authority: RemoteAuthorityCheck(error))
     }
   }
 
@@ -325,13 +328,27 @@ extension RepositoriesFeature {
 
   /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
   /// host. `State.currentLoadFailures` reads them back.
-  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) {
+  /// Returns the hosts whose rebind mark this load set or cleared, for their holds.
+  @discardableResult
+  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) -> RebindMarkChange {
     state.loadFailuresByID = Dictionary(
       failures.map { ($0.rootID, $0.message) },
       uniquingKeysWith: { first, _ in first }
     )
     state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
     state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
+    // A failure after the authority check clears the mark; one before it leaves the mark.
+    var change = RebindMarkChange.none
+    for failure in failures {
+      guard let hostProfileID = RepositoryLocation(id: failure.rootID)?.hostProfileID else { continue }
+      let step = markRebind(hostProfileID, failure.authority, state: &state)
+      change.marked.formUnion(step.marked)
+      change.cleared.formUnion(step.cleared)
+    }
+    // A host marked and cleared by the same load ends as its last failure left it.
+    change.marked.formIntersection(state.rebindHostProfileIDs)
+    change.cleared.subtract(state.rebindHostProfileIDs)
+    return change
   }
 
   /// While remote folders are off, the prunes keep the hidden remote-form IDs
@@ -497,11 +514,27 @@ extension RepositoriesFeature {
         TextState(String(localized: "Cancel"))
       }
     } message: {
-      TextState(
-        String(
-          localized: "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")
-      )
+      TextState(Self.removalMessage(for: repository.location))
     }
+  }
+
+  /// What removing a repository does to its data. A remote folder's files stay on its host,
+  /// and its host stays in the host list for the next folder there (docs-ai 084 C1).
+  static func removalMessage(for location: RepositoryLocation) -> String {
+    guard case .remote(let hostProfileID, _) = location else {
+      return String(
+        localized: "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")
+    }
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    guard let alias = hostProfiles.first(where: { $0.id == hostProfileID })?.alias else {
+      return String(
+        localized: "This removes the folder from Prowl. Its worktrees and files on its host stay as they are.")
+    }
+    return String(
+      localized: """
+        This removes the folder from Prowl. Its worktrees and files on \(alias) stay as they are, and \
+        Prowl stops connecting to \(alias) for it. \(alias) stays in the host list.
+        """)
   }
 
   func selectionDidChange(
@@ -590,7 +623,28 @@ extension RepositoriesFeature.State {
       RepositoriesFeature.LoadFailure(
         rootID: id, message: loadFailuresByID[id] ?? "",
         isGitUnavailable: gitUnavailableRepositoryIDs.contains(id),
-        isHostUnreachable: loadUnreachableRepositoryIDs.contains(id))
+        isHostUnreachable: loadUnreachableRepositoryIDs.contains(id),
+        // A failure read back from state tells nothing new about the target.
+        authority: RepositoryLocation(id: id)?.hostProfileID.map(rebindHostProfileIDs.contains) == true
+          ? .changed : .unknown)
     }
   }
+
+  /// How the host of a remote folder answers, for the sidebar (docs-ai 084 C1). A host
+  /// profile that needs a rebind pauses every folder on it.
+  func remoteHostStatus(for repositoryID: Repository.ID) -> RemoteHostStatus? {
+    guard RepositoryLocation.hasRemoteForm(repositoryID),
+      let hostProfileID = RepositoryLocation(id: repositoryID)?.hostProfileID
+    else { return nil }
+    if rebindHostProfileIDs.contains(hostProfileID) { return .needsRebind(hostProfileID) }
+    return unreachableRepositoryIDs.contains(repositoryID) ? .unreachable : nil
+  }
+}
+
+/// The state of a remote folder's host that the sidebar shows (docs-ai 084 C1).
+nonisolated enum RemoteHostStatus: Equatable, Sendable {
+  /// The host did not answer; a loaded folder shows its last state.
+  case unreachable
+  /// The SSH configuration reaches another target; the folder waits for a rebind.
+  case needsRebind(HostProfile.ID)
 }

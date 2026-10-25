@@ -235,7 +235,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      recordLoadFailures(failures, state: &state)
+      let rebindChange = recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,
@@ -243,7 +243,7 @@ extension RepositoriesFeature {
         selectedWorktreeID: state.selectedWorktreeID,
         selectedWorktree: selectedWorktree
       )
-      var allEffects: [Effect<Action>] = []
+      var allEffects: [Effect<Action>] = [connectionHoldEffects(for: rebindChange, state: state)]
       if repositoriesChanged || wasRestoringSnapshot {
         allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
       }
@@ -817,11 +817,36 @@ extension RepositoriesFeature {
         }
       }
 
+    case .remoteHostRebindRequested(let hostProfileID):
+      return reduceRemoteHostRebindRequested(hostProfileID)
+
+    case .remoteHostRebindResolved(let target):
+      state.alert = rebindAlert(for: target)
+      return .none
+
+    case .remoteHostRebindFailed(let message):
+      state.alert = messageAlert(
+        title: String(localized: "Prowl could not rebind the host"), message: message)
+      return .none
+
+    case .alert(.presented(.rebindRemoteHost(let hostProfileID, let key))):
+      state.alert = nil
+      return reduceRebindRemoteHost(hostProfileID, to: key)
+
+    case .alert(.presented(.confirmRemoveFailedRepository(let repositoryID))):
+      return .send(.repositoryManagement(.removeFailedRepository(repositoryID)))
+
+    case .remoteHostRebound(let hostProfileID):
+      return reduceRemoteHostRebound(hostProfileID, state: &state)
+
     case .addRemoteFolderRequested:
       guard remoteFoldersEnabled else { return .none }
       @Shared(.hostProfiles) var hostProfiles: [HostProfile]
       state.addRemoteFolder = AddRemoteFolderFeature.State(hostProfiles: hostProfiles)
       return .none
+
+    case .addRemoteFolder(.presented(.delegate(.hostRebound(let hostProfileID)))):
+      return .send(.remoteHostRebound(hostProfileID))
 
     case .addRemoteFolder(.presented(.delegate(.cancel))):
       state.addRemoteFolder = nil

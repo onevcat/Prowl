@@ -430,6 +430,11 @@ nonisolated struct RemoteRepositoryHostClient: Sendable {
   /// Holds the host's connection open until `release`, so that polls and commands share
   /// it (B3f). Nil when there is no connection to hold.
   var holdConnection: @Sendable (_ hostProfileID: UUID) async throws -> RemoteConnectionHold? = { _ in nil }
+  /// The host profile and the target that its SSH configuration resolves to now, for a
+  /// rebind (C1).
+  var resolveTarget: @Sendable (_ hostProfileID: UUID) async throws -> RemoteHostTarget = { _ in
+    throw RemoteRepositoryHostError.unsupported
+  }
   /// False for `.unavailable`: no remote repository can be refreshed.
   var isAvailable = true
 
@@ -475,6 +480,14 @@ extension RemoteRepositoryHostClient: DependencyKey {
           else { return }
           await registry.release(key)
         })
+      },
+      resolveTarget: { hostProfileID in
+        try RemoteCommandLane.requireSideChannel()
+        let profile = try Self.profile(hostProfileID)
+        guard let key = await RemoteConnectionRegistry.shared.resolve(profile.recipe) else {
+          throw RemoteRepositoryHostError.configurationRejected
+        }
+        return RemoteHostTarget(profile: profile, resolved: key)
       })
   }()
 

@@ -65,6 +65,13 @@ struct AddRemoteFolderView: View {
           .foregroundStyle(.red)
           .fixedSize(horizontal: false, vertical: true)
       }
+      if store.pendingRebind != nil {
+        Button("Use the New Target") {
+          store.send(.rebindButtonTapped)
+        }
+        .disabled(store.isValidating)
+        .help("Store the host's new target, then add the folder")
+      }
 
       HStack {
         if store.isValidating {

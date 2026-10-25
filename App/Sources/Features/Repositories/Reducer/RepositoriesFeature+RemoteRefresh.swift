@@ -6,7 +6,7 @@ private nonisolated let remoteRefreshLogger = ProwlLogger("RemoteRefresh")
 /// The result of one batched refresh of a remote repository (docs-ai 084 B3f).
 nonisolated enum RemoteRefreshResult: Equatable, Sendable {
   case refreshed(RemoteRepositoryRefresh)
-  case failed(message: String, isHostUnreachable: Bool)
+  case failed(message: String, isHostUnreachable: Bool, authority: RemoteAuthorityCheck = .passed)
 }
 
 /// The refresh cadence of remote repositories (docs-ai 084 B3f, D4). The local monitors
@@ -65,18 +65,54 @@ extension RepositoriesFeature {
         case .remote(let hostProfileID, _) = repository.location
       else { continue }
       effects.append(scheduleRemoteRefresh(id, state: state))
-      let hosts = remoteRepositoryHosts
-      effects.append(
-        .run { _ in
-          guard let hold = try? await hosts.holdConnection(hostProfileID) else { return }
-          // Held until the repository leaves; the cancellation ends the wait.
-          try? await Task.never()
-          await hold.release()
-        }
-        .cancellable(id: CancelID.remoteConnectionHold(id), cancelInFlight: true)
-      )
+      effects.append(connectionHold(id, hostProfileID: hostProfileID))
     }
     return effects.isEmpty ? .none : .merge(effects)
+  }
+
+  /// Sets or clears the rebind mark of a host, and reports whether it changed.
+  func markRebind(
+    _ hostProfileID: HostProfile.ID, _ authority: RemoteAuthorityCheck, state: inout State
+  ) -> RebindMarkChange {
+    switch authority {
+    case .changed:
+      state.rebindHostProfileIDs.insert(hostProfileID).inserted ? RebindMarkChange(marked: [hostProfileID]) : .none
+    case .passed:
+      state.rebindHostProfileIDs.remove(hostProfileID) != nil ? RebindMarkChange(cleared: [hostProfileID]) : .none
+    case .unknown:
+      // The failure came before the authority check, so the mark stays as it is.
+      .none
+    }
+  }
+
+  /// A host that now needs a rebind ends its folders' holds: they hold a connection to the
+  /// old target. A host whose mark clears (the configuration reaches the bound target
+  /// again) holds its folders' connection again, as the rebind does.
+  func connectionHoldEffects(for change: RebindMarkChange, state: State) -> Effect<Action> {
+    func polled(on hostProfileIDs: Set<HostProfile.ID>) -> [(Repository.ID, HostProfile.ID)] {
+      state.remoteRefreshRepositoryIDs.sorted().compactMap { id in
+        guard let hostProfileID = RepositoryLocation(id: id)?.hostProfileID, hostProfileIDs.contains(hostProfileID)
+        else { return nil }
+        return (id, hostProfileID)
+      }
+    }
+    let effects =
+      polled(on: change.marked).map { Effect<Action>.cancel(id: CancelID.remoteConnectionHold($0.0)) }
+      + polled(on: change.cleared).map { connectionHold($0.0, hostProfileID: $0.1) }
+    return effects.isEmpty ? .none : .merge(effects)
+  }
+
+  /// Holds the connection of `repositoryID`'s host until the repository leaves. A host
+  /// profile that needs a rebind holds nothing; the rebind starts it again.
+  func connectionHold(_ repositoryID: Repository.ID, hostProfileID: HostProfile.ID) -> Effect<Action> {
+    let hosts = remoteRepositoryHosts
+    return .run { _ in
+      guard let hold = try? await hosts.holdConnection(hostProfileID) else { return }
+      // Held until the repository leaves; the cancellation ends the wait.
+      try? await Task.never()
+      await hold.release()
+    }
+    .cancellable(id: CancelID.remoteConnectionHold(repositoryID), cancelInFlight: true)
   }
 
   func scheduleRemoteRefresh(_ repositoryID: Repository.ID, state: State) -> Effect<Action> {
@@ -106,7 +142,9 @@ extension RepositoriesFeature {
         do {
           result = .refreshed(try await repositoryHost.remoteRefresh(in: location))
         } catch {
-          result = .failed(message: error.localizedDescription, isHostUnreachable: isRemoteHostUnreachable(error))
+          result = .failed(
+            message: error.localizedDescription, isHostUnreachable: isRemoteHostUnreachable(error),
+            authority: RemoteAuthorityCheck(error))
         }
         await send(.remoteRepositoryRefreshed(repositoryID, result))
       }
@@ -123,7 +161,7 @@ extension RepositoriesFeature {
     else { return .none }
     var effects: [Effect<Action>] = []
     switch result {
-    case .failed(let message, let isHostUnreachable):
+    case .failed(let message, let isHostUnreachable, let authority):
       // The last state stays; only the host's reachability changes. A host that answered
       // with another error is reachable.
       state.remoteRefreshFailureCounts[repositoryID, default: 0] += 1
@@ -132,10 +170,18 @@ extension RepositoriesFeature {
       } else {
         state.pollUnreachableRepositoryIDs.remove(repositoryID)
       }
+      if let hostProfileID = repository.location.hostProfileID {
+        let change = markRebind(hostProfileID, authority, state: &state)
+        effects.append(connectionHoldEffects(for: change, state: state))
+      }
       remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
     case .refreshed(let refresh):
       state.remoteRefreshFailureCounts[repositoryID] = nil
       state.pollUnreachableRepositoryIDs.remove(repositoryID)
+      if let hostProfileID = repository.location.hostProfileID {
+        let change = markRebind(hostProfileID, .passed, state: &state)
+        effects.append(connectionHoldEffects(for: change, state: state))
+      }
       effects.append(contentsOf: applyRemoteRefresh(refresh, to: repository, state: &state))
     }
     effects.append(scheduleRemoteRefresh(repositoryID, state: state))
@@ -218,4 +264,159 @@ extension RepositoriesFeature {
     }
     return effects.isEmpty ? .none : .concatenate(effects)
   }
+}
+
+// MARK: - Rebind (docs-ai 084 C1)
+
+extension RepositoriesFeature {
+  /// Resolves the host profile's SSH configuration again, to show the new target before
+  /// the user rebinds it.
+  func reduceRemoteHostRebindRequested(_ hostProfileID: HostProfile.ID) -> Effect<Action> {
+    let hosts = remoteRepositoryHosts
+    return .run { send in
+      do {
+        await send(.remoteHostRebindResolved(try await hosts.resolveTarget(hostProfileID)))
+      } catch {
+        await send(.remoteHostRebindFailed(error.localizedDescription))
+      }
+    }
+  }
+
+  func rebindAlert(for target: RemoteHostTarget) -> AlertState<Alert> {
+    let profile = target.profile
+    guard profile.authorityChanged(to: target.resolved) else {
+      return AlertState {
+        TextState(String(localized: "Rebind \(profile.alias)?"))
+      } actions: {
+        ButtonState(action: .rebindRemoteHost(profile.id, target.resolved)) {
+          TextState(String(localized: "Connect Again"))
+        }
+        ButtonState(role: .cancel) {
+          TextState(String(localized: "Cancel"))
+        }
+      } message: {
+        TextState(String(localized: "The SSH configuration of \(profile.alias) reaches its target again."))
+      }
+    }
+    return AlertState {
+      TextState(String(localized: "Rebind \(profile.alias)?"))
+    } actions: {
+      ButtonState(action: .rebindRemoteHost(profile.id, target.resolved)) {
+        TextState(String(localized: "Use the New Target"))
+      }
+      ButtonState(role: .cancel) {
+        TextState(String(localized: "Cancel"))
+      }
+    } message: {
+      TextState(
+        String(
+          localized: """
+            The SSH configuration of \(profile.alias) now reaches \(target.resolved.displayName). Its folders \
+            were added for \(profile.connectionKey.displayName). Prowl does not connect to \(profile.alias) \
+            until you use the new target.
+            """))
+    }
+  }
+
+  /// Stores `key` as the host profile's target, then connects its folders again. A file
+  /// that changed since it was loaded is read again first (B2b).
+  func reduceRebindRemoteHost(_ hostProfileID: HostProfile.ID, to key: ConnectionKey) -> Effect<Action> {
+    .run { send in
+      do {
+        try await Self.storeHostTarget(key, for: hostProfileID)
+        await send(.remoteHostRebound(hostProfileID))
+      } catch {
+        await send(.remoteHostRebindFailed(error.localizedDescription))
+      }
+    }
+  }
+
+  /// Stores `key` as the host profile's target in `hosts.json`; the add sheet's rebind
+  /// uses it too.
+  static func storeHostTarget(_ key: ConnectionKey, for hostProfileID: HostProfile.ID) async throws {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    func bind() -> ConnectionKey? {
+      $hostProfiles.withLock { profiles in
+        guard let index = profiles.firstIndex(where: { $0.id == hostProfileID }) else { return nil }
+        defer { profiles[index].connectionKey = key }
+        return profiles[index].connectionKey
+      }
+    }
+    guard var previous = bind() else { throw RepositoryHostError.hostProfileMissing(hostProfileID) }
+    if case .changedSinceLoad? = $hostProfiles.saveError as? HostProfilesFileError {
+      try await $hostProfiles.load()
+      guard let reloaded = bind() else { throw RepositoryHostError.hostProfileMissing(hostProfileID) }
+      previous = reloaded
+    }
+    guard let error = $hostProfiles.saveError else { return }
+    // Nothing reads the unsaved target: it goes back at once, then the file's version loads.
+    $hostProfiles.withLock { profiles in
+      if let index = profiles.firstIndex(where: { $0.id == hostProfileID }) { profiles[index].connectionKey = previous }
+    }
+    try? await $hostProfiles.load()
+    throw error
+  }
+
+  /// The host profile has its new target: its folders' holds start again, their polls run
+  /// at once without backoff (a poll in flight used the old target), and they reload.
+  func reduceRemoteHostRebound(_ hostProfileID: HostProfile.ID, state: inout State) -> Effect<Action> {
+    state.rebindHostProfileIDs.remove(hostProfileID)
+    let polled = state.remoteRefreshRepositoryIDs.filter {
+      RepositoryLocation(id: $0)?.hostProfileID == hostProfileID
+    }
+    var cancellations: [Effect<Action>] = []
+    var effects: [Effect<Action>] = [.send(.reloadRepositories(animated: false))]
+    for id in polled {
+      state.remoteRefreshFailureCounts[id] = nil
+      state.remoteRefreshInFlightIDs.remove(id)
+      cancellations.append(.cancel(id: CancelID.remoteRefreshRun(id)))
+      effects.append(connectionHold(id, hostProfileID: hostProfileID))
+      effects.append(.send(.remoteRepositoryRefreshDue(id)))
+    }
+    // The old poll ends before the new one starts; a hold never ends, so the rest merge.
+    return .concatenate(.merge(cancellations), .merge(effects))
+  }
+}
+
+/// What a remote failure says about the host profile's target (docs-ai 084 C1).
+nonisolated enum RemoteAuthorityCheck: Equatable, Sendable {
+  /// The SSH configuration reaches another user, host or port.
+  case changed
+  /// The command passed the authority check, so the bound target is the right one.
+  case passed
+  /// The command failed before the authority check, such as `ssh -G` rejecting the
+  /// configuration; it says nothing about the target.
+  case unknown
+
+  init(_ error: any Error) {
+    switch error {
+    case RemoteRepositoryHostError.authorityChanged:
+      self = .changed
+    case RemoteRepositoryHostError.configurationRejected, RemoteRepositoryHostError.sideChannelDisabled,
+      RemoteRepositoryHostError.bundledScriptMissing, RemoteRepositoryHostError.unsupported,
+      RepositoryHostError.hostProfileMissing:
+      self = .unknown
+    default:
+      self = .passed
+    }
+  }
+}
+
+/// The hosts whose rebind mark a load or a poll set or cleared.
+nonisolated struct RebindMarkChange: Equatable, Sendable {
+  var marked: Set<HostProfile.ID> = []
+  var cleared: Set<HostProfile.ID> = []
+
+  static let none = RebindMarkChange()
+}
+
+/// A host profile and the target its SSH configuration resolves to now.
+nonisolated struct RemoteHostTarget: Equatable, Sendable {
+  let profile: HostProfile
+  let resolved: ConnectionKey
+}
+
+extension ConnectionKey {
+  /// `user@host`, with the port when it is not 22.
+  nonisolated var displayName: String { port == 22 ? label : "\(label):\(port)" }
 }

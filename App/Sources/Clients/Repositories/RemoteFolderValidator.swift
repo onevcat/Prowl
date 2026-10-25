@@ -5,8 +5,9 @@ import Sharing
 nonisolated enum RemoteFolderValidationError: Error, Equatable, LocalizedError {
   case emptyDestination
   case emptyPath
-  /// The host profile was bound to another user, host name or port; C1 rebinds it.
-  case authorityChanged(alias: String)
+  /// The host profile was bound to another user, host name or port; the sheet offers to
+  /// rebind it to `resolved` (C1b).
+  case authorityChanged(HostProfile, resolved: ConnectionKey)
   case hostsFileNotSaved
   /// `hosts.json` exists but this build cannot read it, so it is never written over (B2b).
   case hostsFileUnreadable
@@ -20,8 +21,12 @@ nonisolated enum RemoteFolderValidationError: Error, Equatable, LocalizedError {
       String(localized: "Enter a host, such as user@example.com or an alias from your SSH configuration.")
     case .emptyPath:
       String(localized: "Enter the folder's path on the host.")
-    case .authorityChanged(let alias):
-      String(localized: "The SSH configuration of \(alias) now reaches another user, host or port.")
+    case .authorityChanged(let profile, let resolved):
+      String(
+        localized: """
+          The SSH configuration of \(profile.alias) now reaches \(resolved.displayName). Its folders were \
+          added for \(profile.connectionKey.displayName).
+          """)
     case .hostsFileNotSaved:
       String(localized: "Prowl could not save the host. Try again.")
     case .hostsFileUnreadable:
@@ -69,7 +74,7 @@ extension RemoteFolderValidatorClient: DependencyKey {
         throw RemoteRepositoryHostError.configurationRejected
       }
       guard !existing.authorityChanged(to: key) else {
-        throw RemoteFolderValidationError.authorityChanged(alias: existing.alias)
+        throw RemoteFolderValidationError.authorityChanged(existing, resolved: key)
       }
       profile = existing
       isNewProfile = false
@@ -98,7 +103,7 @@ extension RemoteFolderValidatorClient: DependencyKey {
     for recipe: SSHConnectionRecipe, resolvedTo key: ConnectionKey, in profiles: [HostProfile]
   ) throws(RemoteFolderValidationError) -> HostProfile? {
     guard let known = profiles.first(where: { $0.recipe == recipe }) else { return nil }
-    guard !known.authorityChanged(to: key) else { throw .authorityChanged(alias: known.alias) }
+    guard !known.authorityChanged(to: key) else { throw .authorityChanged(known, resolved: key) }
     return known
   }
 
