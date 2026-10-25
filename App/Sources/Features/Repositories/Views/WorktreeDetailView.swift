@@ -176,7 +176,8 @@ struct WorktreeDetailView: View {
       onCopyPath: {
         guard let actionTargetWorktree else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(actionTargetWorktree.workingDirectory.path, forType: .string)
+        NSPasteboard.general.setString(
+          actionTargetWorktree.location.displayPath, forType: .string)
       },
       onSelectNotification: selectToolbarNotification,
       onDismissAllNotifications: {

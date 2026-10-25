@@ -209,7 +209,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.snapshotPersistencePhase = .active
     var appState = AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
-    appState.launchRestoreMode = .cliOpenPath(worktree.workingDirectory.path(percentEncoded: false))
+    appState.launchRestoreMode = .cliOpenPath(worktree.localURL!.path(percentEncoded: false))
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(initialState: appState) {

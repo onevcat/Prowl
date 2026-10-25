@@ -311,7 +311,7 @@ struct AppFeature {
         @Shared(.userGlobalSettings) var workflowSettings
         _ = $workflowSettings.withLock {
           $0.migrateLegacyRepositoryWorkflowPreferences(
-            repositoryRootPaths: repositories.map { $0.rootURL.path(percentEncoded: false) })
+            repositoryRootPaths: repositories.compactMap { $0.localURL?.path(percentEncoded: false) })
         }
         let archivedIDs = state.repositories.archivedWorktreeIDSet
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
@@ -503,7 +503,7 @@ struct AppFeature {
           state.openActionSelection = OpenWorktreeAction.fromSettingsID(
             repositorySettings.openActionID,
             defaultEditorID: settings.defaultEditorID,
-            workingDirectory: selectedWorktree.workingDirectory
+            workingDirectory: selectedWorktree.localURL
           )
           state.openActionIsAutomatic =
             repositorySettings.openActionID == OpenWorktreeAction.automaticSettingsID
@@ -740,7 +740,7 @@ struct AppFeature {
         state.openActionSelection = OpenWorktreeAction.fromSettingsID(
           OpenWorktreeAction.automaticSettingsID,
           defaultEditorID: settingsFile.global.defaultEditorID,
-          workingDirectory: worktree.workingDirectory
+          workingDirectory: worktree.localURL
         )
         state.openActionIsAutomatic = true
         return .send(.openSelectedWorktree)
@@ -1017,7 +1017,7 @@ struct AppFeature {
         // visibly reflows when switching between cards with different commands.
         applyWorktreeSettings(
           repositorySettings,
-          workingDirectory: worktree.workingDirectory,
+          workingDirectory: worktree.localURL,
           into: &state
         )
         return applyWorktreeUserSettings(
@@ -1152,7 +1152,7 @@ struct AppFeature {
         }
         applyWorktreeSettings(
           settings,
-          workingDirectory: worktree.workingDirectory,
+          workingDirectory: worktree.localURL,
           into: &state
         )
         return .none

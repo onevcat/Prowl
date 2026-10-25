@@ -35,7 +35,7 @@ struct WorkspaceDetailView: View {
         Text(workspace.title)
           .font(.title3.weight(.semibold))
           .textSelection(.enabled)
-        Text(repository.rootURL.path(percentEncoded: false))
+        Text(repository.location.path)
           .font(.subheadline.monospaced())
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
@@ -85,7 +85,10 @@ struct WorkspaceDetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       Text("Repositories")
         .font(.headline)
-      WorkspaceRepositoriesGridView(workspace: workspace, rootURL: repository.rootURL)
+      // Workspaces are local folders (docs-ai 084 A4a).
+      if let rootURL = repository.localURL {
+        WorkspaceRepositoriesGridView(workspace: workspace, rootURL: rootURL)
+      }
     }
   }
 

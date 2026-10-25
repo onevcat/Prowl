@@ -108,6 +108,10 @@ extension RepositoriesFeature {
           .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
         )
       }
+      // The archive script is available only for a local worktree (checked above).
+      guard let worktreeDirectory = worktree.localURL else {
+        return .send(.worktreeLifecycle(.archiveWorktreeApply(worktreeID, repositoryID)))
+      }
       @Shared(.repositorySettings(worktree.repositoryLocation)) var repositorySettings
       let script = repositorySettings.archiveScript
       let commandText = archiveScriptCommand(script)
@@ -134,7 +138,7 @@ extension RepositoriesFeature {
           for try await event in shellClient.runLoginStream(
             envURL,
             ["bash", "-lc", scriptWithEnv],
-            worktree.workingDirectory,
+            worktreeDirectory,
             log: false
           ) {
             switch event {
@@ -469,7 +473,8 @@ extension RepositoriesFeature {
           state.selectedWorkspaceChildID = nil
         }
       }
-      let roots = state.repositories.map(\.rootURL)
+      // Repository roots are local folders until remote entries join them (docs-ai 084 B2).
+      let roots = state.repositories.compactMap(\.localURL)
       let repositories = state.repositories
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
@@ -485,7 +490,7 @@ extension RepositoriesFeature {
         immediateEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
       }
       var followupEffects: [Effect<Action>] = [
-        roots.isEmpty ? .none : .send(.reloadRepositories(animated: true))
+        state.repositories.isEmpty ? .none : .send(.reloadRepositories(animated: true))
       ]
       if wasPinned {
         let pinnedWorktreeIDs = state.pinnedWorktreeIDs

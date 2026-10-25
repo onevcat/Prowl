@@ -22,7 +22,7 @@ struct AppFeatureAgentProfileTests {
     } operation: {
       @Shared(.userGlobalSettings) var globalSettings
       $globalSettings.withLock { $0.agentProfiles = [profile] }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       let store = TestStore(
         initialState: AppFeature.State(
           repositories: repositories,
@@ -138,7 +138,7 @@ struct AppFeatureAgentProfileTests {
     let (store, repoSettings) = withDependencies {
       $0.settingsFileStorage = storage.storage
     } operation: {
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       let store = TestStore(
         initialState: AppFeature.State(
           repositories: repositories,
@@ -260,7 +260,7 @@ struct AppFeatureAgentProfileTests {
       let disabled = AgentProfile(name: "Hidden", isEnabled: false, runtime: .claude)
       @Shared(.userGlobalSettings) var settings
       $settings.withLock { $0.agentProfiles = [first, second, disabled] }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       $repoSettings.withLock { $0.defaultAgentProfileID = second.id }
 
       let items = agentProfileLaunchItems(repositories, launchWarning: { _ in nil })
@@ -349,7 +349,7 @@ struct AppFeatureAgentProfileTests {
     )
     repositories.repositories.append(plain)
     #expect(
-      repositories.actionTargetTerminalWorktree(explicitTargetID: plain.id)?.workingDirectory
+      repositories.actionTargetTerminalWorktree(explicitTargetID: plain.id)?.localURL!
         == rootURL
     )
     #expect(repositories.actionTargetTerminalWorktree(explicitTargetID: nil) == nil)
@@ -424,7 +424,7 @@ struct AppFeatureAgentProfileTests {
   }
 
   private func makeRepositoriesState(worktree: Worktree) -> RepositoriesFeature.State {
-    let rootURL = worktree.repositoryRootURL
+    let rootURL = worktree.repositoryLocalURL!
     let repository = Repository(
       id: rootURL.path(percentEncoded: false),
       rootURL: rootURL,

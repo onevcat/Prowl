@@ -30,7 +30,8 @@ extension RepositoriesFeature {
       let appearance = appearances[repository.id] ?? .empty
       guard appearance.icon == nil, !appearance.iconDetectionSuppressed else { continue }
       let repositoryID = repository.id
-      let rootURL = repository.rootURL
+      // `detectable` holds local repositories only (icon detection is local, docs-ai 084 A4a).
+      guard let rootURL = repository.localURL else { continue }
       let detector = repositoryIconDetector
       let assetStore = repositoryIconAssetStore
       effects.append(
@@ -73,7 +74,7 @@ extension RepositoriesFeature {
       appearance.icon == nil,
       !appearance.iconDetectionSuppressed
     else {
-      guard let rootURL = repository?.rootURL ?? RepositoryLocation(id: repositoryID)?.localURL else {
+      guard let rootURL = repository?.localURL ?? RepositoryLocation(id: repositoryID)?.localURL else {
         return .none
       }
       let assetStore = repositoryIconAssetStore

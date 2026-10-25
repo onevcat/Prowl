@@ -84,7 +84,7 @@ struct RepositoryLocationTests {
 
     #expect(repository.location == .local(root))
     #expect(repository.localURL == root)
-    #expect(repository.rootURL == root)
+    #expect(repository.localURL! == root)
   }
 
   @Test func remoteRepositoryHasNoLocalURL() {
@@ -107,8 +107,8 @@ struct RepositoryLocationTests {
 
     #expect(worktree.location == .local(linked))
     #expect(worktree.repositoryLocation == .local(root))
-    #expect(worktree.workingDirectory == linked)
-    #expect(worktree.repositoryRootURL == root)
+    #expect(worktree.localURL! == linked)
+    #expect(worktree.repositoryLocalURL! == root)
     #expect(worktree.localURL == linked)
     #expect(worktree.repositoryLocalURL == root)
     #expect(!worktree.isMain)

@@ -313,7 +313,7 @@ struct CanvasView: View {
         worktreeName: tab.displayTitle,
         repositoryIcon: repositoryAppearance.icon,
         repositoryColor: repositoryAppearance.color?.color,
-        repositoryRootURL: state.repositoryRootURL,
+        repositoryRootURL: state.repositoryLocalURL,
         tree: tree,
         activeSurfaceID: state.activeSurfaceID(for: tab.id),
         unfocusedSplitOverlay: unfocusedSplitOverlay,

@@ -131,7 +131,7 @@ struct AppFeatureArchivedSelectionTests {
     let initialRepositories = keepingOtherRepositories ? repositories : [removed]
     let loadedRepositories = keepingOtherRepositories ? [healthy] : []
     let failedRepositories = keepingOtherRepositories ? [removed, otherFailed] : [removed]
-    let roots = initialRepositories.map(\.rootURL)
+    let roots = initialRepositories.map(\.localURL!)
     let entries = LockIsolated(initialRepositories.map { PersistedRepositoryEntry(path: $0.id, kind: .git) })
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     for repository in initialRepositories {
@@ -152,7 +152,7 @@ struct AppFeatureArchivedSelectionTests {
       $0.repositoryPersistence.loadRepositoryEntries = { entries.value }
       $0.repositoryPersistence.saveRepositoryEntries = { entries.setValue($0) }
       $0.gitClient.repoRoot = { url in
-        if url.path == healthy.id { return healthy.rootURL }
+        if url.path == healthy.id { return healthy.localURL! }
         throw GitClientError.unavailable(details: "Unavailable test Git")
       }
       $0.gitClient.worktrees = { url in

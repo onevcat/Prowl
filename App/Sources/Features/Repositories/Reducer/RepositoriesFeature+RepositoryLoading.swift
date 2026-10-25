@@ -387,10 +387,10 @@ extension RepositoriesFeature {
     if previousSelectionID != selectedWorktreeID {
       return true
     }
-    if previousSelectedWorktree?.workingDirectory != selectedWorktree?.workingDirectory {
+    if previousSelectedWorktree?.location != selectedWorktree?.location {
       return true
     }
-    if previousSelectedWorktree?.repositoryRootURL != selectedWorktree?.repositoryRootURL {
+    if previousSelectedWorktree?.repositoryLocation != selectedWorktree?.repositoryLocation {
       return true
     }
     return false

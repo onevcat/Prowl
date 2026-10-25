@@ -1228,7 +1228,7 @@ private func makeContext() -> RefreshTestContext {
   )
   var state = RepositoriesFeature.State()
   state.repositories = [repository]
-  state.repositoryRoots = [repository.rootURL]
+  state.repositoryRoots = [repository.localURL!]
   state.githubIntegrationAvailability = .available
   return RefreshTestContext(
     repoRoot: repoRoot,

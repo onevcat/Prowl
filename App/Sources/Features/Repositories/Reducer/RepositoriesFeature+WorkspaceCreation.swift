@@ -5,7 +5,8 @@ extension RepositoriesFeature.State {
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
     repositories.compactMap { repository in
       guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id),
-        repository.availability(of: .workspace).isAvailable
+        repository.availability(of: .workspace).isAvailable,
+        let rootURL = repository.localURL
       else {
         return nil
       }
@@ -13,7 +14,7 @@ extension RepositoriesFeature.State {
       return ProjectWorkspaceCreationRepository(
         id: repository.id,
         name: name,
-        rootURL: repository.rootURL
+        rootURL: rootURL
       )
     }
   }

@@ -19,7 +19,7 @@ struct WorktreeTerminalManagerTests {
       id: otherRoot.path, name: "removed", detail: "", workingDirectory: otherRoot, repositoryRootURL: otherRoot)
     _ = manager.state(for: removed)
 
-    manager.prune(keeping: [], preservingRepositoryIDs: [failed.repositoryRootURL.path])
+    manager.prune(keeping: [], preservingRepositoryIDs: [failed.repositoryLocalURL!.path])
     #expect(manager.stateIfExists(for: failed.id) === original)
     #expect(manager.stateIfExists(for: removed.id) == nil)
 
@@ -431,7 +431,7 @@ struct WorktreeTerminalManagerTests {
         argumentValues: [1: "notify=[]"]
       ),
       resources: AgentHookResources(bundledCLIPath: "/bundle/prowl", socketPath: "/tmp/prowl.sock"),
-      launchCWD: worktree.workingDirectory,
+      launchCWD: worktree.localURL!,
       token: "token",
       nativeEvents: ["agent-turn-complete": .turnEnded],
       coveredEvents: [.turnEnded]
@@ -446,15 +446,15 @@ struct WorktreeTerminalManagerTests {
     let target = TabResolvedTarget(
       worktreeID: worktree.id,
       worktreeName: worktree.name,
-      worktreePath: worktree.workingDirectory.path,
-      worktreeRootPath: worktree.repositoryRootURL.path,
+      worktreePath: worktree.localURL!.path,
+      worktreeRootPath: worktree.repositoryLocalURL!.path,
       worktreeKind: "git",
       tabID: launched.tabID.rawValue.uuidString,
       tabTitle: "Codex",
       tabSelected: true,
       paneID: launched.surfaceID.uuidString,
       paneTitle: "codex",
-      paneCWD: worktree.workingDirectory.path,
+      paneCWD: worktree.localURL!.path,
       paneFocused: true
     )
 

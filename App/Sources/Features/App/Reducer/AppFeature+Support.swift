@@ -10,14 +10,15 @@ enum CancelID {
 }
 
 /// Every directory a workflow run directory can live under (docs-ai 063 B3): each worktree, and
-/// the root of a plain repository, which the CLI resolves as its own worktree.
+/// the root of a plain repository, which the CLI resolves as its own worktree. Workflows run
+/// only in local folders (docs-ai 084 A4a).
 func workflowRunRoots(of repositories: [Repository]) -> [String] {
   var roots: [String] = []
   for repository in repositories {
-    if let terminalWorktree = repository.terminalWorktree {
-      roots.append(terminalWorktree.workingDirectory.path(percentEncoded: false))
+    if let terminalDirectory = repository.terminalWorktree?.localURL {
+      roots.append(terminalDirectory.path(percentEncoded: false))
     }
-    roots += repository.worktrees.map { $0.workingDirectory.path(percentEncoded: false) }
+    roots += repository.worktrees.compactMap { $0.localURL?.path(percentEncoded: false) }
   }
   return roots
 }

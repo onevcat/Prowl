@@ -41,7 +41,7 @@ struct AppFeaturePlainFolderTerminalTests {
     )
     try localStorage.save(
       JSONEncoder().encode(userSettings),
-      at: ProwlPaths.userRepositorySettingsURL(for: repository.rootURL)
+      at: ProwlPaths.userRepositorySettingsURL(for: repository.localURL!)
     )
 
     let store = TestStore(
@@ -267,7 +267,7 @@ struct AppFeaturePlainFolderTerminalTests {
   ) -> RepositoriesFeature.State {
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.repositoryRoots = [repository.rootURL]
+    repositoriesState.repositoryRoots = [repository.localURL!]
     if selected {
       repositoriesState.selection = .repository(repository.id)
     }
@@ -278,9 +278,9 @@ struct AppFeaturePlainFolderTerminalTests {
     Worktree(
       id: repository.id,
       name: repository.name,
-      detail: repository.rootURL.path(percentEncoded: false),
-      workingDirectory: repository.rootURL,
-      repositoryRootURL: repository.rootURL
+      detail: repository.localURL!.path(percentEncoded: false),
+      workingDirectory: repository.localURL!,
+      repositoryRootURL: repository.localURL!
     )
   }
 }
