@@ -444,9 +444,9 @@ struct ProwlApp: App {
     terminalManager: WorktreeTerminalManager
   ) -> BranchNameSuggestionClient {
     var client = BranchNameSuggestionClient.liveValue
-    client.gatherContext = { repositoryName, repositoryRootURL, existingBranchNames in
+    client.gatherContext = { repositoryName, repository, existingBranchNames in
       let allStates = terminalManager.activeWorktreeStates
-      let sameRepoStates = allStates.filter { $0.worktree.repositoryLocalURL == repositoryRootURL }
+      let sameRepoStates = allStates.filter { $0.worktree.repositoryLocation.standardized == repository.standardized }
 
       let selectedID = terminalManager.selectedWorktreeID
       let sorted = sameRepoStates.sorted { lhs, rhs in

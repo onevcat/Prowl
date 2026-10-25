@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | In progress |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971 |
+| **Primary PRs** | #952 (this plan); A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -171,7 +171,9 @@ One batched command per remote repository returns: HEAD and branch per worktree,
 worktree list, worktree creation times, a hash of the remote URLs, and `isBare`. The row
 shows tracked line counts and the untracked file count; the tooltip says that untracked
 lines are not counted. The focused worktree polls faster than background ones. A failed
-poll keeps the last state and shows the host as unreachable.
+poll keeps the last state and shows the host as unreachable. (Amended 2026-10-23: the reply carries a fingerprint of the remote URLs, and
+the untracked file count reuses `skippedUntrackedFileCount` and its tooltip, see
+[019](019-b3a-refresh-parser.md).)
 
 ### Consent (D2)
 
@@ -263,7 +265,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
 | B2 | Two PRs: root lists by location (B2a, see 017); `hosts.json`, remote entries, snapshot v3 per entry (B2b, see 018) (amended 2026-10-23) | None (unused) |
-| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
+| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output. Six PRs: the refresh script, its reply parser and the mapping to worktrees (B3a, see 019); `RemoteRepositoryHost` with the other git operations on the command lane, as the remote input of `RepositoryHost` (B3b, see 020); worktree creation on the host with the bundled `wt` script (B3c, see 021); the creation flow in the reducer by location, remote worktree placement and the end of the creation gate (B3d, see 022); repository loading through the host with an unreachable mark (B3e, see 023); the refresh cadence with backoff, held connection leases, branch and line changes from the refresh, pull request refresh, and the last state kept through a failed poll (B3f, see 024) (amended 2026-10-23) | None (unused) |
 | C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder | Behind the flag |
 | C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
 | C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
@@ -304,13 +306,18 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 ## Open questions
 
 - Polling intervals for focused and background remote worktrees, and backoff while the host
-  is unreachable.
+  is unreachable. (Answered 2026-10-23 in B3f: 10 s for the selected worktree's repository, 45 s for the
+  others (within the 60 s `ControlPersist`), doubling up to 300 s while polls fail. See
+  024.)
 - Close confirmation: Ghostty reports a live process while `ssh` runs, so every remote pane
   asks before it closes.
 - Launcher location (`$TMPDIR` or `~/.cache/prowl`) and cleanup when ssh never runs it.
 - Completion marker format, and whether framed OSC 133 inside the outer `ssh` command
   confuses Ghostty's prompt tracking for the local shell.
 - Where `wt` puts remote worktrees (the worktree base directory setting is a local path).
+  (Answered 2026-10-23 in B3d: under `<home>/.prowl/repos/<repository>` on the host; the
+  repository's own setting is a host path, and the global default does not apply. See
+  022.)
 - Rebind UI for a changed `HostName`, and the behaviour of the folder lane while paused.
 
 ## Amendments
@@ -329,4 +336,10 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A6e deletes `Repository.rootURL`, `Worktree.workingDirectory` and `Worktree.repositoryRootURL` — see [014-a6e-delete-forwards.md](014-a6e-delete-forwards.md)
 - Updated 2026-10-23: B1 adds the command lane (budgets, concurrency limit, `bash -s` scripts with arguments on stdin, line streaming, login PATH); folder users lease through the existing registry — see [016-b1-command-lane.md](016-b1-command-lane.md)
 - Updated 2026-10-23: B2 split; B2a moves the repository root lists to `RepositoryLocation` — see [017-b2a-roots-by-location.md](017-b2a-roots-by-location.md)
-- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 per entry — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
+- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 (one failing entry still drops the snapshot until P0) — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
+- Updated 2026-10-23: B3 split into three PRs; B3a adds the batched refresh script, its reply parser and the mapping to worktrees, tested with replies recorded on macOS and Linux — see [019-b3a-refresh-parser.md](019-b3a-refresh-parser.md)
+- Updated 2026-10-23: B3 grows to four PRs; B3b adds `RemoteRepositoryHost`, the remote `GitClient` executor and the remote input of `RepositoryHost` — see [020-b3b-remote-repository-host.md](020-b3b-remote-repository-host.md)
+- Updated 2026-10-23: B3 grows to five PRs; B3c runs the bundled `wt` on the host for worktree creation behind `RepositoryHost` — see [021-b3c-remote-worktree-creation.md](021-b3c-remote-worktree-creation.md)
+- Updated 2026-10-23: B3d moves the worktree creation flow to locations, places remote worktrees under the host's `~/.prowl/repos/<repository>`, and ends the creation gate for remote folders — see [022-b3d-creation-by-location.md](022-b3d-creation-by-location.md)
+- Updated 2026-10-23: B3 grows to six PRs; B3e loads remote folders through their host and marks load failures that come from the connection — see [023-b3e-load-through-host.md](023-b3e-load-through-host.md)
+- Updated 2026-10-23: B3f polls remote repositories on a cadence with backoff, applies branch, line and remote changes, holds a connection lease per loaded remote repository, and refreshes their pull requests; B3 ends here — see [024-b3f-refresh-cadence.md](024-b3f-refresh-cadence.md)

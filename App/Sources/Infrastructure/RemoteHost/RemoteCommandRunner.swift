@@ -13,6 +13,10 @@ nonisolated struct RemoteCommandLimits: Equatable, Sendable {
   static let commandLane = RemoteCommandLimits(deadline: 30, outputBytes: 8 * 1024 * 1024, errorBytes: 64 * 1024)
   /// Streamed work such as a worktree creation, which checks out and copies files.
   static let longRunning = RemoteCommandLimits(deadline: 600, outputBytes: 8 * 1024 * 1024, errorBytes: 1024 * 1024)
+  /// A worktree creation. Copying a large ignored tree can take long, and `wt --verbose`
+  /// prints a line per copied entry, so both limits are wide; the local creation has none.
+  static let worktreeCreation = RemoteCommandLimits(
+    deadline: 3600, outputBytes: 8 * 1024 * 1024, errorBytes: 16 * 1024 * 1024)
 }
 
 /// Which pipe an output chunk came from.

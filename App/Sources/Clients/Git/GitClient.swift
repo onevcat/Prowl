@@ -288,7 +288,7 @@ struct GitClient {
       let wtURL = try wtScriptURL()
       let command =
         ([wtURL.lastPathComponent]
-        + createWorktreeArguments(
+        + Self.createWorktreeArguments(
           baseDirectory: baseDirectory,
           name: name,
           copyIgnored: copyFiles.ignored,
@@ -308,7 +308,7 @@ struct GitClient {
         let repositoryRootURL = request.repoRoot.standardizedFileURL
         do {
           let wtURL = try wtScriptURL()
-          let arguments = createWorktreeArguments(
+          let arguments = Self.createWorktreeArguments(
             baseDirectory: request.baseDirectory,
             name: request.name,
             copyIgnored: request.copyFiles.ignored,
@@ -379,7 +379,8 @@ struct GitClient {
     }
   }
 
-  nonisolated private func createWorktreeArguments(
+  /// The `wt` arguments of a creation; the remote host runs the same ones (docs-ai 084 B3c).
+  nonisolated static func createWorktreeArguments(
     baseDirectory: URL,
     name: String,
     copyIgnored: Bool,
@@ -1324,6 +1325,9 @@ struct GitClient {
     let command = ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " ")
     do {
       return try await git.run(arguments, shell: shell).stdout
+    } catch let error as RemoteRepositoryHostError {
+      // A remote host that cannot be reached is not a git failure (docs-ai 084 B3b).
+      throw error
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }
@@ -1363,7 +1367,9 @@ struct GitClient {
     }
   }
 
-  nonisolated private static func relativePath(from base: URL, to target: URL) -> String {
+  /// The path of `target` relative to `base`, from path components only. The remote
+  /// host uses it for paths on another machine (docs-ai 084 B3).
+  nonisolated static func relativePath(from base: URL, to target: URL) -> String {
     let baseComponents = base.standardizedFileURL.pathComponents
     let targetComponents = target.standardizedFileURL.pathComponents
     var index = 0

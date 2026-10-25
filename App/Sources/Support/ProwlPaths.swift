@@ -478,7 +478,7 @@ nonisolated enum ProwlPaths {
     return repositorySettingsDirectory.appending(path: name, directoryHint: .isDirectory)
   }
 
-  private static func repositoryDirectoryName(for rootURL: URL) -> String {
+  static func repositoryDirectoryName(for rootURL: URL) -> String {
     let repoName = rootURL.lastPathComponent
     if repoName.isEmpty || repoName == ".bare" || repoName == ".git" {
       let path = rootURL.standardizedFileURL.path(percentEncoded: false)

@@ -593,6 +593,8 @@ final class WorktreeTerminalState {
   }
 
   func ensureInitialTab(focusing: Bool) {
+    // A remote worktree gets no automatic local shell or setup script (docs-ai 084 C3).
+    guard worktree.location.availability(of: .terminalTab).isAvailable else { return }
     guard tabManager.tabs.isEmpty else { return }
     guard !isEnsuringInitialTab else { return }
     isEnsuringInitialTab = true

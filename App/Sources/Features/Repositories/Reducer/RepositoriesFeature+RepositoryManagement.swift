@@ -11,6 +11,7 @@ extension RepositoriesFeature {
     case .openRepositories(let urls):
       analyticsClient.capture("repository_added", ["count": urls.count])
       state.alert = nil
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
         let existingEntries = await loadPersistedRepositoryEntries()
         var resolvedEntries: [PersistedRepositoryEntry] = []
@@ -59,7 +60,8 @@ extension RepositoriesFeature {
         let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
         let mergedRoots = mergedEntries.map(\.location)
         await repositoryPersistence.saveRepositoryEntries(mergedEntries)
-        let (repositories, failures) = await loadRepositoriesData(mergedEntries)
+        let (repositories, failures) = await loadRepositoriesData(
+          mergedEntries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
           .repositoryManagement(
             .openRepositoriesFinished(
@@ -67,7 +69,8 @@ extension RepositoriesFeature {
               failures: failures,
               invalidRoots: invalidRoots,
               openFailures: openFailures,
-              roots: mergedRoots
+              roots: mergedRoots,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         )
@@ -75,12 +78,14 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
     case .openRepositoriesFinished(
-      let repositories,
+      let loadedRepositories,
       let failures,
       let invalidRoots,
       let openFailures,
-      let roots
+      let roots,
+      let reusedIDs
     ):
+      let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
       state.snapshotPersistencePhase = state.snapshotPersistencePhase.afterLiveLoad(
@@ -98,11 +103,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      state.loadFailuresByID = Dictionary(
-        failures.map { ($0.rootID, $0.message) },
-        uniquingKeysWith: { first, _ in first }
-      )
-      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+      recordLoadFailures(failures, state: &state)
       let invalidRootMessages = invalidRoots.map { String(localized: "\($0) is not a Git repository.") }
       let openFailureMessages = invalidRootMessages + openFailures
       if !openFailureMessages.isEmpty {
@@ -177,6 +178,7 @@ extension RepositoriesFeature {
         }
         allEffects.append(contentsOf: iconDetectionEffects(for: Array(newRepos)))
       }
+      allEffects.append(syncRemoteRefreshSchedules(state: &state))
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):
@@ -341,6 +343,7 @@ extension RepositoriesFeature {
         rootURL: state.repositories[id: repositoryID]?.localURL
       )
       let remainingRoots = state.repositoryRoots
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .merge(
         failedIconCleanup,
         // Failed roots are absent from the loaded models, so a reload may not emit this delegate.
@@ -350,13 +353,15 @@ extension RepositoriesFeature {
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
           let roots = remainingEntries.map(\.location)
-          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
+          let (repositories, failures) = await loadRepositoriesData(
+            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
               failures: failures,
               roots: roots,
-              animated: true
+              animated: true,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         }
@@ -377,6 +382,7 @@ extension RepositoriesFeature {
       )
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let remainingRoots = state.repositoryRoots
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .merge(
         iconCleanup,
         .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
@@ -385,13 +391,15 @@ extension RepositoriesFeature {
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
           let roots = remainingEntries.map(\.location)
-          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
+          let (repositories, failures) = await loadRepositoriesData(
+            remainingEntries, knownRemoteRepositories: knownRemoteRepositories)
           await send(
             .repositoriesLoaded(
               repositories,
               failures: failures,
               roots: roots,
-              animated: true
+              animated: true,
+              reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
             )
           )
         }

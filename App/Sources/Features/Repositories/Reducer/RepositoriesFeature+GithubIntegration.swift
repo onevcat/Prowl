@@ -101,7 +101,6 @@ extension RepositoriesFeature {
     switch action {
     case .delayedPullRequestRefresh(let worktreeID):
       guard let worktree = state.worktree(for: worktreeID),
-        worktree.repositoryLocation.refreshesPullRequests,
         let repositoryID = state.repositoryID(containing: worktreeID),
         let repository = state.repositories[id: repositoryID]
       else {
@@ -125,7 +124,9 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.delayedPRRefresh(worktreeID), cancelInFlight: true)
 
     case .repositoryPullRequestRefreshRequested(let repositoryLocation, let worktreeIDs):
-      guard repositoryLocation.refreshesPullRequests else { return .none }
+      // A remote host that does not answer gets no pull request refresh either; its
+      // refresh cadence backs off, and the request would wait for the host too.
+      guard !state.unreachableRepositoryIDs.contains(repositoryLocation.standardized.id) else { return .none }
       @Shared(.repositorySettings(repositoryLocation)) var repositorySettings
       guard repositorySettings.fetchesPullRequestState else {
         return .none
@@ -760,7 +761,6 @@ extension RepositoriesFeature {
       var refresh: Action?
       if let worktreeID = state.selectedWorktreeID,
         let worktree = state.worktree(for: worktreeID),
-        worktree.repositoryLocation.refreshesPullRequests,
         let repositoryID = state.repositoryID(containing: worktreeID),
         let repository = state.repositories[id: repositoryID]
       {

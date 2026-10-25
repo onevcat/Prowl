@@ -396,7 +396,7 @@ extension RepositoriesFeature {
       let repositoryHost = repositoryHost
       return .run { send in
         do {
-          _ = try await repositoryHost.removeWorktree(worktree, deleteBranch: false)
+          try await repositoryHost.removeWorktree(worktree, deleteBranch: false)
           let forceDeleteBranchRequest: ForceDeleteBranchRequest?
           if deleteBranch {
             do {

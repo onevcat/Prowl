@@ -1,0 +1,6 @@
+PROWL_REFRESH	1
+ROOT	/private/tmp/prowl-b3-fx/bare.git
+BARE	true
+REMOTES	4294967295-0
+WORKTREE	bare							/private/tmp/prowl-b3-fx/bare.git
+END

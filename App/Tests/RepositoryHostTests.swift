@@ -142,13 +142,15 @@ struct RepositoryHostTests {
         .repositoryRemoteConfigurationChanged(repository: .local(URL(fileURLWithPath: "/tmp/elsewhere")))))
   }
 
-  @Test(.dependencies) func remotePullRequestRefreshIsSkippedUntilTheHostHasRemotes() async {
+  /// A remote repository's pull requests refresh with the GitHub remotes that its host
+  /// reads (docs-ai 084 B3f). `gh repo view` reads a working directory on this Mac, so its
+  /// fallback never runs for a remote repository; without a host there is nothing to read.
+  @Test(.dependencies) func remotePullRequestRefreshNeverRunsTheLocalGhFallback() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     let worktreeID = remote.worktrees[0].id
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
     state.selection = .worktree(worktreeID)
-    state.githubIntegrationAvailability = .unknown
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -159,14 +161,13 @@ struct RepositoryHostTests {
       }
       $0.githubCLI.retryRateLimitedRequests = {}
     }
+    store.exhaustivity = .off
 
-    // No availability probe, no pending or in-flight refresh, no forced mark.
     await store.send(
       .worktreeInfoEvent(.repositoryPullRequestRefresh(repository: remote.location, worktreeIDs: [worktreeID]))
     )
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
-    await store.send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
-    await store.send(.githubIntegration(.retryRateLimitedRequests))
+    await store.finish(timeout: .seconds(10))
   }
 
   @Test(.dependencies) func openingARemoteRepositoryOnItsCodeHostExplainsTheMissingURL() async {
@@ -251,20 +252,24 @@ struct RepositoryHostTests {
     }
   }
 
-  @Test(.dependencies) func creatingAWorktreeInARemoteRepositoryExplainsWhy() async {
+  /// Without a host connection, the prompt cannot place a remote worktree.
+  @Test(.dependencies) func creatingAWorktreeInARemoteRepositoryWithoutAHostExplainsWhy() async {
     let remote = RemoteRepositoryFixtures.gitRepository()
     var state = RepositoriesFeature.State()
     state.repositories = [remote]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
-    } withDependencies: {
-      $0.gitClient = Self.failingGitClient
     }
 
-    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(remote.id))) {
+    await store.send(
+      .worktreeCreation(
+        .promptedWorktreeCreationDataLoaded(
+          repositoryID: remote.id, baseRefOptions: [], automaticBaseRef: "", selectedBaseRef: nil,
+          remoteHomeDirectory: nil))
+    ) {
       $0.alert = RepositoriesFeature().messageAlert(
         title: "Unable to create worktree",
-        message: "Worktrees cannot be created in remote folders yet."
+        message: "The remote host could not be reached."
       )
     }
   }
@@ -308,6 +313,7 @@ struct RepositoryHostTests {
     let entries = [PersistedRepositoryEntry(path: remote.id, kind: .git)]
     let feature = withDependencies {
       $0.gitClient = Self.failingGitClient
+      $0.continuousClock = TestClock()
     } operation: {
       RepositoriesFeature()
     }

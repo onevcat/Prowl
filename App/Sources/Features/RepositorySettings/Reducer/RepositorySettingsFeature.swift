@@ -157,6 +157,7 @@ struct RepositorySettingsFeature {
   }
 
   @Dependency(GitClientDependency.self) private var gitClient
+  @Dependency(RemoteRepositoryHostClient.self) private var remoteRepositoryHosts
   @Dependency(\.repositoryIconAssetStore) private var repositoryIconAssetStore
   @Dependency(\.repositorySymbolSuggestionClient) private var symbolSuggestionClient
 
@@ -186,7 +187,7 @@ struct RepositorySettingsFeature {
             )
           }
         }
-        let repositoryHost = RepositoryHost(local: gitClient)
+        let repositoryHost = RepositoryHost(local: gitClient, remote: remoteRepositoryHosts)
         return .run { send in
           let isBareRepository = (try? await repositoryHost.isBareRepository(location)) ?? false
           @Shared(.repositorySettings(location)) var repositorySettings

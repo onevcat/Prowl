@@ -6,9 +6,10 @@ struct WorktreeCreationPromptFeature {
   @ObservableState
   struct State: Equatable {
     let repositoryID: Repository.ID
-    /// Canonical repository root, used to resolve relative path overrides in the
-    /// preview the same way the reducer does (not reconstructed from the ID).
-    let repositoryRootURL: URL
+    /// How the repository places worktrees: the canonical local root, or the remote
+    /// repository's path and its host's home. The preview resolves overrides the same way
+    /// the reducer does.
+    let placement: WorktreePlacement
     let repositoryName: String
     let automaticBaseRef: String
     let baseRefOptions: [String]
@@ -53,9 +54,8 @@ struct WorktreeCreationPromptFeature {
     /// Full destination path the worktree will be created at, mirroring the
     /// reducer's resolution.
     var resolvedWorktreeLocationPreview: String {
-      ProwlPaths.previewWorktreeDirectory(
+      placement.previewDirectory(
         defaultBaseDirectory: URL(filePath: defaultWorktreeBaseDirectory, directoryHint: .isDirectory),
-        repositoryRootURL: repositoryRootURL,
         nameOverride: worktreeNameOverride,
         pathOverride: worktreePathOverride,
         branchName: effectiveBranchName
@@ -147,5 +147,42 @@ struct WorktreeCreationPromptFeature {
         return .none
       }
     }
+  }
+}
+
+extension WorktreeCreationPromptFeature.State {
+  /// A prompt for a local repository.
+  init(
+    repositoryID: Repository.ID,
+    repositoryRootURL: URL,
+    repositoryName: String,
+    automaticBaseRef: String,
+    baseRefOptions: [String],
+    branchName: String,
+    selectedBaseRef: String?,
+    fetchRemote: Bool,
+    defaultWorktreeBaseDirectory: String,
+    worktreeNameOverride: String = "",
+    worktreePathOverride: String = "",
+    validationMessage: String?,
+    isSuggestingName: Bool = false,
+    randomPlaceholder: String
+  ) {
+    self.init(
+      repositoryID: repositoryID,
+      placement: .local(repositoryRootURL: repositoryRootURL),
+      repositoryName: repositoryName,
+      automaticBaseRef: automaticBaseRef,
+      baseRefOptions: baseRefOptions,
+      branchName: branchName,
+      selectedBaseRef: selectedBaseRef,
+      fetchRemote: fetchRemote,
+      defaultWorktreeBaseDirectory: defaultWorktreeBaseDirectory,
+      worktreeNameOverride: worktreeNameOverride,
+      worktreePathOverride: worktreePathOverride,
+      validationMessage: validationMessage,
+      isSuggestingName: isSuggestingName,
+      randomPlaceholder: randomPlaceholder
+    )
   }
 }

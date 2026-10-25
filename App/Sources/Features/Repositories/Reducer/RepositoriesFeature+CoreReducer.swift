@@ -182,16 +182,19 @@ extension RepositoriesFeature {
     case .loadPersistedRepositories:
       state.alert = nil
       state.isRefreshingWorktrees = false
+      let knownRemoteRepositories = state.retainedRemoteRepositories
       return .run { send in
         let entries = await loadPersistedRepositoryEntries()
         let roots = entries.map(\.location)
-        let (repositories, failures) = await loadRepositoriesData(entries)
+        let (repositories, failures) = await loadRepositoriesData(
+          entries, knownRemoteRepositories: knownRemoteRepositories)
         await send(
           .repositoriesLoaded(
             repositories,
             failures: failures,
             roots: roots,
-            animated: false
+            animated: false,
+            reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
           )
         )
       }
@@ -207,9 +210,11 @@ extension RepositoriesFeature {
         state.isRefreshingWorktrees = false
         return .none
       }
-      return loadRepositories(fallbackRoots: roots, animated: animated)
+      return loadRepositories(
+        fallbackRoots: roots, animated: animated, knownRemoteRepositories: state.retainedRemoteRepositories)
 
-    case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
+    case .repositoriesLoaded(let loadedRepositories, let failures, let roots, let animated, let reusedIDs):
+      let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
       state.snapshotPersistencePhase = state.snapshotPersistencePhase.afterLiveLoad(
@@ -227,11 +232,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      state.loadFailuresByID = Dictionary(
-        failures.map { ($0.rootID, $0.message) },
-        uniquingKeysWith: { first, _ in first }
-      )
-      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+      recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
         previousSelectionID: previousSelection,
@@ -292,7 +293,17 @@ extension RepositoriesFeature {
         allEffects.append(effect)
       }
       allEffects.append(refreshWorkspaceChildrenEffect(state: state))
+      allEffects.append(syncRemoteRefreshSchedules(state: &state))
       return .merge(allEffects)
+
+    case .remoteRepositoryRefreshDue(let repositoryID):
+      return reduceRemoteRefreshDue(repositoryID, state: &state)
+
+    case .remoteRepositoryRefreshed(let repositoryID, let result):
+      return reduceRemoteRefreshed(repositoryID, result, state: &state)
+
+    case .setRemoteRefreshActive(let isActive):
+      return setRemoteRefreshActive(isActive, state: &state)
 
     case .refreshAllCustomTitles:
       // Fan out across the current repository list, reading each
@@ -1002,26 +1013,7 @@ extension RepositoriesFeature {
         else {
           return .none
         }
-        let repositories = IdentifiedArrayOf(uniqueElements: [repository])
-        var effects: [Effect<Action>] = []
-        let worktreeIDs = repository.worktrees.map(\.id)
-        // A changed remote can point every branch at different pull requests.
-        state.pullRequestRefreshForcedWorktreeIDs.formUnion(worktreeIDs)
-        if repository.capabilities.supportsPullRequests, !worktreeIDs.isEmpty {
-          effects.append(
-            .send(
-              .githubIntegration(
-                .repositoryPullRequestRefreshRequested(
-                  repositoryLocation: repository.location,
-                  worktreeIDs: worktreeIDs
-                )
-              ))
-          )
-        }
-        if let effect = detectCodeHostsEffect(for: repositories, includeUnknown: true) {
-          effects.append(effect)
-        }
-        return effects.isEmpty ? .none : .concatenate(effects)
+        return remoteConfigurationChanged(repository, state: &state)
       case .repositoryPullRequestRefresh(let location, let worktreeIDs):
         return .send(
           .githubIntegration(
