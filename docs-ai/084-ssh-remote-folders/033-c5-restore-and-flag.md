@@ -128,3 +128,22 @@ stay stored but hidden (C1a).
   repository that never loaded keeps it until that worktree's layout is saved again.
 - A restored pane's directory is the one its session showed when the layout was saved. On a
   macOS host's plain shell, which is never mapped, the pane opens in the folder.
+
+## Fixes from the C1c–C5 end-to-end check (2026-10-26)
+
+The whole stack was checked in an isolated Debug instance against folders on mini (a macOS
+host), with the flag at its new default. Two launcher defects showed:
+
+- **Unknown `TERM`.** `ssh` sends the local `TERM`, `xterm-ghostty`, and the typed line uses
+  `/usr/bin/ssh`, so Ghostty's own ssh integration does not run. On a host without that
+  terminfo entry, tmux refused to start ("missing or unsuitable terminal") and line editing
+  broke. The launcher now sets `TERM=xterm-256color` when `infocmp` does not know the
+  incoming one. It installs nothing on the host.
+- **History of a first-command shell.** zsh reads the global zshrc while the wrapper's
+  `ZDOTDIR` is in place, and macOS's `/etc/zshrc` sets `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`.
+  The history of a script or custom command tab went to the launch directory, which is
+  removed ("locking failed" at exit). The wrapper's `.zshrc` moves such a `HISTFILE` back
+  to the user's `ZDOTDIR` or home.
+
+Tests: `RemoteLauncherTests/anUnknownTerminalFallsBackToXterm(_:)` and
+`zshKeepsTheHistoryOutOfTheLaunchDirectory()` (both checked red).

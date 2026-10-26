@@ -47,7 +47,9 @@ types the `ssh` line, Prowl stages a small launcher on the host over the side ch
 finishes. When the launcher cannot be staged, the tab closes with the reason.
 
 - **Environment.** The shell has `PROWL_WORKTREE_PATH` and `PROWL_ROOT_PATH`, both paths on
-  the host, and `LC_PROWL_PANE` (the pane's id).
+  the host, and `LC_PROWL_PANE` (the pane's id). When the host has no terminfo entry for
+  the local `TERM` (`xterm-ghostty`), `TERM` is `xterm-256color`, so that tmux and line
+  editing work. Prowl installs nothing on the host.
 - **Splits.** A split (`⌘D`, `prowl create pane`, a New Split custom command) is a new
   remote pane. It starts where its anchor pane is on the host. Otherwise it starts in the
   last known directory there, and then in the folder.

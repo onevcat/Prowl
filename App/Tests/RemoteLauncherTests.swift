@@ -88,12 +88,12 @@ nonisolated struct RemoteLauncherTests {
   /// Stages `launch` in `home` as the host would, then runs the launcher with `shell` as the
   /// user's login shell, feeding `input` to the shell.
   private static func launch(
-    _ launch: RemoteLaunch, shell: String, home: Home, input: String
+    _ launch: RemoteLaunch, shell: String, home: Home, input: String, environment extra: [String: String] = [:]
   ) throws -> (output: String, launcher: String) {
     let environment = [
       "HOME": home.path, "SHELL": shell, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
       "TERM": "dumb", "LANG": "en_US.UTF-8",
-    ]
+    ].merging(extra) { $1 }
     let staging = try RemoteLauncher.stagingCommand(for: launch).script()
     let staged = try run("/bin/sh", ["-s"], input: staging, environment: environment)
     let launcher = try RemoteLauncher.stagedLauncherPath(from: staged, for: launch)
@@ -253,6 +253,26 @@ nonisolated struct RemoteLauncherTests {
     let hook = try #require(loads.firstIndex(of: "user_precmd"), "\(loads)")
     #expect(hook < first, "\(loads)")
     #expect(output.contains("ZD:\(home.path)/.config/zsh"), "\(output)")
+  }
+
+  /// A global zshrc runs while the wrapper's `ZDOTDIR` is in place, and macOS's
+  /// `/etc/zshrc` sets `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`. The history must still go
+  /// to the user's file, not to the launch directory. An imported `HISTFILE` in the wrapper
+  /// directory, with no global files, stands in for that `/etc/zshrc`.
+  @Test func zshKeepsTheHistoryOutOfTheLaunchDirectory() throws {
+    guard FileManager.default.isExecutableFile(atPath: "/bin/zsh") else { return }
+    let home = try Home()
+    defer { home.remove() }
+    try Data("unsetopt GLOBAL_RCS\n".utf8).write(to: home.root.appending(path: ".zshenv"))
+    let launch = RemoteLaunch(
+      nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [], firstCommand: "true")
+    let wrapperHistory = "\(home.path)/\(RemoteLauncher.launchDirectory)/\(launch.nonce)/zsh/.zsh_history"
+
+    let (output, _) = try Self.launch(
+      launch, shell: "/bin/zsh", home: home, input: "echo \"HF:$HISTFILE:\"\nexit\n",
+      environment: ["HISTFILE": wrapperHistory])
+
+    #expect(output.contains("HF:\(home.path)/.zsh_history:"), "\(output)")
   }
 
   /// The user's startup files keep their top-level meaning: a `typeset -U path` change and
@@ -538,6 +558,23 @@ nonisolated struct RemoteLauncherTests {
         output.contains("AT:\(expected)\n") || output.contains("AT:\(String(cString: physical))\n"), "\(output)")
       #expect(!output.contains("7501"))
       #expect(!FileManager.default.fileExists(atPath: URL(filePath: launcher).deletingLastPathComponent().path))
+    }
+  }
+
+  /// A TERM that the host does not know (the local xterm-ghostty) becomes xterm-256color
+  /// before the shell starts; a known one stays.
+  @Test(arguments: shells)
+  func anUnknownTerminalFallsBackToXterm(_ shell: String) throws {
+    let home = try Home()
+    defer { home.remove() }
+    for (term, expected) in [("prowl-unknown-terminal", "xterm-256color"), ("vt100", "vt100")] {
+      let launch = RemoteLaunch(
+        nonce: RemoteLaunch.makeNonce(), workingDirectory: home.workingDirectory, environment: [], firstCommand: nil)
+
+      let (output, _) = try Self.launch(
+        launch, shell: shell, home: home, input: "echo \"TERM:$TERM:\"\nexit\n", environment: ["TERM": term])
+
+      #expect(output.contains("TERM:\(expected):"), "\(term): \(output)")
     }
   }
 

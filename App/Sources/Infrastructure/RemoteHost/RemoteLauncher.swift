@@ -149,6 +149,7 @@ nonisolated enum RemoteLauncher {
           \(marker(posixMarker))
         fi
       fi
+      \(terminalFallback)
       \(exports.joined(separator: "\n"))
       prowl_shell=${SHELL-}
       if [ -z "$prowl_shell" ] || [ ! -x "$prowl_shell" ]; then
@@ -169,7 +170,7 @@ nonisolated enum RemoteLauncher {
       \(zshUserFile(".zprofile"))
       PROWL_EOF
           cat > "$prowl_dir/zsh/.zshrc" <<'PROWL_EOF'
-      \(zshUserFile(".zshrc"))
+      \(zshRC)
       PROWL_EOF
           cat > "$prowl_dir/zsh/.zlogin" <<'PROWL_EOF'
       \(zshLogin(marker: marker(posixMarker)))
@@ -224,6 +225,15 @@ nonisolated enum RemoteLauncher {
       """
   }
 
+  /// `ssh` sends the local `TERM` (`xterm-ghostty`), which most hosts do not know: tmux then
+  /// refuses to start and line editing breaks. The launcher uses the common fallback, as
+  /// Ghostty's own ssh integration does, and installs nothing on the host.
+  private static let terminalFallback = """
+    if [ -n "${TERM-}" ] && command -v infocmp >/dev/null 2>&1 && ! infocmp -- "$TERM" >/dev/null 2>&1; then
+      TERM=xterm-256color; export TERM
+    fi
+    """
+
   /// `printf` of the marker for `sh`, bash and zsh, with `$prowl_state` and `$prowl_status`.
   private static let posixMarker =
     #"printf '\033]7501;state=%s:id=\#(markerIDPrefix)/NONCE/%s\007' "$prowl_state" "$prowl_status""#
@@ -242,6 +252,16 @@ nonisolated enum RemoteLauncher {
     [ -n "${PROWL_USER_ZDOTDIR_SET-}" ] && prowl_user_zdotdir=$PROWL_USER_ZDOTDIR
     unset PROWL_LAUNCH_DIR PROWL_USER_ZDOTDIR PROWL_USER_ZDOTDIR_SET
     \(zshUserFile(".zshenv"))
+    """
+
+  /// The wrapper's `.zshrc`. The global zshrc ran with the wrapper's `ZDOTDIR`, and macOS's
+  /// `/etc/zshrc` sets `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`: the history would go to
+  /// the launch directory, which is removed.
+  private static let zshRC = """
+    case ${HISTFILE-} in
+      "$prowl_wrapper_dir"/*) HISTFILE=${prowl_user_zdotdir:-$HOME}/${HISTFILE#"$prowl_wrapper_dir"/} ;;
+    esac
+    \(zshUserFile(".zshrc"))
     """
 
   /// Runs the user's `file` (such as `.zshrc`) at top level, from the user's `ZDOTDIR`, and
