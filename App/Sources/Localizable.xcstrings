@@ -1106,6 +1106,16 @@
         }
       }
     },
+    "A destination for ssh: user@host, or an alias from your SSH configuration." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ssh 的目标：user@host，或 SSH 配置中的别名。"
+          }
+        }
+      }
+    },
     "A different version exists at %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1152,6 +1162,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 被一个真实的文件或目录占用。Prowl 只管理符号链接，不会删除它；请先手动移除。"
+          }
+        }
+      }
+    },
+    "A repository adds its main worktree; any other folder is added as it is." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库会添加其主 worktree；其他文件夹按原样添加。"
+          }
+        }
+      }
+    },
+    "A script that Prowl runs on the remote host is missing from the app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 中缺少 Prowl 在远程主机上运行的脚本。"
           }
         }
       }
@@ -1316,6 +1346,26 @@
         }
       }
     },
+    "Add Remote Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加远程文件夹"
+          }
+        }
+      }
+    },
+    "Add Remote Folder..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加远程文件夹…"
+          }
+        }
+      }
+    },
     "Add Repository" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1392,6 +1442,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请先在设置中添加自定义 Diff 命令，再打开 Diff。"
+          }
+        }
+      }
+    },
+    "Add a folder on another machine over SSH" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 SSH 添加另一台机器上的文件夹"
           }
         }
       }
@@ -1672,6 +1732,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Agent 配置"
+          }
+        }
+      }
+    },
+    "Agent Profiles cannot launch in remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 配置暂时无法在远程文件夹中启动。"
           }
         }
       }
@@ -2272,6 +2342,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 worktree 归档之前运行的脚本"
+          }
+        }
+      }
+    },
+    "Archive scripts do not run for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档脚本不会为远程文件夹运行。"
           }
         }
       }
@@ -3417,6 +3497,16 @@
         }
       }
     },
+    "Check the host and add the folder (Return)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查主机并添加文件夹（Return）"
+          }
+        }
+      }
+    },
     "Check this folder's permissions and Git configuration, then retry." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3443,6 +3533,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查仓库模式"
+          }
+        }
+      }
+    },
+    "Checking the host…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查主机…"
           }
         }
       }
@@ -4457,6 +4557,16 @@
         }
       }
     },
+    "Close without adding a folder (Esc)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭且不添加文件夹（Esc）"
+          }
+        }
+      }
+    },
     "Close without creating a profile." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4827,6 +4937,16 @@
         }
       }
     },
+    "Connect Again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新连接"
+          }
+        }
+      }
+    },
     "Connect to Host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4893,6 +5013,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已连接 · %@"
+          }
+        }
+      }
+    },
+    "Connected." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接。"
           }
         }
       }
@@ -6517,6 +6647,16 @@
         }
       }
     },
+    "Diffs are not available for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹不支持 Diff。"
+          }
+        }
+      }
+    },
     "Dim unfocused split panes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7187,6 +7327,16 @@
         }
       }
     },
+    "Enter a host, such as user@example.com or an alias from your SSH configuration." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入主机，例如 user@example.com 或 SSH 配置中的别名。"
+          }
+        }
+      }
+    },
     "Enter a listen address of this Mac and a port between 1 and 65535." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7283,6 +7433,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入主机上当前显示的 8 位配对码。"
+          }
+        }
+      }
+    },
+    "Enter the folder's path on the host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入文件夹在主机上的路径。"
           }
         }
       }
@@ -7939,6 +8099,16 @@
         }
       }
     },
+    "Finder is not available for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹不支持访达。"
+          }
+        }
+      }
+    },
     "Finished in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8265,6 +8435,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Git 已不再识别此 worktree：%@"
+          }
+        }
+      }
+    },
+    "Git on the remote host refused the repository: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机上的 Git 拒绝了该仓库：%@"
+          }
+        }
+      }
+    },
+    "Git was not found on the remote host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机上找不到 Git。"
           }
         }
       }
@@ -8869,6 +9059,16 @@
         }
       }
     },
+    "Icon detection is not available for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹不支持图标检测。"
+          }
+        }
+      }
+    },
     "Icon picker" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8889,6 +9089,16 @@
         }
       }
     },
+    "Images are not available for remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹暂不支持图片。"
+          }
+        }
+      }
+    },
     "Immediately (debug)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8905,6 +9115,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "就地"
+          }
+        }
+      }
+    },
+    "In Place commands do not run in remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“就地”命令暂时无法在远程文件夹中运行。"
           }
         }
       }
@@ -9675,6 +9895,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第 %lld 行，第 %lld 列"
+          }
+        }
+      }
+    },
+    "Line counts are not available for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹不支持行数统计。"
           }
         }
       }
@@ -10499,6 +10729,16 @@
         }
       }
     },
+    "New Host…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建主机…"
+          }
+        }
+      }
+    },
     "New Pane" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11159,6 +11399,16 @@
         }
       }
     },
+    "Not answering" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无响应"
+          }
+        }
+      }
+    },
     "Not authenticated" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11175,6 +11425,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未绑定"
+          }
+        }
+      }
+    },
+    "Not connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未连接"
           }
         }
       }
@@ -11670,6 +11930,16 @@
         }
       }
     },
+    "Open a folder on another machine over SSH." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 SSH 打开另一台机器上的文件夹。"
+          }
+        }
+      }
+    },
     "Open a new terminal tab at this worktree's root" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12047,6 +12317,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已在 Prowl 中打开"
+          }
+        }
+      }
+    },
+    "Opening in an app is not available for remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹无法在 App 中打开。"
           }
         }
       }
@@ -12963,6 +13243,26 @@
         }
       }
     },
+    "Prowl cannot open %@ on the host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法在主机上打开 %@。"
+          }
+        }
+      }
+    },
+    "Prowl cannot open the folder on the remote host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法打开远程主机上的文件夹。"
+          }
+        }
+      }
+    },
     "Prowl cannot reach the tmux server that this pane shows on %@, so it does not detect the agents in it. Prowl looks for tmux servers only in the default socket directory: a server started with tmux -S is not found." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12999,6 +13299,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl 无法绑定该套接字。请移除此路径上残留的文件，然后重新启动。"
+          }
+        }
+      }
+    },
+    "Prowl could not connect: %@ It shows the last state and tries again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法连接：%@ 它会显示上次的状态并重试。"
           }
         }
       }
@@ -13143,6 +13453,16 @@
         }
       }
     },
+    "Prowl could not prepare the terminal for the remote folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法为远程文件夹准备终端。"
+          }
+        }
+      }
+    },
     "Prowl could not read the selected folders." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13153,12 +13473,32 @@
         }
       }
     },
+    "Prowl could not rebind the host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法重新绑定主机"
+          }
+        }
+      }
+    },
     "Prowl could not restrict the socket to your user. Check the folder's permissions." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl 无法将该套接字限制为仅你的用户可用。请检查文件夹的权限。"
+          }
+        }
+      }
+    },
+    "Prowl could not save the host. Try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法保存主机，请重试。"
           }
         }
       }
@@ -13229,6 +13569,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl 未在监听 prowl 命令。"
+          }
+        }
+      }
+    },
+    "Prowl keeps a background SSH connection to %@ while its folders are in the sidebar. Over it, Prowl reads the folders' worktrees and changes: every %lld seconds for the selected folder, and every %lld seconds for the others. While the host does not answer, it tries less often, at most every %lld minutes." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只要 %@ 的文件夹还在边栏中，Prowl 就会与它保持一条后台 SSH 连接。Prowl 通过它读取这些文件夹的 worktree 和更改：选中的文件夹每 %lld 秒一次，其他文件夹每 %lld 秒一次。主机无响应时，Prowl 会降低重试频率，最多每 %lld 分钟一次。"
+          }
+        }
+      }
+    },
+    "Prowl keeps a background SSH connection to this host while its folders are in the sidebar." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只要此主机的文件夹还在边栏中，Prowl 就会与它保持一条后台 SSH 连接。"
           }
         }
       }
@@ -13349,6 +13709,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl 将退出并重新启动，以完成更新安装。"
+          }
+        }
+      }
+    },
+    "Prowl's background SSH connection to the host of this remote folder. Click to see what it does." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 与此远程文件夹所在主机的后台 SSH 连接。点按以查看它的作用。"
           }
         }
       }
@@ -13694,6 +14064,36 @@
         }
       }
     },
+    "Rebind %@?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新绑定 %@？"
+          }
+        }
+      }
+    },
+    "Rebind Host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新绑定主机"
+          }
+        }
+      }
+    },
+    "Rebind Host…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新绑定主机…"
+          }
+        }
+      }
+    },
     "Recent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14034,6 +14434,56 @@
         }
       }
     },
+    "Remote connections are turned off (PROWL_REMOTE_AGENT_DETECTION=0)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程连接已关闭（PROWL_REMOTE_AGENT_DETECTION=0）。"
+          }
+        }
+      }
+    },
+    "Remote folder over SSH" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 SSH 访问的远程文件夹"
+          }
+        }
+      }
+    },
+    "Remote folders are not available yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹暂不可用。"
+          }
+        }
+      }
+    },
+    "Remote folders cannot use another user's home (%@). Use an absolute path." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹不能使用其他用户的主目录（%@），请使用绝对路径。"
+          }
+        }
+      }
+    },
+    "Remote folders do not support this yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹暂不支持此操作。"
+          }
+        }
+      }
+    },
     "Remote host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14060,6 +14510,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程接收端速度过慢。"
+          }
+        }
+      }
+    },
+    "Remote…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程…"
           }
         }
       }
@@ -14120,6 +14580,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除并将文件放入废纸篓"
+          }
+        }
+      }
+    },
+    "Remove folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除文件夹"
+          }
+        }
+      }
+    },
+    "Remove folder?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除文件夹？"
           }
         }
       }
@@ -15104,6 +15584,26 @@
         }
       }
     },
+    "Reveal this folder in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示此文件夹"
+          }
+        }
+      }
+    },
+    "Reveal this worktree in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示此 worktree"
+          }
+        }
+      }
+    },
     "Review %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15650,6 +16150,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SSH 会话"
+          }
+        }
+      }
+    },
+    "SSH configuration changed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 配置已更改"
+          }
+        }
+      }
+    },
+    "SSH could not start: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 无法启动：%@"
+          }
+        }
+      }
+    },
+    "SSH failed: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 失败：%@"
+          }
+        }
+      }
+    },
+    "SSH rejected the options of this remote host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 拒绝了此远程主机的选项。"
           }
         }
       }
@@ -17106,6 +17646,16 @@
         }
       }
     },
+    "Show the new target of this host's SSH configuration and use it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示此主机 SSH 配置的新目标并使用它"
+          }
+        }
+      }
+    },
     "Show the unread worktree count on the Prowl dock icon." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17846,6 +18396,16 @@
         }
       }
     },
+    "Store the host's new target, then add the folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存主机的新目标，然后添加文件夹"
+          }
+        }
+      }
+    },
     "Stored in %@. Edit Workspace opens the editor in the main window." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17962,6 +18522,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为此仓库推荐"
+          }
+        }
+      }
+    },
+    "Suggestions are not available for remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程文件夹暂不支持建议。"
           }
         }
       }
@@ -18236,6 +18806,16 @@
         }
       }
     },
+    "Terminals cannot open in remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端暂时无法在远程文件夹中打开。"
+          }
+        }
+      }
+    },
     "The Agent Profile Prowl starts for this role." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18262,6 +18842,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机尚未准备好处理下一个请求。"
+          }
+        }
+      }
+    },
+    "The SSH configuration changed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 配置已更改"
+          }
+        }
+      }
+    },
+    "The SSH configuration of %@ now reaches %@. Its folders were added for %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的 SSH 配置现在指向 %@。它的文件夹是为 %@ 添加的。"
+          }
+        }
+      }
+    },
+    "The SSH configuration of %@ now reaches %@. Its folders were added for %@. Prowl does not connect to %@ until you use the new target." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的 SSH 配置现在指向 %@。它的文件夹是为 %@ 添加的。在你使用新目标之前，Prowl 不会连接 %@。"
+          }
+        }
+      }
+    },
+    "The SSH configuration of %@ now reaches another user, host or port. Prowl does not connect to it until you rebind it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的 SSH 配置现在指向另一个用户、主机或端口。在你重新绑定之前，Prowl 不会连接它。"
+          }
+        }
+      }
+    },
+    "The SSH configuration of %@ reaches its target again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的 SSH 配置已重新指向原目标。"
+          }
+        }
+      }
+    },
+    "The SSH configuration of this host changed. Click to use its new target." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机的 SSH 配置已更改。点按以使用新目标。"
+          }
+        }
+      }
+    },
+    "The SSH configuration of this remote host now reaches another user, host or port." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此远程主机的 SSH 配置现在指向另一个用户、主机或端口。"
+          }
+        }
+      }
+    },
+    "The SSH options of this remote host cannot be typed into a terminal." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此远程主机的 SSH 选项无法输入到终端中。"
           }
         }
       }
@@ -18387,6 +19047,36 @@
         }
       }
     },
+    "The folder no longer exists on the remote host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件夹在远程主机上已不存在。"
+          }
+        }
+      }
+    },
+    "The folder on the remote host is not a Git repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机上的文件夹不是 Git 仓库。"
+          }
+        }
+      }
+    },
+    "The folder on the remote host is not the root of its repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机上的文件夹不是其仓库的根目录。"
+          }
+        }
+      }
+    },
     "The highlighted layout button stays on as cards are added or closed. Drag or resize a card to place cards freely." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18403,6 +19093,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机可能会记录这条连接。在你做出选择之前，Prowl 不会连接。"
+          }
+        }
+      }
+    },
+    "The host did not answer" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机无响应"
+          }
+        }
+      }
+    },
+    "The host did not answer. Prowl shows the last state and tries again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机无响应。Prowl 会显示上次的状态并重试。"
+          }
+        }
+      }
+    },
+    "The host of this remote folder is missing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到此远程文件夹的主机。"
           }
         }
       }
@@ -18487,6 +19207,16 @@
         }
       }
     },
+    "The path cannot be used for a remote folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此路径不能用于远程文件夹。"
+          }
+        }
+      }
+    },
     "The previously used profile no longer qualifies." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18547,6 +19277,106 @@
         }
       }
     },
+    "The remote connection was closed or the command was cancelled." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程连接已关闭，或命令已取消。"
+          }
+        }
+      }
+    },
+    "The remote host could not be reached." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法访问远程主机。"
+          }
+        }
+      }
+    },
+    "The remote host did not answer in time." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机未及时响应。"
+          }
+        }
+      }
+    },
+    "The remote host did not confirm the terminal launch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机没有确认终端已启动。"
+          }
+        }
+      }
+    },
+    "The remote host key is unknown or has changed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机密钥未知或已更改。"
+          }
+        }
+      }
+    },
+    "The remote host name could not be resolved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解析远程主机名。"
+          }
+        }
+      }
+    },
+    "The remote host refused the SSH login." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机拒绝了 SSH 登录。"
+          }
+        }
+      }
+    },
+    "The remote host sent an incomplete reply." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机返回的应答不完整。"
+          }
+        }
+      }
+    },
+    "The remote host sent more output than Prowl reads." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机返回的输出超出了 Prowl 的读取上限。"
+          }
+        }
+      }
+    },
+    "The remote host sent output that Prowl cannot read." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程主机返回了 Prowl 无法读取的输出。"
+          }
+        }
+      }
+    },
     "The run continues; %@ proceeds without this delivery." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18563,6 +19393,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已保存的 JSON 结果文件；输出中包含它的各个字段"
+          }
+        }
+      }
+    },
+    "The script is too large to run in a remote folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "脚本太大，无法在远程文件夹中运行。"
           }
         }
       }
@@ -18637,6 +19477,16 @@
         }
       }
     },
+    "The terminal on %@ did not start: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 上的终端未能启动：%@"
+          }
+        }
+      }
+    },
     "The value contains an unsupported character — this row is ignored at launch." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18693,6 +19543,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "worktree 已删除，但 %@ 无法安全删除。\n\n%@"
+          }
+        }
+      }
+    },
+    "There is no folder at %@ on the host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机上的 %@ 处没有文件夹。"
           }
         }
       }
@@ -18907,6 +19767,26 @@
         }
       }
     },
+    "This removes the folder from Prowl. Its worktrees and files on %@ stay as they are, and Prowl stops connecting to %@ for it. %@ stays in the host list." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从 Prowl 中移除该文件夹。它在 %@ 上的 worktree 和文件保持不变，Prowl 也不再为它连接 %@。%@ 仍保留在主机列表中。"
+          }
+        }
+      }
+    },
+    "This removes the folder from Prowl. Its worktrees and files on its host stay as they are." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从 Prowl 中移除该文件夹。它在主机上的 worktree 和文件保持不变。"
+          }
+        }
+      }
+    },
     "This removes the profile from Prowl. No files will be deleted." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19003,6 +19883,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此步骤已跳过。"
+          }
+        }
+      }
+    },
+    "This version of Prowl cannot read ~/.prowl/hosts.json, so it adds no host to it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Prowl 无法读取 ~/.prowl/hosts.json，因此不会向其中添加主机。"
+          }
+        }
+      }
+    },
+    "This version of Prowl cannot read ~/.prowl/hosts.json, so it does not change it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Prowl 无法读取 ~/.prowl/hosts.json，因此不会修改它。"
           }
         }
       }
@@ -19733,6 +20633,16 @@
         }
       }
     },
+    "Unknown host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知主机"
+          }
+        }
+      }
+    },
     "Unpin" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19964,6 +20874,16 @@
         }
       }
     },
+    "Use the New Target" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用新目标"
+          }
+        }
+      }
+    },
     "Use the card's title-bar button" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19980,6 +20900,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用默认工作流图标"
+          }
+        }
+      }
+    },
+    "Use the new target of this host's SSH configuration" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用此主机 SSH 配置的新目标"
           }
         }
       }
@@ -20534,6 +21464,16 @@
         }
       }
     },
+    "Workflows cannot run in remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流暂时无法在远程文件夹中运行。"
+          }
+        }
+      }
+    },
     "Workflows coordinate agents for repeatable tasks. Select one to review its setup or run it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20634,6 +21574,16 @@
         }
       }
     },
+    "Workspaces cannot include remote folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区不能包含远程文件夹。"
+          }
+        }
+      }
+    },
     "Worktree" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20710,6 +21660,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Worktree"
+          }
+        }
+      }
+    },
+    "Worktrees cannot be created in remote folders yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法在远程文件夹中创建 worktree。"
           }
         }
       }
@@ -21487,6 +22447,9 @@
         }
       }
     },
+    "user@example.com" : {
+      "shouldTranslate" : false
+    },
     "value" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21526,6 +22489,19 @@
           }
         }
       }
+    },
+    "~/.prowl/hosts.json changed while Prowl saved it. Try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 保存 ~/.prowl/hosts.json 时它被修改了，请重试。"
+          }
+        }
+      }
+    },
+    "~/projects/app" : {
+      "shouldTranslate" : false
     },
     "·" : {
       "shouldTranslate" : false

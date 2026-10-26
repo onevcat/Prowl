@@ -110,6 +110,20 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 | Turn On / Turn Off / Not Now | 开启 / 关闭 / 以后再说 |
 | connected to / disconnected from %@ | 已连接到 %@ / 已断开与 %@ 的连接 |
 
+## Remote folders
+
+| English | 中文 |
+| --- | --- |
+| remote folder / folder | 远程文件夹 / 文件夹 (a repository stays 仓库) |
+| Add Remote Folder / Remote… | 添加远程文件夹 / 远程… |
+| SSH configuration | SSH 配置 |
+| target (of a host's SSH configuration) / reaches | 目标 / 指向 |
+| Rebind Host / rebind | 重新绑定主机 / 重新绑定 |
+| Connected / Not connected / Not answering | 已连接 / 未连接 / 无响应 |
+| Connect Again | 重新连接 |
+| host list | 主机列表 |
+| is not available for remote folders / … yet | 远程文件夹不支持… / 暂不支持…, 暂时无法… |
+
 ## Playful copy
 
 The loading messages of `App/Sources/App/AppLoadingView.swift` are jokes. Do not translate them
