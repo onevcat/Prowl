@@ -178,7 +178,7 @@ struct WorkflowRunAdmissionTests {
             profileID: profile.id, profileName: profile.name, runtime: profile.runtime,
             invocation: AgentInvocation(
               executable: profile.runtime.rawValue, arguments: ["placeholder"]),
-            commandEnvironmentTokens: [], placement: .split, splitDirection: .right,
+            commandEnvironment: [], placement: .split, splitDirection: .right,
             surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: "placeholder"],
             dedicatedHome: nil)
         },

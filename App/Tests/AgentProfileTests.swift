@@ -363,7 +363,7 @@ struct AgentProfileTests {
         executable: "/bin/zsh",
         arguments: ["-f", "-c", childCheck, "prowl-child", prompt]
       ),
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: .tab,
       splitDirection: .right,
       surfaceEnvironment: [carrier: prompt],
