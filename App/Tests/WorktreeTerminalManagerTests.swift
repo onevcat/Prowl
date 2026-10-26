@@ -52,7 +52,7 @@ struct WorktreeTerminalManagerTests {
       profileName: "Codex",
       runtime: .codex,
       invocation: AgentInvocation(executable: "codex", arguments: []),
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: .tab,
       splitDirection: .right,
       surfaceEnvironment: [:],
