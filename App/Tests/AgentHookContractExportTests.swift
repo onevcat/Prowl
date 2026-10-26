@@ -37,7 +37,7 @@ struct AgentHookContractExportTests {
       )
       let plan = AgentProfileLaunchPlan(
         profileID: UUID(), profileName: "Runtime contract", runtime: runtime,
-        invocation: invocation, commandEnvironmentTokens: [], placement: .tab, splitDirection: .right,
+        invocation: invocation, commandEnvironment: [], placement: .tab, splitDirection: .right,
         surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: request.prompt],
         profileEnvironmentOverrides: request.environment, dedicatedHome: nil
       )

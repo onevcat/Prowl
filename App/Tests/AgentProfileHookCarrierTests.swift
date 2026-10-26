@@ -79,7 +79,7 @@ struct AgentProfileHookCarrierTests {
       profileName: base.profileName,
       runtime: base.runtime,
       invocation: base.invocation,
-      commandEnvironmentTokens: ["OPENCODE_CONFIG_CONTENT=\"$PROWL_ENV_OPENCODE_CONFIG_CONTENT\""],
+      commandEnvironment: [.carrier(name: "OPENCODE_CONFIG_CONTENT", carrier: "PROWL_ENV_OPENCODE_CONFIG_CONTENT")],
       placement: base.placement,
       splitDirection: base.splitDirection,
       surfaceEnvironment: base.surfaceEnvironment.merging(
@@ -167,7 +167,7 @@ struct AgentProfileHookCarrierTests {
       profileName: "Test",
       runtime: invocation.executable == "codex" ? .codex : .claude,
       invocation: invocation,
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: .tab,
       splitDirection: .right,
       surfaceEnvironment: environment,
@@ -186,7 +186,7 @@ struct AgentProfileWorkflowCarrierTests {
       profileName: "Reviewer",
       runtime: .codex,
       invocation: AgentInvocation(executable: "codex", arguments: ["placeholder"]),
-      commandEnvironmentTokens: ["CODEX_HOME=/tmp/home"],
+      commandEnvironment: [.literal(name: "CODEX_HOME", value: "/tmp/home")],
       placement: .split,
       splitDirection: .right,
       surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: "placeholder"],
@@ -224,7 +224,7 @@ struct AgentProfileWorkflowCarrierTests {
     #expect(input.contains("-u PROWL_LAUNCH_WORKFLOW_0"))
     #expect(input.contains("-u PROWL_LAUNCH_WORKFLOW_2"))
     #expect(input.contains("-u PROWL_LAUNCH_HOOK_TOKEN"))
-    #expect(input.contains("CODEX_HOME=/tmp/home"))
+    #expect(input.contains("CODEX_HOME='/tmp/home'"))
     #expect(!input.contains("secret-token"))
     #expect(!input.contains("hook-token"))
     #expect(!input.contains("Review the brief"))
@@ -235,7 +235,7 @@ struct AgentProfileWorkflowCarrierTests {
     let unprompted = AgentProfileLaunchPlan(
       profileID: UUID(), profileName: "Plain", runtime: .claude,
       invocation: AgentInvocation(executable: "claude", arguments: []),
-      commandEnvironmentTokens: [], placement: .tab, splitDirection: .right, surfaceEnvironment: [:],
+      commandEnvironment: [], placement: .tab, splitDirection: .right, surfaceEnvironment: [:],
       dedicatedHome: nil)
     #expect(throws: AgentProfileLaunchPlanError.dispatchRequiresPrompt) {
       try unprompted.attachingWorkflow(prompt: "x", environment: [:])
@@ -243,7 +243,7 @@ struct AgentProfileWorkflowCarrierTests {
     let prompted = AgentProfileLaunchPlan(
       profileID: UUID(), profileName: "Prompted", runtime: .claude,
       invocation: AgentInvocation(executable: "claude", arguments: ["placeholder"]),
-      commandEnvironmentTokens: [], placement: .tab, splitDirection: .right,
+      commandEnvironment: [], placement: .tab, splitDirection: .right,
       surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: "placeholder"], dedicatedHome: nil)
     #expect(throws: AgentProfileLaunchPlanError.promptContainsNUL) {
       try prompted.attachingWorkflow(prompt: "a\0b", environment: [:])

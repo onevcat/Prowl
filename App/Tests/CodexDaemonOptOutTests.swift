@@ -110,7 +110,7 @@ struct CodexDaemonOptOutTests {
       profileName: "Codex",
       runtime: .codex,
       invocation: AgentInvocation(executable: "codex", arguments: arguments),
-      commandEnvironmentTokens: [],
+      commandEnvironment: [],
       placement: .tab,
       splitDirection: .right,
       surfaceEnvironment: [AgentProfileLaunchPlanner.promptCarrierName: Self.prompt],

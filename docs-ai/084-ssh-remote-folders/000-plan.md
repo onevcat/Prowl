@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented (slice PRs open, see [001-action.md](001-action.md)) |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | #952 (this plan); P0 #954; A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982; C3b #983; C3c #984; C4 #985; C5 #986 |
+| **Primary PRs** | #952 (this plan); P0 #954; A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; A7 #968; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982; C3b #983; C3c #984; C4 #985; C5 #986 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -343,6 +343,7 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 - Updated 2026-10-23: A6 re-split into A6a–A6e; A6c keys repository settings by location — see [012-a6c-settings-by-location.md](012-a6c-settings-by-location.md)
 - Updated 2026-10-23: A6d moves the pull request and code host path to locations — see [013-a6d-pull-requests-by-location.md](013-a6d-pull-requests-by-location.md)
 - Updated 2026-10-23: A6e deletes `Repository.rootURL`, `Worktree.workingDirectory` and `Worktree.repositoryRootURL` — see [014-a6e-delete-forwards.md](014-a6e-delete-forwards.md)
+- Updated 2026-10-23: A7 types the Profile launch environment (`AgentLaunchEnvironmentAssignment`) — see [015-a7-typed-launch-environment.md](015-a7-typed-launch-environment.md)
 - Updated 2026-10-23: B1 adds the command lane (budgets, concurrency limit, `bash -s` scripts with arguments on stdin, line streaming, login PATH); folder users lease through the existing registry — see [016-b1-command-lane.md](016-b1-command-lane.md)
 - Updated 2026-10-23: B2 split; B2a moves the repository root lists to `RepositoryLocation` — see [017-b2a-roots-by-location.md](017-b2a-roots-by-location.md)
 - Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 (one failing entry still drops the snapshot until P0) — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
