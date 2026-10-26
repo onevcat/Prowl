@@ -24,12 +24,14 @@ extension RepositoriesFeature {
     guard settingsFile.global.detectRepositoryIconsAutomatically else { return [] }
     @Shared(.repositoryAppearances) var appearances
     var effects: [Effect<Action>] = []
-    for repository in newRepositories.prefix(Self.maxIconDetectionsPerAdd) {
+    let detectable = newRepositories.filter { $0.availability(of: .iconDetection).isAvailable }
+    for repository in detectable.prefix(Self.maxIconDetectionsPerAdd) {
       guard repository.workspace == nil else { continue }
       let appearance = appearances[repository.id] ?? .empty
       guard appearance.icon == nil, !appearance.iconDetectionSuppressed else { continue }
       let repositoryID = repository.id
-      let rootURL = repository.rootURL
+      // `detectable` holds local repositories only (icon detection is local, docs-ai 084 A4a).
+      guard let rootURL = repository.localURL else { continue }
       let detector = repositoryIconDetector
       let assetStore = repositoryIconAssetStore
       effects.append(
@@ -72,7 +74,9 @@ extension RepositoriesFeature {
       appearance.icon == nil,
       !appearance.iconDetectionSuppressed
     else {
-      let rootURL = repository?.rootURL ?? URL(fileURLWithPath: repositoryID, isDirectory: true)
+      guard let rootURL = repository?.localURL ?? RepositoryLocation(id: repositoryID)?.localURL else {
+        return .none
+      }
       let assetStore = repositoryIconAssetStore
       return .run { _ in
         try? assetStore.remove(filename, rootURL)
@@ -110,8 +114,9 @@ extension RepositoriesFeature {
       }
     }
     let cancel: Effect<Action> = .cancel(id: CancelID.iconDetection(repositoryID))
-    guard let removedFilename else { return cancel }
-    let resolvedRootURL = rootURL ?? URL(fileURLWithPath: repositoryID, isDirectory: true)
+    guard let removedFilename,
+      let resolvedRootURL = rootURL ?? RepositoryLocation(id: repositoryID)?.localURL
+    else { return cancel }
     let assetStore = repositoryIconAssetStore
     return .merge(
       cancel,

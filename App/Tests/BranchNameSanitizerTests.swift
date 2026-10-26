@@ -181,7 +181,7 @@ struct BranchNameSanitizerTests {
   @Test @MainActor func liveSuggestionUsesBranchesBeyondTheFirstTen() async {
     let client = BranchNameSuggestionClient.live(llmService: StubLLMService(output: "Add Login"))
     let branches = (1...10).map { "topic-\($0)" } + ["feat/a", "feat/b"]
-    let context = client.gatherContext("demo", URL(fileURLWithPath: "/tmp/demo"), branches)
+    let context = client.gatherContext("demo", .local(URL(fileURLWithPath: "/tmp/demo")), branches)
     #expect(await client.suggest(context) == "feat/add-login")
   }
 }

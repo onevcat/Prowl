@@ -671,7 +671,6 @@ struct GithubRateLimitedClientTests {
     }
     await #expect(throws: GithubCLIError.rateLimited(retryAt: retryAt)) {
       try await client.mergePullRequest(
-        URL(fileURLWithPath: "/tmp/repo"),
         GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo"),
         1,
         .squash,
@@ -734,7 +733,7 @@ struct GithubRateLimitedClientTests {
       rateLimitGate: gate
     )
     await #expect(throws: GithubCLIError.self) {
-      _ = try await client.latestRun(URL(fileURLWithPath: "/tmp/repo"), "feature", nil)
+      _ = try await client.latestRun(GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo"), "feature", nil)
     }
 
     let request = CrossRepoPullRequestRequest(owner: "octo", repo: "repo", branches: ["feature"])

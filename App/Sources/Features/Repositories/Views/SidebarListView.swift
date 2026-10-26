@@ -203,6 +203,9 @@ struct SidebarListView: View {
               },
               onDrop: { urls in
                 store.send(.repositoryManagement(.openRepositories(urls)))
+              },
+              onRemoteFolder: {
+                store.send(.addRemoteFolderRequested)
               }
             )
           }
@@ -380,10 +383,16 @@ struct SidebarListView: View {
           name: model.name,
           path: model.path,
           isGitUnavailable: model.isGitUnavailable,
+          hostStatus: model.hostStatus,
+          rebind: {
+            if case .needsRebind(let hostProfileID) = model.hostStatus {
+              store.send(.remoteHostRebindRequested(hostProfileID))
+            }
+          },
           retry: { store.send(.refreshWorktrees) },
           showFailure: { store.send(.showRepositoryLoadFailure(model.id)) },
           removeRepository: {
-            store.send(.repositoryManagement(.removeFailedRepository(model.id)))
+            store.send(.repositoryManagement(.requestRemoveFailedRepository(model.id)))
           }
         )
         .padding(.horizontal, 12)
@@ -594,12 +603,12 @@ struct SidebarListView: View {
     // changes, so re-resolving unchanged directories put N `stat`s plus N symlink walks on the
     // main thread per frame.
     let resolvedWorktreeIDs = WorktreeDirectoryIndexCache.worktreeIDs(
-      forWorkingDirectories: entries.compactMap(\.workingDirectory),
+      forWorkingDirectories: entries.compactMap(\.localWorkingDirectory),
       in: repositories
     )
     var displays: [ActiveAgentEntry.ID: ActiveAgentRowDisplay] = [:]
     for entry in entries {
-      let resolvedWorktreeID = entry.workingDirectory.flatMap { resolvedWorktreeIDs[$0] }
+      let resolvedWorktreeID = entry.remoteWorktreeID ?? entry.localWorkingDirectory.flatMap { resolvedWorktreeIDs[$0] }
       displays[entry.id] = activeAgentRowDisplay(
         for: entry,
         repositories: repositories,
@@ -625,10 +634,13 @@ struct SidebarListView: View {
     metadata: ActiveAgentWorktreeMetadata,
     directoryIndex: WorktreeDirectoryIndex? = nil
   ) -> ActiveAgentRowDisplay {
-    let resolvedWorktreeID = entry.workingDirectory.flatMap { workingDirectory in
-      (directoryIndex ?? WorktreeDirectoryIndex(repositories: repositories))
-        .worktreeID(forWorkingDirectory: workingDirectory)
-    }
+    // A remote agent's directory is on its host: only its own remote folder can hold it.
+    let resolvedWorktreeID =
+      entry.remoteWorktreeID
+      ?? entry.localWorkingDirectory.flatMap { workingDirectory in
+        (directoryIndex ?? WorktreeDirectoryIndex(repositories: repositories))
+          .worktreeID(forWorkingDirectory: workingDirectory)
+      }
     return activeAgentRowDisplay(
       for: entry,
       repositories: repositories,
@@ -691,13 +703,13 @@ struct SidebarListView: View {
   ) -> URL? {
     for repository in repositories {
       if let worktree = repository.worktrees[id: worktreeID] {
-        return worktree.workingDirectory
+        return worktree.localURL
       }
     }
     guard let repository = repositories[id: worktreeID],
       repository.capabilities.supportsRunnableFolderActions
     else { return nil }
-    return repository.rootURL
+    return repository.localURL
   }
 }
 

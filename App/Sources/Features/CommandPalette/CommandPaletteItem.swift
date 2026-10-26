@@ -49,6 +49,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case checkForUpdates
     case openRepository
     case newWorkspace
+    /// Off with `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C1, C5).
+    case addRemoteFolder
     case worktreeSelect(Worktree.ID)
     case openSettings
     case newWorktree
@@ -116,7 +118,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.checkForUpdates
     case .openRepository:
       return AppShortcuts.CommandID.openRepository
-    case .newWorkspace:
+    case .newWorkspace, .addRemoteFolder:
       return nil
     case .openSettings:
       return AppShortcuts.CommandID.openSettings

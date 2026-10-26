@@ -933,6 +933,32 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     }
   }
 
+  /// An absolute `--path` goes to the app as typed (no trailing slash): in a remote folder it
+  /// is a path on the host, which this Mac must not resolve (docs-ai 084 C3c).
+  func testCreateTabSendsAnAbsolutePathAsTyped() throws {
+    let socketPath = temporarySocketPath(suffix: "create-tab-host-path")
+    let response = try CommandResponse(
+      ok: true,
+      command: "create",
+      schemaVersion: "prowl.cli.create.v1",
+      data: RawJSON(encoding: makeLifecyclePayload(resource: .tab))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["create", "tab", "mini:/private/tmp/app", "--path", "/private/tmp/app/./sub/", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .create(let input) = envelope.command {
+      XCTAssertEqual(input.path, "/private/tmp/app/./sub")
+    } else {
+      XCTFail("Expected create command envelope")
+    }
+  }
+
   func testCreatePaneCommandRoundTripsOverSocket() throws {
     let socketPath = temporarySocketPath(suffix: "create-pane")
     let response = try CommandResponse(

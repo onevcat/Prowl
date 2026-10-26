@@ -9,7 +9,7 @@ import Foundation
 /// - `bundledAsset`: a name from the app's asset catalog (reserved for
 ///   future branded presets; not user-importable).
 /// - `userImage`: a file the user dropped in via the picker, stored at
-///   `~/.prowl/repo/<name>/icons/<filename>`. Filename includes its
+///   `~/.prowl/repo/<name>-<hash>/icons/<filename>`. Filename includes its
 ///   extension so `isTintable` can distinguish PNG (no tint) from SVG.
 /// - `detectedImage`: a project asset found by automatic detection when
 ///   the repository was added; same on-disk storage as `userImage` but

@@ -125,6 +125,9 @@ extension AppFeature {
     case .newWorkspace:
       return .send(.repositories(.workspaceCreation(.promptRequested)))
 
+    case .addRemoteFolder:
+      return .send(.repositories(.addRemoteFolderRequested))
+
     case .editWorkspace(let repositoryID):
       return .send(
         .repositories(.workspaceEditing(.promptRequested(repositoryID, removingChildID: nil))))
@@ -182,7 +185,7 @@ extension AppFeature {
       guard let worktree = state.repositories.selectedTerminalWorktree else {
         return .none
       }
-      let path = worktree.workingDirectory.path
+      let path = worktree.location.displayPath
       return .run { _ in
         await MainActor.run {
           NSPasteboard.general.clearContents()

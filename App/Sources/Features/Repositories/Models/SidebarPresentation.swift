@@ -1,4 +1,5 @@
 import Foundation
+import Sharing
 
 struct SidebarPresentation: Equatable {
   var items: [SidebarItem]
@@ -75,7 +76,8 @@ struct SidebarRepositoryContainerModel: Equatable, Identifiable {
 
   var repositoryID: Repository.ID
   var title: String
-  var rootURL: URL
+  /// The root on this Mac. Nil for a remote repository.
+  var rootURL: URL?
   var kind: Repository.Kind
   var isExpanded: Bool
   var isRemoving: Bool
@@ -101,6 +103,8 @@ struct FailedRepositoryModel: Equatable, Identifiable {
   var path: String
   var failureMessage: String
   var isGitUnavailable: Bool = false
+  /// The host of a remote folder that did not answer or needs a rebind (docs-ai 084 C1).
+  var hostStatus: RemoteHostStatus?
   var isReorderable: Bool
 }
 
@@ -139,7 +143,7 @@ extension RepositoriesFeature.State {
       repositories.map { ($0.id, $0) },
       uniquingKeysWith: { first, _ in first }
     )
-    let roots = sidebarPresentationRoots()
+    let roots = orderedRepositoryRoots()
     let repositoryCount = roots.count
     var items: [SidebarItem] = []
 
@@ -147,19 +151,18 @@ extension RepositoriesFeature.State {
       items.append(.listHeader(SidebarListHeaderModel(repositoryCount: repositoryCount)))
     }
 
-    for rootURL in roots {
-      let standardizedRootURL = rootURL.standardizedFileURL
-      let repositoryID = standardizedRootURL.path(percentEncoded: false)
+    for standardizedRoot in roots {
+      let repositoryID = standardizedRoot.id
       if let failureMessage = loadFailuresByID[repositoryID] {
-        let path = standardizedRootURL.path(percentEncoded: false)
         items.append(
           .failedRepository(
             FailedRepositoryModel(
               id: repositoryID,
-              name: Repository.name(for: standardizedRootURL),
-              path: path,
+              name: Repository.name(for: standardizedRoot),
+              path: sidebarPath(for: standardizedRoot),
               failureMessage: failureMessage,
               isGitUnavailable: gitUnavailableRepositoryIDs.contains(repositoryID),
+              hostStatus: remoteHostStatus(for: repositoryID),
               isReorderable: true
             )
           )
@@ -171,7 +174,7 @@ extension RepositoriesFeature.State {
             SidebarRepositoryContainerModel(
               repositoryID: repository.id,
               title: repository.name,
-              rootURL: repository.rootURL,
+              rootURL: repository.localURL,
               kind: repository.kind,
               isExpanded: isExpanded,
               isRemoving: isRemovingRepository(repository),
@@ -192,13 +195,15 @@ extension RepositoriesFeature.State {
 
     return SidebarPresentation(items: items)
   }
+}
 
-  private func sidebarPresentationRoots() -> [URL] {
-    let orderedRoots = orderedRepositoryRoots()
-    if !orderedRoots.isEmpty {
-      return orderedRoots
-    }
-    return repositories.map(\.rootURL)
+extension RepositoriesFeature.State {
+  /// The local path, or `alias:/path` for a remote folder (docs-ai 084 D1).
+  fileprivate func sidebarPath(for location: RepositoryLocation) -> String {
+    guard case .remote(let hostProfileID, let path) = location else { return location.path }
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    let alias = hostProfiles.first { $0.id == hostProfileID }?.alias ?? String(localized: "Unknown host")
+    return "\(alias):\(path)"
   }
 }
 

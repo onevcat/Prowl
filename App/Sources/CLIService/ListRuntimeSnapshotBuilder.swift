@@ -1,5 +1,6 @@
 import Foundation
 import ProwlCLIShared
+import Sharing
 
 @MainActor
 enum ListRuntimeSnapshotBuilder {
@@ -9,6 +10,24 @@ enum ListRuntimeSnapshotBuilder {
     let path: String
     let rootPath: String
     let kind: ListCommandWorktree.Kind
+    /// The host of a remote folder (docs-ai 084 C2); nil for a local worktree.
+    var host: ListCommandHost?
+
+    /// Whether `selector` names this worktree: its ID, its name, its path for a local
+    /// worktree, or `alias:/path` for a remote one. A bare path never matches a worktree on
+    /// another host.
+    func matches(_ selector: String) -> Bool {
+      name == selector || matchesExactly(selector)
+    }
+
+    /// Whether `selector` names this worktree by its ID or its path, not by its name.
+    func matchesExactly(_ selector: String) -> Bool {
+      id == selector || ListCommandHost.displayPath(path, host: host) == selector
+    }
+
+    var listWorktree: ListCommandWorktree {
+      ListCommandWorktree(id: id, name: name, path: path, rootPath: rootPath, kind: kind, host: host)
+    }
   }
 
   static func makeSnapshot(
@@ -66,6 +85,7 @@ enum ListRuntimeSnapshotBuilder {
         path: context.path,
         rootPath: context.rootPath,
         kind: context.kind,
+        host: context.host,
         taskStatus: terminalSnapshot.taskStatus,
         tabs: tabs
       )
@@ -81,9 +101,16 @@ enum ListRuntimeSnapshotBuilder {
       uniquingKeysWith: { first, _ in first }
     )
 
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    let aliases = Dictionary(hostProfiles.map { ($0.id, $0.alias) }, uniquingKeysWith: { first, _ in first })
     for repositoryID in repositoriesState.orderedRepositoryIDs() {
-      guard let repository = repositoriesByID[repositoryID] else {
-        continue
+      guard let repository = repositoriesByID[repositoryID] else { continue }
+      // A remote folder carries its host, so a bare path matches local worktrees only
+      // (docs-ai 084 C2).
+      let host = repository.location.hostProfileID.map { hostProfileID in
+        ListCommandHost(
+          profileID: hostProfileID.uuidString.lowercased(),
+          label: aliases[hostProfileID] ?? hostProfileID.uuidString.lowercased())
       }
 
       if repository.capabilities.supportsWorktrees {
@@ -92,24 +119,25 @@ enum ListRuntimeSnapshotBuilder {
             WorktreeContext(
               id: worktree.id,
               name: worktree.name,
-              path: worktree.workingDirectory.path(percentEncoded: false),
-              rootPath: worktree.repositoryRootURL.path(percentEncoded: false),
-              kind: listCommandKind(for: repository)
+              path: worktree.location.path,
+              rootPath: worktree.repositoryLocation.path,
+              kind: listCommandKind(for: repository),
+              host: host
             )
           )
         }
         continue
       }
 
-      if repository.capabilities.supportsRunnableFolderActions {
-        let rootPath = repository.rootURL.path(percentEncoded: false)
+      if let terminalWorktree = repository.terminalWorktree {
         contexts.append(
           WorktreeContext(
-            id: repository.id,
-            name: repository.name,
-            path: rootPath,
-            rootPath: rootPath,
-            kind: listCommandKind(for: repository)
+            id: terminalWorktree.id,
+            name: terminalWorktree.name,
+            path: terminalWorktree.location.path,
+            rootPath: terminalWorktree.repositoryLocation.path,
+            kind: listCommandKind(for: repository),
+            host: host
           )
         )
       }

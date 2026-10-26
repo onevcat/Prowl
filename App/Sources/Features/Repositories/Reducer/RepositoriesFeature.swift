@@ -67,7 +67,7 @@ struct DeleteWorktreeConfirmation: Equatable, Identifiable {
 
 struct ForceDeleteBranchRequest: Equatable {
   let branchName: String
-  let repositoryRootURL: URL
+  let repositoryLocation: RepositoryLocation
   let errorMessage: String
 }
 
@@ -115,6 +115,15 @@ struct RepositoriesFeature {
       "repositories.delayedPRRefresh.\(worktreeID)"
     }
     static let branchNameSuggestion = "repositories.branchNameSuggestion"
+    static func remoteRefreshTimer(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteRefreshTimer.\(repositoryID)"
+    }
+    static func remoteRefreshRun(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteRefreshRun.\(repositoryID)"
+    }
+    static func remoteConnectionHold(_ repositoryID: Repository.ID) -> String {
+      "repositories.remoteConnectionHold.\(repositoryID)"
+    }
     static func iconDetection(_ repositoryID: Repository.ID) -> String {
       "repositories.iconDetection.\(repositoryID)"
     }
@@ -133,11 +142,16 @@ struct RepositoriesFeature {
       fetchRemote: Bool,
       placement: WorktreePlacementOverride = WorktreePlacementOverride()
     )
+    /// The prompt could not load, such as when a remote host's home could not be read.
+    case promptLoadFailed(message: String)
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
       baseRefOptions: [String],
       automaticBaseRef: String,
-      selectedBaseRef: String?
+      selectedBaseRef: String?,
+      /// The host's home for a remote repository, which places its worktrees; nil when
+      /// it could not be read, and for a local repository.
+      remoteHomeDirectory: String? = nil
     )
     case startPromptedWorktreeCreation(
       repositoryID: Repository.ID,
@@ -165,9 +179,10 @@ struct RepositoriesFeature {
       pendingID: Worktree.ID,
       previousSelection: Worktree.ID?,
       repositoryID: Repository.ID,
+      repositoryLocation: RepositoryLocation,
       name: String?,
       /// The directory this attempt created, if any. Cleanup removes only this directory.
-      worktreeDirectory: URL?
+      worktreeLocation: RepositoryLocation?
     )
     case consumeSetupScript(Worktree.ID)
     case consumeTerminalFocus(Worktree.ID)
@@ -216,7 +231,7 @@ struct RepositoriesFeature {
   @CasePathable
   enum GithubIntegrationAction: Equatable {
     case delayedPullRequestRefresh(Worktree.ID)
-    case repositoryPullRequestRefreshRequested(repositoryRootURL: URL, worktreeIDs: [Worktree.ID])
+    case repositoryPullRequestRefreshRequested(repositoryLocation: RepositoryLocation, worktreeIDs: [Worktree.ID])
     case refreshGithubIntegrationAvailability
     case githubIntegrationAvailabilityUpdated(Bool)
     case repositoryPullRequestRefreshCompleted(Repository.ID)
@@ -240,14 +255,19 @@ struct RepositoriesFeature {
   @CasePathable
   enum RepositoryManagementAction: Equatable {
     case openRepositories([URL])
+    /// Adds a remote folder that the Add Remote Folder sheet checked (docs-ai 084 C1).
+    case openRemoteRepository(RepositoryLocation, kind: Repository.Kind)
     case openRepositoriesFinished(
       [Repository],
       failures: [LoadFailure],
       invalidRoots: [String],
       openFailures: [String],
-      roots: [URL]
+      roots: [RepositoryLocation],
+      /// Remote repositories that the load kept as they were (docs-ai 084 B3f).
+      reusedRemoteRepositoryIDs: Set<Repository.ID> = []
     )
     case requestRemoveRepository(Repository.ID)
+    case requestRemoveFailedRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
     case removeWorkspaceDeleteFilesChanged(Bool)
     case removeWorkspaceDeleteBranchChanged(String, Bool)
@@ -295,10 +315,36 @@ struct RepositoriesFeature {
   @ObservableState
   struct State: Equatable {
     var repositories: IdentifiedArrayOf<Repository> = []
-    var repositoryRoots: [URL] = []
+    var repositoryRoots: [RepositoryLocation] = []
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
+    /// Remote folders whose host did not answer at the last load (docs-ai 084 B3e).
+    var loadUnreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Loaded remote repositories whose last poll did not reach the host (B3f). A reload
+    /// that keeps a repository as it was does not touch this mark; a poll does.
+    var pollUnreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Loaded remote repositories whose last poll reached no usable connection for a reason
+    /// the user must fix (a refused login, a changed host key, the kill switch), with that
+    /// reason (docs-ai 084 C1).
+    var pollConnectionFailures: [Repository.ID: String] = [:]
+    /// Remote folders whose host could not be reached, at the last load or poll.
+    var unreachableRepositoryIDs: Set<Repository.ID> {
+      loadUnreachableRepositoryIDs.union(pollUnreachableRepositoryIDs)
+    }
+    /// Host profiles whose SSH configuration resolved to another user, host or port
+    /// (docs-ai 084 C1). Every folder on such a host pauses until the user rebinds it. A
+    /// load or poll that passes the authority check, or the rebind, clears the mark.
+    var rebindHostProfileIDs: Set<HostProfile.ID> = []
+    /// The remote git repositories that the refresh cadence polls (B3f).
+    var remoteRefreshRepositoryIDs: Set<Repository.ID> = []
+    var remoteRefreshInFlightIDs: Set<Repository.ID> = []
+    /// Failed polls in a row, for the backoff.
+    var remoteRefreshFailureCounts: [Repository.ID: Int] = [:]
+    /// The remote URL fingerprint of the last poll; a change refreshes pull requests.
+    var remoteRefreshFingerprints: [Repository.ID: String] = [:]
+    /// True while the app is inactive or in the background.
+    var isRemoteRefreshPaused = false
     /// User-defined display titles indexed by `Repository.ID`. Resolved
     /// once on repo discovery (and refreshed when settings change) so
     /// hot-path display sites — sidebar, shelf spine, canvas card,
@@ -414,6 +460,8 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
+    /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
+    @Presents var addRemoteFolder: AddRemoteFolderFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -426,7 +474,7 @@ struct RepositoriesFeature {
   }
 
   struct PendingPullRequestRefresh: Equatable {
-    var repositoryRootURL: URL
+    var repositoryLocation: RepositoryLocation
     var worktreeIDs: [Worktree.ID]
   }
 
@@ -463,9 +511,14 @@ struct RepositoriesFeature {
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
-    case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
+    /// `reusedRemoteRepositoryIDs` are the remote repositories that the load kept as they
+    /// were; the reducer keeps its current version of them, which a poll may have updated
+    /// while the load ran (docs-ai 084 B3f).
+    case repositoriesLoaded(
+      [Repository], failures: [LoadFailure], roots: [RepositoryLocation], animated: Bool,
+      reusedRemoteRepositoryIDs: Set<Repository.ID> = [])
     case refreshAllCustomTitles
-    case refreshCustomTitle(URL)
+    case refreshCustomTitle(RepositoryLocation)
     case customTitlesLoaded([Repository.ID: String])
     case customTitleUpdated(Repository.ID, String?)
     case codeHostsDetected([Repository.ID: CodeHost])
@@ -508,10 +561,23 @@ struct RepositoriesFeature {
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, changes: GitLineChanges)
+    /// A remote repository's next poll is due, or its worktree was selected (B3f).
+    case remoteRepositoryRefreshDue(Repository.ID)
+    case remoteRepositoryRefreshed(Repository.ID, RemoteRefreshResult)
+    /// The user asked to rebind a host profile whose SSH configuration changed (C1).
+    case remoteHostRebindRequested(HostProfile.ID)
+    case remoteHostRebindResolved(RemoteHostTarget)
+    case remoteHostRebindFailed(String)
+    case remoteHostRebound(HostProfile.ID)
+    /// The app became active (true) or inactive (false).
+    case setRemoteRefreshActive(Bool)
     case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
     case showToast(StatusToast)
     case dismissToast
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
+    case addRemoteFolder(PresentationAction<AddRemoteFolderFeature.Action>)
+    /// Opens the Add Remote Folder sheet; nothing happens while remote folders are off.
+    case addRemoteFolderRequested
     case workspaceEditor(PresentationAction<WorkspaceEditorFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -521,6 +587,10 @@ struct RepositoriesFeature {
     let rootID: Repository.ID
     let message: String
     var isGitUnavailable: Bool = false
+    /// A remote folder whose host could not be reached (docs-ai 084 B3e).
+    var isHostUnreachable: Bool = false
+    /// What the failure says about the host profile's target (C1).
+    var authority: RemoteAuthorityCheck = .unknown
   }
 
   struct DeleteWorktreeTarget: Equatable {
@@ -531,6 +601,18 @@ struct RepositoriesFeature {
   struct ArchiveWorktreeTarget: Equatable {
     let worktreeID: Worktree.ID
     let repositoryID: Repository.ID
+  }
+
+  /// Where a repository list for `applyRepositories` comes from. It sets how much
+  /// ID-keyed state the list can prune.
+  enum RepositoryListOrigin: Equatable {
+    /// A live load. `failedRootIDs` are the roots that did not load: their
+    /// worktrees are unknown, so only worktrees that left a loaded repository
+    /// count as removed.
+    case live(failedRootIDs: Set<Repository.ID>)
+    /// The snapshot cache. It is not rewritten while a root fails, so it can be
+    /// out of date; the live load that follows does the pruning.
+    case snapshot
   }
 
   struct ApplyRepositoriesResult {
@@ -573,6 +655,8 @@ struct RepositoriesFeature {
     case confirmArchiveWorktrees([ArchiveWorktreeTarget])
     case confirmForceDeleteBranch(ForceDeleteBranchRequest)
     case confirmRemoveRepository(Repository.ID)
+    case rebindRemoteHost(HostProfile.ID, ConnectionKey)
+    case confirmRemoveFailedRepository(Repository.ID)
     case confirmWorkspaceRootDeletion(
       repositoryID: Repository.ID, rootPath: String, selectionWasRemoved: Bool)
     case keepWorkspaceFolderAfterCleanupFailure(
@@ -604,6 +688,11 @@ struct RepositoriesFeature {
   @Dependency(AnalyticsClient.self) var analyticsClient
   @Dependency(GitClientDependency.self) var gitClient
   @Dependency(GithubCLIClient.self) var githubCLI
+  /// Repository-scoped git operations go through the host (docs-ai 084);
+  /// `gitClient` stays for local URLs that are not a repository's location.
+  var repositoryHost: RepositoryHost { RepositoryHost(local: gitClient, remote: remoteRepositoryHosts) }
+  @Dependency(RemoteRepositoryHostClient.self) var remoteRepositoryHosts
+  @Dependency(RemoteFoldersEnabledKey.self) var remoteFoldersEnabled
   @Dependency(PullRequestRefreshCoordinatorClient.self) var pullRequestRefreshCoordinator
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(OpenURLClient.self) var openURLClient
@@ -649,6 +738,9 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+    .ifLet(\.$addRemoteFolder, action: \.addRemoteFolder) {
+      AddRemoteFolderFeature()
     }
     .ifLet(\.$workspaceEditor, action: \.workspaceEditor) {
       WorkspaceEditorFeature()

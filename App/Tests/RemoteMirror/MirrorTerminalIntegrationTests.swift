@@ -767,7 +767,7 @@ struct MirrorTerminalIntegrationTests {
     initial.repositories.repositories = IdentifiedArray(uniqueElements: [
       Repository(id: dormantID, rootURL: dormant, name: "Dormant", kind: .plain, worktrees: [])
     ])
-    initial.repositories.repositoryRoots = [dormant]
+    initial.repositories.repositoryRoots = [.local(dormant)]
     #expect(
       ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: initial.repositories).map(\.id) == [
         dormantID

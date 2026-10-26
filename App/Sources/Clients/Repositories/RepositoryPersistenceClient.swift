@@ -40,7 +40,7 @@ extension RepositoryPersistenceClient: DependencyKey {
       },
       saveRoots: { roots in
         @Shared(.repositoryEntries) var sharedEntries: [PersistedRepositoryEntry]
-        let entries = RepositoryPathNormalizer.normalize(roots).map {
+        let entries = RepositoryIDNormalizer.normalizeRoots(roots).map {
           PersistedRepositoryEntry(path: $0, kind: .git)
         }
         $sharedEntries.withLock {
@@ -64,7 +64,7 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
         // One-time migration from legacy format
         @Shared(.appStorage("archivedWorktreeIDs")) var legacyArchived: [Worktree.ID] = []
-        let legacyIDs = RepositoryPathNormalizer.normalize(legacyArchived)
+        let legacyIDs = RepositoryIDNormalizer.normalize(legacyArchived)
         guard !legacyIDs.isEmpty else { return [] }
         let now = Date()
         let migrated = legacyIDs.map { ArchivedWorktree(id: $0, archivedAt: now) }
@@ -227,7 +227,10 @@ private nonisolated func discardRepositorySnapshot(at url: URL) {
 }
 
 nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
-  nonisolated static let currentVersion = 2
+  /// Version 3 (docs-ai 084 B2): repositories and worktrees are stored by location ID. A
+  /// local location's ID is its path, so a version 2 snapshot reads the same way.
+  nonisolated static let currentVersion = 3
+  nonisolated static let readableVersions = 2...3
   nonisolated static let maxSnapshotFileBytes = 2 * 1024 * 1024
   nonisolated static let maxRepositories = 256
   nonisolated static let maxWorktreesPerRepository = 512
@@ -243,29 +246,31 @@ nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable 
   func restoreRepositories(
     pathExists: @Sendable (String) -> Bool
   ) -> [Repository]? {
-    guard version == Self.currentVersion, !repositories.isEmpty else {
+    guard Self.readableVersions.contains(version), !repositories.isEmpty else {
       return nil
     }
     guard repositories.count <= Self.maxRepositories else {
       return nil
     }
 
+    // One repository that cannot be restored still discards the whole snapshot. A partial
+    // snapshot would prune the left-out repository's pins, archives and order on load, and
+    // spend the one-time restore of the last focused worktree (docs-ai 084 018).
     var restored: [Repository] = []
     restored.reserveCapacity(repositories.count)
-
     for repository in repositories {
       guard let restoredRepository = repository.restore(pathExists: pathExists) else {
         return nil
       }
       restored.append(restoredRepository)
     }
-
     return restored
   }
 }
 
 extension RepositorySnapshotCachePayload {
   nonisolated struct SnapshotRepository: Codable, Equatable, Sendable {
+    /// The repository's location ID: a local path, or an encoded remote location.
     let rootPath: String
     let name: String
     let kind: Repository.Kind
@@ -273,16 +278,23 @@ extension RepositorySnapshotCachePayload {
     let workspace: ProjectWorkspace?
 
     init(repository: Repository) {
-      rootPath = repository.rootURL.path(percentEncoded: false)
+      rootPath = repository.location.id
       name = repository.name
       kind = repository.kind
       worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
       workspace = repository.workspace
     }
 
+    /// Nil when the repository cannot be restored: a local folder that is gone, a worktree
+    /// that is gone, or a stored value that does not decode. Remote locations are not
+    /// checked on this Mac, so they never fail on a missing local path; their host reloads
+    /// them.
     func restore(
       pathExists: @Sendable (String) -> Bool
     ) -> Repository? {
+      if RepositoryLocation.hasRemoteForm(rootPath) {
+        return restoreRemote()
+      }
       guard let normalizedRootPath = normalizePath(rootPath), pathExists(normalizedRootPath) else {
         return nil
       }
@@ -316,18 +328,43 @@ extension RepositorySnapshotCachePayload {
         workspace: workspace?.normalized(relativeTo: rootURL)
       )
     }
+
+    private func restoreRemote() -> Repository? {
+      guard let location = RepositoryLocation(id: rootPath), case .remote(let hostProfileID, _) = location,
+        worktrees.count <= RepositorySnapshotCachePayload.maxWorktreesPerRepository
+      else { return nil }
+      var restoredWorktrees: [Worktree] = []
+      for worktree in worktrees {
+        // A remote repository's worktrees live on the same host.
+        guard let worktreeLocation = RepositoryLocation(id: worktree.workingDirectoryPath),
+          case .remote(hostProfileID, _) = worktreeLocation
+        else { return nil }
+        restoredWorktrees.append(
+          Worktree(
+            name: worktree.name, detail: worktree.detail, location: worktreeLocation, repositoryLocation: location,
+            createdAt: worktree.createdAt))
+      }
+      let repositoryName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      return Repository(
+        location: location,
+        name: repositoryName.isEmpty ? Repository.name(for: location) : repositoryName,
+        kind: kind,
+        worktrees: IdentifiedArray(restoredWorktrees, uniquingIDsWith: { current, _ in current })
+      )
+    }
   }
 
   nonisolated struct SnapshotWorktree: Codable, Equatable, Sendable {
     let name: String
     let detail: String
+    /// The worktree's location ID: a local path, or an encoded remote location.
     let workingDirectoryPath: String
     let createdAt: Date?
 
     init(worktree: Worktree) {
       name = worktree.name
       detail = worktree.detail
-      workingDirectoryPath = worktree.workingDirectory.path(percentEncoded: false)
+      workingDirectoryPath = worktree.location.id
       createdAt = worktree.createdAt
     }
 
@@ -357,7 +394,9 @@ private nonisolated func normalizeArchivedWorktrees(_ worktrees: [ArchivedWorktr
   var result: [ArchivedWorktree] = []
   result.reserveCapacity(worktrees.count)
   for entry in worktrees {
-    guard let normalized = normalizePath(entry.id), seen.insert(normalized).inserted else {
+    guard let normalized = RepositoryIDNormalizer.normalize(entry.id, resolvingSymlinks: true),
+      seen.insert(normalized).inserted
+    else {
       continue
     }
     result.append(ArchivedWorktree(id: normalized, archivedAt: entry.archivedAt))
@@ -371,7 +410,7 @@ private nonisolated func normalizePath(_ path: String) -> String? {
 
 nonisolated enum RepositoryOrderNormalizer {
   static func normalizeRepositoryIDs(_ ids: [Repository.ID]) -> [Repository.ID] {
-    RepositoryPathNormalizer.normalize(ids)
+    RepositoryIDNormalizer.normalize(ids)
   }
 
   static func normalizeWorktreeOrderByRepository(
@@ -379,8 +418,8 @@ nonisolated enum RepositoryOrderNormalizer {
   ) -> [Repository.ID: [Worktree.ID]] {
     var normalized: [Repository.ID: [Worktree.ID]] = [:]
     for (repoID, worktreeIDs) in order {
-      guard let normalizedRepoID = normalizePath(repoID) else { continue }
-      let normalizedWorktreeIDs = RepositoryPathNormalizer.normalize(worktreeIDs)
+      guard let normalizedRepoID = normalizeKey(repoID) else { continue }
+      let normalizedWorktreeIDs = RepositoryIDNormalizer.normalize(worktreeIDs)
       guard !normalizedWorktreeIDs.isEmpty else { continue }
       if var existing = normalized[normalizedRepoID] {
         for id in normalizedWorktreeIDs where !existing.contains(id) {
@@ -394,9 +433,12 @@ nonisolated enum RepositoryOrderNormalizer {
     return normalized
   }
 
-  private static func normalizePath(_ path: String) -> String? {
-    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+  /// Local keys keep their own normalization (no tilde expansion, the trailing
+  /// slash kept); other IDs are kept as stored.
+  private static func normalizeKey(_ key: String) -> String? {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
+    guard RepositoryLocation.isLocalPathForm(key) else { return key }
     return URL(fileURLWithPath: trimmed)
       .standardizedFileURL
       .path(percentEncoded: false)

@@ -464,6 +464,88 @@ struct GhosttySurfaceViewTests {
     #expect(surfaceView.superview === foreignHost)
   }
 
+  /// Entering Canvas: the card's host takes the surface, then the leaving normal view
+  /// builds one more terminal host that never joins a window and takes it back.
+  @Test func canvasHostInWindowReclaimsSurfaceFromHostOutsideWindow() {
+    let surfaceView = makeHostedSurfaceView()
+    let window = makeHostWindow()
+    let canvasHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .canvas)
+    window.contentView?.addSubview(canvasHost)
+    let leavingHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .terminal)
+
+    #expect(leavingHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.window == nil)
+
+    canvasHost.ensureSurfaceAttached()
+
+    #expect(canvasHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.window === window)
+    #expect(surfaceView.scrollWrapper === canvasHost)
+  }
+
+  @Test func surfaceReturnsToLiveHostAfterHostOutsideWindowTakesIt() async {
+    let surfaceView = makeHostedSurfaceView()
+    let window = makeHostWindow()
+    let canvasHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .canvas)
+    window.contentView?.addSubview(canvasHost)
+
+    let leavingHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .terminal)
+    #expect(surfaceView.window == nil)
+    await drainMainQueue()
+
+    #expect(canvasHost.isSurfaceAttachedToDocumentView)
+    #expect(!leavingHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.window === window)
+  }
+
+  @Test func hostInWindowDoesNotStealSurfaceFromAnotherHostInWindow() {
+    let surfaceView = makeHostedSurfaceView()
+    let window = makeHostWindow()
+    let firstHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .canvas)
+    window.contentView?.addSubview(firstHost)
+    let secondHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .terminal)
+    window.contentView?.addSubview(secondHost)
+
+    firstHost.ensureSurfaceAttached()
+
+    #expect(!firstHost.isSurfaceAttachedToDocumentView)
+    #expect(secondHost.isSurfaceAttachedToDocumentView)
+  }
+
+  @Test func hostInWindowDoesNotReclaimSurfacePendingClose() async {
+    let surfaceView = makeHostedSurfaceView()
+    let window = makeHostWindow()
+    let host = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .terminal)
+    window.contentView?.addSubview(host)
+
+    surfaceView.suspendForPendingClose()
+    host.ensureSurfaceAttached()
+    await drainMainQueue()
+
+    #expect(surfaceView.superview == nil)
+    #expect(!host.isSurfaceAttachedToDocumentView)
+  }
+
+  private func makeHostedSurfaceView() -> GhosttySurfaceView {
+    GhosttySurfaceView(
+      runtime: GhosttyRuntime(),
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+  }
+
+  private func makeHostWindow() -> NSWindow {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    window.isReleasedWhenClosed = false
+    return window
+  }
+
   private func drainMainQueue() async {
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async {

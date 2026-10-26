@@ -7,18 +7,30 @@ struct GitClient {
     let index: Int
   }
 
-  private let shell: ShellClient
+  private let executor: GitCommandExecutor
 
-  private let resolveGit: @Sendable (Bool) async throws -> GitExecutable
+  /// The client for repositories on this Mac. Code outside the dependency layer
+  /// uses this instance instead of building its own.
+  nonisolated static let local = GitClient(executor: .local)
 
+  nonisolated init(executor: GitCommandExecutor) {
+    self.executor = executor
+  }
+
+  /// A local executor with an injected shell (and `git`), for tests.
   nonisolated init(
-    shell: ShellClient = .live,
-    resolveGit: @escaping @Sendable (Bool) async throws -> GitExecutable = {
-      try await GitExecutableResolver.shared.resolve(revalidate: $0)
-    }
+    shell: ShellClient,
+    resolveGit: @escaping @Sendable (Bool) async throws -> GitExecutable = GitCommandExecutor.local.resolveGit
   ) {
-    self.shell = shell
-    self.resolveGit = resolveGit
+    self.init(
+      executor: GitCommandExecutor(
+        shell: shell, resolveGit: resolveGit, wtScriptURL: GitCommandExecutor.local.wtScriptURL))
+  }
+
+  nonisolated private var shell: ShellClient { executor.shell }
+
+  nonisolated private func resolveGit(_ revalidate: Bool) async throws -> GitExecutable {
+    try await executor.resolveGit(revalidate)
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
@@ -60,8 +72,8 @@ struct GitClient {
       let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
       let name = entry.branch.isEmpty ? worktreeURL.lastPathComponent : entry.branch
       let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-      let id = worktreeURL.path(percentEncoded: false)
-      guard seenWorktreeIDs.insert(id).inserted else {
+      let location = RepositoryLocation.local(worktreeURL)
+      guard seenWorktreeIDs.insert(location.id).inserted else {
         return nil
       }
       let resourceValues = try? worktreeURL.resourceValues(forKeys: [
@@ -71,11 +83,10 @@ struct GitClient {
       let sortDate = createdAt ?? .distantPast
       return WorktreeSortEntry(
         worktree: Worktree(
-          id: id,
           name: name,
           detail: detail,
-          workingDirectory: worktreeURL,
-          repositoryRootURL: repositoryRootURL,
+          location: location,
+          repositoryLocation: .local(repositoryRootURL),
           createdAt: createdAt
         ),
         createdAt: sortDate,
@@ -277,7 +288,7 @@ struct GitClient {
       let wtURL = try wtScriptURL()
       let command =
         ([wtURL.lastPathComponent]
-        + createWorktreeArguments(
+        + Self.createWorktreeArguments(
           baseDirectory: baseDirectory,
           name: name,
           copyIgnored: copyFiles.ignored,
@@ -297,7 +308,7 @@ struct GitClient {
         let repositoryRootURL = request.repoRoot.standardizedFileURL
         do {
           let wtURL = try wtScriptURL()
-          let arguments = createWorktreeArguments(
+          let arguments = Self.createWorktreeArguments(
             baseDirectory: request.baseDirectory,
             name: request.name,
             copyIgnored: request.copyFiles.ignored,
@@ -335,17 +346,15 @@ struct GitClient {
                 }
                 let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
                 let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-                let id = worktreeURL.path(percentEncoded: false)
                 let resourceValues = try? worktreeURL.resourceValues(forKeys: [
                   .creationDateKey, .contentModificationDateKey,
                 ])
                 let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
                 let worktree = Worktree(
-                  id: id,
                   name: request.name,
                   detail: detail,
-                  workingDirectory: worktreeURL,
-                  repositoryRootURL: repositoryRootURL,
+                  location: .local(worktreeURL),
+                  repositoryLocation: .local(repositoryRootURL),
                   createdAt: createdAt
                 )
                 continuation.yield(.finished(worktree))
@@ -370,7 +379,8 @@ struct GitClient {
     }
   }
 
-  nonisolated private func createWorktreeArguments(
+  /// The `wt` arguments of a creation; the remote host runs the same ones (docs-ai 084 B3c).
+  nonisolated static func createWorktreeArguments(
     baseDirectory: URL,
     name: String,
     copyIgnored: Bool,
@@ -1045,13 +1055,17 @@ struct GitClient {
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {
-    let rootPath = worktree.repositoryRootURL.path(percentEncoded: false)
-    let worktreeURL = worktree.workingDirectory.standardizedFileURL
+    // The local client removes local worktrees only (RepositoryHost routes by location).
+    guard let workingDirectory = worktree.localURL, let repositoryRootURL = worktree.repositoryLocalURL else {
+      throw RepositoryHostError.remoteUnavailable(worktree.location)
+    }
+    let rootPath = repositoryRootURL.path(percentEncoded: false)
+    let worktreeURL = workingDirectory.standardizedFileURL
     let worktreePath = Self.canonicalWorktreePath(worktreeURL.path(percentEncoded: false))
     let initialWorktreePaths = try await registeredWorktreePaths(rootPath: rootPath)
     guard initialWorktreePaths.contains(worktreePath) else {
       throw GitClientError.worktreeNotRegistered(
-        path: worktree.workingDirectory.path(percentEncoded: false)
+        path: workingDirectory.path(percentEncoded: false)
       )
     }
     let relocatedURL =
@@ -1084,24 +1098,24 @@ struct GitClient {
       if deleteBranch {
         _ = try? await deleteLocalBranch(
           named: worktree.name,
-          for: worktree.repositoryRootURL,
+          for: repositoryRootURL,
           force: false
         )
       }
       Task.detached {
         try? FileManager.default.removeItem(at: relocatedURL)
       }
-      return worktree.workingDirectory
+      return workingDirectory
     }
     try await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
     if deleteBranch {
       _ = try? await deleteLocalBranch(
         named: worktree.name,
-        for: worktree.repositoryRootURL,
+        for: repositoryRootURL,
         force: false
       )
     }
-    return worktree.workingDirectory
+    return workingDirectory
   }
 
   nonisolated private func registeredWorktreePaths(rootPath: String) async throws -> Set<String> {
@@ -1311,6 +1325,9 @@ struct GitClient {
     let command = ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " ")
     do {
       return try await git.run(arguments, shell: shell).stdout
+    } catch let error as RemoteRepositoryHostError {
+      // A remote host that cannot be reached is not a git failure (docs-ai 084 B3b).
+      throw error
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }
@@ -1328,10 +1345,7 @@ struct GitClient {
   }
 
   nonisolated private func wtScriptURL() throws -> URL {
-    guard let url = Bundle.main.url(forResource: "wt", withExtension: nil, subdirectory: "git-wt") else {
-      fatalError("Bundled wt script not found")
-    }
-    return url
+    try executor.wtScriptURL()
   }
 
   nonisolated private func runBundledWtProcess(
@@ -1353,7 +1367,9 @@ struct GitClient {
     }
   }
 
-  nonisolated private static func relativePath(from base: URL, to target: URL) -> String {
+  /// The path of `target` relative to `base`, from path components only. The remote
+  /// host uses it for paths on another machine (docs-ai 084 B3).
+  nonisolated static func relativePath(from base: URL, to target: URL) -> String {
     let baseComponents = base.standardizedFileURL.pathComponents
     let targetComponents = target.standardizedFileURL.pathComponents
     var index = 0

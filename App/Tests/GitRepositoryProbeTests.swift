@@ -9,7 +9,7 @@ struct GitRepositoryProbeTests {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let executable = try await GitExecutableResolver.shared.resolve()
-    let client = GitClient(resolveGit: { _ in executable })
+    let client = GitClient(shell: .live, resolveGit: { _ in executable })
     do {
       _ = try await client.repoRoot(for: root)
       Issue.record("An empty directory is not a repository")
@@ -19,14 +19,14 @@ struct GitRepositoryProbeTests {
     let main = root.appending(path: "main", directoryHint: .isDirectory)
     let linked = root.appending(path: "linked", directoryHint: .isDirectory)
     let bare = root.appending(path: "bare", directoryHint: .isDirectory)
-    _ = try await executable.run(["init", "-q", main.path])
+    _ = try await executable.run(["init", "-q", main.path], shell: .live)
     _ = try await executable.run(
       [
         "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgSign=false",
         "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Initial",
-      ], in: main)
-    _ = try await executable.run(["worktree", "add", "-b", "linked", linked.path], in: main)
-    _ = try await executable.run(["init", "--bare", "-q", bare.path])
+      ], in: main, shell: .live)
+    _ = try await executable.run(["worktree", "add", "-b", "linked", linked.path], in: main, shell: .live)
+    _ = try await executable.run(["init", "--bare", "-q", bare.path], shell: .live)
     for (directory, expected) in [(main, main), (linked, main), (bare, bare)] {
       let discovered = try await client.repoRoot(for: directory)
       #expect(RepositoriesFeature.pathsReferToSameFileSystemLocation(discovered.path, expected.path))

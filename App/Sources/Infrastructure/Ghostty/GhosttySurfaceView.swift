@@ -52,6 +52,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
       desired = nil
       applied = nil
     }
+
+    /// A new native surface starts visible and has had nothing applied; the value asked for
+    /// before it existed (a deferred remote pane, docs-ai 084 C3b) is what it must get.
+    mutating func resetForNewSurface() -> Bool? {
+      let pending = desired
+      reset()
+      return pending
+    }
   }
 
   private struct ScrollbarState {
@@ -136,7 +144,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private(set) var surface: ghostty_surface_t?
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
   private let workingDirectoryCString: UnsafeMutablePointer<CChar>?
-  private let initialInputCString: UnsafeMutablePointer<CChar>?
+  private var initialInputCString: UnsafeMutablePointer<CChar>?
   private let envVarCStrings: [UnsafeMutablePointer<CChar>]
   private let envVarEntries: UnsafeMutablePointer<ghostty_env_var_s>?
   private let envVarCount: Int
@@ -199,6 +207,15 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
     }
   }
+
+  /// Every live scroll wrapper built for this surface. When the surface leaves the
+  /// window, one of them that is still in a window takes it back.
+  private let hosts = NSHashTable<GhosttySurfaceScrollView>.weakObjects()
+
+  func registerHost(_ host: GhosttySurfaceScrollView) {
+    hosts.add(host)
+  }
+
   weak var scrollWrapper: GhosttySurfaceScrollView? {
     didSet {
       if let lastScrollbar {
@@ -397,6 +414,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
     for pointer in envVarCStrings {
       free(pointer)
     }
+  }
+
+  /// Replaces the input that the shell gets once it starts. It works only before the
+  /// surface exists: a deferred remote pane learns its launcher after staging (docs-ai 084
+  /// C3b).
+  func setInitialInput(_ input: String?) {
+    guard !surfaceCreationArmed else { return }
+    if let initialInputCString { free(initialInputCString) }
+    initialInputCString = input.map { $0.withCString { strdup($0) } }
+  }
+
+  var initialInputForTesting: String? {
+    initialInputCString.map { String(cString: $0) }
   }
 
   @discardableResult
@@ -766,7 +796,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
-    occlusionState.reset()
+    let pendingOcclusion = occlusionState.resetForNewSurface()
     lastSurfaceFocus = nil
     // A freshly created Ghostty surface defaults to focused (blinking cursor).
     // Sync it to our Swift-side `focused` flag so background/restored surfaces
@@ -774,6 +804,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // would no-op here (self.focused already false), so push the state directly.
     setSurfaceFocus(focused)
     updateSurfaceSize()
+    if let pendingOcclusion { setOcclusion(pendingOcclusion) }
   }
 
   private func updateContentScale() {
@@ -794,7 +825,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else {
-      guard skipsSurfaceCreationForTesting else { return }
+      // A deferred surface keeps the request for when it exists (`createSurface`).
+      guard skipsSurfaceCreationForTesting else {
+        occlusionState.setDesired(visible)
+        return
+      }
       // Occluding (pausing render) is always safe, even without a view
       // hierarchy. This handles restored surfaces that haven't been attached
       // to a window yet.
@@ -846,9 +881,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // tree and pause Ghostty's renderer. Invalidate the applied cache so the
     // currently desired occlusion value is sent again after reattachment.
     _ = occlusionState.invalidateForAttachmentChange()
-    if superview == nil, !isPendingClose {
+    if window == nil, !isPendingClose {
       DispatchQueue.main.async { [weak self] in
-        self?.scrollWrapper?.ensureSurfaceAttached()
+        self?.returnToLiveHost()
       }
     }
     guard isReadyToApplyOcclusion else { return }
@@ -857,9 +892,21 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
   }
 
+  private func returnToLiveHost() {
+    guard window == nil, !isPendingClose else { return }
+    if superview == nil {
+      scrollWrapper?.ensureSurfaceAttached()
+    }
+    for host in hosts.allObjects where window == nil && host.window != nil {
+      host.ensureSurfaceAttached()
+    }
+  }
+
   func handleAttachmentChangeForTesting() {
     handleAttachmentChange()
   }
+
+  var desiredOcclusionForTesting: Bool? { occlusionState.desired }
 
   func resumeDeferredOcclusionIfNeededForTesting() {
     resumeDeferredOcclusionIfNeeded()

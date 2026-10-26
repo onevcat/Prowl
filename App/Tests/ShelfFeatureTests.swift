@@ -291,7 +291,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
     )
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt1.id)
     state.isShelfActive = true
@@ -326,7 +326,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [wt1])
     )
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt1.id)
     let store = TestStore(initialState: state) {
@@ -360,7 +360,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
     )
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt2.id)  // Currently on the last book.
     state.openedWorktreeIDs = [wt1.id, wt2.id]
@@ -402,7 +402,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
     )
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt1.id)  // Currently on the first book.
     state.openedWorktreeIDs = [wt1.id, wt2.id]
@@ -614,7 +614,7 @@ struct ShelfFeatureTests {
   @Test(.dependencies) func markWorktreeClosedAdvancesToNextBookWhenAvailable() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
-    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryRoots = [fixture.repo.location]
     state.repositoryOrderIDs = [fixture.repo.id]
     state.selection = .worktree(fixture.worktrees[1].id)  // Middle book open.
     state.isShelfActive = true
@@ -644,7 +644,7 @@ struct ShelfFeatureTests {
   @Test(.dependencies) func markWorktreeClosedFallsBackToPreviousBookWhenClosingLast() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
-    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryRoots = [fixture.repo.location]
     state.repositoryOrderIDs = [fixture.repo.id]
     state.selection = .worktree(fixture.worktrees[2].id)  // Last book open.
     state.isShelfActive = true
@@ -684,7 +684,7 @@ struct ShelfFeatureTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
+    state.repositoryRoots = [.local(rootURL)]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .repository(repo.id)
     state.isShelfActive = true
@@ -731,7 +731,7 @@ struct ShelfFeatureTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [gitRepo, plainRepo])
-    state.repositoryRoots = [gitRootURL, plainRootURL]
+    state.repositoryRoots = [.local(gitRootURL), .local(plainRootURL)]
     state.repositoryOrderIDs = [gitRepo.id, plainRepo.id]
     state.selection = .worktree(worktree.id)
     state.isShelfActive = true
@@ -990,7 +990,7 @@ struct ShelfFeatureTests {
 
     await store.send(.repositorySnapshotLoaded([repository])) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [rootURL]
+      $0.repositoryRoots = [.local(rootURL)]
       $0.selection = .worktree(worktree.id)
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
@@ -1045,7 +1045,7 @@ struct ShelfFeatureTests {
 
     await store.send(.repositorySnapshotLoaded([repository])) {
       $0.repositories = [repository]
-      $0.repositoryRoots = [rootURL]
+      $0.repositoryRoots = [.local(rootURL)]
       $0.selection = .worktree(worktree.id)
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true

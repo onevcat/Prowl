@@ -266,7 +266,11 @@ extension WorktreeTerminalState {
   ) -> RemoteAgentContext? {
     guard origin != .local else { return nil }
     let known = stabilized != .unknown && remotePaneTrackers[surfaceID]?.tmuxScreen() != .unavailable
-    return remote?.context(now: now, stateKnown: known)
+    var context = remote?.context(now: now, stateKnown: known)
+    let alias = remoteHostAlias(surfaceID: surfaceID)
+    context?.hostAlias = alias
+    context?.hostProfileID = alias == nil ? nil : remoteLaunchOriginBySurface[surfaceID]?.hostProfileID
+    return context
   }
 
   private func pollScreen(
@@ -354,7 +358,15 @@ extension WorktreeTerminalState {
   private func observeRemoteAgent(
     job: ForegroundJob?, localIdentified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date
   ) -> RemotePaneTracker.Observation? {
-    switch remoteAgentDetectionMode {
+    let foregroundSSH = job.flatMap { localIdentified == nil ? Self.foregroundSSH($0) : nil }
+    // A pane that Prowl opened in a remote folder needs no consent: adding the folder was
+    // the consent (docs-ai 084 D2). The kill switch still applies.
+    // A probe gap (no job read) changes no binding.
+    let origin =
+      job == nil
+      ? remoteLaunchOriginBySurface[surfaceID].flatMap { $0.ssh == nil || $0.sessionEnded ? nil : $0 }
+      : activeRemoteLaunchOrigin(surfaceID: surfaceID, foregroundSSH: foregroundSSH)
+    switch remoteAgentDetectionMode(consent: origin == nil ? remoteAgentDetectionConsent : .enabled) {
     case .enabled:
       break
     case .disabled:
@@ -364,14 +376,14 @@ extension WorktreeTerminalState {
     case .awaitingConsent:
       retireRemotePaneTracker(surfaceID: surfaceID)
       setRemoteIndicator(nil, surfaceID: surfaceID)
-      if let job, localIdentified == nil, let ssh = Self.foregroundSSH(job) {
+      if let ssh = foregroundSSH {
         askRemoteAgentConsent(surfaceID: surfaceID, ssh: ssh)
       }
       return nil
     }
     let tracker: RemotePaneTracker
-    if let job {
-      guard localIdentified == nil, let ssh = Self.foregroundSSH(job) else {
+    if job != nil {
+      guard let ssh = foregroundSSH else {
         // The `ssh` left the foreground: its next tracker starts a new interval.
         if let ssh = remotePaneTrackers[surfaceID]?.ssh {
           remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
@@ -380,7 +392,7 @@ extension WorktreeTerminalState {
         reconcileRemoteIndicator(foregroundSSH: nil, observation: nil, surfaceID: surfaceID, now: now)
         return nil
       }
-      tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh)
+      tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh, recipe: origin?.recipe)
     } else {
       // A probe gap (no job read) is not evidence of a foreground change: an existing
       // tracker keeps observing, and a missing one waits for the next real sample.
@@ -413,7 +425,8 @@ extension WorktreeTerminalState {
     if let foregroundSSH, let observation {
       let issue = RemotePaneIndicator.issue(observation.correlation)
       if observation.connection != nil || issue != nil {
-        let host = observation.connection?.label ?? String(localized: "Remote host")
+        let host =
+          remoteHostAlias(surfaceID: surfaceID) ?? observation.connection?.label ?? String(localized: "Remote host")
         setRemoteIndicator(.connected(host: host, ssh: foregroundSSH, issue: issue), surfaceID: surfaceID)
         return
       }
@@ -465,7 +478,7 @@ extension WorktreeTerminalState {
     histories[history.ssh] = history
     if histories.count > 1 {
       histories = histories.filter { ssh, _ in
-        ssh == history.ssh || ProcessDetection.processStartDate(pid: ssh.pid) == ssh.startedAt
+        ssh == history.ssh || ssh.isRunning
       }
     }
     remoteFenceHistoryBySurface[surfaceID] = histories
@@ -510,8 +523,10 @@ extension WorktreeTerminalState {
 
   /// The pane's tracker for `ssh`, created (with the retained fence history) when the pane
   /// has none for that generation.
+  /// A pane that Prowl opened in a remote folder gives its stored `recipe`; any other `ssh`
+  /// is parsed from its command line.
   private func remotePaneTracker(
-    surfaceID: UUID, ssh: (generation: LocalProcessGeneration, arguments: [String])
+    surfaceID: UUID, ssh: (generation: LocalProcessGeneration, arguments: [String]), recipe: SSHConnectionRecipe?
   ) -> RemotePaneTracker {
     if let existing = remotePaneTrackers[surfaceID] {
       if existing.ssh == ssh.generation { return existing }
@@ -521,8 +536,9 @@ extension WorktreeTerminalState {
     retireRemotePaneTracker(surfaceID: surfaceID)
     let tracker = RemotePaneTracker(
       surfaceID: surfaceID, ssh: ssh.generation,
-      invocation: SSHInvocation.parse(
-        ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
+      invocation: recipe.map(SSHInvocation.supported)
+        ?? SSHInvocation.parse(
+          ssh.arguments, workingDirectory: ProcessDetection.currentDirectory(pid: ssh.generation.pid)),
       fenceHistory: remoteFenceHistoryBySurface[surfaceID]?[ssh.generation],
       source: remoteSnapshotSourceForTesting ?? .live,
       uptime: remoteUptimeForTesting ?? { ProcessInfo.processInfo.systemUptime }
@@ -948,6 +964,11 @@ extension WorktreeTerminalState {
 
   func activeAgentWorkingDirectory(surfaceID: UUID) -> URL? {
     guard let surface = surfaces[surfaceID] else { return nil }
+    // A remote agent works on its host: its directory is the one the probe read there, never
+    // this pane's local one. Unknown there, it is unknown (docs-ai 084 C4).
+    if surfaceAgentStates[surfaceID]?.agentProcess.map({ $0.origin != .local }) == true {
+      return remotePaneTrackers[surfaceID]?.agentWorkingDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
     // This can run while handling Ghostty callbacks, so use cached Swift state instead of
     // re-entering Ghostty for inherited surface config.
     if let pwd = surface.bridge.state.pwd?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -955,7 +976,7 @@ extension WorktreeTerminalState {
     {
       return URL(fileURLWithPath: pwd, isDirectory: true)
     }
-    return surface.launchWorkingDirectory ?? worktree.workingDirectory
+    return surface.launchWorkingDirectory ?? worktree.localURL
   }
 
   func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {

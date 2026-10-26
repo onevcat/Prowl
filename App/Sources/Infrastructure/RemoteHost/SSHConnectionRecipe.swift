@@ -76,10 +76,14 @@ nonisolated enum SSHSideChannel {
 
   /// `ssh … <destination> sh -s`: the script arrives on stdin, so the remote login shell
   /// (zsh, bash, fish) never parses Prowl's text.
-  static func scriptArguments(recipe: SSHConnectionRecipe, controlPath: String, persist: Int) -> [String] {
+  /// `remoteCommand` reads its script from stdin; it is a fixed word list, so the remote
+  /// login shell never parses data (docs-ai 082 C5).
+  static func scriptArguments(
+    recipe: SSHConnectionRecipe, controlPath: String, persist: Int, remoteCommand: [String] = ["sh", "-s"]
+  ) -> [String] {
     sessionOverrides
       + ["-o", "ControlMaster=auto", "-o", "ControlPath=\(controlPath)", "-o", "ControlPersist=\(persist)", "-T"]
-      + recipe.options + ["--", recipe.destination, "sh", "-s"]
+      + recipe.options + ["--", recipe.destination] + remoteCommand
   }
 
   /// `ssh -G …`: the effective configuration, without connecting.

@@ -427,10 +427,14 @@ extension ProwlApp {
         background: request.background
       )
     }
+    // Checked before the cwd below is read; prepareAgentProfileLaunch refuses again.
+    guard worktree.availability(of: .profileLaunch).isAvailable, let workingDirectory = worktree.localURL else {
+      return .failure(.failed("Agent Profiles cannot launch in a remote folder yet."))
+    }
     let launchRequest = AgentProfileLaunchRequest(
       plan: frozenPlan,
       placement: placement,
-      workingDirectoryOverride: worktree.workingDirectory,
+      workingDirectoryOverride: workingDirectory,
       inheritanceAnchor: request.anchorSurfaceID,
       title: request.profile.name
     )
@@ -519,7 +523,8 @@ extension ProwlApp {
           id: id, repositories: Array(appStore.state.repositories.repositories))
       },
       branchName: { worktree in
-        WorktreeBranchReader.branchName(of: worktree.workingDirectory) ?? worktree.name
+        // Workflows run only in local worktrees (admission refuses remote ones).
+        worktree.localURL.flatMap(WorktreeBranchReader.branchName(of:)) ?? worktree.name
       },
       makeLaunchPlan: { profile in
         try AgentProfileLaunchPlanner.plan(

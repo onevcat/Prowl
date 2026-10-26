@@ -293,7 +293,7 @@ struct WorktreeTerminalUndoCloseTests {
     let fixture = makeFixture()
     let state = fixture.state
     _ = try #require(state.createTab())
-    let launched = try launchProfile(in: state, cwd: fixture.worktree.workingDirectory)
+    let launched = try launchProfile(in: state, cwd: fixture.worktree.localURL!)
     let profile = try #require(state.launchProfilesBySurface[launched.surfaceID])
     #expect(fixture.manager.hasManagedHookForTesting(surfaceID: launched.surfaceID))
 
@@ -351,7 +351,7 @@ struct WorktreeTerminalUndoCloseTests {
     let state = fixture.state
     let store = try #require(fixture.manager.forwardingRecordStoreForTesting())
     let record = try store.create(argv: ["/tmp/notifier"])
-    let launched = try launchProfile(in: state, cwd: fixture.worktree.workingDirectory, forwardingRecord: record)
+    let launched = try launchProfile(in: state, cwd: fixture.worktree.localURL!, forwardingRecord: record)
 
     #expect(state.closeTab(launched.tabID))
     #expect(!store.isRetired(record))

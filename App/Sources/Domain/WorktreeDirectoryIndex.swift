@@ -15,15 +15,24 @@ nonisolated struct WorktreeDirectoryIndex: Equatable {
 
   init() {}
 
+  /// Only local worktrees are indexed: a local directory never belongs to a
+  /// worktree on another host, even when the paths are equal.
   init(repositories: some Sequence<Repository>) {
+    Self.forEachLocalDirectory(of: repositories) { insert(id: $0, directory: $1) }
+  }
+
+  static func forEachLocalDirectory(
+    of repositories: some Sequence<Repository>,
+    _ body: (Worktree.ID, URL) -> Void
+  ) {
     for repository in repositories {
-      if repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        insert(id: repository.id, directory: repository.rootURL)
+      if let terminalWorktree = repository.terminalWorktree, let directory = terminalWorktree.localURL {
+        body(terminalWorktree.id, directory)
       }
       for worktree in repository.worktrees {
-        insert(id: worktree.id, directory: worktree.workingDirectory)
+        if let directory = worktree.localURL {
+          body(worktree.id, directory)
+        }
       }
     }
   }
@@ -184,16 +193,7 @@ enum WorktreeDirectoryIndexCache {
   /// rebuilding when an unrelated part of a repository changes (a branch rename, a color, an icon).
   private static func signature(for repositories: IdentifiedArrayOf<Repository>) -> [Entry] {
     var entries: [Entry] = []
-    for repository in repositories {
-      if repository.capabilities.supportsRunnableFolderActions,
-        !repository.capabilities.supportsWorktrees
-      {
-        entries.append(Entry(id: repository.id, directory: repository.rootURL))
-      }
-      for worktree in repository.worktrees {
-        entries.append(Entry(id: worktree.id, directory: worktree.workingDirectory))
-      }
-    }
+    WorktreeDirectoryIndex.forEachLocalDirectory(of: repositories) { entries.append(Entry(id: $0, directory: $1)) }
     return entries
   }
 

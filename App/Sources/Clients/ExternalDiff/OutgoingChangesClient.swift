@@ -33,7 +33,7 @@ extension OutgoingChangesClient {
           GitPullRequestBase(url: $0.url, baseRefName: $0.baseRefName ?? "")
         }
         @Shared(.repositorySettings(target.repositoryRootURL)) var repositorySettings
-        let gitClient = GitClient()
+        let gitClient = GitClient.local
         let base = try await gitClient.outgoingBaseResolution(
           pullRequest: pullRequestBase,
           configuredBaseRef: repositorySettings.worktreeBaseRef,

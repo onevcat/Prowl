@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
+import IdentifiedCollections
 import ProwlCLIShared
 import Sharing
 import Testing
@@ -21,7 +22,7 @@ struct AppFeatureAgentProfileTests {
     } operation: {
       @Shared(.userGlobalSettings) var globalSettings
       $globalSettings.withLock { $0.agentProfiles = [profile] }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       let store = TestStore(
         initialState: AppFeature.State(
           repositories: repositories,
@@ -53,6 +54,82 @@ struct AppFeatureAgentProfileTests {
     #expect(repoSettings.wrappedValue.lastLaunchedAgentProfileID == profile.id)
   }
 
+  @Test(.dependencies) func launchInARemoteFolderShowsTheReasonAndSendsNothing() async {
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    var repositories = RepositoriesFeature.State()
+    repositories.repositories = [repository]
+    repositories.selection = .worktree(repository.worktrees[0].id)
+    let profile = AgentProfile(name: "Codex", runtime: .codex)
+    let storage = SettingsTestStorage()
+
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.userGlobalSettings) var globalSettings
+      $globalSettings.withLock { $0.agentProfiles = [profile] }
+      return TestStore(
+        initialState: AppFeature.State(repositories: repositories, settings: SettingsFeature.State())
+      ) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.launchAgentProfile(profile.id))
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning("Agent Profiles cannot launch in remote folders yet."))
+  }
+
+  @Test(.dependencies) func openingARemoteFolderInAnAppShowsTheReason() async {
+    let repository = RemoteRepositoryFixtures.gitRepository()
+    var repositories = RepositoriesFeature.State()
+    repositories.repositories = [repository]
+    repositories.selection = .worktree(repository.worktrees[0].id)
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositories, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openWorktree(.finder))
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning("Finder is not available for remote folders."))
+  }
+
+  @Test(.dependencies) func remotePlainFolderRefusesOpenActionsWithoutChangingTheSelection() async {
+    let folder = RemoteRepositoryFixtures.plainFolder()
+    var repositories = RepositoriesFeature.State()
+    repositories.repositories = [folder]
+    repositories.selection = .repository(folder.id)
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositories, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in Issue.record("nothing may be sent for a remote target") }
+    }
+    store.exhaustivity = .off
+    let selectionBefore = store.state.openActionSelection
+    let automaticBefore = store.state.openActionIsAutomatic
+    let message = "Opening in an app is not available for remote folders."
+
+    await store.send(.openWorktree(.editor))
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.repositories.statusToast == .warning(message))
+
+    await store.send(.openActionSelectionChanged(.finder))
+    await store.receive(\.repositories.showToast)
+    await store.send(.openActionResetToAutomatic)
+    await store.receive(\.repositories.showToast)
+    #expect(store.state.openActionSelection == selectionBefore)
+    #expect(store.state.openActionIsAutomatic == automaticBefore)
+  }
+
   @Test(.dependencies) func launchFailedEventShowsWarningToastWithoutRecordingMemory() async {
     let worktree = makeWorktree()
     let repositories = makeRepositoriesState(worktree: worktree)
@@ -61,7 +138,7 @@ struct AppFeatureAgentProfileTests {
     let (store, repoSettings) = withDependencies {
       $0.settingsFileStorage = storage.storage
     } operation: {
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       let store = TestStore(
         initialState: AppFeature.State(
           repositories: repositories,
@@ -183,7 +260,7 @@ struct AppFeatureAgentProfileTests {
       let disabled = AgentProfile(name: "Hidden", isEnabled: false, runtime: .claude)
       @Shared(.userGlobalSettings) var settings
       $settings.withLock { $0.agentProfiles = [first, second, disabled] }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocalURL!)) var repoSettings
       $repoSettings.withLock { $0.defaultAgentProfileID = second.id }
 
       let items = agentProfileLaunchItems(repositories, launchWarning: { _ in nil })
@@ -272,7 +349,7 @@ struct AppFeatureAgentProfileTests {
     )
     repositories.repositories.append(plain)
     #expect(
-      repositories.actionTargetTerminalWorktree(explicitTargetID: plain.id)?.workingDirectory
+      repositories.actionTargetTerminalWorktree(explicitTargetID: plain.id)?.localURL!
         == rootURL
     )
     #expect(repositories.actionTargetTerminalWorktree(explicitTargetID: nil) == nil)
@@ -347,7 +424,7 @@ struct AppFeatureAgentProfileTests {
   }
 
   private func makeRepositoriesState(worktree: Worktree) -> RepositoriesFeature.State {
-    let rootURL = worktree.repositoryRootURL
+    let rootURL = worktree.repositoryLocalURL!
     let repository = Repository(
       id: rootURL.path(percentEncoded: false),
       rootURL: rootURL,

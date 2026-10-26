@@ -57,7 +57,7 @@ struct RepositorySectionView: View {
           isRemoving: isRemovingRepository,
           icon: appearance.icon ?? (repository.isWorkspace ? .sfSymbol("folder") : nil),
           iconTint: appearance.color?.color ?? .accentColor,
-          repositoryRootURL: repository.rootURL,
+          repositoryRootURL: repository.localURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? String(localized: "Collapse") : String(localized: "Expand"))
             : (repository.isWorkspace
@@ -73,6 +73,13 @@ struct RepositorySectionView: View {
             repository: repository,
             terminalManager: terminalManager
           )
+        }
+        if let hostStatus = state.remoteHostStatus(for: repository.id) {
+          RemoteHostStatusBadge(status: hostStatus) {
+            if case .needsRebind(let hostProfileID) = hostStatus {
+              store.send(.remoteHostRebindRequested(hostProfileID))
+            }
+          }
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -303,11 +310,16 @@ struct RepositorySectionView: View {
     } else {
       Button("Copy Path") {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(repository.rootURL.path, forType: .string)
+        NSPasteboard.general.setString(repository.location.displayPath, forType: .string)
       }
+      // Finder shows folders on this Mac only (docs-ai 084 A4b).
+      let finderReason = repository.availability(of: .finder).unavailableReason?.message
       Button("Reveal in Finder") {
-        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repository.rootURL.path)
+        guard let rootURL = repository.localURL else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: rootURL.path)
       }
+      .disabled(finderReason != nil)
+      .help(finderReason ?? String(localized: "Reveal this folder in Finder"))
     }
     Divider()
     if repository.isWorkspace {

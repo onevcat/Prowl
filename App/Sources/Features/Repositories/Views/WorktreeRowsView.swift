@@ -212,6 +212,7 @@ struct WorktreeRowsView: View {
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
     let notifications = terminalManager.stateIfExists(for: row.id)?.notifications ?? []
     let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isWorktreeDragActive
+    let diffUnavailableReason = diffUnavailableReason(for: row.id)
     return WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
@@ -223,7 +224,8 @@ struct WorktreeRowsView: View {
       showsShortcutHint: shortcutHint.isVisible,
       pinAction: canShowRowActions && !row.isMainWorktree ? { togglePin(for: row.id, isPinned: row.isPinned) } : nil,
       archiveAction: canShowRowActions && !row.isMainWorktree ? { archiveWorktree(row.id) } : nil,
-      onDiffTap: diffTapHandler(for: row.id),
+      onDiffTap: diffUnavailableReason == nil ? diffTapHandler(for: row.id) : nil,
+      diffUnavailableReason: diffUnavailableReason,
       onStopRunScript: stopRunScriptHandler(for: row.id),
       moveDisabled: moveDisabled,
     )
@@ -242,6 +244,12 @@ struct WorktreeRowsView: View {
     {
       store.send(.delegate(.showDiff(.worktree(worktreeID))))
     }
+  }
+
+  /// Why a worktree has no diff: a remote folder (docs-ai 084 A4b). A worktree ID is its
+  /// encoded location.
+  private func diffUnavailableReason(for worktreeID: Worktree.ID) -> String? {
+    RepositoryLocation(id: worktreeID)?.availability(of: .diff).unavailableReason?.message
   }
 
   private func stopRunScriptHandler(for worktreeID: Worktree.ID) -> (() -> Void)? {
@@ -356,6 +364,7 @@ struct WorktreeRowsView: View {
     let pinAction: (() -> Void)?
     let archiveAction: (() -> Void)?
     let onDiffTap: (() -> Void)?
+    let diffUnavailableReason: String?
     let onStopRunScript: (() -> Void)?
     let moveDisabled: Bool
   }
@@ -403,6 +412,7 @@ struct WorktreeRowsView: View {
       isSelected: isSelected,
       archiveAction: config.archiveAction,
       onDiffTap: config.onDiffTap,
+      diffUnavailableReason: config.diffUnavailableReason,
       onStopRunScript: config.onStopRunScript,
     )
     .tag(SidebarSelection.worktree(row.id))
@@ -437,6 +447,22 @@ struct WorktreeRowsView: View {
   }
 
   @ViewBuilder
+  private func pathContextMenuItems(for worktree: Worktree) -> some View {
+    Button("Copy Path") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(worktree.location.displayPath, forType: .string)
+    }
+    // Finder shows folders on this Mac only (docs-ai 084 A4b).
+    let finderReason = worktree.availability(of: .finder).unavailableReason?.message
+    Button("Reveal in Finder") {
+      guard let worktreeDirectory = worktree.localURL else { return }
+      NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktreeDirectory.path)
+    }
+    .disabled(finderReason != nil)
+    .help(finderReason ?? String(localized: "Reveal this worktree in Finder"))
+  }
+
+  @ViewBuilder
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let contextRows = contextActionRows(for: row)
@@ -468,10 +494,12 @@ struct WorktreeRowsView: View {
       ? String(localized: "Delete Selected Worktrees (\(deleteShortcut))")
       : String(localized: "Delete Worktree (\(deleteShortcut))")
     let tabCount = terminalManager.stateIfExists(for: row.id)?.tabManager.tabs.count ?? 0
+    let terminalReason = worktree.availability(of: .terminalTab).unavailableReason?.message
     Button("New Terminal Tab") {
       newTerminalTab(for: row)
     }
-    .help("Open a new terminal tab at this worktree's root")
+    .disabled(terminalReason != nil)
+    .help(terminalReason ?? String(localized: "Open a new terminal tab at this worktree's root"))
     if let stopRunScript = stopRunScriptHandler(for: row.id) {
       Button("Stop Running Script") {
         stopRunScript()
@@ -493,13 +521,7 @@ struct WorktreeRowsView: View {
       }
     }
     Divider()
-    Button("Copy Path") {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
-    }
-    Button("Reveal in Finder") {
-      NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktree.workingDirectory.path)
-    }
+    pathContextMenuItems(for: worktree)
     Button("Copy Branch Name") {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(row.name, forType: .string)
@@ -512,14 +534,17 @@ struct WorktreeRowsView: View {
       .help("Open this worktree's pull request on the code host")
     }
     Divider()
+    let diffReason = worktree.availability(of: .diff).unavailableReason?.message
     Button("Show Diff") {
       store.send(.delegate(.showDiff(.worktree(worktree.id))))
     }
-    .help("Show uncommitted changes for this worktree")
+    .disabled(diffReason != nil)
+    .help(diffReason ?? String(localized: "Show uncommitted changes for this worktree"))
     Button("Show Outgoing Changes") {
       store.send(.delegate(.showOutgoingChanges(.worktree(worktree.id))))
     }
-    .help("Show committed changes relative to this worktree's base")
+    .disabled(diffReason != nil)
+    .help(diffReason ?? String(localized: "Show committed changes relative to this worktree's base"))
     Divider()
     Button("Close All Tabs") {
       terminalManager.stateIfExists(for: row.id)?.closeAllTabs()
@@ -608,11 +633,8 @@ struct WorktreeRowsView: View {
     if row.isPending {
       return row.detail
     }
-    if row.id.contains("/") {
-      let pathName = URL(fileURLWithPath: row.id).lastPathComponent
-      if !pathName.isEmpty {
-        return pathName
-      }
+    if let pathName = row.folderName, !pathName.isEmpty {
+      return pathName
     }
     if !row.detail.isEmpty, row.detail != "." {
       let detailName = URL(fileURLWithPath: row.detail).lastPathComponent

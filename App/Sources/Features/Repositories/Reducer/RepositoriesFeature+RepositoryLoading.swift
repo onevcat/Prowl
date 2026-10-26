@@ -11,15 +11,15 @@ extension RepositoriesFeature {
     let targets =
       repositories
       .filter { $0.capabilities.supportsCodeHost }
-      .map { (id: $0.id, rootURL: $0.rootURL) }
+      .map { (id: $0.id, location: $0.location) }
     guard !targets.isEmpty else { return nil }
-    let gitClient = gitClient
+    let repositoryHost = repositoryHost
     return .run { send in
       var detected: [Repository.ID: CodeHost] = [:]
       await withTaskGroup(of: (Repository.ID, CodeHost).self) { group in
         for target in targets {
           group.addTask {
-            let host = await gitClient.repositoryWebURL(target.rootURL)?.host
+            let host = await repositoryHost.repositoryWebURL(for: target.location)?.host
             return (target.id, CodeHost.from(host: host))
           }
         }
@@ -35,8 +35,35 @@ extension RepositoriesFeature {
     }
   }
 
+  /// The entries that load and show. While remote folders are off (`PROWL_REMOTE_FOLDERS`),
+  /// a stored remote folder stays stored but does not load, show or connect (docs-ai 084
+  /// D7); the prunes keep its pins and orders (`keepsHiddenRemoteID`).
+  func shownEntries(_ entries: [PersistedRepositoryEntry]) -> [PersistedRepositoryEntry] {
+    remoteFoldersEnabled ? entries : entries.filter { !RepositoryLocation.hasRemoteForm($0.path) }
+  }
+
+  /// Whether a prune keeps `id` although it is not loaded: the ID of a remote folder, or
+  /// of its worktree, while remote folders are off.
+  var keepsHiddenRemoteID: @Sendable (String) -> Bool {
+    let hidesRemoteFolders = !remoteFoldersEnabled
+    return { hidesRemoteFolders && RepositoryLocation.hasRemoteForm($0) }
+  }
+
+  /// `visibleOrder` with the hidden IDs of `storedOrder` put back at their places, so a
+  /// reorder while remote folders are off keeps the hidden folders' places.
+  nonisolated static func mergingHiddenRepositoryIDs(
+    _ visibleOrder: [Repository.ID], into storedOrder: [Repository.ID], isHidden: (Repository.ID) -> Bool
+  ) -> [Repository.ID] {
+    let visible = Set(visibleOrder)
+    var merged = visibleOrder
+    for (index, id) in storedOrder.enumerated() where isHidden(id) && !visible.contains(id) {
+      merged.insert(id, at: min(index, merged.count))
+    }
+    return merged
+  }
+
   func loadPersistedRepositoryEntries(
-    fallbackRoots: [URL] = []
+    fallbackRoots: [RepositoryLocation] = []
   ) async -> [PersistedRepositoryEntry] {
     let entries = await repositoryPersistence.loadRepositoryEntries()
     let resolvedEntries: [PersistedRepositoryEntry]
@@ -48,7 +75,7 @@ extension RepositoriesFeature {
         if !loadedPaths.isEmpty {
           loadedPaths
         } else {
-          fallbackRoots.map { $0.path(percentEncoded: false) }
+          fallbackRoots.map(\.id)
         }
       resolvedEntries = RepositoryEntryNormalizer.normalize(
         pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
@@ -64,6 +91,8 @@ extension RepositoriesFeature {
       for (index, entry) in entries.enumerated() {
         let gitClient = self.gitClient
         group.addTask {
+          // A remote entry is not a local path; its host checks it when it loads (docs-ai 084 B3).
+          if RepositoryLocation.hasRemoteForm(entry.path) { return (index, entry) }
           let normalizedPath = URL(fileURLWithPath: entry.path)
             .standardizedFileURL
             .path(percentEncoded: false)
@@ -126,24 +155,32 @@ extension RepositoriesFeature {
     return "\(path): \(detail)"
   }
 
+  /// `knownRemoteRepositories` are loaded remote repositories that the load keeps as they
+  /// are instead of asking their hosts (docs-ai 084 B3f). Every caller passes
+  /// `State.retainedRemoteRepositories`, so no load can evict them or roll them back.
   func loadRepositories(
-    fallbackRoots: [URL] = [],
-    animated: Bool = false
+    fallbackRoots: [RepositoryLocation] = [],
+    animated: Bool = false,
+    knownRemoteRepositories: [Repository]
   ) -> Effect<Action> {
-    let gitClient = gitClient
+    let repositoryHost = repositoryHost
     return .run { [animated, fallbackRoots] send in
-      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
-      let roots = entries.map { URL(fileURLWithPath: $0.path) }
-      for entry in entries where entry.kind == .git {
-        _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
+      let entries = await shownEntries(await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots))
+      let roots = entries.map(\.location)
+      // A remote prune would add a connection per entry to every reload; the refresh lists
+      // a worktree whose folder is gone, so remote entries skip it (docs-ai 084 B3e).
+      for entry in entries where entry.kind == .git && entry.location.localURL != nil {
+        _ = try? await repositoryHost.pruneWorktrees(in: entry.location)
       }
-      let (repositories, failures) = await loadRepositoriesData(entries)
+      let (repositories, failures) = await loadRepositoriesData(
+        entries, knownRemoteRepositories: knownRemoteRepositories)
       await send(
         .repositoriesLoaded(
           repositories,
           failures: failures,
           roots: roots,
-          animated: animated
+          animated: animated,
+          reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
         )
       )
     }
@@ -155,62 +192,44 @@ extension RepositoriesFeature {
     let repository: Repository?
     let errorMessage: String?
     var isGitUnavailable: Bool = false
+    var isHostUnreachable: Bool = false
+    var authority: RemoteAuthorityCheck = .unknown
   }
 
-  func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
+  /// How long a load waits for a remote host before it reports the host unreachable, so a
+  /// host that does not answer never holds back the other repositories. The refresh
+  /// cadence (B3f) tries it again.
+  static let remoteLoadDeadline: Duration = .seconds(10)
+
+  func loadRepositoriesData(
+    _ entries: [PersistedRepositoryEntry], knownRemoteRepositories: [Repository] = []
+  ) async -> ([Repository], [LoadFailure]) {
+    let clock = clock
+    let known = Dictionary(knownRemoteRepositories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
-        let gitClient = self.gitClient
+        let repositoryHost = self.repositoryHost
         group.addTask {
-          let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
-          switch entry.kind {
-          case .git:
-            do {
-              let worktrees = try await gitClient.worktrees(rootURL)
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
-                  name: Repository.name(for: rootURL),
-                  kind: .git,
-                  worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })
-                ),
-                errorMessage: nil
-              )
-            } catch {
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: nil,
-                errorMessage: error.localizedDescription,
-                isGitUnavailable: {
-                  if case GitClientError.unavailable = error { return true }
-                  return false
-                }()
-              )
-            }
-          case .plain:
-            let workspace = ProjectWorkspace.load(from: rootURL)
-            return WorktreesFetchResult(
-              entry: entry,
-              repository: Repository(
-                id: rootURL.path(percentEncoded: false),
-                rootURL: rootURL,
-                name: workspace?.title ?? Repository.name(for: rootURL),
-                kind: .plain,
-                worktrees: IdentifiedArray(),
-                workspace: workspace
-              ),
-              errorMessage: nil
-            )
+          // A remote folder loads through its host, within a deadline (docs-ai 084 B3e).
+          guard case .remote = entry.location else {
+            return await Self.loadRepository(entry, host: repositoryHost)
+          }
+          if let repository = known[entry.location.standardized.id] {
+            return WorktreesFetchResult(entry: entry, repository: repository, errorMessage: nil)
+          }
+          return await Self.withDeadline(Self.remoteLoadDeadline, clock: clock) {
+            await Self.loadRepository(entry, host: repositoryHost)
+          } onTimeout: {
+            WorktreesFetchResult(
+              entry: entry, repository: nil,
+              errorMessage: RemoteRepositoryHostError.timedOut.localizedDescription, isHostUnreachable: true)
           }
         }
       }
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
-        resultsByRootID[rootID] = result
+        resultsByRootID[result.entry.location.standardized.id] = result
       }
       return resultsByRootID
     }
@@ -218,8 +237,7 @@ extension RepositoriesFeature {
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
     for entry in entries {
-      let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
-      let rootID = normalizedRoot.path(percentEncoded: false)
+      let rootID = entry.location.standardized.id
       guard let result = fetchResults[rootID] else { continue }
       if let repository = result.repository {
         loaded.append(repository)
@@ -228,7 +246,9 @@ extension RepositoriesFeature {
           LoadFailure(
             rootID: rootID,
             message: result.errorMessage ?? String(localized: "Unknown error"),
-            isGitUnavailable: result.isGitUnavailable
+            isGitUnavailable: result.isGitUnavailable,
+            isHostUnreachable: result.isHostUnreachable,
+            authority: result.authority
           )
         )
       }
@@ -236,10 +256,108 @@ extension RepositoriesFeature {
     return (loaded, failures)
   }
 
+  /// Loads one entry through `host`, which runs a local location on this Mac and a remote
+  /// one on its host. A plain folder loads without a check, as before; a remote one only
+  /// needs its host to be known. Workspaces are local only (A4a).
+  private nonisolated static func loadRepository(
+    _ entry: PersistedRepositoryEntry, host: RepositoryHost
+  ) async -> WorktreesFetchResult {
+    let location: RepositoryLocation =
+      switch entry.location {
+      case .local: .local(URL(fileURLWithPath: entry.path).standardizedFileURL)
+      case .remote: entry.location
+      }
+    do {
+      switch entry.kind {
+      case .git:
+        let worktrees = try await host.worktrees(in: location)
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: Repository(
+            location: location, name: Repository.name(for: location), kind: .git,
+            worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })),
+          errorMessage: nil
+        )
+      case .plain:
+        if location.localURL == nil { try await host.requireRemoteHost(for: location) }
+        let workspace = location.localURL.flatMap(ProjectWorkspace.load(from:))
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: Repository(
+            location: location, name: workspace?.title ?? Repository.name(for: location), kind: .plain,
+            worktrees: IdentifiedArray(), workspace: workspace),
+          errorMessage: nil
+        )
+      }
+    } catch {
+      return WorktreesFetchResult(
+        entry: entry, repository: nil, errorMessage: error.localizedDescription,
+        isGitUnavailable: {
+          if case GitClientError.unavailable = error { return true }
+          return false
+        }(),
+        isHostUnreachable: isRemoteHostUnreachable(error),
+        authority: RemoteAuthorityCheck(error))
+    }
+  }
+
+  /// `operation`'s result, or `onTimeout`'s when `deadline` passes first. On a timeout this
+  /// returns at once and only cancels the operation: a remote wait that does not respond to
+  /// cancellation (such as a shared read of the login `PATH`) must not hold the load past
+  /// its deadline. A cancelled caller gets `onTimeout`'s result too.
+  private nonisolated static func withDeadline(
+    _ deadline: Duration, clock: any Clock<Duration>,
+    operation: @escaping @Sendable () async -> WorktreesFetchResult,
+    onTimeout: @escaping @Sendable () -> WorktreesFetchResult
+  ) async -> WorktreesFetchResult {
+    let race = DeadlineRace<WorktreesFetchResult>()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        race.start(
+          continuation: continuation,
+          operation: Task { race.finish(with: await operation()) },
+          timer: Task {
+            try? await clock.sleep(for: deadline)
+            race.finish(with: onTimeout())
+          })
+      }
+    } onCancel: {
+      race.finish(with: onTimeout())
+    }
+  }
+
+  /// Keeps the failures of a load: their messages, and which ones lack git or a reachable
+  /// host. `State.currentLoadFailures` reads them back.
+  /// Returns the hosts whose rebind mark this load set or cleared, for their holds.
+  @discardableResult
+  func recordLoadFailures(_ failures: [LoadFailure], state: inout State) -> RebindMarkChange {
+    state.loadFailuresByID = Dictionary(
+      failures.map { ($0.rootID, $0.message) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
+    state.loadUnreachableRepositoryIDs = Set(failures.filter(\.isHostUnreachable).map(\.rootID))
+    // A failure after the authority check clears the mark; one before it leaves the mark.
+    var change = RebindMarkChange.none
+    for failure in failures {
+      guard let hostProfileID = RepositoryLocation(id: failure.rootID)?.hostProfileID else { continue }
+      let step = markRebind(hostProfileID, failure.authority, state: &state)
+      change.marked.formUnion(step.marked)
+      change.cleared.formUnion(step.cleared)
+    }
+    // A host marked and cleared by the same load ends as its last failure left it.
+    change.marked.formIntersection(state.rebindHostProfileIDs)
+    change.cleared.subtract(state.rebindHostProfileIDs)
+    return change
+  }
+
+  /// While remote folders are off, the prunes keep the hidden remote-form IDs
+  /// (`keepsHiddenRemoteID`). A snapshot prunes nothing (`origin`), so a snapshot that a
+  /// session without the flag wrote keeps them too; the live load that follows decides.
   func applyRepositories(
     _ repositories: [Repository],
-    roots: [URL],
-    shouldPruneArchivedWorktrees: Bool,
+    roots: [RepositoryLocation],
+    origin: RepositoryListOrigin,
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
@@ -267,6 +385,10 @@ extension RepositoriesFeature {
       return false
     }
     let availableWorktreeIDs = Set(repositories.flatMap { $0.worktrees.map(\.id) })
+    let isKept = keepsHiddenRemoteID
+    let isRemovedByLoad = removedWorktreeIDFilter(
+      origin: origin, availableWorktreeIDs: availableWorktreeIDs, state: state)
+    let isRemoved: (Worktree.ID) -> Bool = { isRemovedByLoad($0) && !isKept($0) }
     let filteredDeletingIDs = state.deletingWorktreeIDs.intersection(availableWorktreeIDs)
     let filteredSetupScriptIDs = state.pendingSetupScriptWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
@@ -282,9 +404,7 @@ extension RepositoriesFeature {
       availableWorktreeIDs.contains($0.key)
     }
     state.forgetPullRequestRefreshHistory(keeping: availableWorktreeIDs)
-    state.$prowlCreatedWorktreeIDs.withLock {
-      $0.removeAll { !availableWorktreeIDs.contains($0) }
-    }
+    pruneProwlCreatedWorktreeIDs(where: isRemoved, state: &state)
     let identifiedRepositories = IdentifiedArray(uniqueElements: repositories)
     if animated {
       withAnimation {
@@ -307,13 +427,12 @@ extension RepositoriesFeature {
       state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
       state.worktreeInfoByID = filteredWorktreeInfo
     }
-    let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
-    let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state)
-    let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state)
-    let didPruneArchivedWorktrees =
-      shouldPruneArchivedWorktrees
-      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
-      : false
+    let didPrunePinned = prunePinnedWorktreeIDs(where: isRemoved, state: &state)
+    let prunesOrder = origin != .snapshot
+    let didPruneRepositoryOrder = prunesOrder && pruneRepositoryOrderIDs(roots: roots, state: &state, keeping: isKept)
+    let didPruneWorktreeOrder =
+      prunesOrder && pruneWorktreeOrderByRepository(roots: roots, state: &state, keeping: isKept)
+    let didPruneArchivedWorktrees = pruneArchivedWorktrees(where: isRemoved, state: &state)
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSidebarSelectionValid(state.selection, state: state)
     {
@@ -342,6 +461,28 @@ extension RepositoriesFeature {
       didPruneWorktreeOrder: didPruneWorktreeOrder,
       didPruneArchivedWorktrees: didPruneArchivedWorktrees
     )
+  }
+
+  /// The test for a worktree ID that pins, archived worktrees and Prowl-created
+  /// marks drop. Call it before the new list replaces `state.repositories`.
+  func removedWorktreeIDFilter(
+    origin: RepositoryListOrigin,
+    availableWorktreeIDs: Set<Worktree.ID>,
+    state: State
+  ) -> (Worktree.ID) -> Bool {
+    switch origin {
+    case .snapshot:
+      return { _ in false }
+    case .live(let failedRootIDs) where failedRootIDs.isEmpty:
+      return { !availableWorktreeIDs.contains($0) }
+    case .live(let failedRootIDs):
+      let removedIDs = Set(
+        state.repositories
+          .filter { !failedRootIDs.contains($0.id) }
+          .flatMap { $0.worktrees.map(\.id) }
+      ).subtracting(availableWorktreeIDs)
+      return { removedIDs.contains($0) }
+    }
   }
 
   func messageAlert(title: String, message: String) -> AlertState<Alert> {
@@ -373,11 +514,27 @@ extension RepositoriesFeature {
         TextState(String(localized: "Cancel"))
       }
     } message: {
-      TextState(
-        String(
-          localized: "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")
-      )
+      TextState(Self.removalMessage(for: repository.location))
     }
+  }
+
+  /// What removing a repository does to its data. A remote folder's files stay on its host,
+  /// and its host stays in the host list for the next folder there (docs-ai 084 C1).
+  static func removalMessage(for location: RepositoryLocation) -> String {
+    guard case .remote(let hostProfileID, _) = location else {
+      return String(
+        localized: "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")
+    }
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    guard let alias = hostProfiles.first(where: { $0.id == hostProfileID })?.alias else {
+      return String(
+        localized: "This removes the folder from Prowl. Its worktrees and files on its host stay as they are.")
+    }
+    return String(
+      localized: """
+        This removes the folder from Prowl. Its worktrees and files on \(alias) stay as they are, and \
+        Prowl stops connecting to \(alias) for it. \(alias) stays in the host list.
+        """)
   }
 
   func selectionDidChange(
@@ -389,12 +546,109 @@ extension RepositoriesFeature {
     if previousSelectionID != selectedWorktreeID {
       return true
     }
-    if previousSelectedWorktree?.workingDirectory != selectedWorktree?.workingDirectory {
+    if previousSelectedWorktree?.location != selectedWorktree?.location {
       return true
     }
-    if previousSelectedWorktree?.repositoryRootURL != selectedWorktree?.repositoryRootURL {
+    if previousSelectedWorktree?.repositoryLocation != selectedWorktree?.repositoryLocation {
       return true
     }
     return false
   }
+}
+
+/// The first of an operation and its deadline to finish resumes the caller; the other is
+/// cancelled and its result dropped.
+private nonisolated final class DeadlineRace<Value: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Value, Never>?
+  private var pending: Value?
+  private var tasks: [Task<Void, Never>] = []
+  private var isFinished = false
+
+  func start(continuation: CheckedContinuation<Value, Never>, operation: Task<Void, Never>, timer: Task<Void, Never>) {
+    let early: Value? = lock.withLock {
+      tasks = [operation, timer]
+      if isFinished { return pending }
+      self.continuation = continuation
+      return nil
+    }
+    if let early {
+      operation.cancel()
+      timer.cancel()
+      continuation.resume(returning: early)
+    }
+  }
+
+  func finish(with value: Value) {
+    let (continuation, tasks): (CheckedContinuation<Value, Never>?, [Task<Void, Never>]) = lock.withLock {
+      guard !isFinished else { return (nil, []) }
+      isFinished = true
+      pending = value
+      defer { self.continuation = nil }
+      return (self.continuation, self.tasks)
+    }
+    for task in tasks { task.cancel() }
+    continuation?.resume(returning: value)
+  }
+}
+
+extension RepositoriesFeature {
+  /// The kept remote repositories that the load returned.
+  nonisolated static func reusedIDs(_ known: [Repository], in loaded: [Repository]) -> Set<Repository.ID> {
+    Set(known.map(\.id)).intersection(loaded.map(\.id))
+  }
+}
+
+extension RepositoriesFeature.State {
+  /// The loaded remote repositories that a load keeps as they are once the first live load
+  /// is done: their refresh cadence keeps them current (docs-ai 084 B3f).
+  var retainedRemoteRepositories: [Repository] {
+    isInitialLoadComplete ? Array(repositories.filter { $0.location.localURL == nil }) : []
+  }
+
+  /// `loaded`, with the current version of each kept remote repository: a poll may have
+  /// changed it while the load ran.
+  func reconcilingReusedRemoteRepositories(
+    _ loaded: [Repository], reusedIDs: Set<Repository.ID>
+  ) -> [Repository] {
+    guard !reusedIDs.isEmpty else { return loaded }
+    return loaded.map { repository in
+      reusedIDs.contains(repository.id) ? (repositories[id: repository.id] ?? repository) : repository
+    }
+  }
+
+  /// The failures of the last load, as `recordLoadFailures` kept them.
+  var currentLoadFailures: [RepositoriesFeature.LoadFailure] {
+    loadFailuresByID.keys.sorted().map { id in
+      RepositoriesFeature.LoadFailure(
+        rootID: id, message: loadFailuresByID[id] ?? "",
+        isGitUnavailable: gitUnavailableRepositoryIDs.contains(id),
+        isHostUnreachable: loadUnreachableRepositoryIDs.contains(id),
+        // A failure read back from state tells nothing new about the target.
+        authority: RepositoryLocation(id: id)?.hostProfileID.map(rebindHostProfileIDs.contains) == true
+          ? .changed : .unknown)
+    }
+  }
+
+  /// How the host of a remote folder answers, for the sidebar (docs-ai 084 C1). A host
+  /// profile that needs a rebind pauses every folder on it.
+  func remoteHostStatus(for repositoryID: Repository.ID) -> RemoteHostStatus? {
+    guard RepositoryLocation.hasRemoteForm(repositoryID),
+      let hostProfileID = RepositoryLocation(id: repositoryID)?.hostProfileID
+    else { return nil }
+    if rebindHostProfileIDs.contains(hostProfileID) { return .needsRebind(hostProfileID) }
+    if unreachableRepositoryIDs.contains(repositoryID) { return .unreachable }
+    return pollConnectionFailures[repositoryID].map(RemoteHostStatus.connectionFailed)
+  }
+}
+
+/// The state of a remote folder's host that the sidebar shows (docs-ai 084 C1).
+nonisolated enum RemoteHostStatus: Equatable, Sendable {
+  /// The host did not answer; a loaded folder shows its last state.
+  case unreachable
+  /// The SSH configuration reaches another target; the folder waits for a rebind.
+  case needsRebind(HostProfile.ID)
+  /// The host answered, but Prowl has no usable connection for a reason the user must fix,
+  /// such as a refused login or a changed host key; a loaded folder shows its last state.
+  case connectionFailed(String)
 }

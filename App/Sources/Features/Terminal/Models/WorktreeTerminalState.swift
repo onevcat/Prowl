@@ -261,13 +261,32 @@ final class WorktreeTerminalState {
   @ObservationIgnored var remoteConsentAskedSSHBySurface: [UUID: LocalProcessGeneration] = [:]
   /// A pane's `ssh` needs the user's answer before Prowl connects: (surface, destination).
   @ObservationIgnored var onRemoteAgentConsentNeeded: ((UUID, String) -> Void)?
+  /// The panes that Prowl opened for a remote folder (docs-ai 084 C3b).
+  @ObservationIgnored var remoteLaunchOriginBySurface: [UUID: RemoteLaunchOrigin] = [:]
+  /// The staging of each remote pane that waits for its launcher.
+  @ObservationIgnored var remoteLaunchTasksBySurface: [UUID: Task<Void, Never>] = [:]
+  @ObservationIgnored var remoteTerminalStagerForTesting: RemoteTerminalStager?
+  /// A remote pane could not start: the message for the user.
+  @ObservationIgnored var onRemoteTerminalFailed: ((String) -> Void)?
+  /// A remote pane started its `ssh`.
+  @ObservationIgnored var onRemoteLaunchStarted: (() -> Void)?
+  /// A remote folder's saved layout, restored when its terminals first open (docs-ai 084 C5).
+  @ObservationIgnored var pendingLayoutSnapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree?
   @ObservationIgnored var accessibilityPosterForTesting: (@MainActor (Any, NSAccessibility.Notification) -> Void)?
   var remoteAgentDetectionMode: RemoteAgentDetection.Mode {
+    remoteAgentDetectionMode(consent: remoteAgentDetectionConsent)
+  }
+  /// The mode for `consent`; a pane that Prowl opened in a remote folder passes `.enabled`:
+  /// no consent to wait for, but the kill switch (docs-ai 084 C3b).
+  func remoteAgentDetectionMode(consent: RemoteAgentDetectionConsent) -> RemoteAgentDetection.Mode {
     if let enabled = remoteAgentDetectionEnabledForTesting { return enabled ? .enabled : .disabled }
     return RemoteAgentDetection.mode(
-      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment,
-      consent: remoteAgentDetectionConsent)
+      environment: remoteDetectionEnvironmentForTesting ?? ProcessInfo.processInfo.environment, consent: consent)
   }
+  /// Times the grace before a remote first command without a marker completes nothing.
+  @ObservationIgnored var remoteLaunchClock: any Clock<Duration> = ContinuousClock()
+  /// Whether a local process still runs, for the `ssh` of a remote pane.
+  @ObservationIgnored var processIsAliveForTesting: ((LocalProcessGeneration) -> Bool)?
   /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
   @ObservationIgnored var agentProcessProbeForTesting: AgentProcessProbeOverride?
   @ObservationIgnored var programStatusSupportForTesting: ((DetectedAgent) -> ProgramStatusSupport)?
@@ -461,7 +480,7 @@ final class WorktreeTerminalState {
     self.tabManager = TerminalTabManager(titleFlushClock: titleFlushClock)
     _repositorySettings = SharedReader(
       wrappedValue: RepositorySettings.default,
-      .repositorySettings(worktree.repositoryRootURL)
+      .repositorySettings(worktree.repositoryLocation)
     )
     self.tabManager.onCoalescedTitlesFlushed = { [weak self] tabIDs in
       for tabID in tabIDs {
@@ -472,7 +491,10 @@ final class WorktreeTerminalState {
 
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
-  var repositoryRootURL: URL { worktree.repositoryRootURL }
+  /// The repository root on this Mac. Nil for a remote worktree.
+  var repositoryLocalURL: URL? { worktree.repositoryLocalURL }
+  /// The `Repository.ID` of the worktree's repository.
+  var repositoryID: Repository.ID { worktree.repositoryLocation.id }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
     targetHandleRegistry.register(tabID: tabID)
@@ -590,7 +612,13 @@ final class WorktreeTerminalState {
   }
 
   func ensureInitialTab(focusing: Bool) {
+    guard worktree.location.availability(of: .terminalTab).isAvailable else { return }
     guard tabManager.tabs.isEmpty else { return }
+    // A remote folder's saved layout, once: a failed restore opens a plain first tab.
+    if let snapshot = pendingLayoutSnapshot {
+      pendingLayoutSnapshot = nil
+      if applyLayoutSnapshot(snapshot) { return }
+    }
     guard !isEnsuringInitialTab else { return }
     isEnsuringInitialTab = true
     Task {
@@ -649,10 +677,12 @@ final class WorktreeTerminalState {
         selecting: selecting,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
-        workingDirectoryOverride: workingDirectoryOverride
+        workingDirectoryOverride: workingDirectoryOverride,
+        consumesSetupScript: shouldConsumeSetupScript
       )
     )
-    if shouldConsumeSetupScript, tabId != nil {
+    // A remote tab consumes it once its launcher is staged (`finishRemoteLaunch`).
+    if shouldConsumeSetupScript, tabId != nil, worktree.location.localURL != nil {
       onSetupScriptConsumed?()
     }
     return tabId
@@ -661,6 +691,10 @@ final class WorktreeTerminalState {
   func freezeAgentProfileLaunchContext(
     _ request: AgentProfileLaunchRequest
   ) -> Result<FrozenAgentProfileLaunchContext, AgentProfileLaunchError> {
+    // Profiles launch in local worktrees only (docs-ai 084 A4a; remote launches come with 082 L1f).
+    guard let worktreeDirectory = worktree.localURL else {
+      return .failure(.unavailable(.remoteFolder(.profileLaunch)))
+    }
     let anchor: UUID?
     let context: ghostty_surface_context_e
     let tracksFocusedAnchor: Bool
@@ -680,7 +714,7 @@ final class WorktreeTerminalState {
     let inheritedCWD =
       request.workingDirectoryOverride
       ?? inheritedSurfaceConfig(fromSurfaceId: anchor, context: context).workingDirectory
-      ?? worktree.workingDirectory
+      ?? worktreeDirectory
     let frozenPlacement: AgentProfileLaunchRequest.Placement =
       switch request.placement {
       case .tab(let background): .tab(background: background)
@@ -708,6 +742,7 @@ final class WorktreeTerminalState {
     _ context: FrozenAgentProfileLaunchContext,
     inheritedCWDOverride: URL? = nil
   ) -> Bool {
+    guard let worktreeDirectory = worktree.localURL else { return false }
     if let anchor = context.anchorSurfaceID, surfaces[anchor] == nil { return false }
     if context.tracksFocusedAnchor, currentFocusedSurfaceId() != context.anchorSurfaceID { return false }
     guard context.tracksInheritedCWD else { return true }
@@ -722,7 +757,7 @@ final class WorktreeTerminalState {
         fromSurfaceId: context.anchorSurfaceID,
         context: surfaceContext
       ).workingDirectory
-      ?? worktree.workingDirectory
+      ?? worktreeDirectory
     return AgentProfileLaunchPlanner.pathString(currentCWD)
       == AgentProfileLaunchPlanner.pathString(context.inheritedCWD)
   }
@@ -961,17 +996,60 @@ final class WorktreeTerminalState {
     let title: String
     let icon: String?
     let isTitleLocked: Bool
-    let initialInput: String?
+    var initialInput: String?
     let focusing: Bool
     var selecting: Bool = true
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
-    let workingDirectoryOverride: URL?
+    var workingDirectoryOverride: URL?
     var additionalEnvironment: [String: String] = [:]
     var defersSurfaceCreation = false
+    /// The input carries the pending setup script.
+    var consumesSetupScript = false
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
+    // Every tab passes here: in a remote folder, from any entry point, a tab is a local
+    // pane that runs the remote launcher (docs-ai 084 C3b), never a plain local shell.
+    if case .remote(let hostProfileID, let path) = worktree.location {
+      return createRemoteTab(creation, hostProfileID: hostProfileID, path: path)
+    }
+    return insertTab(creation).tabID
+  }
+
+  /// A remote folder's tab: a deferred local pane, which types
+  /// `ssh -t <recipe> -- exec sh <launcher>` once the launcher is staged on the host.
+  /// Its local working directory is the recipe's, so relative `-F` and `-i` options resolve
+  /// as when the host was added. The tab's input (a setup, run or custom script) is the
+  /// launch's first command on the host, never typed into the local shell (C3c); a working
+  /// directory override (CLI `create tab --path`) is a host path inside the folder.
+  private func createRemoteTab(_ creation: TabCreation, hostProfileID: UUID, path: String) -> TerminalTabID? {
+    let stager = remoteTerminalStager
+    guard let profile = stager.profile(hostProfileID) else {
+      onRemoteTerminalFailed?(RepositoryHostError.hostProfileMissing(hostProfileID).localizedDescription)
+      return nil
+    }
+    let remoteDirectory =
+      creation.workingDirectoryOverride.map { Self.hostPath($0.path(percentEncoded: false)) } ?? path
+    var remote = creation
+    remote.initialInput = nil
+    remote.defersSurfaceCreation = true
+    remote.workingDirectoryOverride = Self.localDirectory(for: profile)
+    let inserted = insertTab(remote)
+    guard let surfaceID = inserted.surfaceID else { return inserted.tabID }
+    startRemoteLaunch(
+      remoteLaunch(surfaceID: surfaceID, workingDirectory: remoteDirectory, firstCommand: creation.initialInput),
+      profile: profile, surfaceID: surfaceID, tabID: inserted.tabID,
+      consumesSetupScript: creation.consumesSetupScript)
+    return inserted.tabID
+  }
+
+  /// A host path from a `URL`, without the trailing slash of a directory URL.
+  static func hostPath(_ path: String) -> String {
+    path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+  }
+
+  private func insertTab(_ creation: TabCreation) -> (tabID: TerminalTabID, surfaceID: UUID?) {
     let tabId = tabManager.createTab(
       title: creation.title,
       icon: creation.icon,
@@ -999,7 +1077,7 @@ final class WorktreeTerminalState {
       lastForegroundCreatedTabID = tabId
     }
     onTabCreated?()
-    return tabId
+    return (tabId, tree.root?.leftmostLeaf().id)
   }
 
   func selectTab(_ tabId: TerminalTabID) {

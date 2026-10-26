@@ -38,7 +38,7 @@ struct GitAutomaticBaseRefIntegrationTests {
     try runGit(["-C", workURL.path(percentEncoded: false), "push", "-u", "origin", "main"])
     try runGit(["--git-dir", bareURL.path(percentEncoded: false), "symbolic-ref", "HEAD", "refs/heads/main"])
 
-    let baseRef = await GitClient().automaticWorktreeBaseRef(for: bareURL)
+    let baseRef = await GitClient.local.automaticWorktreeBaseRef(for: bareURL)
     #expect(baseRef == "main")
   }
 }

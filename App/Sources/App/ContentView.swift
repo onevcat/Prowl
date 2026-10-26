@@ -15,7 +15,6 @@ struct ContentView: View {
   @Bindable var store: StoreOf<AppFeature>
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
-  @Environment(\.scenePhase) private var scenePhase
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
@@ -64,12 +63,6 @@ struct ContentView: View {
         repositoriesStore.send(.selectWorktree(nil))
       }
     }
-    .task {
-      store.send(.scenePhaseChanged(scenePhase))
-    }
-    .onChange(of: scenePhase) { _, newValue in
-      store.send(.scenePhaseChanged(newValue))
-    }
     .fileImporter(
       isPresented: $repositoriesStore.isOpenPanelPresented.sending(\.setOpenPanelPresented),
       allowedContentTypes: [.folder],
@@ -94,6 +87,9 @@ struct ContentView: View {
     .sheet(item: $repositoriesStore.scope(state: \.worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
+    }
+    .sheet(item: $repositoriesStore.scope(state: \.addRemoteFolder, action: \.addRemoteFolder)) { sheetStore in
+      AddRemoteFolderView(store: sheetStore)
     }
     .sheet(item: $repositoriesStore.scope(state: \.workspaceEditor, action: \.workspaceEditor)) {
       promptStore in

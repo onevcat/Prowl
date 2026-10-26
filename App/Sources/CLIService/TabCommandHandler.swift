@@ -110,7 +110,8 @@ final class TabCommandHandler: CommandHandler {
   }
 
   private func handleCreate(input: TabInput, target: TabResolvedTarget) -> CommandResponse {
-    let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
+    let path = allowedTabPath(
+      input.path, worktreePath: target.worktreePath, isRemote: RepositoryLocation.hasRemoteForm(target.worktreeID))
     guard input.path == nil || path != nil else {
       return errorResponse(
         code: CLIErrorCode.pathNotAllowed,
@@ -129,23 +130,6 @@ final class TabCommandHandler: CommandHandler {
       return errorResponse(code: CLIErrorCode.tabFailed, message: "Failed to close tab.")
     }
     return success(action: .close, target: target)
-  }
-
-  private func normalizedAllowedPath(_ path: String?, worktreePath: String) -> String? {
-    guard let path else { return nil }
-    let normalizedPath = normalize(path)
-    let normalizedWorktree = normalize(worktreePath)
-    guard normalizedPath == normalizedWorktree || normalizedPath.hasPrefix(normalizedWorktree + "/") else {
-      return nil
-    }
-    return normalizedPath
-  }
-
-  private func normalize(_ path: String) -> String {
-    URL(fileURLWithPath: path, isDirectory: true)
-      .standardizedFileURL
-      .path(percentEncoded: false)
-      .trimmingTrailingSlash()
   }
 
   private func success(action: TabAction, target: TabResolvedTarget) -> CommandResponse {
@@ -175,12 +159,22 @@ final class TabCommandHandler: CommandHandler {
   }
 }
 
-extension String {
-  fileprivate func trimmingTrailingSlash() -> String {
-    var value = self
-    while value.count > 1, value.hasSuffix("/") {
-      value.removeLast()
-    }
+/// A tab's `--path` when it lies inside `worktreePath`, normalized; nil outside. A local path
+/// is standardized on this Mac. A remote folder's path is on its host and is normalized by its
+/// text only (`RemotePaths.canonicalPath`), so a local symlink or `/private` never changes it
+/// (docs-ai 084 C3c).
+func allowedTabPath(_ path: String?, worktreePath: String, isRemote: Bool) -> String? {
+  guard let path else { return nil }
+  func normalized(_ path: String) -> String {
+    if isRemote { return RemotePaths.canonicalPath(path) }
+    var value = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path(percentEncoded: false)
+    while value.count > 1, value.hasSuffix("/") { value.removeLast() }
     return value
   }
+  let normalizedPath = normalized(path)
+  let normalizedWorktree = normalized(worktreePath)
+  guard normalizedPath == normalizedWorktree || normalizedPath.hasPrefix(normalizedWorktree + "/") else {
+    return nil
+  }
+  return normalizedPath
 }

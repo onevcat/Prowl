@@ -69,6 +69,32 @@ struct CLITabCommandHandlerTests {
     #expect(didCreate == false)
   }
 
+  /// The legacy `tab create` opens a remote tab like `create tab`: its path is a host path,
+  /// checked by its text only (docs-ai 084 C3c).
+  @Test func createInARemoteFolderChecksTheHostPath() async throws {
+    var paths: [String?] = []
+    let remote = makeTarget(worktreeID: "ssh:5c1f0a8e-7d1b-4c63-9a3e-2f1b6c9d0e42:/srv/app", worktreePath: "/srv/app")
+    let handler = TabCommandHandler(
+      resolveProvider: { _ in .success(remote) },
+      createTab: { _, path in
+        paths.append(path)
+        return remote
+      },
+      closeTab: { _, _ in true }
+    )
+    func create(_ path: String?) async -> CommandResponse {
+      await handler.handle(
+        envelope: CommandEnvelope(
+          output: .json, command: .tab(TabInput(action: .create, selector: .pane("p17"), path: path))))
+    }
+
+    #expect(await create("/srv/app/subdir").ok)
+    let outside = await create("/srv/other")
+    #expect(outside.ok == false)
+    #expect(outside.error?.code == CLIErrorCode.pathNotAllowed)
+    #expect(paths == ["/srv/app/subdir"])
+  }
+
   @Test func createAllowsOmittedPath() async throws {
     var createPath: String?
     let handler = TabCommandHandler(

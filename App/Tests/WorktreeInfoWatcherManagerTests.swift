@@ -1,4 +1,5 @@
 import Clocks
+import ConcurrencyExtras
 import Foundation
 import Testing
 
@@ -23,6 +24,93 @@ struct WorktreeInfoWatcherManagerTests {
     manager.handleCommand(.stop)
     await task.value
     try FileManager.default.removeItem(at: tempWorktree.tempRoot)
+  }
+
+  @Test func remoteWorktreesGetNoLocalMonitorsTimersOrEvents() async throws {
+    let clock = TestClock()
+    let localCalls = LockIsolated<[String]>([])
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let remoteWorktree = try #require(remote.worktrees.first)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .milliseconds(80),
+      unfocusedInterval: .milliseconds(80),
+      lineChangePhaseOffset: { _, _ in .zero },
+      pullRequestPhaseOffset: { _, _ in .zero },
+      worktreeFileEventMonitorFactory: { _, _ in
+        localCalls.withValue { $0.append("files") }
+        return nil
+      },
+      worktreeHeadEventMonitorFactory: { _, _, _ in
+        localCalls.withValue { $0.append("head") }
+        return nil
+      },
+      worktreeRegistryMonitorFactory: { _, _ in
+        localCalls.withValue { $0.append("registry") }
+        return nil
+      },
+      remoteConfigMonitorFactory: { _, _ in
+        localCalls.withValue { $0.append("config") }
+        return nil
+      },
+      indexEntryCountProvider: { _ in
+        localCalls.withValue { $0.append("index") }
+        return nil
+      },
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees([remoteWorktree]))
+    manager.handleCommand(.setSelectedWorktreeID(remoteWorktree.id))
+    manager.handleCommand(.setOpenedWorktreeIDs([remoteWorktree.id]))
+    await drainAsyncEvents(120)
+
+    #expect(localCalls.value.isEmpty)
+    // The batched refresh carries a remote repository's line counts (B3f); its pull
+    // requests follow the same cadence as a local repository's.
+    #expect(collector.filesChangedCount(worktreeID: remoteWorktree.id) == 0)
+    #expect(collector.pullRequestRefreshCount(repository: remote.location) >= 1)
+    let refreshesBefore = collector.pullRequestRefreshCount(repository: remote.location)
+
+    await clock.advance(by: .seconds(400))
+    await drainAsyncEvents(120)
+    #expect(localCalls.value.isEmpty)
+    #expect(collector.filesChangedCount(worktreeID: remoteWorktree.id) == 0)
+    #expect(collector.pullRequestRefreshCount(repository: remote.location) > refreshesBefore)
+
+    manager.handleCommand(.stop)
+    await task.value
+  }
+
+  /// A remote repository's pull requests count against the same request budget, so its
+  /// worktree slows the unfocused sweep as a local one does (docs-ai 084 B3f).
+  @Test func remoteWorktreesShareTheUnfocusedPullRequestBudget() async throws {
+    let clock = TestClock()
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .milliseconds(80),
+      unfocusedIntervalPerWorktree: .milliseconds(100),
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees(tempRepository.worktrees + remote.worktrees))
+    await drainAsyncEvents(120)
+    #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 1)
+
+    // Two tracked worktrees at 100 ms each: the sweep runs every 200 ms.
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncEvents(120)
+    #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 1)
+    await clock.advance(by: .milliseconds(100))
+    await drainAsyncEvents(120)
+    #expect(collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == 2)
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
 
   @Test func worktreesAddedAfterInitialLoadRefreshLineChangesOnce() async throws {
@@ -71,8 +159,8 @@ struct WorktreeInfoWatcherManagerTests {
       id: tempWorktree.worktree.id,
       name: "eagle-duplicate",
       detail: "duplicate",
-      workingDirectory: tempWorktree.worktree.workingDirectory,
-      repositoryRootURL: tempWorktree.worktree.repositoryRootURL
+      workingDirectory: tempWorktree.worktree.localURL!,
+      repositoryRootURL: tempWorktree.worktree.repositoryLocalURL!
     )
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .seconds(3_600),
@@ -341,11 +429,11 @@ struct WorktreeInfoWatcherManagerTests {
       unfocusedInterval: .milliseconds(80),
       unfocusedIntervalPerWorktree: .zero,
       lineChangePhaseOffset: { _, _ in .zero },
-      pullRequestPhaseOffset: { repositoryRootURL, _ in
-        switch repositoryRootURL {
-        case firstRepository.tempRoot:
+      pullRequestPhaseOffset: { repository, _ in
+        switch repository {
+        case .local(firstRepository.tempRoot):
           return .milliseconds(10)
-        case secondRepository.tempRoot:
+        case .local(secondRepository.tempRoot):
           return .milliseconds(40)
         default:
           return .zero
@@ -941,9 +1029,17 @@ final class EventCollector {
     }
   }
 
+  func pullRequestRefreshCount(repository expected: RepositoryLocation) -> Int {
+    events.reduce(into: 0) { result, event in
+      if case .repositoryPullRequestRefresh(let repository, _) = event, repository == expected {
+        result += 1
+      }
+    }
+  }
+
   func pullRequestRefreshCount(repositoryRootURL: URL) -> Int {
     events.reduce(into: 0) { result, event in
-      if case .repositoryPullRequestRefresh(let rootURL, _) = event, rootURL == repositoryRootURL {
+      if case .repositoryPullRequestRefresh(let repository, _) = event, repository.localURL == repositoryRootURL {
         result += 1
       }
     }
@@ -952,8 +1048,8 @@ final class EventCollector {
   func repositoryWorktreesChangedCount(repositoryRootURL: URL) -> Int {
     let expectedURL = repositoryRootURL.standardizedFileURL
     return events.reduce(into: 0) { result, event in
-      if case .repositoryWorktreesChanged(let rootURL) = event,
-        rootURL.standardizedFileURL == expectedURL
+      if case .repositoryWorktreesChanged(let repository) = event,
+        repository.localURL?.standardizedFileURL == expectedURL
       {
         result += 1
       }
@@ -963,8 +1059,8 @@ final class EventCollector {
   func repositoryRemoteConfigurationChangedCount(repositoryRootURL: URL) -> Int {
     let expectedURL = repositoryRootURL.standardizedFileURL
     return events.reduce(into: 0) { result, event in
-      if case .repositoryRemoteConfigurationChanged(let rootURL) = event,
-        rootURL.standardizedFileURL == expectedURL
+      if case .repositoryRemoteConfigurationChanged(let repository) = event,
+        repository.localURL?.standardizedFileURL == expectedURL
       {
         result += 1
       }

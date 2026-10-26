@@ -66,6 +66,9 @@ extension AppFeature {
       let message = String(localized: "\(name) succeeded in \(formatCustomCommandDuration(durationMs))")
       return .send(.repositories(.showToast(.success(message))))
 
+    case .remoteTerminalFailed(_, let message):
+      return .send(.repositories(.showToast(.warning(message))))
+
     case .runScriptStatusChanged(let worktreeID, let isRunning):
       if isRunning {
         state.runScriptStatusByWorktreeID[worktreeID] = true
@@ -167,7 +170,7 @@ extension AppFeature {
       // Launch memory is recorded only once a surface actually exists, so a
       // failed provision or surface creation never shifts Recommended.
       guard let worktree = state.repositories.terminalWorktree(for: worktreeID) else { return .none }
-      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userRepositorySettings
+      @Shared(.userRepositorySettings(worktree.repositoryLocation)) var userRepositorySettings
       $userRepositorySettings.withLock { $0.lastLaunchedAgentProfileID = profileID }
       return .none
 

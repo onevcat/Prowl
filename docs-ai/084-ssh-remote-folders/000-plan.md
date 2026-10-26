@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented (slice PRs open, see [001-action.md](001-action.md)) |
 | **Anchor date** | 2026-10-22 |
-| **Primary PRs** | (fill in per the slice table) |
+| **Primary PRs** | #952 (this plan); P0 #954; A1 #955; A2 #956; A3a #958; A3b #959; A4a #960; A5a #961; A5b #962; A6a #963; A6b #964; A6c #965; A6d #966; A6e #967; A7 #968; B1 #969; B2a #970; B2b #971; B3a #972; B3b #973; B3c #974; B3d #975; B3e #976; B3f #977; C1a #978; C1b #979; C1c #980; C2 #981; C3a #982; C3b #983; C3c #984; C4 #985; C5 #986 |
 | **Related** | [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md) (L0, shared contracts C1–C6, L1f–L1h, L2), [002-spike-findings.md](../082-ssh-remote-agents/002-spike-findings.md), `docs/components/agent-detection.md` |
 
 ## Background
@@ -123,7 +123,7 @@ assert the arguments of all six calls, including a non-github.com host. The loca
 the index header that sets watcher timing, local untracked line counts, creation times, and
 the move-then-prune worktree removal. `observeChanges` wraps the five local monitor roles
 (four classes in `WorktreeInfoMonitors.swift`) into one host stream that keeps today's six watcher events;
-cadence logic stays in `WorktreeInfoWatcherManager`.
+cadence logic stays in `WorktreeInfoWatcherManager`. (Amended 2026-10-23: no stream; the manager reads repositories by location, runs the local monitors only for local repositories, and starts the remote pull request cadence in A6c, see [011](011-a6b-watcher-locations.md).)
 
 ### Remote command lane
 
@@ -132,8 +132,8 @@ connection (`ConnectionKey`, private `ControlPath`):
 
 - A general `run(RemoteShellCommand)` with its own deadline and output budget (the 5 s and
   256 KiB probe limits are too small for `wt ls` and polling).
-- Line streaming for worktree creation; a bundled script with arguments sent as
-  `bash -s -- <args>` on stdin (the `wt` script is bash 3.2 compatible and branches on
+- Line streaming for worktree creation; a bundled script with arguments sent on stdin
+  (amended 2026-10-23: `set -- <args>` before the script, not `bash -s -- <args>`, see 016) (the `wt` script is bash 3.2 compatible and branches on
   `uname` for copies).
 - The remote login PATH for user tools, as `GitExecutableResolver` does locally.
 - Folder users take leases from the existing `RemoteConnectionRegistry` (no parallel
@@ -154,7 +154,9 @@ connection (`ConnectionKey`, private `ControlPath`):
   an existence check (`RepositoriesFeature+RepositoryLoading.swift`). Remote IDs and entries
   must bypass both.
 - The snapshot cache moves to version 3 and skips a single entry instead of dropping the
-  snapshot; remote entries skip the `fileExists` check.
+  snapshot; remote entries skip the `fileExists` check. (Amended 2026-10-23: version 3
+  stores location IDs and remote entries skip the check, but one failing entry still drops
+  the snapshot until P0 lands, see 018.)
 - The repository settings directory key includes the location, which also fixes today's
   basename collision. Migration copies (never moves) the old directory, because two
   repositories may share it.
@@ -169,7 +171,9 @@ One batched command per remote repository returns: HEAD and branch per worktree,
 worktree list, worktree creation times, a hash of the remote URLs, and `isBare`. The row
 shows tracked line counts and the untracked file count; the tooltip says that untracked
 lines are not counted. The focused worktree polls faster than background ones. A failed
-poll keeps the last state and shows the host as unreachable.
+poll keeps the last state and shows the host as unreachable. (Amended 2026-10-23: the reply carries a fingerprint of the remote URLs, and
+the untracked file count reuses `skippedUntrackedFileCount` and its tooltip, see
+[019](019-b3a-refresh-parser.md).)
 
 ### Consent (D2)
 
@@ -254,17 +258,17 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 | P0 | Load failures do not prune pins or `prowlCreatedWorktreeIDs` (independent fix from `main`) | Pins survive an unavailable repository |
 | A1 | One `Repository.terminalWorktree`; ID → path reversals become lookups | None |
 | A2 | `RepositoryLocation`, the ID codec (normalizers keep non-local IDs unchanged), `localURL`, `.local` initializers, deprecated forwards | None |
-| A3 | Call-site migration by category: identity and settings keys (with the basename fix and copy migration), git and file reads, terminal cwd and cwd matching, CLI; then delete the forwards. Two or three PRs | Settings directory key changes (migrated) |
-| A4 | Capabilities with location and reasons (including Profile launch), enforced at the reducer, launch and admission boundary | None |
-| A5 | `GitClient(executor:)`, ad-hoc instances and bypasses routed, `gh --repo` | None |
-| A6 | Repository state reads and `observeChanges` as host operations; local fast paths kept | None |
+| A3 | Call-site migration by category, two PRs: identity and settings keys with the basename fix and copy migration (A3a); terminal cwd and cwd matching (A3b). CLI output moves with its `host` field in C2; git and file reads move in A5–A6 (amended 2026-10-23) | Settings directory key changes (migrated) |
+| A4 | Capabilities with location and reasons (including Profile launch), two PRs: the model and enforcement at the reducer, launch and admission boundary (A4a); disabled controls with the reason as tooltip, palette filtering, and the view-level Finder and copy-path actions routed through the reducer (A4b, lands with C1, when a remote folder exists for the toolbar visual check) (amended 2026-10-23) | None |
+| A5 | Two or three PRs: `gh` commands name their repository instead of inferring it from a cwd (A5a); `GitClient(executor:)` with the ad-hoc instances and bypasses routed (A5b); git reads move off the forwards (A5c, may join A6) (amended 2026-10-23) | None |
+| A6 | Five PRs: `RepositoryHost` and repository git operations by location, with A5c (A6a); the watcher keyed by location, with local monitors only for local repositories (A6b, see 011); settings keys and `RepositorySettingsFeature` by location (A6c, see 012); the pull request and code host path by location (A6d, see 013); remaining forward reads, then delete the forwards (A6e, see 014) (amended 2026-10-23) | None |
 | A7 | Typed environment in `AgentProfileLaunchPlan`, rendered to the same `terminalInput` (prepares 082 L1f; can run in parallel) | None |
 | B1 | Command lane, budgets, streaming, `bash -s` scripts, folder leases on the existing registry | None (unused) |
-| B2 | `hosts.json`, remote entries, snapshot v3 per entry | None (unused) |
-| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output | None (unused) |
-| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state | Behind the flag |
-| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag |
-| C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin` | Behind the flag |
+| B2 | Two PRs: root lists by location (B2a, see 017); `hosts.json`, remote entries, snapshot v3 per entry (B2b, see 018) (amended 2026-10-23) | None (unused) |
+| B3 | `RemoteRepositoryHost` and the batched refresh, parser tested with recorded output. Six PRs: the refresh script, its reply parser and the mapping to worktrees (B3a, see 019); `RemoteRepositoryHost` with the other git operations on the command lane, as the remote input of `RepositoryHost` (B3b, see 020); worktree creation on the host with the bundled `wt` script (B3c, see 021); the creation flow in the reducer by location, remote worktree placement and the end of the creation gate (B3d, see 022); repository loading through the host with an unreachable mark (B3e, see 023); the refresh cadence with backoff, held connection leases, branch and line changes from the refresh, pull request refresh, and the last state kept through a failed poll (B3f, see 024) (amended 2026-10-23) | None (unused) |
+| C1 | Add Remote Folder, per-profile consent, rebind prompt, unreachable state; the A4b UI gates, verified visually with a real remote folder. Three PRs: the flag, the add sheet, validation on the host and the stored profile and entry (C1a, see 025); the unreachable state, the rebind prompt with restarted connection holds, and what removal does to data (C1b); the A4b UI gates and the toolbar status for folder connections, with the visual check (C1c) (amended 2026-10-23) | Behind the flag |
+| C2 | CLI and Mirror `host` field, local-only `prowl open`, `alias:/path` selector, workflow `rootKey` | Behind the flag; makes the CLI and workflow refusals of A4a reachable (router-level regressions for `create --profile` and `workflow run` in a remote worktree) |
+| C3 | Launcher with per-shell handoff and completion marker, remote tabs and scripts, `RemoteLaunchOrigin`. Three PRs: the launcher, its staging and the OSC 7501 completion marker (C3a, see 029); remote tabs with the typed line, `RemoteLaunchOrigin` and the marker mapped to the completion (C3b); remote scripts, Close on Success and CLI waiters (C3c) (amended 2026-10-23) | Behind the flag |
 | C4 | Tracker cwd accessor, remote splits, remote agent cwd | Behind the flag |
 | C5 | Snapshot origin, reconnect on restore, `docs/` update; flag on | Remote folders ship |
 
@@ -302,15 +306,60 @@ local shell and before C5 a restored remote leaf would come back as a local shel
 ## Open questions
 
 - Polling intervals for focused and background remote worktrees, and backoff while the host
-  is unreachable.
+  is unreachable. (Answered 2026-10-23 in B3f: 10 s for the selected worktree's repository, 45 s for the
+  others (within the 60 s `ControlPersist`), doubling up to 300 s while polls fail. See
+  024.)
 - Close confirmation: Ghostty reports a live process while `ssh` runs, so every remote pane
   asks before it closes.
 - Launcher location (`$TMPDIR` or `~/.cache/prowl`) and cleanup when ssh never runs it.
+  (Answered 2026-10-23 in C3a: `~/.cache/prowl/launch/<nonce>/`, mode 0700; the launch
+  removes it, and each staging removes those older than a day. See 029.)
 - Completion marker format, and whether framed OSC 133 inside the outer `ssh` command
   confuses Ghostty's prompt tracking for the local shell.
+  (Answered 2026-10-23 in C3a: OSC 7501 with `id=prowl-launch/<nonce>/<status>`; framed 133
+  is not used. See 029.)
 - Where `wt` puts remote worktrees (the worktree base directory setting is a local path).
+  (Answered 2026-10-23 in B3d: under `<home>/.prowl/repos/<repository>` on the host; the
+  repository's own setting is a host path, and the global default does not apply. See
+  022.)
 - Rebind UI for a changed `HostName`, and the behaviour of the folder lane while paused.
+  (Answered 2026-10-23 in C1b: a Rebind Host button on the folder's row or header resolves
+  the recipe again and names both targets; Use the New Target stores the new key and
+  connects again. While paused, every command fails at once in the authority check and no
+  connection is held. See 026.)
 
 ## Amendments
 
+- Updated 2026-10-22: P0 landed (partial loads prune only worktrees that left a loaded repository; snapshot restore prunes nothing) — see [002-p0-load-failure-prune.md](002-p0-load-failure-prune.md)
+- Updated 2026-10-22: A1 landed (`Repository.terminalWorktree`; ID → path reversals with a model become lookups; the rest is listed for A2–A3) — see [003-a1-terminal-worktree.md](003-a1-terminal-worktree.md)
+- Updated 2026-10-22: A2 landed (`RepositoryLocation`, the ID codec, location-backed models with local forwards, ID normalizers that keep non-local IDs) — see [004-a2-location-codec.md](004-a2-location-codec.md)
+- Updated 2026-10-23: A3a landed (IDs minted and decoded through the codec; settings directory `<basename>-<hash>` with copy-on-load from the basename directory) — see [005-a3a-identity-and-settings-keys.md](005-a3a-identity-and-settings-keys.md)
+- Updated 2026-10-23: A3b landed (terminal cwd, cwd matching); A3 ends with two PRs and the forwards are deleted at the end of A6, after git and file reads move to the host — see [006-a3b-cwd-matching-cli.md](006-a3b-cwd-matching-cli.md)
+- Updated 2026-10-23: A4a landed (`RepositoryFeature` availability by location with reasons; enforcement at the reducer and the Profile launch boundary); A4 split into A4a and A4b — see [007-a4a-capability-enforcement.md](007-a4a-capability-enforcement.md)
+- Updated 2026-10-23: A5a landed (`gh run` and pull request commands pass `--repo` and run without a repository cwd; dead `defaultBranch` removed; `gh repo view` remote fallback keeps its cwd); A4b moves to C1; A5 split — see [008-a5a-gh-repository-target.md](008-a5a-gh-repository-target.md)
+- Updated 2026-10-23: A5b landed (`GitCommandExecutor`, `GitClient(executor:)`, shared `GitClient.local`; no default shell) — see [009-a5b-git-executor.md](009-a5b-git-executor.md)
+- Updated 2026-10-23: A6 split into A6a–A6d, A5c folded into A6a; A6a landed (`RepositoryHost`) — see [010-a6a-repository-host.md](010-a6a-repository-host.md)
+- Updated 2026-10-23: A6b keys the info watcher by location; there is no `observeChanges` stream, because the monitors have no remote counterpart (remote changes come from the B3 refresh) — see [011-a6b-watcher-locations.md](011-a6b-watcher-locations.md)
+- Updated 2026-10-23: A6 re-split into A6a–A6e; A6c keys repository settings by location — see [012-a6c-settings-by-location.md](012-a6c-settings-by-location.md)
+- Updated 2026-10-23: A6d moves the pull request and code host path to locations — see [013-a6d-pull-requests-by-location.md](013-a6d-pull-requests-by-location.md)
+- Updated 2026-10-23: A6e deletes `Repository.rootURL`, `Worktree.workingDirectory` and `Worktree.repositoryRootURL` — see [014-a6e-delete-forwards.md](014-a6e-delete-forwards.md)
 - Updated 2026-10-23: A7 types the Profile launch environment (`AgentLaunchEnvironmentAssignment`) — see [015-a7-typed-launch-environment.md](015-a7-typed-launch-environment.md)
+- Updated 2026-10-23: B1 adds the command lane (budgets, concurrency limit, `bash -s` scripts with arguments on stdin, line streaming, login PATH); folder users lease through the existing registry — see [016-b1-command-lane.md](016-b1-command-lane.md)
+- Updated 2026-10-23: B2 split; B2a moves the repository root lists to `RepositoryLocation` — see [017-b2a-roots-by-location.md](017-b2a-roots-by-location.md)
+- Updated 2026-10-23: B2b adds `hosts.json`, the entry host, and snapshot version 3 (one failing entry still drops the snapshot until P0) — see [018-b2b-hosts-and-snapshot.md](018-b2b-hosts-and-snapshot.md)
+- Updated 2026-10-23: B3 split into three PRs; B3a adds the batched refresh script, its reply parser and the mapping to worktrees, tested with replies recorded on macOS and Linux — see [019-b3a-refresh-parser.md](019-b3a-refresh-parser.md)
+- Updated 2026-10-23: B3 grows to four PRs; B3b adds `RemoteRepositoryHost`, the remote `GitClient` executor and the remote input of `RepositoryHost` — see [020-b3b-remote-repository-host.md](020-b3b-remote-repository-host.md)
+- Updated 2026-10-23: B3 grows to five PRs; B3c runs the bundled `wt` on the host for worktree creation behind `RepositoryHost` — see [021-b3c-remote-worktree-creation.md](021-b3c-remote-worktree-creation.md)
+- Updated 2026-10-23: B3d moves the worktree creation flow to locations, places remote worktrees under the host's `~/.prowl/repos/<repository>`, and ends the creation gate for remote folders — see [022-b3d-creation-by-location.md](022-b3d-creation-by-location.md)
+- Updated 2026-10-23: B3 grows to six PRs; B3e loads remote folders through their host and marks load failures that come from the connection — see [023-b3e-load-through-host.md](023-b3e-load-through-host.md)
+- Updated 2026-10-23: B3f polls remote repositories on a cadence with backoff, applies branch, line and remote changes, holds a connection lease per loaded remote repository, and refreshes their pull requests; B3 ends here — see [024-b3f-refresh-cadence.md](024-b3f-refresh-cadence.md)
+- Updated 2026-10-23: C1 split into three PRs; C1a adds the flag, the Add Remote Folder sheet with validation on the host, and the stored host profile and entry — see [025-c1a-add-remote-folder.md](025-c1a-add-remote-folder.md)
+- Updated 2026-10-23: C1b shows unreachable and changed hosts in the sidebar, adds the rebind prompt that stores the new target and connects again, and states what removing a remote folder does to its data — see [026-c1b-unreachable-and-rebind.md](026-c1b-unreachable-and-rebind.md)
+- Updated 2026-10-23: C1c lands the A4b UI gates (disabled controls with reasons, palette filtering, terminal commands refused and hidden), keeps Finder and Copy Path checks in the views, and shows the folder connection in the toolbar status — see [027-c1c-ui-gates.md](027-c1c-ui-gates.md)
+- Updated 2026-10-23: C2 adds the `host` field to CLI worktrees, includes remote folders in the CLI contexts, the `label:path` selector (a bare path matches local only), reachable refusals for remote tabs and workflows; the host-aware workflow `rootKey` is deferred until remote workflows exist — see [028-c2-cli-host.md](028-c2-cli-host.md)
+- Updated 2026-10-23: C3 split into three PRs; C3a adds the remote launcher (staging over `sh -s`, per-shell hand-over, OSC 7501 completion marker), tested with real shells — see [029-c3a-remote-launcher.md](029-c3a-remote-launcher.md)
+- Updated 2026-10-23: C3b opens remote tabs: a deferred local pane types `ssh -t <recipe> -- exec sh <launcher>` once the launcher is staged; the pane keeps a `RemoteLaunchOrigin` (stored recipe, no consent, alias label); launch markers complete the first command, and the outer `ssh` finish completes nothing. Scripts get their own gate until C3c; splits and layout restore stay off for remote folders until C4 and C5 — see [030-c3b-remote-tabs.md](030-c3b-remote-tabs.md)
+- Updated 2026-10-24: C3c runs setup, run and custom scripts in remote folders as the launch's first command (a split custom command waits for C4), maps the marker to Close on Success, the toast and CLI waiters (a missing marker completes nothing, decided at the `ssh` finish), and opens CLI tabs in remote folders with host paths — see [031-c3c-remote-scripts.md](031-c3c-remote-scripts.md)
+- Updated 2026-10-24: C4 adds the tracker's directory on the host, remote splits (a new remote pane that starts where its anchor is, after a fresh probe, else the last known directory, else the folder), and the remote agent directory for Active Agents and `prowl agents` — see [032-c4-remote-splits.md](032-c4-remote-splits.md)
+- Updated 2026-10-24: C5 saves remote leaves with their host and directory, restores them as plain remote panes (no script replay), skips a remote folder that cannot restore instead of dropping the layout, turns remote folders on (`PROWL_REMOTE_FOLDERS=0` turns them off), and documents them in `docs/components/remote-folders.md` — see [033-c5-restore-and-flag.md](033-c5-restore-and-flag.md)
+- Updated 2026-10-25: B3f's pause and resume of remote polls now follows `NSApplication` activation, and the 30 s reload that B3f kept remote repositories through is gone — see [034.005](../034-worktree-watcher-correctness/005-app-activity-signal.md)

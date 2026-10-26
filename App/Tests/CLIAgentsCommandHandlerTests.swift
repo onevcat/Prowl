@@ -315,8 +315,8 @@ struct CLIAgentsCommandHandlerTests {
         .init(
           id: tabWorktree.id,
           name: tabWorktree.name,
-          path: tabWorktree.workingDirectory.path(percentEncoded: false),
-          rootPath: tabWorktree.repositoryRootURL.path(percentEncoded: false),
+          path: tabWorktree.localURL!.path(percentEncoded: false),
+          rootPath: tabWorktree.repositoryLocalURL!.path(percentEncoded: false),
           kind: .git,
           taskStatus: .running,
           tabs: [
