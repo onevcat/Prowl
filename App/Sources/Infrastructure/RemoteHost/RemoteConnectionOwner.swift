@@ -388,7 +388,7 @@ extension RemoteConnectionOwner {
     }
   }
 
-  static let laneClosedReason = "The remote connection was closed or the command was cancelled."
+  static let laneClosedReason = String(localized: "The remote connection was closed or the command was cancelled.")
 
   /// Waits for a lane slot, in order. False when the owner shut down or the caller was
   /// cancelled while it waited; a cancelled waiter leaves the queue at once.
