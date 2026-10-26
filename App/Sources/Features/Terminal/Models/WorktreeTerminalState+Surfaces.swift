@@ -7,6 +7,8 @@ import ProwlCLIShared
 enum SplitCreationError: Error, Equatable, Sendable {
   case anchorNotFound(UUID)
   case insertionFailed
+  /// The remote folder's host profile is missing (docs-ai 084 C4).
+  case remoteFolder
 }
 
 extension WorktreeTerminalState {
@@ -219,15 +221,26 @@ extension WorktreeTerminalState {
     else {
       return .failure(.anchorNotFound(anchorSurfaceID))
     }
+    // In a remote folder, a split is a new remote pane: the input is its launch's first
+    // command on the host, never typed into a local shell (docs-ai 084 C4).
+    var remoteProfile: HostProfile?
+    if case .remote(let hostProfileID, _) = worktree.location {
+      guard let profile = remoteTerminalStager.profile(hostProfileID) else {
+        onRemoteTerminalFailed?(RepositoryHostError.hostProfileMissing(hostProfileID).localizedDescription)
+        return .failure(.remoteFolder)
+      }
+      remoteProfile = profile
+    }
 
+    let input = initialInput.flatMap { runScriptInput($0) }
     let newSurface = createSurface(
       tabId: tabID,
-      initialInput: initialInput.flatMap { runScriptInput($0) },
+      initialInput: remoteProfile == nil ? input : nil,
       inheritingFromSurfaceId: anchorSurfaceID,
-      workingDirectoryOverride: workingDirectoryOverride,
+      workingDirectoryOverride: remoteProfile.map(Self.localDirectory(for:)) ?? workingDirectoryOverride,
       context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
       additionalEnvironment: additionalEnvironment,
-      defersSurfaceCreation: defersSurfaceCreation
+      defersSurfaceCreation: defersSurfaceCreation || remoteProfile != nil
     )
     do {
       let newTree = try tree.inserting(
@@ -243,6 +256,18 @@ extension WorktreeTerminalState {
         focusSurface(newSurface, in: tabID)
       }
       _ = registerTargetHandle(for: newSurface.id)
+      if let remoteProfile {
+        // The directory is resolved in the launch task (`remoteSplitDirectory`); the folder
+        // stands in when the state is gone.
+        let folder = worktree.location.path
+        startRemoteLaunch(
+          remoteLaunch(surfaceID: newSurface.id, workingDirectory: folder, firstCommand: input),
+          profile: remoteProfile, surfaceID: newSurface.id, tabID: tabID, consumesSetupScript: false
+        ) { [weak self] in
+          await self?.remoteSplitDirectory(anchorSurfaceID: anchorSurfaceID, override: workingDirectoryOverride)
+            ?? folder
+        }
+      }
       return .success(newSurface.id)
     } catch {
       newSurface.closeSurface()
@@ -483,7 +508,9 @@ extension WorktreeTerminalState {
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context,
-      environment: worktree.scriptEnvironment.merging(additionalEnvironment) { _, patched in patched },
+      // A remote folder's paths are on its host: the launcher exports them there (C3b).
+      environment: (worktree.location.localURL == nil ? [:] : worktree.scriptEnvironment)
+        .merging(additionalEnvironment) { _, patched in patched },
       skipsSurfaceCreationForTesting: skipsSurfaceCreationForTesting,
       failsSurfaceCreationForTesting: failsSurfaceCreationForTesting,
       defersSurfaceCreation: defersSurfaceCreation
@@ -761,6 +788,7 @@ extension WorktreeTerminalState {
     surfaces.removeValue(forKey: surfaceID)
     launchProfilesBySurface.removeValue(forKey: surfaceID)
     launchHookRegistrationsBySurface.removeValue(forKey: surfaceID)
+    forgetRemoteLaunch(surfaceID: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
     pendingCustomCommands.removeValue(forKey: surfaceID)
@@ -1013,7 +1041,9 @@ extension WorktreeTerminalState {
       forgetSurface(view.id)
       return true
     }
-    let retain = retainForUndo && undoCloseTimeout > .zero && !view.childProcessHasExited
+    // A remote pane that still waits for its launcher has no surface to bring back (C4).
+    let retain =
+      retainForUndo && undoCloseTimeout > .zero && !view.childProcessHasExited && !isAwaitingRemoteLaunch(view.id)
     let wasFocused = focusedSurfaceIdByTab[tabId] == view.id
     let nextSurface = wasFocused ? tree.focusTargetAfterClosing(node) : nil
     let newTree = tree.removing(node)

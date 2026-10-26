@@ -299,10 +299,9 @@ struct ProwlApp: App {
       workflowReservations: workflowRuntime.reservations
     )
     mirrors.host.commandService = MirrorCommandService(router: cliRouter) {
-      ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: appStore.state.repositories).map {
-        ListCommandWorktree(
-          id: $0.id, name: $0.name, path: $0.path, rootPath: $0.rootPath, kind: $0.kind)
-      }
+      // A remote folder cannot launch until C3 (docs-ai 084), so the picker lists none.
+      ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: appStore.state.repositories)
+        .filter { $0.host == nil }.map(\.listWorktree)
     }
 
     _cliSocketServer = State(initialValue: cliServer)
@@ -1463,7 +1462,10 @@ struct ProwlApp: App {
   static func resolveCLITabCreationTarget(
     _ value: String, worktrees: [ListRuntimeSnapshotBuilder.WorktreeContext]
   ) -> Result<TabResolvedTarget, TargetResolverError> {
-    let matches = worktrees.filter { $0.id == value || $0.name == value || $0.path == value }
+    // A name shared with a remote folder means the local worktree, which can open a tab.
+    let candidates = worktrees.filter { $0.matches(value) }
+    let local = candidates.filter { $0.host == nil }
+    let matches = local.isEmpty ? candidates : local
     guard let worktree = matches.first else {
       return .failure(.notFound("Worktree '\(value)' not found."))
     }

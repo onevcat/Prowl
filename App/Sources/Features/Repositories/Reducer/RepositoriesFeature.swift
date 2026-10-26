@@ -324,6 +324,10 @@ struct RepositoriesFeature {
     /// Loaded remote repositories whose last poll did not reach the host (B3f). A reload
     /// that keeps a repository as it was does not touch this mark; a poll does.
     var pollUnreachableRepositoryIDs: Set<Repository.ID> = []
+    /// Loaded remote repositories whose last poll reached no usable connection for a reason
+    /// the user must fix (a refused login, a changed host key, the kill switch), with that
+    /// reason (docs-ai 084 C1).
+    var pollConnectionFailures: [Repository.ID: String] = [:]
     /// Remote folders whose host could not be reached, at the last load or poll.
     var unreachableRepositoryIDs: Set<Repository.ID> {
       loadUnreachableRepositoryIDs.union(pollUnreachableRepositoryIDs)
@@ -456,7 +460,7 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
-    /// The Add Remote Folder sheet (docs-ai 084 C1), only while `PROWL_REMOTE_FOLDERS=1`.
+    /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
     @Presents var addRemoteFolder: AddRemoteFolderFeature.State?
     @Presents var alert: AlertState<Alert>?
   }

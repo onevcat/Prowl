@@ -291,10 +291,8 @@ struct AppFeature {
         return .merge(effects)
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
-        // A remote worktree gets its first tab once remote terminals exist (docs-ai 084 C3).
         guard worktree.location.availability(of: .terminalTab).isAvailable else { return .none }
-        let shouldRunSetupScript =
-          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
           await terminalClient.send(
             .ensureInitialTab(
@@ -757,8 +755,7 @@ struct AppFeature {
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
-        let feature: RepositoryFeature = action == .finder ? .finder : .openInEditor
-        if let reason = worktree.availability(of: feature).unavailableReason {
+        if let reason = worktree.availability(of: action.repositoryFeature).unavailableReason {
           return .send(.repositories(.showToast(.warning(reason.message))))
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
@@ -820,9 +817,11 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
+        if let reason = worktree.availability(of: .terminalTab).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
+        }
         analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(
-          worktree.id)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
         return .run { _ in
           await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
@@ -938,6 +937,10 @@ struct AppFeature {
         let customCommand = effectiveCommand.command
         guard customCommand.hasRunnableCommand else {
           return .none
+        }
+        // A split or In Place command cannot run in a remote folder yet (docs-ai 084 C3c).
+        if let reason = worktree.availability(of: customCommand.execution.repositoryFeature).unavailableReason {
+          return .send(.repositories(.showToast(.warning(reason.message))))
         }
         let command = customCommand.command
         let closeOnSuccess = customCommand.closeOnSuccess

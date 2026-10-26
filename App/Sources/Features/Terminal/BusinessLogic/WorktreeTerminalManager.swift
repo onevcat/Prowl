@@ -525,6 +525,16 @@ final class WorktreeTerminalManager {
       prune(keeping: ids)
     case .prunePreservingRepositories(let ids, let repositoryIDs):
       prune(keeping: ids, preservingRepositoryIDs: repositoryIDs)
+    case .discardSavedLayout(let repositoryID):
+      // The repository's own worktree has its ID. A linked worktree is found by the
+      // repository that its saved layout names.
+      let discarded = pendingRemoteLayouts.filter { id, layout in
+        id == repositoryID || layout.repositoryID == repositoryID
+      }.keys
+      for id in discarded {
+        pendingRemoteLayouts.removeValue(forKey: id)
+        states[id]?.pendingLayoutSnapshot = nil
+      }
     case .setCanvasMode(let enabled):
       if enabled {
         terminalLogger.info(
@@ -996,10 +1006,7 @@ final class WorktreeTerminalManager {
       threshold: commandFinishedNotificationThreshold
     )
     state.setRemoteAgentDetectionConsent(remoteAgentDetectionConsent)
-    state.onRemoteAgentConsentNeeded = { [weak self] surfaceID, destination in
-      self?.emit(
-        .remoteAgentConsentNeeded(worktreeID: worktree.id, surfaceID: surfaceID, destination: destination))
-    }
+    wireRemoteCallbacks(of: state, worktree: worktree)
     state.undoCloseTimeout = closeUndoStack.timeout
     state.onCloseRecorded = { [weak self] record in
       guard let self else { return }
@@ -1073,6 +1080,7 @@ final class WorktreeTerminalManager {
       self?.emit(
         .customCommandSucceeded(worktreeID: worktree.id, name: name, durationMs: durationMs))
     }
+    state.pendingLayoutSnapshot = pendingRemoteLayouts[worktree.id]
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
     return state
@@ -1107,6 +1115,24 @@ final class WorktreeTerminalManager {
       guard let registration = plan.hookRegistration else { return true }
       _ = agentObservationStore.registerManagedHook(registration, surfaceID: surfaceID)
       return true
+    }
+  }
+
+  /// The remote callbacks of a worktree's terminal state: the L0 consent question
+  /// (docs-ai 082) and a remote tab that did not start (084 C3b).
+  private func wireRemoteCallbacks(of state: WorktreeTerminalState, worktree: Worktree) {
+    state.onRemoteAgentConsentNeeded = { [weak self] surfaceID, destination in
+      self?.emit(
+        .remoteAgentConsentNeeded(worktreeID: worktree.id, surfaceID: surfaceID, destination: destination))
+    }
+    state.onRemoteTerminalFailed = { [weak self] message in
+      self?.emit(.remoteTerminalFailed(worktreeID: worktree.id, message: message))
+    }
+    // A remote pane started: the folder's live tabs replace its saved layout from now on,
+    // in the save and for the next empty open.
+    state.onRemoteLaunchStarted = { [weak self, weak state] in
+      self?.pendingRemoteLayouts.removeValue(forKey: worktree.id)
+      state?.pendingLayoutSnapshot = nil
     }
   }
 
@@ -1300,6 +1326,9 @@ final class WorktreeTerminalManager {
       removedIDs.insert(id)
     }
     closeUndoStack.discard { removedIDs.contains($0) }
+    // A removed remote folder's saved layout goes with it. One that never loaded has no state
+    // here (its host is unreachable, or remote folders are off), so it is kept.
+    for id in removedIDs { pendingRemoteLayouts.removeValue(forKey: id) }
     for state in removed {
       state.closeAllSurfaces()
     }
@@ -1595,13 +1624,21 @@ final class WorktreeTerminalManager {
     }
   }
 
+  /// Saved remote folder layouts that no remote pane has replaced yet (docs-ai 084 C5).
+  private var pendingRemoteLayouts: [Worktree.ID: TerminalLayoutSnapshotPayload.SnapshotWorktree] = [:]
+
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    // A remote folder's saved layout that no remote pane has replaced yet (it never opened,
+    // its host never answered, or its restored panes still stage) is kept as it was, over
+    // its unstarted tabs (docs-ai 084 C5).
+    let pending = pendingRemoteLayouts.sorted { $0.key < $1.key }.map(\.value)
+    let activeStates = activeWorktreeStates.filter { pendingRemoteLayouts[$0.worktreeID] == nil }
+      .sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
-        + " totalStates=\(states.count)"
+        + " totalStates=\(states.count) pendingRemote=\(pending.count)"
     )
-    guard !activeStates.isEmpty else {
+    guard !activeStates.isEmpty || !pending.isEmpty else {
       return nil
     }
 
@@ -1616,8 +1653,10 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
+    snapshotWorktrees.append(contentsOf: pending)
+    // The selection must name a saved worktree.
     return TerminalLayoutSnapshotPayload(
-      selectedWorktreeID: selectedWorktreeID,
+      selectedWorktreeID: snapshotWorktrees.contains { $0.worktreeID == selectedWorktreeID } ? selectedWorktreeID : nil,
       worktrees: snapshotWorktrees
     )
   }
@@ -1638,6 +1677,18 @@ final class WorktreeTerminalManager {
     var skippedWorktreeIDs: Set<Worktree.ID> = []
 
     for snapshot in payload.worktrees {
+      // A remote folder restores when its terminals first open (`pendingLayoutSnapshot`), so
+      // launch opens no burst of connections and an unreachable host never drops the local
+      // layout. Until a remote pane starts, its saved layout stays in the save (docs-ai 084 C5).
+      if RepositoryLocation.hasRemoteForm(snapshot.worktreeID) {
+        pendingRemoteLayouts[snapshot.worktreeID] = snapshot
+        if let worktree = worktreeByID[snapshot.worktreeID] {
+          state(for: worktree).pendingLayoutSnapshot = snapshot
+        } else {
+          skippedWorktreeIDs.insert(snapshot.worktreeID)
+        }
+        continue
+      }
       guard let worktree = worktreeByID[snapshot.worktreeID] else {
         terminalLogger.warning(
           "[LayoutRestore] apply: worktreeID \(snapshot.worktreeID) not found in available worktrees"

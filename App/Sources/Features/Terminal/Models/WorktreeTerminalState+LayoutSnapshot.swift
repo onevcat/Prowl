@@ -42,10 +42,13 @@ extension WorktreeTerminalState {
       )
     }
 
+    var repositoryID: String?
+    if case .remote = worktree.repositoryLocation { repositoryID = worktree.repositoryLocation.id }
     let result = TerminalLayoutSnapshotPayload.SnapshotWorktree(
       worktreeID: worktree.id,
       selectedTabID: tabManager.selectedTabId?.rawValue.uuidString,
-      tabs: snapshotTabs
+      tabs: snapshotTabs,
+      repositoryID: repositoryID
     )
     terminalStateLogger.info(
       "[LayoutRestore] makeSnapshot: success, \(snapshotTabs.count) tab(s) captured"
@@ -202,6 +205,14 @@ extension WorktreeTerminalState {
   ) -> TerminalLayoutSnapshotPayload.SnapshotSplitNode? {
     switch node {
     case .leaf(let view):
+      // A remote folder's pane: its host, and where its own session is on the host now.
+      if case .remote(let hostProfileID, _) = worktree.location {
+        let directory =
+          remoteHostAlias(surfaceID: view.id) == nil ? nil : remotePaneTrackers[view.id]?.foregroundWorkingDirectory
+        return .leaf(
+          surfaceID: view.id.uuidString,
+          remote: .init(hostProfileID: hostProfileID.uuidString.lowercased(), cwdPath: directory))
+      }
       let cwdPath = inheritedSurfaceConfig(
         fromSurfaceId: view.id,
         context: GHOSTTY_SURFACE_CONTEXT_TAB
@@ -235,6 +246,10 @@ extension WorktreeTerminalState {
         return nil
       }
       let context: ghostty_surface_context_e = isRoot ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
+      if case .remote(let hostProfileID, let folder) = worktree.location {
+        return restoreRemoteLeaf(
+          snapshotNode.remote, hostProfileID: hostProfileID, folder: folder, tabID: tabID, context: context)
+      }
       let restoredWorkingDirectory = worktree.localURL.flatMap { worktreeRoot in
         Self.resolveSnapshotWorkingDirectory(from: snapshotNode.cwdPath, worktreeRoot: worktreeRoot)
       }
@@ -272,6 +287,27 @@ extension WorktreeTerminalState {
         )
       )
     }
+  }
+
+  /// A remote folder's restored pane: a new remote pane with a plain shell, where its session
+  /// was on the host when inside the folder, else in the folder. nil when the host profile is
+  /// gone: the worktree is not restored.
+  private func restoreRemoteLeaf(
+    _ origin: TerminalLayoutSnapshotPayload.SnapshotRemoteOrigin?, hostProfileID: UUID, folder: String,
+    tabID: TerminalTabID, context: ghostty_surface_context_e
+  ) -> SplitTree<GhosttySurfaceView>.Node? {
+    guard let profile = remoteTerminalStager.profile(hostProfileID) else { return nil }
+    // A directory saved for another host is not this folder's.
+    let sameHost = origin.flatMap { UUID(uuidString: $0.hostProfileID) } == hostProfileID
+    let saved = sameHost ? origin?.cwdPath.map(RemotePaths.canonicalPath) : nil
+    let directory = saved.flatMap { RemotePaths.contains($0, in: folder) ? $0 : nil } ?? folder
+    let view = createSurface(
+      tabId: tabID, initialInput: nil, inheritingFromSurfaceId: nil,
+      workingDirectoryOverride: Self.localDirectory(for: profile), context: context, defersSurfaceCreation: true)
+    startRemoteLaunch(
+      remoteLaunch(surfaceID: view.id, workingDirectory: directory, firstCommand: nil),
+      profile: profile, surfaceID: view.id, tabID: tabID, consumesSetupScript: false)
+    return .leaf(view: view)
   }
 
   func snapshotSplitDirection(

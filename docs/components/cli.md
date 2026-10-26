@@ -55,6 +55,10 @@ Most commands accept one selector (mutually exclusive):
 - `--worktree <id|name|path>` — a worktree (its selected/first tab → focused/first
   pane). For a Git worktree, `name` is the checked-out branch and stops matching after a
   checkout; automation should pass `id` (the worktree path).
+  A folder on another machine over SSH is `label:path` (its `host.label` and `path`); a
+  bare path matches worktrees on this Mac only, and a name shared with such a folder
+  means the local worktree. Such a folder has no terminals yet, so `create tab` and
+  `workflow run` refuse it with the reason.
 - `-t, --target <value>` — auto-resolve: `pN` as a pane, `tN` as a tab, then
   pane UUID, tab UUID, or worktree id/name/path.
 - **No selector** → the *current* focus (focused worktree → selected tab → focused
@@ -153,7 +157,10 @@ Snapshot of all worktrees → tabs → panes. No selectors.
 prowl list --json
 ```
 Each item contains:
-- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`|`workspace`)
+- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`|`workspace`), and
+  `host` (`profile_id`, `label`) for a folder on another machine over SSH. A remote
+  folder's `path` and `root_path` are paths on that host, not on this Mac. Text output
+  shows them as `label:path`.
 - `tab`: `id`, `title`, `selected`
 - `pane`: `id`, `title`, `cwd`, `focused`, `visible`, `agent`
 - `task`: `status` (`running` | `idle` | null)
@@ -236,8 +243,8 @@ Each agent contains:
   additional confirmation.
 - `remote`: present only for an agent on a remote host behind the pane's `ssh` (see
   [agent detection](agent-detection.md#remote-agents-over-ssh)). It contains:
-  - `host` (`user@hostname`), `user`, `hostname`, `port`: absent while the connection
-    is not resolved.
+  - `host` (`user@hostname`, or the host's alias in a tab of a remote folder), `user`,
+    `hostname`, `port`: absent while the connection is not resolved.
   - `correlation`: `pending`, `correlated`, `ambiguous`, `unmapped`,
     `probe_unavailable`, `unsupported`, or `tmux_unreachable` (the pane shows a tmux
     client whose server Prowl cannot reach).
@@ -892,6 +899,9 @@ absent until Canvas has laid out cards), and `.data.card_count`. See
 ### `prowl create tab`
 Create a new terminal tab (deterministic — unlike `open`). A worktree is required,
 either positionally or with `--worktree`; `--path` must remain inside it.
+In a remote folder, the tab runs `ssh` to the host and lands in the folder (or in `--path`,
+a path on the host, checked by its text only). Its pane may show no output until Prowl has
+prepared the connection.
 
 ```bash
 pane="$(prowl create tab "$wt" --json | jq -r '.data.target.pane.id')"
@@ -936,7 +946,9 @@ receipt semantics.
 
 ### `prowl create pane`
 Create a split beside an explicit pane anchor. The anchor is a pane UUID or current-process
-`pN` handle, supplied positionally or with `--pane`; `--direction` is required.
+`pN` handle, supplied positionally or with `--pane`; `--direction` is required. In a remote
+folder, the split connects to the host on its own and starts where the anchor pane is on the
+host (or in the folder when Prowl cannot tell).
 
 ```bash
 pane="$(prowl create pane "$anchor" --direction right --json | jq -r '.data.target.pane.id')"

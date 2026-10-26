@@ -104,6 +104,10 @@ extension TerminalLayoutSnapshotPayload {
     let worktreeID: String
     let selectedTabID: String?
     let tabs: [SnapshotTab]
+    /// The repository of a remote worktree, so that removing a repository that never loaded
+    /// also drops the layouts of its linked worktrees (docs-ai 084 C5). Nil for a local
+    /// worktree and in older files.
+    var repositoryID: String?
 
     func isValid(
       maxTabsPerWorktree: Int,
@@ -172,6 +176,13 @@ extension TerminalLayoutSnapshotPayload {
     }
   }
 
+  /// A remote folder's pane (docs-ai 084 C5): its host and its directory there. Restore
+  /// reconnects with a plain shell; it never runs a script again. Older files have none.
+  nonisolated struct SnapshotRemoteOrigin: Codable, Equatable, Sendable {
+    let hostProfileID: String
+    let cwdPath: String?
+  }
+
   nonisolated struct SnapshotSplitNode: Codable, Equatable, Sendable {
     let kind: TerminalLayoutSnapshotNodeKind
     let surfaceID: String?
@@ -179,15 +190,19 @@ extension TerminalLayoutSnapshotPayload {
     let direction: TerminalLayoutSnapshotSplitDirection?
     let ratio: Double?
     let children: [SnapshotSplitNode]?
+    var remote: SnapshotRemoteOrigin?
 
-    static func leaf(surfaceID: String, cwdPath: String? = nil) -> SnapshotSplitNode {
+    static func leaf(surfaceID: String, cwdPath: String? = nil, remote: SnapshotRemoteOrigin? = nil)
+      -> SnapshotSplitNode
+    {
       SnapshotSplitNode(
         kind: .leaf,
         surfaceID: surfaceID,
         cwdPath: cwdPath,
         direction: nil,
         ratio: nil,
-        children: nil
+        children: nil,
+        remote: remote
       )
     }
 

@@ -55,7 +55,10 @@ struct WorkflowCommandHandlerTests {
       try? FileManager.default.removeItem(at: root)
     }
 
-    func snapshot(focused: Bool = true, disabled: Set<String> = []) -> WorkflowRuntimeSnapshot {
+    func snapshot(
+      focused: Bool = true, disabled: Set<String> = [],
+      remoteFolders: [ListRuntimeSnapshotBuilder.WorktreeContext] = []
+    ) -> WorkflowRuntimeSnapshot {
       let surfaceView = GhosttySurfaceView(
         runtime: GhosttyRuntime(),
         workingDirectory: nil,
@@ -73,7 +76,7 @@ struct WorkflowCommandHandlerTests {
         rootPath: repoRoot.path(percentEncoded: false), kind: .git, tabs: [tab])
       return WorkflowRuntimeSnapshot(
         resolution: TargetResolutionSnapshot(
-          worktrees: [worktree], focusedWorktreeID: focused ? "wt-1" : nil),
+          worktrees: [worktree], focusedWorktreeID: focused ? "wt-1" : nil, remoteFolders: remoteFolders),
         paneByShellPID: [shellPID: CallerPane(worktreeID: "wt-1", surfaceID: paneID)],
         bundleWorkflowsURL: nil,
         userWorkflowsURL: userWorkflows,
@@ -126,6 +129,52 @@ struct WorkflowCommandHandlerTests {
     #expect(listed.workflows.map(\.scope) == [.user, .repo])
     #expect(listed.workflows.map(\.enabled) == [false, true])
     #expect(listed.workflows.map(\.valid) == [true, true])
+  }
+
+  /// A remote folder has no pane yet; `--worktree alias:/path` gets the workflow refusal,
+  /// not "not found" (docs-ai 084 C2).
+  @Test func aRemoteFolderSourceIsRefusedWithTheRemoteCode() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let remote = ListRuntimeSnapshotBuilder.WorktreeContext(
+      id: RemoteRepositoryFixtures.location("/srv/app").id, name: "main", path: "/srv/app", rootPath: "/srv/app",
+      kind: .git, host: ListCommandHost(profileID: "id", label: "mini"))
+    let handler = WorkflowCommandHandler { fixture.snapshot(focused: false, remoteFolders: [remote]) }
+
+    let result = handler.resolveSource(
+      .worktree("mini:/srv/app"), snapshot: fixture.snapshot(focused: false, remoteFolders: [remote]),
+      callerPane: nil)
+    guard case .failure(let refusal) = result else {
+      Issue.record("A remote folder source must be refused")
+      return
+    }
+    #expect(refusal.response.error?.code == CLIErrorCode.remoteAgentUnsupported)
+    #expect(refusal.response.error?.message == "Workflows cannot run in a remote folder yet.")
+    let snapshot = fixture.snapshot(focused: false, remoteFolders: [remote])
+    // `-t` names it the same way.
+    guard case .failure(let auto) = handler.resolveSource(.auto("mini:/srv/app"), snapshot: snapshot, callerPane: nil)
+    else {
+      Issue.record("A remote folder source must be refused")
+      return
+    }
+    #expect(auto.response.error?.code == CLIErrorCode.remoteAgentUnsupported)
+    // A name shared with the remote folder means the local worktree with its panes.
+    guard case .success(let local) = handler.resolveSource(.worktree("main"), snapshot: snapshot, callerPane: nil)
+    else {
+      Issue.record("The local worktree must win a shared name")
+      return
+    }
+    #expect(local.worktree.id == "wt-1")
+    // With no selector and no caller, a focused remote folder is the chosen source.
+    let focusedRemote = WorkflowRuntimeSnapshot(
+      resolution: TargetResolutionSnapshot(worktrees: [], focusedWorktreeID: remote.id, remoteFolders: [remote]),
+      paneByShellPID: [:], bundleWorkflowsURL: nil, userWorkflowsURL: snapshot.userWorkflowsURL,
+      disabledWorkflowIDs: [], bundledSkillIDs: [], knownAgents: [], installedAgents: nil, enabledProfiles: [])
+    guard case .failure(let focused) = handler.resolveSource(.none, snapshot: focusedRemote, callerPane: nil) else {
+      Issue.record("A focused remote folder must be refused")
+      return
+    }
+    #expect(focused.response.error?.code == CLIErrorCode.remoteAgentUnsupported)
   }
 
   @Test func withoutACallerTheFocusedWorktreeIsUsed() async throws {

@@ -1,6 +1,8 @@
 import AppKit
+import Clocks
 import Foundation
 import GhosttyKit
+import IdentifiedCollections
 import ProwlCLIShared
 import Testing
 
@@ -79,13 +81,14 @@ struct RemoteAgentDetectionTests {
     }
   }
 
-  private func makeFixture(probe: Probe, enabled: Bool = true) -> Fixture {
+  private func makeFixture(probe: Probe, enabled: Bool = true, worktree: Worktree? = nil) -> Fixture {
     let state = WorktreeTerminalState(
       runtime: GhosttyRuntime(),
-      worktree: Worktree(
-        id: "/tmp/repo/worktree", name: "worktree", detail: "",
-        workingDirectory: URL(fileURLWithPath: "/tmp/repo/worktree"),
-        repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")),
+      worktree: worktree
+        ?? Worktree(
+          id: "/tmp/repo/worktree", name: "worktree", detail: "",
+          workingDirectory: URL(fileURLWithPath: "/tmp/repo/worktree"),
+          repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")),
       skipsSurfaceCreationForTesting: true)
     let source = FakeRemoteSource()
     state.remoteAgentDetectionEnabledForTesting = enabled
@@ -125,6 +128,20 @@ struct RemoteAgentDetectionTests {
       processes: [ForegroundProcess(pid: getpid(), parentProcessID: 1, name: "zsh", argv0: "zsh", cmdline: "zsh")])
   }
 
+  /// The `ssh` that a remote folder's pane types: its arguments carry the launch's nonce.
+  private var launchSSHJob: ForegroundJob {
+    let arguments = [
+      "/usr/bin/ssh", "-t", "--", "mini", "exec", "sh", "/home/dev/.cache/prowl/launch/0123456789abcdef/launch.sh",
+    ]
+    return ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(
+          pid: getpid(), parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: arguments.joined(separator: " "),
+          arguments: arguments)
+      ])
+  }
+
   private var sshJob: ForegroundJob {
     ForegroundJob(
       processGroupID: getpid(),
@@ -135,10 +152,12 @@ struct RemoteAgentDetectionTests {
       ])
   }
 
-  private func remoteProcess(_ pid: Int32, name: String, start: String = "t1") -> RemoteProbeProcess {
+  private func remoteProcess(
+    _ pid: Int32, name: String, start: String = "t1", directory: String = "/home/dev"
+  ) -> RemoteProbeProcess {
     RemoteProbeProcess(
       pid: pid, parentPID: 100, processGroupID: pid, startToken: start, elapsedSeconds: 1, name: name,
-      arguments: [name], commandLine: name, workingDirectory: "/home/dev")
+      arguments: [name], commandLine: name, workingDirectory: directory)
   }
 
   private func snapshot(
@@ -1137,6 +1156,8 @@ struct RemoteAgentDetectionTests {
     var removed: [UUID] = []
     fixture.state.onAgentEntryChanged = { emitted.append($0) }
     fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    // The pane's local directory is never a remote agent's (docs-ai 084 C4).
+    fixture.surface.bridge.state.pwd = "/Users/local/project"
     fixture.source.failNext(100)
     probe.job = sshJob
     await detect(fixture)
@@ -1154,6 +1175,7 @@ struct RemoteAgentDetectionTests {
     let entry = try #require(emitted.last)
     #expect(entry.remote?.isUnprobed == true)
     #expect(entry.remote?.isStale == false)
+    #expect(entry.workingDirectory == nil)
     #expect(pane?.session == nil)
 
     // A withdrawal or quiet producer never releases it; the observation turns stale instead.
@@ -1764,6 +1786,138 @@ struct RemoteAgentDetectionTests {
     tracker.requestSoon()
     await detect(fixture)
     await settle { fixture.source.refreshes == 2 }
+  }
+
+  private static func origin(recipe: SSHConnectionRecipe) -> RemoteLaunchOrigin {
+    RemoteLaunchOrigin(
+      hostProfileID: UUID(), alias: "mini", recipe: recipe, nonce: "0123456789abcdef", hasFirstCommand: false,
+      launchedAt: Date())
+  }
+
+  /// A pane that Prowl opened in a remote folder (docs-ai 084 C3b) needs no consent, uses the
+  /// stored recipe instead of the `ssh` arguments, and shows the profile's alias. Once its
+  /// `ssh` ended, a later `ssh` in the pane is the user's own and asks.
+  @Test func aRemoteFolderPaneUsesItsStoredRecipeWithoutConsent() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = [:]
+    var asked: [String] = []
+    fixture.state.onRemoteAgentConsentNeeded = { _, destination in asked.append(destination) }
+    let stored = SSHConnectionRecipe(destination: "dev@mini.local", options: ["-p", "22"])
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(recipe: stored)
+
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
+    await detect(fixture)
+
+    #expect(asked.isEmpty)
+    #expect(fixture.source.recipes == [stored])
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostLabel == "mini")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.remote?.hostProfileID != nil)
+    probe.job = shellJob
+    await detect(fixture)
+    probe.job = sshJob
+    await detect(fixture)
+    #expect(asked == ["mini"])
+  }
+
+  /// A remote agent's entry and directory are the host's (docs-ai 084 C4), not the pane's
+  /// local one.
+  @Test func aRemoteAgentWorksInItsHostDirectory() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture,
+      snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude", directory: "/srv/app/api")))
+    await detect(fixture)
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.agentWorkingDirectory == "/srv/app/api")
+    #expect(fixture.state.activeAgentWorkingDirectory(surfaceID: fixture.surfaceID)?.path == "/srv/app/api")
+  }
+
+  /// A remote split starts where its anchor pane is on the host: after a fresh snapshot,
+  /// else the last known directory when none comes in time (docs-ai 084 C4).
+  @Test func aRemoteSplitStartsWhereItsAnchorIs() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    let clock = TestClock()
+    fixture.state.remoteLaunchClock = clock
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/a")))
+    let refreshes = fixture.source.refreshes
+
+    let fresh = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes }
+    await deliver(
+      fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/srv/b")))
+    #expect(await fresh.value == "/srv/b")
+
+    // A failed snapshot keeps the last known directory.
+    await deliver(
+      fixture,
+      RemoteProbeSnapshot(
+        connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: 0, sequence: 3,
+        startedAt: Self.uptime, finishedAt: Self.uptime, outcome: .failed(.unreachable), report: nil))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == "/srv/b")
+    let stale = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes + 1 }
+    await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)
+    #expect(await stale.value == "/srv/b")
+
+    // A tmux client whose server Prowl cannot read hides where the user works: no earlier
+    // directory stands in, so a split starts in the folder.
+    await deliver(fixture, unreadTmuxSnapshot(4, pane: fixture.surfaceID))
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID]?.foregroundWorkingDirectory == nil)
+  }
+
+  /// A remote folder's saved layout keeps where its pane's own session is on the host
+  /// (docs-ai 084 C5), and nothing local.
+  @Test func aRemoteLeafSavesItsHostDirectory() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe, worktree: RemoteRepositoryFixtures.gitRepository().worktrees[0])
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(
+      fixture,
+      snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/home/dev/app/api")))
+
+    let saved = try #require(fixture.state.makeLayoutSnapshotWorktree())
+    let leaf = try #require(saved.tabs.first?.splitRoot)
+    #expect(leaf.remote?.cwdPath == "/home/dev/app/api")
+    #expect(leaf.remote?.hostProfileID == RemoteRepositoryFixtures.hostProfileID.uuidString.lowercased())
+    #expect(leaf.cwdPath == nil)
+  }
+
+  /// The kill switch still turns detection off for a remote folder's pane.
+  @Test func theKillSwitchTurnsOffARemoteFolderPane() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = nil
+    fixture.state.remoteDetectionEnvironmentForTesting = ["PROWL_REMOTE_AGENT_DETECTION": "0"]
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"))
+
+    probe.job = launchSSHJob
+    await detect(fixture)
+    for _ in 0..<50 { await Task.yield() }
+
+    #expect(fixture.state.remotePaneTrackers[fixture.surfaceID] == nil)
+    #expect(fixture.source.attempts == 0)
   }
 
   @Test func paneShellsExportThePaneIdUnderAnSSHForwardedName() {

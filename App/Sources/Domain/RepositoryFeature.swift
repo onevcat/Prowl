@@ -16,8 +16,13 @@ nonisolated enum RepositoryFeature: CaseIterable, Hashable, Sendable {
   case profileLaunch
   /// Creating a worktree (remote creation runs through the remote host, B3 and later).
   case worktreeCreation
-  /// Opening a terminal tab from the sidebar (remote tabs come with C3).
+  /// Opening a terminal tab (a remote tab runs the remote launcher, docs-ai 084 C3b).
   case terminalTab
+  /// Typing a custom command into the focused pane: in a remote folder that pane may be
+  /// the local shell or an authentication prompt (docs-ai 084 C3c).
+  case inPlaceCommand
+  /// Running a workflow: its history and role launches are rooted in a local worktree (A4a, C2).
+  case workflow
 }
 
 nonisolated enum FeatureAvailability: Equatable, Sendable {
@@ -60,15 +65,37 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
         String(localized: "Worktrees cannot be created in remote folders yet.")
       case .terminalTab:
         String(localized: "Terminals cannot open in remote folders yet.")
+      case .inPlaceCommand:
+        String(localized: "In Place commands do not run in remote folders yet.")
+      case .workflow:
+        String(localized: "Workflows cannot run in remote folders yet.")
       }
     }
   }
 }
 
+extension UserCustomCommandExecution {
+  /// The feature that a custom command with this execution needs.
+  var repositoryFeature: RepositoryFeature {
+    switch self {
+    case .shellScript, .split: .terminalTab
+    case .terminalInput: .inPlaceCommand
+    }
+  }
+}
+
+extension OpenWorktreeAction {
+  /// The feature that this action needs: Finder, or another app.
+  var repositoryFeature: RepositoryFeature {
+    if case .finder = self { return .finder }
+    return .openInEditor
+  }
+}
+
 extension RepositoryLocation {
   /// Whether `feature` works for a repository at this location. Every feature
-  /// is available locally; on a remote host, worktree creation (docs-ai 084 B3d) and line
-  /// counts, which the refresh reads (B3f), are so far.
+  /// is available locally; on a remote host, worktree creation (docs-ai 084 B3d), line
+  /// counts, which the refresh reads (B3f), and terminal tabs (C3b) are so far.
   func availability(of feature: RepositoryFeature) -> FeatureAvailability {
     switch self {
     case .local:
@@ -78,7 +105,7 @@ extension RepositoryLocation {
     }
   }
 
-  private static let remoteFeatures: Set<RepositoryFeature> = [.worktreeCreation, .lineCounts]
+  private static let remoteFeatures: Set<RepositoryFeature> = [.worktreeCreation, .lineCounts, .terminalTab]
 }
 
 extension Repository {

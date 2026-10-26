@@ -43,6 +43,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | File | What it covers |
 |------|----------------|
 | [`components/repositories-and-worktrees.md`](components/repositories-and-worktrees.md) | The sidebar: adding repositories, creating / opening / archiving / deleting git worktrees, plain (non-git) folders, pinning, ordering, repository icons & colors. |
+| [`components/remote-folders.md`](components/remote-folders.md) | Folders on another machine over SSH: adding them, unreachable hosts, remote tabs and splits, scripts, restore, CLI paths, and what does not work remotely. |
 | [`components/workspaces.md`](components/workspaces.md) | Multi-repo workspaces: one agent terminal rooted at a shared folder, with `.prowl/workspace.json` metadata describing the repositories in scope. |
 | [`components/terminal.md`](components/terminal.md) | Terminal tabs, splits/panes, surfaces, the Ghostty engine, tab titles & icons, shell integration, scrollback, font size. |
 | [`components/canvas.md`](components/canvas.md) | Canvas view — a zoomable board of live terminal cards, multi-select, and **broadcast a command to every agent at once**. |
@@ -76,6 +77,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 |------------|------|
 | Run many agents side by side and see them all | [`components/canvas.md`](components/canvas.md), [`components/shelf.md`](components/shelf.md) |
 | Give one agent a task that spans several repos | [`components/workspaces.md`](components/workspaces.md) |
+| Work in a repository on another machine over SSH | [`components/remote-folders.md`](components/remote-folders.md) |
 | Hand a task off between agents | [`components/handoff.md`](components/handoff.md) |
 | Run a multi-agent workflow (e.g. launch a reviewer and loop until clean) | [`components/workflows.md`](components/workflows.md) |
 | Send one command to every agent simultaneously | [`components/canvas.md`](components/canvas.md) (broadcast) |

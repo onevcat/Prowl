@@ -17,16 +17,17 @@ struct RepositoryFeatureAvailabilityTests {
     }
   }
 
-  @Test func everyFeatureButWorktreeCreationAndLineCountsIsUnavailableRemotelyWithAReason() {
+  @Test func everyFeatureButWorktreeCreationLineCountsAndTabsIsUnavailableRemotelyWithAReason() {
     let location = RemoteRepositoryFixtures.location("/home/dev/app")
 
-    let available: Set<RepositoryFeature> = [.worktreeCreation, .lineCounts]
+    let available: Set<RepositoryFeature> = [.worktreeCreation, .lineCounts, .terminalTab]
     for feature in RepositoryFeature.allCases where !available.contains(feature) {
       let reason = location.availability(of: feature).unavailableReason
       #expect(reason == .remoteFolder(feature))
       #expect(reason?.message.isEmpty == false)
     }
-    // The remote host creates worktrees (docs-ai 084 B3d); the refresh reads line counts (B3f).
+    // The remote host creates worktrees (docs-ai 084 B3d); the refresh reads line counts (B3f);
+    // a remote tab runs the remote launcher (C3b).
     for feature in available {
       #expect(location.availability(of: feature) == .available)
     }

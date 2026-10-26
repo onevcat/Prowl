@@ -19,9 +19,16 @@ nonisolated struct RemoteAgentContext: Equatable, Sendable {
   /// process, stale whenever its producer has been quiet for `staleAfter`.
   var isUnprobed: Bool
 
-  /// `user@hostname`, the label a remote pane shows.
+  /// The host profile's alias, for a pane that Prowl opened in a remote folder (docs-ai 084
+  /// C3b).
+  var hostAlias: String?
+  /// The host profile of that pane's remote folder: the host the agent runs on, which the
+  /// agent's directory must share with a remote folder to belong to it (docs-ai 084 C4).
+  var hostProfileID: UUID?
+
+  /// The alias of a remote folder's pane, or `user@hostname`: the label a remote pane shows.
   var hostLabel: String? {
-    connection?.label
+    hostAlias ?? connection?.label
   }
 
   init(

@@ -637,7 +637,8 @@ extension RepositoriesFeature.State {
       let hostProfileID = RepositoryLocation(id: repositoryID)?.hostProfileID
     else { return nil }
     if rebindHostProfileIDs.contains(hostProfileID) { return .needsRebind(hostProfileID) }
-    return unreachableRepositoryIDs.contains(repositoryID) ? .unreachable : nil
+    if unreachableRepositoryIDs.contains(repositoryID) { return .unreachable }
+    return pollConnectionFailures[repositoryID].map(RemoteHostStatus.connectionFailed)
   }
 }
 
@@ -647,4 +648,7 @@ nonisolated enum RemoteHostStatus: Equatable, Sendable {
   case unreachable
   /// The SSH configuration reaches another target; the folder waits for a rebind.
   case needsRebind(HostProfile.ID)
+  /// The host answered, but Prowl has no usable connection for a reason the user must fix,
+  /// such as a refused login or a changed host key; a loaded folder shows its last state.
+  case connectionFailed(String)
 }

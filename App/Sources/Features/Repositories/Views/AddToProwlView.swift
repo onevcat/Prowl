@@ -8,7 +8,7 @@ struct AddToProwlView: View {
   let onCloneCompleted: (URL) -> Void
   let onWorkspace: () -> Void
   let onDrop: ([URL]) -> Void
-  /// Shown while `PROWL_REMOTE_FOLDERS=1` (docs-ai 084 C1).
+  /// Shown unless `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C1, C5).
   var onRemoteFolder: (() -> Void)?
   @State private var isDragTargeted = false
   @State private var isWorkspaceHovered = false

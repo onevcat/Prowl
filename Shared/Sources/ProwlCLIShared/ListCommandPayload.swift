@@ -61,9 +61,12 @@ public struct ListCommandWorktree: Codable, Equatable {
 
   public let id: String
   public let name: String
+  /// The path on the worktree's own host: this Mac, or `host` for a remote folder.
   public let path: String
   public let rootPath: String
   public let kind: Kind
+  /// The host of a remote folder; absent for a local worktree.
+  public let host: ListCommandHost?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -71,14 +74,45 @@ public struct ListCommandWorktree: Codable, Equatable {
     case path
     case rootPath = "root_path"
     case kind
+    case host
   }
 
-  public init(id: String, name: String, path: String, rootPath: String, kind: Kind) {
+  public init(
+    id: String, name: String, path: String, rootPath: String, kind: Kind, host: ListCommandHost? = nil
+  ) {
     self.id = id
     self.name = name
     self.path = path
     self.rootPath = rootPath
     self.kind = kind
+    self.host = host
+  }
+
+  /// `label:path` for a remote folder (scp style), the path for a local one.
+  public var displayPath: String { ListCommandHost.displayPath(path, host: host) }
+}
+
+/// The host of a remote folder in CLI output (docs-ai 084 C2).
+public struct ListCommandHost: Codable, Equatable, Sendable {
+  /// The host profile's UUID, lowercase.
+  public let profileID: String
+  /// The host profile's alias, as the sidebar shows it.
+  public let label: String
+
+  enum CodingKeys: String, CodingKey {
+    case profileID = "profile_id"
+    case label
+  }
+
+  public init(profileID: String, label: String) {
+    self.profileID = profileID
+    self.label = label
+  }
+
+  /// The one spelling of a worktree path in output and selectors: `label:path` on a host,
+  /// the path itself on this Mac.
+  public static func displayPath(_ path: String, host: ListCommandHost?) -> String {
+    host.map { "\($0.label):\(path)" } ?? path
   }
 }
 

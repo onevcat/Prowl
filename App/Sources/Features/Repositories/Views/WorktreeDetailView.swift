@@ -62,10 +62,11 @@ struct WorktreeDetailView: View {
       actionTargetWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
-    let runScriptEnabled = hasActiveTerminalTarget
+    let opensTerminals = actionTargetWorktree?.location.availability(of: .terminalTab).isAvailable != false
+    let runScriptEnabled = hasActiveTerminalTarget && opensTerminals
     let runScriptIsRunning =
       actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
-    let customCommands = state.selectedCustomCommands
+    let customCommands = opensTerminals ? state.selectedCustomCommands : []
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
       customTitles: repositories.repositoryCustomTitles
@@ -120,6 +121,7 @@ struct WorktreeDetailView: View {
     let actions = makeFocusedActions(
       repositories: repositories,
       hasActiveWorktree: hasActiveTerminalTarget,
+      opensTerminals: opensTerminals,
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
     )
@@ -146,7 +148,8 @@ struct WorktreeDetailView: View {
           openActionSelection: state.openActionSelection,
           openActionIsAutomatic: state.openActionIsAutomatic,
           showExtras: commandKeyObserver.isPressed,
-          showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
+          showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar,
+          openTargetLocation: actionTargetWorktree?.location
         ),
         actionTargetWorktree: actionTargetWorktree
       )
@@ -209,7 +212,8 @@ struct WorktreeDetailView: View {
       onWorkflowIntent: handleWorkflowIntent,
       onRetryGithubRateLimit: retryGithubRateLimitedRequests,
       onRemoteAgentConsent: { store.send(.remoteAgentConsent($0)) },
-      onOpenAgentSettings: { store.send(.openAgentDisplaySettings) }
+      onOpenAgentSettings: { store.send(.openAgentDisplaySettings) },
+      onRebindRemoteHost: { store.send(.repositories(.remoteHostRebindRequested($0))) }
     )
   }
 
@@ -269,7 +273,8 @@ struct WorktreeDetailView: View {
       availableUpdateVersion: input.availableUpdateVersion,
       showRunButtonInToolbar: input.showRunButtonInToolbar,
       remoteAgentConsent: input.remoteAgentConsent,
-      remoteChannel: remoteChannelStatus(for: input.actionTargetWorktree)
+      remoteChannel: remoteChannelStatus(for: input.actionTargetWorktree),
+      remoteFolder: RemoteFolderToolbarStatus(worktree: input.actionTargetWorktree, repositories: input.repositories)
     )
   }
 
@@ -328,10 +333,12 @@ struct WorktreeDetailView: View {
         codeHost: state.codeHost,
         remoteAgentConsent: state.remoteAgentConsent,
         remoteChannel: state.remoteChannel,
+        remoteFolder: state.remoteFolder,
         onWorkflowIntent: handleWorkflowIntent,
         onRetryGithubRateLimit: retryGithubRateLimitedRequests,
         onRemoteAgentConsent: { store.send(.remoteAgentConsent($0)) },
-        onOpenAgentSettings: { store.send(.openAgentDisplaySettings) }
+        onOpenAgentSettings: { store.send(.openAgentDisplaySettings) },
+        onRebindRemoteHost: { store.send(.repositories(.remoteHostRebindRequested($0))) }
       )
       .padding(.horizontal)
     }
@@ -474,6 +481,7 @@ struct WorktreeDetailView: View {
     let ordered = enabled.sorted { lhs, rhs in
       (lhs.id == recommendedID ? 0 : 1) < (rhs.id == recommendedID ? 0 : 1)
     }
+    let unavailableReason = worktree.availability(of: .profileLaunch).unavailableReason?.message
     return ordered.map { profile in
       AgentsLauncherItem(
         id: profile.id,
@@ -481,7 +489,8 @@ struct WorktreeDetailView: View {
         runtimeName: AgentRuntimeAdapterRegistry.displayName(for: profile.runtime),
         iconSource: profile.iconSource,
         isRecommended: profile.id == recommendedID,
-        availabilityWarning: AgentProfileAvailability.launchWarning(for: profile)
+        availabilityWarning: AgentProfileAvailability.launchWarning(for: profile),
+        unavailableReason: unavailableReason
       )
     }
   }
@@ -769,6 +778,7 @@ struct WorktreeDetailView: View {
   private func makeFocusedActions(
     repositories: RepositoriesFeature.State,
     hasActiveWorktree: Bool,
+    opensTerminals: Bool,
     runScriptEnabled: Bool,
     runScriptIsRunning: Bool
   ) -> FocusedActions {
@@ -823,7 +833,7 @@ struct WorktreeDetailView: View {
 
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
-      newTerminal: action(.newTerminal),
+      newTerminal: opensTerminals ? action(.newTerminal) : nil,
       closeTab: closeTabFocusedAction(
         repositories: repositories, hasActiveWorktree: hasActiveWorktree),
       closeSurface: closeSurfaceFocusedAction(
@@ -980,6 +990,7 @@ struct WorktreeDetailView: View {
     let showRunButtonInToolbar: Bool
     let remoteAgentConsent: RemoteAgentConsentPrompt?
     let remoteChannel: RemoteChannelToolbarStatus?
+    var remoteFolder: RemoteFolderToolbarStatus?
   }
 
   struct WorktreeToolbarState {
@@ -988,6 +999,8 @@ struct WorktreeDetailView: View {
     let openActionIsAutomatic: Bool
     let showExtras: Bool
     let showDefaultEditorInToolbar: Bool
+    /// Where the open actions would open; a remote folder has no local app or Finder.
+    var openTargetLocation: RepositoryLocation?
   }
 
   /// Shared leading toolbar cluster for Normal, Shelf, and Canvas. Agents and
@@ -1084,6 +1097,7 @@ struct WorktreeDetailView: View {
     let onRetryGithubRateLimit: () -> Void
     let onRemoteAgentConsent: (RemoteAgentConsentChoice) -> Void
     let onOpenAgentSettings: () -> Void
+    var onRebindRemoteHost: (HostProfile.ID) -> Void = { _ in }
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
@@ -1117,10 +1131,12 @@ struct WorktreeDetailView: View {
           codeHost: toolbarState.shared.codeHost,
           remoteAgentConsent: toolbarState.shared.remoteAgentConsent,
           remoteChannel: toolbarState.shared.remoteChannel,
+          remoteFolder: toolbarState.shared.remoteFolder,
           onWorkflowIntent: onWorkflowIntent,
           onRetryGithubRateLimit: onRetryGithubRateLimit,
           onRemoteAgentConsent: onRemoteAgentConsent,
-          onOpenAgentSettings: onOpenAgentSettings
+          onOpenAgentSettings: onOpenAgentSettings,
+          onRebindRemoteHost: onRebindRemoteHost
         )
         .padding(.horizontal)
       }
@@ -1147,6 +1163,7 @@ struct WorktreeDetailView: View {
     ) -> some View {
       let availableActions = OpenWorktreeAction.availableCases
       let resolvedOpenActionSelection = OpenWorktreeAction.availableSelection(openActionSelection)
+      let mainReason = unavailableReason(for: resolvedOpenActionSelection)
       Button {
         onOpenWorktree(resolvedOpenActionSelection)
       } label: {
@@ -1155,7 +1172,8 @@ struct WorktreeDetailView: View {
           shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.CommandID.openWorktree) : nil
         )
       }
-      .help(openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
+      // Not disabled: a disabled toolbar button shows no tooltip. A click shows the reason.
+      .help(mainReason ?? openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
 
       Menu {
         Button {
@@ -1172,6 +1190,7 @@ struct WorktreeDetailView: View {
         Divider()
         ForEach(availableActions) { action in
           let isDefault = action == resolvedOpenActionSelection
+          let reason = unavailableReason(for: action)
           Button {
             onOpenActionSelectionChanged(action)
             onOpenWorktree(action)
@@ -1179,7 +1198,8 @@ struct WorktreeDetailView: View {
             OpenWorktreeActionMenuLabelView(action: action, shortcutHint: nil)
           }
           .buttonStyle(.plain)
-          .help(openActionHelpText(for: action, isDefault: isDefault))
+          .disabled(reason != nil)
+          .help(reason ?? openActionHelpText(for: action, isDefault: isDefault))
         }
         Divider()
         Button("Copy Path") {
@@ -1196,6 +1216,11 @@ struct WorktreeDetailView: View {
       .fixedSize()
       .help("Open in...")
 
+    }
+
+    /// Why `action` cannot open the target (docs-ai 084 A4b), for its tooltip.
+    private func unavailableReason(for action: OpenWorktreeAction) -> String? {
+      toolbarState.openTargetLocation?.availability(of: action.repositoryFeature).unavailableReason?.message
     }
 
     private func openActionHelpText(for action: OpenWorktreeAction, isDefault: Bool) -> String {

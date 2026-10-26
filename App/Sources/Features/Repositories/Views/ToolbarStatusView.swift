@@ -11,10 +11,12 @@ struct ToolbarStatusView: View {
   let codeHost: CodeHost
   var remoteAgentConsent: RemoteAgentConsentPrompt?
   var remoteChannel: RemoteChannelToolbarStatus?
+  var remoteFolder: RemoteFolderToolbarStatus?
   let onWorkflowIntent: (WorkflowRunPanelIntent) -> Void
   let onRetryGithubRateLimit: () -> Void
   var onRemoteAgentConsent: (RemoteAgentConsentChoice) -> Void = { _ in }
   var onOpenAgentSettings: () -> Void = {}
+  var onRebindRemoteHost: (HostProfile.ID) -> Void = { _ in }
 
   var body: some View {
     let selection = ToolbarStatusSelection(
@@ -24,7 +26,8 @@ struct ToolbarStatusView: View {
       pullRequest: pullRequest,
       githubRateLimit: githubRateLimit,
       remoteAgentConsent: remoteAgentConsent,
-      remoteChannel: remoteChannel
+      remoteChannel: remoteChannel,
+      remoteFolder: remoteFolder
     )
     ZStack {
       // Keep the panel mounted so a selected run remains readable after the last active run ends.
@@ -73,6 +76,9 @@ struct ToolbarStatusView: View {
       case .remoteChannel(let status):
         RemoteChannelStatusButton(status: status, onOpenSettings: onOpenAgentSettings)
           .transition(.opacity)
+      case .remoteFolder(let status):
+        RemoteFolderStatusButton(status: status) { onRebindRemoteHost(status.hostProfileID) }
+          .transition(.opacity)
       case .githubRateLimited(let status):
         GithubRateLimitStatusButton(status: status, onRetry: onRetryGithubRateLimit)
           .transition(.opacity)
@@ -96,6 +102,7 @@ enum ToolbarStatusSelection: Equatable {
   case workflow(WorkflowStatusCenterPresentation)
   case githubRateLimited(GithubRateLimitStatus)
   case remoteChannel(RemoteChannelToolbarStatus)
+  case remoteFolder(RemoteFolderToolbarStatus)
   case pullRequest(PullRequestStatusModel)
   case motivational
 
@@ -110,7 +117,8 @@ enum ToolbarStatusSelection: Equatable {
     pullRequest: GithubPullRequest?,
     githubRateLimit: GithubRateLimitStatus? = nil,
     remoteAgentConsent: RemoteAgentConsentPrompt? = nil,
-    remoteChannel: RemoteChannelToolbarStatus? = nil
+    remoteChannel: RemoteChannelToolbarStatus? = nil,
+    remoteFolder: RemoteFolderToolbarStatus? = nil
   ) {
     // The consent question outranks running work: until it is answered, the pane's `ssh`
     // gets no detection (docs-ai 082, L0 item 12).
@@ -124,8 +132,14 @@ enum ToolbarStatusSelection: Equatable {
       self = .githubRateLimited(githubRateLimit)
     } else if let remoteChannel {
       self = .remoteChannel(remoteChannel)
+    } else if let remoteFolder, remoteFolder.hostStatus != nil {
+      // A folder whose host does not answer as it should, after the focused pane's own
+      // channel (docs-ai 084 C1); a connected folder yields to the pull request.
+      self = .remoteFolder(remoteFolder)
     } else if let pullRequest = PullRequestStatusModel(pullRequest: pullRequest) {
       self = .pullRequest(pullRequest)
+    } else if let remoteFolder {
+      self = .remoteFolder(remoteFolder)
     } else {
       self = .motivational
     }
