@@ -545,7 +545,7 @@ show a consent prompt or start detection. Direct commands such as `ssh -t host c
   holds the answer; the switch shows on until you turn it off. The environment variable
   `PROWL_REMOTE_AGENT_DETECTION` overrides the setting and never asks: `0` turns the
   feature off, any other value turns it on.
-- **Remote folders.** A tab that Prowl opens for a remote folder runs `ssh` itself. It asks
+- **Remote projects.** A tab that Prowl opens for a remote project runs `ssh` itself. It asks
   for no consent, because adding the folder already agreed to the connection, and it uses
   the folder's stored SSH settings instead of reading the command line. Its pane and agents
   show the host's alias. `PROWL_REMOTE_AGENT_DETECTION=0` still turns detection off. Once

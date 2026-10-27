@@ -39,7 +39,7 @@ nonisolated enum RemoteFolderValidationError: Error, Equatable, LocalizedError {
     case .notAFolder(let path):
       String(localized: "\(path) on the host is a file, not a folder.")
     case .invalidPath:
-      String(localized: "The path cannot be used for a remote folder.")
+      String(localized: "The path cannot be used for a remote project.")
     }
   }
 }

@@ -753,7 +753,7 @@ private struct CommandPaletteRowView: View {
     case .newWorkspace:
       base = String(localized: "New Workspace")
     case .addRemoteFolder:
-      base = String(localized: "Add Remote Folder")
+      base = String(localized: "Add Remote Project")
     case .openSettings:
       base = String(localized: "Open Settings")
     case .newWorktree:

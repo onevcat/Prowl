@@ -8,7 +8,7 @@ struct AddRemoteFolderView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
-        Text("Add Remote Folder")
+        Text("Add Remote Project")
           .font(.title3)
         Text("Open a folder on another machine over SSH.")
           .foregroundStyle(.secondary)
@@ -63,7 +63,7 @@ struct AddRemoteFolderView: View {
       }
 
       Label {
-        Text("Prowl keeps a background SSH connection to this host while its folders are in the sidebar.")
+        Text("Prowl keeps a background SSH connection to this host while its projects are in the sidebar.")
           .font(.footnote)
           .fixedSize(horizontal: false, vertical: true)
       } icon: {
@@ -83,7 +83,7 @@ struct AddRemoteFolderView: View {
           store.send(.rebindButtonTapped)
         }
         .disabled(store.isValidating)
-        .help("Store the host's new target, then add the folder")
+        .help("Store the host's new target, then add the project")
       }
 
       HStack {
@@ -100,13 +100,13 @@ struct AddRemoteFolderView: View {
         }
         .keyboardShortcut(.cancelAction)
         .disabled(store.isValidating)
-        .help("Close without adding a folder (Esc)")
+        .help("Close without adding a project (Esc)")
         Button("Add") {
           store.send(.addButtonTapped)
         }
         .keyboardShortcut(.defaultAction)
         .disabled(!store.canAdd)
-        .help("Check the host and add the folder (Return)")
+        .help("Check the host and add the project (Return)")
       }
     }
     .padding(20)

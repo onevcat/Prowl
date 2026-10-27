@@ -243,7 +243,7 @@ struct RemoteFolderUIGateTests {
     let count = sent.value.count
     await store.send(.runCustomCommand(state.selectedCustomCommands[2].id))
     await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote folders yet."))
+    #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote projects yet."))
     await store.finish()
     #expect(sent.value.count == count)
   }

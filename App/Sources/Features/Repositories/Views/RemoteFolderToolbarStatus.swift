@@ -56,7 +56,7 @@ struct RemoteFolderStatusButton: View {
     .buttonStyle(.plain)
     .font(.caption)
     .contentShape(.rect)
-    .help("Prowl's background SSH connection to the host of this remote folder. Click to see what it does.")
+    .help("Prowl's background SSH connection to the host of this remote project. Click to see what it does.")
     .accessibilityLabel(Text("\(status.alias): \(summary)"))
     .popover(isPresented: $isPresented, arrowEdge: .bottom) {
       RemoteFolderStatusPanel(status: status) {
@@ -91,7 +91,7 @@ private struct RemoteFolderStatusPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Label {
-        Text("Remote folder over SSH")
+        Text("Remote project over SSH")
           .font(.headline)
       } icon: {
         Image(systemName: "network")

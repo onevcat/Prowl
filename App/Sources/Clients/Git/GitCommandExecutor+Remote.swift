@@ -30,7 +30,7 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
       String(localized: "The SSH configuration of this remote host now reaches another user, host or port.")
     case .gitMissing: String(localized: "Git was not found on the remote host.")
     case .outputTooLarge: String(localized: "The remote host sent more output than Prowl reads.")
-    case .unsupported: String(localized: "Remote folders do not support this yet.")
+    case .unsupported: String(localized: "Remote projects do not support this yet.")
     case .sideChannelDisabled:
       String(localized: "Remote connections are turned off (PROWL_REMOTE_AGENT_DETECTION=0).")
     case .bundledScriptMissing:

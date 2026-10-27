@@ -852,7 +852,7 @@ struct RemoteRepositoryHostTests {
     ])
 
     #expect(loaded.isEmpty)
-    #expect(failures.map(\.message) == ["Remote folders are not available yet."])
+    #expect(failures.map(\.message) == ["Remote projects are not available yet."])
   }
 
   // MARK: - Refresh cadence (B3f)

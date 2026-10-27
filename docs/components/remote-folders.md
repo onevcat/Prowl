@@ -1,20 +1,20 @@
-# Remote folders
+# Remote projects
 
 ## What it is
 
-A remote folder is a git repository or a plain folder on another machine that Prowl
+A remote project is a git repository or a plain folder on another machine that Prowl
 reaches over SSH. It shows in the sidebar next to your local repositories. Its terminals,
 scripts and agents run on that host. Prowl installs nothing on the host and edits no
 startup file there.
 
-Remote folders are on by default. `PROWL_REMOTE_FOLDERS=0` (or `false`, `off`, `no`) in
-Prowl's environment turns them off: the menu items go away, and stored remote folders and
+Remote projects are on by default. `PROWL_REMOTE_FOLDERS=0` (or `false`, `off`, `no`) in
+Prowl's environment turns them off: the menu items go away, and stored remote projects and
 their saved layouts stay stored but hidden.
 
-## Adding a remote folder
+## Adding a remote project
 
-**File › Add Remote Folder...**, **Add Remote Project** in the sidebar's add panel, or
-**Add Remote Folder** in the command palette:
+**File › Add Remote Project...**, **Add Remote Project** in the sidebar's add panel, or
+**Add Remote Project** in the command palette:
 
 1. Choose a host: one you added before, or a new SSH destination (`host`, `user@host`, or
    an alias from `~/.ssh/config`).
@@ -29,7 +29,7 @@ their saved layouts stay stored but hidden.
 Adding a folder is your consent for that host. Prowl keeps a background SSH connection
 to it (the side channel) for git state, agent detection and terminal setup. The toolbar
 status shows that connection. `PROWL_REMOTE_AGENT_DETECTION=0` turns off every side-channel
-connection, and remote folders then cannot load.
+connection, and remote projects then cannot load.
 
 The folder's ID is `ssh:<host-profile-uuid>:<path>`. The CLI also accepts
 `<alias>:<path>`.
@@ -44,7 +44,7 @@ The folder's ID is `ssh:<host-profile-uuid>:<path>`. The CLI also accepts
 
 ## Terminals
 
-A tab in a remote folder is a local pane that runs `ssh` to the host. It lands in the
+A tab in a remote project is a local pane that runs `ssh` to the host. It lands in the
 folder, in your login shell. Your startup files load once, as in any login. Before it
 types the `ssh` line, Prowl stages a small launcher on the host over the side channel
 (`~/.cache/prowl/launch/`, removed after use). The pane may show nothing until that
@@ -60,7 +60,7 @@ finishes. When the launcher cannot be staged, the tab closes with the reason.
 - **When `ssh` ends.** The pane returns to a local shell. A later `ssh` that you type in
   that pane is your own, and it follows the rules for manual SSH sessions in
   [agent detection](agent-detection.md#remote-agents-over-ssh).
-- **Restore.** After a restart, a remote folder's tabs and splits come back when you first
+- **Restore.** After a restart, a remote project's tabs and splits come back when you first
   open the folder. They connect again with a plain shell, where they were on the host. A
   script never runs again. An unreachable host never affects your local layout, and the
   folder keeps its saved layout until its panes connect again.
@@ -80,7 +80,7 @@ finishes. When the launcher cannot be staged, the tab closes with the reason.
   connection dropped, completes nothing.
 - **Missing folder.** When the folder is gone on the host, the script does not run. The pane
   says so and opens in the home folder.
-- **In Place custom commands** do not run in remote folders. The focused pane could be the
+- **In Place custom commands** do not run in remote projects. The focused pane could be the
   local shell, or a password prompt.
 
 ## Agents
@@ -93,7 +93,7 @@ Agents in remote panes show in Active Agents and in `prowl agents`:
 
 See [agent detection](agent-detection.md#remote-agents-over-ssh).
 
-## Not available in remote folders
+## Not available in remote projects
 
 Prowl shows the reason in the control's tooltip, or as a toast:
 
@@ -107,7 +107,9 @@ Prowl shows the reason in the control's tooltip, or as a toast:
 
 ## CLI
 
-- `prowl list` gives a remote folder's worktrees a `host` object (`profile_id`, `label`).
+- CLI and workflow error messages still name it a "remote folder" (for example "Workflows
+  cannot run in a remote folder yet."). It is the same thing as a remote project.
+- `prowl list` gives a remote project's worktrees a `host` object (`profile_id`, `label`).
   Their `path` is a path on the host. Text output shows `label:path`.
 - `prowl create tab <alias>:<path> --path <host path>` opens a remote tab. The path is
   checked by its text only, and it must stay inside the folder.
@@ -117,7 +119,7 @@ Prowl shows the reason in the control's tooltip, or as a toast:
 
 ## Gotchas for agents
 
-- **Paths are on the host.** A remote folder's paths are on the host, not on this Mac. Do
+- **Paths are on the host.** A remote project's paths are on the host, not on this Mac. Do
   not run local file tools on them.
 - **macOS hosts.** On a macOS host, a plain shell session cannot be matched to its pane:
   macOS hides the environment of system binaries. The pane then shows "Agents not

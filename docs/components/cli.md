@@ -243,7 +243,7 @@ Each agent contains:
   additional confirmation.
 - `remote`: present only for an agent on a remote host behind the pane's `ssh` (see
   [agent detection](agent-detection.md#remote-agents-over-ssh)). It contains:
-  - `host` (`user@hostname`, or the host's alias in a tab of a remote folder), `user`,
+  - `host` (`user@hostname`, or the host's alias in a tab of a remote project), `user`,
     `hostname`, `port`: absent while the connection is not resolved.
   - `correlation`: `pending`, `correlated`, `ambiguous`, `unmapped`,
     `probe_unavailable`, `unsupported`, or `tmux_unreachable` (the pane shows a tmux
@@ -899,7 +899,7 @@ absent until Canvas has laid out cards), and `.data.card_count`. See
 ### `prowl create tab`
 Create a new terminal tab (deterministic — unlike `open`). A worktree is required,
 either positionally or with `--worktree`; `--path` must remain inside it.
-In a remote folder, the tab runs `ssh` to the host and lands in the folder (or in `--path`,
+In a remote project, the tab runs `ssh` to the host and lands in the folder (or in `--path`,
 a path on the host, checked by its text only). Its pane may show no output until Prowl has
 prepared the connection.
 
