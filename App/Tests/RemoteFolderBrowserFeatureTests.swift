@@ -250,6 +250,44 @@ struct RemoteFolderBrowserFeatureTests {
     #expect(asked.value == ["~", "~/app ", "~/app ", "~/typed"])
   }
 
+  /// Choosing in the browser the folder that the field already names makes it the browser's
+  /// exact choice, so it is not trimmed either.
+  @Test(.dependencies) func choosingTheTypedFolderInTheBrowserKeepsItsExactName() async {
+    let asked = LockIsolated<[String]>([])
+    let spaced = RemoteFolderListing(
+      path: "/home/dev", home: "/home/dev", entries: [Self.entry("app"), Self.entry("app ")], omittedCount: 0)
+    let store = TestStore(initialState: AddRemoteFolderFeature.State(hostProfiles: [Self.profile])) {
+      AddRemoteFolderFeature()
+    } withDependencies: {
+      $0[RemoteFolderValidatorClient.self] = RemoteFolderValidatorClient(
+        validate: { _, _, path, _ in
+          asked.withValue { $0.append(path) }
+          throw RemoteFolderValidationError.folderNotFound(path)
+        },
+        listFolder: { _, _, _, _ in spaced })
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    await store.send(.browseButtonTapped)
+    await store.receive(\.browser.listingLoaded)
+    await store.send(\.binding.path, "~/app ")
+    await store.send(.browser(.selectionChanged("app ")))
+    await store.send(.addButtonTapped)
+    await store.receive(\.validationFailed)
+    #expect(asked.value == ["~/app "])
+  }
+
+  /// A rebound host has a new target, so a listing read for the old one is closed.
+  @Test(.dependencies) func aReboundHostClosesTheBrowser() async {
+    let store = makeStore(asked: LockIsolated([]))
+    await store.send(.browseButtonTapped)
+    await store.receive(\.browser.listingLoaded)
+
+    let resolved = ConnectionKey(user: "dev", hostname: "mini-2.local")
+    await store.send(.rebound(RemoteHostTarget(profile: Self.profile, resolved: resolved)))
+    #expect(store.state.browser == nil)
+    #expect(store.state.hostProfiles.first?.connectionKey == resolved)
+  }
+
   /// The path bar starts at `~` inside the home and at `/` outside it.
   @Test func thePathBarStartsAtTheHomeOrTheRoot() {
     var state = RemoteFolderBrowserFeature.State(host: .init(existing: nil, destination: "mini", knownProfiles: []))

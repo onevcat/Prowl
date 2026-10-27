@@ -54,7 +54,7 @@ struct AddRemoteFolderView: View {
           .help("Choose the folder from the folders on the host")
         }
         if let browserStore = store.scope(state: \.browser, action: \.browser) {
-          RemoteFolderBrowserView(store: browserStore)
+          RemoteFolderBrowserView(store: browserStore, takesFocus: store.pathFollowsBrowser)
             .disabled(store.isValidating)
         }
         Text("A repository adds its main worktree; any other folder is added as it is.")

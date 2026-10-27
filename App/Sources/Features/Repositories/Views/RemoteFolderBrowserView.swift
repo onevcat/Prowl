@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 /// folder, → and ⌘↓ too; ← and ⌘↑ go to the enclosing folder.
 struct RemoteFolderBrowserView: View {
   let store: StoreOf<RemoteFolderBrowserFeature>
+  /// False while a typed path leads: a listing that arrives then must not take the keyboard
+  /// from the path field.
+  var takesFocus = true
   @FocusState private var isListFocused: Bool
 
   var body: some View {
@@ -30,7 +33,9 @@ struct RemoteFolderBrowserView: View {
     .accessibilityIdentifier("remote-folder-browser")
     // Each folder that is shown takes the focus, so the keyboard works after a click in the
     // path bar too. An empty list cannot take it before the first folder arrives.
-    .onChange(of: store.listing?.path, initial: true) { isListFocused = true }
+    .onChange(of: store.listing?.path, initial: true) {
+      if takesFocus { isListFocused = true }
+    }
   }
 
   private var header: some View {

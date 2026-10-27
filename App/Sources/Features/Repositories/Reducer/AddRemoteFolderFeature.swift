@@ -165,6 +165,8 @@ struct AddRemoteFolderFeature {
       case .rebound(let target):
         state.isValidating = false
         state.pendingRebind = nil
+        // The browser lists through the profile as it was when it opened.
+        state.browser = nil
         if let index = state.hostProfiles.firstIndex(where: { $0.id == target.profile.id }) {
           state.hostProfiles[index].connectionKey = target.resolved
         }
@@ -193,11 +195,15 @@ struct AddRemoteFolderFeature {
       RemoteFolderBrowserFeature()
     }
     Reduce { state, action in
-      // After the browser ran, so the field shows where it moved.
-      if case .browser = action, state.pathFollowsBrowser, let path = state.browser?.chosenPath, path != state.path {
-        state.path = path
+      // After the browser ran, so the field shows where it moved. The choice is recorded
+      // also when the field already shows it, so a typed name that the browser confirms is
+      // sent as it is.
+      if case .browser = action, state.pathFollowsBrowser, let path = state.browser?.chosenPath {
         state.browserPath = path
-        state.errorMessage = nil
+        if path != state.path {
+          state.path = path
+          state.errorMessage = nil
+        }
       }
       return .none
     }
