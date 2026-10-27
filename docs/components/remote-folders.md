@@ -18,7 +18,11 @@ their saved layouts stay stored but hidden.
 
 1. Choose a host: one you added before, or a new SSH destination (`host`, `user@host`, or
    an alias from `~/.ssh/config`).
-2. Enter the path on the host.
+2. Enter the path on the host, or click **Browse…** to choose it from the folders on the
+   host. The browser starts at the typed path (or at the home) and fills the path as you
+   move. A Git repository has a branch mark. Return, a double-click, → or ⌘↓ opens a
+   folder; ← or ⌘↑ goes to the enclosing folder. Browsing connects to the host, but it
+   stores nothing until you add the folder.
 3. Prowl checks the destination with `ssh -G`, connects, resolves the path with
    `pwd -P`, and checks for git. Then it stores the folder.
 

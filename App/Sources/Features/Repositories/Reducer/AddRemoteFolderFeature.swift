@@ -21,6 +21,8 @@ struct AddRemoteFolderFeature {
     /// A known host whose SSH configuration now reaches another target; the sheet offers to
     /// rebind it and add the folder (C1b).
     var pendingRebind: RemoteHostTarget?
+    /// The folder browser; nil while it is hidden. It fills `path` as it moves.
+    var browser: RemoteFolderBrowserFeature.State?
 
     init(hostProfiles: [HostProfile]) {
       self.hostProfiles = hostProfiles
@@ -29,6 +31,16 @@ struct AddRemoteFolderFeature {
 
     var selectedProfile: HostProfile? {
       hostProfiles.first { $0.id == selectedProfileID }
+    }
+
+    /// Whether the sheet still names the host that the browser lists.
+    func names(_ host: RemoteFolderBrowserFeature.Host) -> Bool {
+      guard let profile = selectedProfile else { return host.existing == nil && host.destination == destination }
+      return host.existing?.id == profile.id
+    }
+
+    var canBrowse: Bool {
+      !isValidating && (selectedProfile != nil || !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     var canAdd: Bool {
@@ -40,6 +52,8 @@ struct AddRemoteFolderFeature {
   enum Action: BindableAction, Equatable {
     case binding(BindingAction<State>)
     case addButtonTapped
+    case browseButtonTapped
+    case browser(RemoteFolderBrowserFeature.Action)
     case cancelButtonTapped
     case validationFinished(ValidatedRemoteFolder)
     case validationFailed(String)
@@ -66,6 +80,25 @@ struct AddRemoteFolderFeature {
       case .binding:
         state.errorMessage = nil
         state.pendingRebind = nil
+        // A listing belongs to the host that it was read from. A text field writes its
+        // value again when it loses focus, so only a changed host counts.
+        if let host = state.browser?.host, !state.names(host) {
+          state.browser = nil
+        }
+        return .none
+
+      case .browseButtonTapped:
+        if state.browser != nil {
+          state.browser = nil
+          return .none
+        }
+        guard state.canBrowse else { return .none }
+        state.browser = RemoteFolderBrowserFeature.State(
+          host: .init(
+            existing: state.selectedProfile, destination: state.destination, knownProfiles: state.hostProfiles))
+        return .send(.browser(.start(path: state.path)))
+
+      case .browser:
         return .none
 
       case .addButtonTapped:
@@ -136,6 +169,17 @@ struct AddRemoteFolderFeature {
       case .delegate:
         return .none
       }
+    }
+    .ifLet(\.browser, action: \.browser) {
+      RemoteFolderBrowserFeature()
+    }
+    Reduce { state, action in
+      // After the browser ran, so the field shows where it moved.
+      if case .browser = action, let path = state.browser?.chosenPath, path != state.path {
+        state.path = path
+        state.errorMessage = nil
+      }
+      return .none
     }
   }
 

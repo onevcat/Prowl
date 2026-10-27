@@ -38,12 +38,25 @@ struct AddRemoteFolderView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Path")
           .foregroundStyle(.secondary)
-        TextField("Path", text: $store.path, prompt: Text("~/projects/app"))
-          .textFieldStyle(.roundedBorder)
-          .monospaced()
-          .disabled(store.isValidating)
-          .focused($isPathFieldFocused)
-          .onSubmit { store.send(.addButtonTapped) }
+        HStack {
+          TextField("Path", text: $store.path, prompt: Text("~/projects/app"))
+            .textFieldStyle(.roundedBorder)
+            .monospaced()
+            .disabled(store.isValidating)
+            .focused($isPathFieldFocused)
+            .onSubmit { store.send(.addButtonTapped) }
+          Toggle(
+            "Browse…",
+            isOn: Binding(get: { store.browser != nil }, set: { _ in store.send(.browseButtonTapped) })
+          )
+          .toggleStyle(.button)
+          .disabled(!store.canBrowse && store.browser == nil)
+          .help("Choose the folder from the folders on the host")
+        }
+        if let browserStore = store.scope(state: \.browser, action: \.browser) {
+          RemoteFolderBrowserView(store: browserStore)
+            .disabled(store.isValidating)
+        }
         Text("A repository adds its main worktree; any other folder is added as it is.")
           .font(.footnote)
           .foregroundStyle(.secondary)
