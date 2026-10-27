@@ -386,7 +386,8 @@ extension RepositoriesFeature {
           // Canvas session, so re-enter it directly instead of via `.selectCanvas`,
           // which would overwrite them with the archived list's empty selection.
           state.selection = .canvas
-          if let card = state.preArchivedCanvasCard,
+          // The saved tab can close while the list is open; a request for it would never resolve.
+          if let card = state.preArchivedCanvasCard.flatMap(terminalClient.canvasRestorableCard),
             state.terminalWorktree(for: card.worktreeID) != nil
           {
             requestCanvasFocus(.tab(card.tabID), viewport: .reveal, openedWorktreeID: card.worktreeID, state: &state)

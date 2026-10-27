@@ -420,6 +420,18 @@ struct ProwlApp: App {
         else { return nil }
         return CanvasCardRef(worktreeID: worktreeID, tabID: tabID)
       },
+      canvasRestorableCard: { card in
+        let states = terminalManager.activeWorktreeStates
+        @MainActor func selectedCard(_ state: WorktreeTerminalState) -> CanvasCardRef? {
+          guard let tabID = state.tabManager.selectedTabId, state.hasCanvasCard(tabID) else { return nil }
+          return CanvasCardRef(worktreeID: state.worktreeID, tabID: tabID)
+        }
+        if let state = states.first(where: { $0.worktreeID == card.worktreeID }) {
+          if state.hasCanvasCard(card.tabID) { return card }
+          if let selected = selectedCard(state) { return selected }
+        }
+        return states.lazy.compactMap(selectedCard).first
+      },
       canvasFocusedWorktreeID: {
         terminalManager.canvasFocusedWorktreeID
       },

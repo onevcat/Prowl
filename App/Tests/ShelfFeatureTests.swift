@@ -1069,6 +1069,64 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  // The saved tab or its whole worktree can close while the archived list is open.
+  @Test(.dependencies, arguments: [false, true])
+  func archivedRoundTripFocusesASurvivingCanvasTab(savedWorktreeRemoved: Bool) async {
+    let worktree = Worktree(
+      id: "/tmp/repo", name: "main", detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"))
+    let repository = Repository(
+      id: worktree.id, rootURL: URL(fileURLWithPath: worktree.id), name: "repo",
+      kind: .git, worktrees: [worktree])
+    let saved = CanvasCardRef(
+      worktreeID: savedWorktreeRemoved ? "/tmp/removed" : worktree.id, tabID: TerminalTabID(rawValue: UUID()))
+    let survivor = CanvasCardRef(worktreeID: worktree.id, tabID: TerminalTabID(rawValue: UUID()))
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedCard = { saved }
+      $0.terminalClient.canvasRestorableCard = { $0 == saved ? survivor : nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.send(.selectArchivedWorktrees)
+    #expect(store.state.pendingCanvasFocusRequest?.target == .tab(survivor.tabID))
+    #expect(store.state.isShowingCanvas)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func archivedRoundTripWithoutCanvasTabsRequestsNoFocus() async {
+    let worktree = Worktree(
+      id: "/tmp/repo", name: "main", detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"))
+    let repository = Repository(
+      id: worktree.id, rootURL: URL(fileURLWithPath: worktree.id), name: "repo",
+      kind: .git, worktrees: [worktree])
+    let saved = CanvasCardRef(worktreeID: worktree.id, tabID: TerminalTabID(rawValue: UUID()))
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedCard = { saved }
+      $0.terminalClient.canvasRestorableCard = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.send(.selectArchivedWorktrees)
+    #expect(store.state.pendingCanvasFocusRequest == nil)
+    #expect(store.state.isShowingCanvas)
+    await store.finish()
+  }
+
   @Test(.dependencies, arguments: [false, true])
   func archivedRoundTripRestoresWorkspaceChild(shelf: Bool) async {
     let repository = Repository(
