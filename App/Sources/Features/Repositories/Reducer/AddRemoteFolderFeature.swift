@@ -23,6 +23,12 @@ struct AddRemoteFolderFeature {
     var pendingRebind: RemoteHostTarget?
     /// The folder browser; nil while it is hidden. It fills `path` as it moves.
     var browser: RemoteFolderBrowserFeature.State?
+    /// False after a path is typed, until the browser is used again: a listing that arrives
+    /// later must not replace the typed path.
+    var pathFollowsBrowser = false
+    /// The last path that the browser wrote. While `path` is still that path, it is the
+    /// exact name of a folder on the host and is sent as it is, not trimmed as typed text.
+    var browserPath: String?
 
     init(hostProfiles: [HostProfile]) {
       self.hostProfiles = hostProfiles
@@ -41,6 +47,11 @@ struct AddRemoteFolderFeature {
 
     var canBrowse: Bool {
       !isValidating && (selectedProfile != nil || !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    /// The path to send to the host.
+    var requestedPath: String {
+      path == browserPath ? path : path.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var canAdd: Bool {
@@ -75,6 +86,12 @@ struct AddRemoteFolderFeature {
 
   var body: some Reducer<State, Action> {
     BindingReducer()
+      .onChange(of: \.path) { _, _ in
+        Reduce { state, _ in
+          state.pathFollowsBrowser = false
+          return .none
+        }
+      }
     Reduce { state, action in
       switch action {
       case .binding:
@@ -96,9 +113,11 @@ struct AddRemoteFolderFeature {
         state.browser = RemoteFolderBrowserFeature.State(
           host: .init(
             existing: state.selectedProfile, destination: state.destination, knownProfiles: state.hostProfiles))
-        return .send(.browser(.start(path: state.path)))
+        state.pathFollowsBrowser = true
+        return .send(.browser(.start(path: state.requestedPath)))
 
-      case .browser:
+      case .browser(let action):
+        if action.isMove { state.pathFollowsBrowser = true }
         return .none
 
       case .addButtonTapped:
@@ -107,7 +126,7 @@ struct AddRemoteFolderFeature {
         state.errorMessage = nil
         state.pendingRebind = nil
         let (existing, destination, path, known) = (
-          state.selectedProfile, state.destination, state.path, state.hostProfiles
+          state.selectedProfile, state.destination, state.requestedPath, state.hostProfiles
         )
         let validator = validator
         return .run { send in
@@ -175,8 +194,9 @@ struct AddRemoteFolderFeature {
     }
     Reduce { state, action in
       // After the browser ran, so the field shows where it moved.
-      if case .browser = action, let path = state.browser?.chosenPath, path != state.path {
+      if case .browser = action, state.pathFollowsBrowser, let path = state.browser?.chosenPath, path != state.path {
         state.path = path
+        state.browserPath = path
         state.errorMessage = nil
       }
       return .none

@@ -103,6 +103,15 @@ struct RemoteFolderBrowserFeature {
     case retryButtonTapped
     case listingLoaded(requestedPath: String, RemoteFolderListing, selecting: String?)
     case listingFailed(requestedPath: String, message: String, fallsBackToHome: Bool)
+
+    /// A choice that the user makes in the browser, as opposed to a reply from the host or a
+    /// change in what the list shows.
+    var isMove: Bool {
+      switch self {
+      case .selectionChanged, .entryOpened, .parentFolderOpened, .folderOpened, .retryButtonTapped: true
+      case .start, .showsHiddenFoldersToggled, .listingLoaded, .listingFailed: false
+      }
+    }
   }
 
   private nonisolated enum CancelID { case listing }
@@ -113,7 +122,6 @@ struct RemoteFolderBrowserFeature {
     Reduce { state, action in
       switch action {
       case .start(let path):
-        let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
         return load(path.isEmpty ? "~" : path, in: &state, fallsBackToHome: !path.isEmpty && path != "~")
 
       case .selectionChanged(let name):

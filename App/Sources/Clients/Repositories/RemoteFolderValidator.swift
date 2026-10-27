@@ -71,8 +71,11 @@ nonisolated struct RemoteFolderValidatorClient: Sendable {
 extension RemoteFolderValidatorClient: DependencyKey {
   static let liveValue = RemoteFolderValidatorClient(
     validate: { existing, destination, path, knownProfiles in
-      let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !path.isEmpty else { throw RemoteFolderValidationError.emptyPath }
+      // Not trimmed here: the sheet trims a typed path, and a folder chosen in the browser
+      // can end with a space.
+      guard !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw RemoteFolderValidationError.emptyPath
+      }
       let (profile, isNewProfile) = try await resolveProfile(existing, destination, knownProfiles)
       let host = RemoteRepositoryHost(hostProfileID: profile.id, lane: .leased(profile))
       let discovery = try await host.discoverFolder(path)

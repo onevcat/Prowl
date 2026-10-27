@@ -172,6 +172,84 @@ struct RemoteFolderBrowserFeatureTests {
     #expect(store.state.path == "~")
   }
 
+  /// A typed path takes over from the browser: a listing that arrives later and a change
+  /// that the browser makes on its own leave it. The next move in the browser takes the
+  /// field back.
+  @Test(.dependencies) func aTypedPathIsNotReplacedUntilTheBrowserIsUsedAgain() async {
+    let (gate, open) = AsyncStream<Void>.makeStream()
+    let store = TestStore(initialState: AddRemoteFolderFeature.State(hostProfiles: [Self.profile])) {
+      AddRemoteFolderFeature()
+    } withDependencies: {
+      $0[RemoteFolderValidatorClient.self] = RemoteFolderValidatorClient(
+        validate: { _, _, _, _ in throw RemoteRepositoryHostError.unsupported },
+        listFolder: { _, _, path, _ in
+          switch path {
+          case "~", "/home/dev": return Self.home
+          case "/home/dev/projects": return Self.projects
+          default:
+            for await _ in gate { break }
+            return Self.app
+          }
+        })
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    await store.send(.browseButtonTapped)
+    await store.receive(\.browser.listingLoaded)
+    await store.send(.browser(.entryOpened("projects")))
+    await store.receive(\.browser.listingLoaded)
+    await store.send(.browser(.selectionChanged("app")))
+    #expect(store.state.path == "~/projects/app")
+
+    await store.send(.browser(.entryOpened("app")))
+    await store.send(\.binding.path, "~/typed")
+    open.yield()
+    open.finish()
+    await store.receive(\.browser.listingLoaded)
+    #expect(store.state.browser?.listing == Self.app)
+    #expect(store.state.path == "~/typed")
+    await store.send(.browser(.showsHiddenFoldersToggled))
+    #expect(store.state.path == "~/typed")
+
+    await store.send(.browser(.selectionChanged("src")))
+    #expect(store.state.path == "~/projects/app/src")
+  }
+
+  /// A folder chosen in the browser is added as it is named, also when the name ends with a
+  /// space; a typed path is trimmed.
+  @Test(.dependencies) func aChosenFolderIsAddedWithItsExactName() async {
+    let asked = LockIsolated<[String]>([])
+    let spaced = RemoteFolderListing(
+      path: "/home/dev", home: "/home/dev", entries: [Self.entry("app"), Self.entry("app ")], omittedCount: 0)
+    let store = TestStore(initialState: AddRemoteFolderFeature.State(hostProfiles: [Self.profile])) {
+      AddRemoteFolderFeature()
+    } withDependencies: {
+      $0[RemoteFolderValidatorClient.self] = RemoteFolderValidatorClient(
+        validate: { _, _, path, _ in
+          asked.withValue { $0.append(path) }
+          throw RemoteFolderValidationError.folderNotFound(path)
+        },
+        listFolder: { _, _, path, _ in
+          asked.withValue { $0.append(path) }
+          return spaced
+        })
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    await store.send(.browseButtonTapped)
+    await store.receive(\.browser.listingLoaded)
+    await store.send(.browser(.selectionChanged("app ")))
+    #expect(store.state.path == "~/app ")
+    await store.send(.addButtonTapped)
+    await store.receive(\.validationFailed)
+
+    await store.send(.browseButtonTapped)
+    await store.send(.browseButtonTapped)
+    await store.receive(\.browser.listingLoaded)
+    await store.send(\.binding.path, "  ~/typed \n")
+    await store.send(.addButtonTapped)
+    await store.receive(\.validationFailed)
+    #expect(asked.value == ["~", "~/app ", "~/app ", "~/typed"])
+  }
+
   /// The path bar starts at `~` inside the home and at `/` outside it.
   @Test func thePathBarStartsAtTheHomeOrTheRoot() {
     var state = RemoteFolderBrowserFeature.State(host: .init(existing: nil, destination: "mini", knownProfiles: []))
