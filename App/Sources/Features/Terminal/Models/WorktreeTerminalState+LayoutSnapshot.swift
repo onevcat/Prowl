@@ -207,8 +207,7 @@ extension WorktreeTerminalState {
     case .leaf(let view):
       // A remote folder's pane: its host, and where its own session is on the host now.
       if case .remote(let hostProfileID, _) = worktree.location {
-        let directory =
-          remoteHostAlias(surfaceID: view.id) == nil ? nil : remotePaneTrackers[view.id]?.foregroundWorkingDirectory
+        let directory = remoteHostAlias(surfaceID: view.id) == nil ? nil : remoteWorkingDirectory(surfaceID: view.id)
         return .leaf(
           surfaceID: view.id.uuidString,
           remote: .init(hostProfileID: hostProfileID.uuidString.lowercased(), cwdPath: directory))

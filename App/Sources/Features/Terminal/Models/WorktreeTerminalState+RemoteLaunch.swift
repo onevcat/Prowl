@@ -34,16 +34,24 @@ extension WorktreeTerminalState {
   static let splitDirectoryTimeout: Duration = .seconds(1)
 
   /// Where a remote split starts (C4): `override` (a host path), else where the anchor pane
-  /// is on the host now (a fresh probe, then the last known one), else the folder.
+  /// is on the host now (after a fresh probe), else the folder.
   func remoteSplitDirectory(anchorSurfaceID: UUID, override: URL?) async -> String {
     if let override { return Self.hostPath(override.path(percentEncoded: false)) }
-    if remoteHostAlias(surfaceID: anchorSurfaceID) != nil, let tracker = remotePaneTrackers[anchorSurfaceID],
-      let directory = await tracker.refreshedWorkingDirectory(
-        timeout: Self.splitDirectoryTimeout, clock: remoteLaunchClock)
-    {
-      return directory
+    if remoteHostAlias(surfaceID: anchorSurfaceID) != nil, let tracker = remotePaneTrackers[anchorSurfaceID] {
+      _ = await tracker.refreshedWorkingDirectory(timeout: Self.splitDirectoryTimeout, clock: remoteLaunchClock)
     }
-    return worktree.location.path
+    return remoteWorkingDirectory(surfaceID: anchorSurfaceID) ?? worktree.location.path
+  }
+
+  /// Where a remote pane's own session is on the host: the directory that a snapshot read
+  /// last, else the one its shell started in. nil when the pane runs no session of its own
+  /// (its `ssh` ended, so it is a local shell), and inside a tmux client whose server Prowl
+  /// cannot read: the user works somewhere that no directory tells.
+  func remoteWorkingDirectory(surfaceID: UUID) -> String? {
+    guard let origin = remoteLaunchOriginBySurface[surfaceID], !origin.sessionEnded else { return nil }
+    guard let tracker = remotePaneTrackers[surfaceID] else { return origin.workingDirectory }
+    if tracker.showsUnreadableTmux { return nil }
+    return tracker.foregroundWorkingDirectory ?? origin.workingDirectory
   }
 
   /// Stages `launch` on the host, then types the `ssh` line into the deferred pane and
@@ -57,7 +65,7 @@ extension WorktreeTerminalState {
   ) {
     remoteLaunchOriginBySurface[surfaceID] = RemoteLaunchOrigin(
       hostProfileID: profile.id, alias: profile.alias, recipe: profile.recipe, nonce: launch.nonce,
-      hasFirstCommand: launch.firstCommand != nil, launchedAt: Date())
+      hasFirstCommand: launch.firstCommand != nil, launchedAt: Date(), workingDirectory: launch.workingDirectory)
     let stager = remoteTerminalStager
     remoteLaunchTasksBySurface[surfaceID] = Task { [weak self] in
       var launch = launch
@@ -65,6 +73,7 @@ extension WorktreeTerminalState {
         launch.workingDirectory = await resolveWorkingDirectory()
         // The pane was closed while its directory was resolved: stage nothing on the host.
         guard !Task.isCancelled else { return }
+        self?.remoteLaunchOriginBySurface[surfaceID]?.workingDirectory = launch.workingDirectory
       }
       let staged: Result<String, any Error>
       do {

@@ -1804,10 +1804,10 @@ struct RemoteAgentDetectionTests {
     await settle { fixture.source.refreshes == 2 }
   }
 
-  private static func origin(recipe: SSHConnectionRecipe) -> RemoteLaunchOrigin {
+  private static func origin(recipe: SSHConnectionRecipe, workingDirectory: String? = nil) -> RemoteLaunchOrigin {
     RemoteLaunchOrigin(
       hostProfileID: UUID(), alias: "mini", recipe: recipe, nonce: "0123456789abcdef", hasFirstCommand: false,
-      launchedAt: Date())
+      launchedAt: Date(), workingDirectory: workingDirectory)
   }
 
   /// A pane that Prowl opened in a remote folder (docs-ai 084 C3b) needs no consent, uses the
@@ -1917,6 +1917,38 @@ struct RemoteAgentDetectionTests {
     #expect(leaf.remote?.cwdPath == "/home/dev/app/api")
     #expect(leaf.remote?.hostProfileID == RemoteRepositoryFixtures.hostProfileID.uuidString.lowercased())
     #expect(leaf.cwdPath == nil)
+  }
+
+  /// A pane whose session never maps (a macOS host hides its system shell's environment)
+  /// is where its shell started: the saved layout keeps that directory, so a second restart
+  /// does not lose it, the CLI shows it instead of the local `ssh`'s directory, and a split
+  /// starts there. A directory that a snapshot reads wins.
+  @Test func anUnmappedRemotePaneIsWhereItsShellStarted() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe, worktree: RemoteRepositoryFixtures.gitRepository().worktrees[0])
+    let clock = TestClock()
+    fixture.state.remoteLaunchClock = clock
+    fixture.state.remoteLaunchOriginBySurface[fixture.surfaceID] = Self.origin(
+      recipe: SSHConnectionRecipe(destination: "mini"), workingDirectory: "/home/dev/app/api")
+    probe.job = launchSSHJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: nil, foreground: nil))
+    await detect(fixture)
+
+    let saved = try #require(fixture.state.makeLayoutSnapshotWorktree())
+    #expect(saved.tabs.first?.splitRoot.remote?.cwdPath == "/home/dev/app/api")
+    #expect(fixture.state.makeCLIListSnapshot().tabs.first?.panes.first?.cwd == "/home/dev/app/api")
+    let refreshes = fixture.source.refreshes
+    let split = Task { await fixture.state.remoteSplitDirectory(anchorSurfaceID: fixture.surfaceID, override: nil) }
+    await settle { fixture.source.refreshes > refreshes }
+    await clock.advance(by: WorktreeTerminalState.splitDirectoryTimeout)
+    #expect(await split.value == "/home/dev/app/api")
+
+    await deliver(
+      fixture,
+      snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh", directory: "/home/dev/app/web")))
+    #expect(fixture.state.makeCLIListSnapshot().tabs.first?.panes.first?.cwd == "/home/dev/app/web")
   }
 
   /// The kill switch still turns detection off for a remote folder's pane.

@@ -307,6 +307,11 @@ final class RemotePaneTracker {
     return currentForegroundWorkingDirectory ?? lastKnownWorkingDirectory
   }
 
+  /// The latest snapshot maps the session to a tmux client whose server Prowl cannot read.
+  var showsUnreadableTmux: Bool {
+    mappedSession()?.hasUnreadTmuxPane == true
+  }
+
   /// The latest snapshot's directory, when it maps the session to a readable foreground.
   private var currentForegroundWorkingDirectory: String? {
     guard let session = mappedSession(), !session.hasUnreadTmuxPane else { return nil }
