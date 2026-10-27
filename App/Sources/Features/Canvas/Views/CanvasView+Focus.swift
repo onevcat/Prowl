@@ -260,8 +260,13 @@ extension CanvasView {
       state.isCanvasManaged = true
     }
 
-    // Auto-focus the card that was active before entering canvas.
-    if let selectedID = terminalManager.selectedWorktreeID,
+    // A focus request can run in onAppear before this activation task.
+    // Keep that card selected instead of clearing its restored terminal focus.
+    if let tabID = selectionState.primaryTabID,
+      activeStates.contains(where: { $0.surfaceView(for: tabID) != nil })
+    {
+      syncPrimaryFocus(from: nil, to: tabID, states: activeStates)
+    } else if let selectedID = terminalManager.selectedWorktreeID,
       let state = activeStates.first(where: { $0.worktreeID == selectedID }),
       let tabID = state.tabManager.selectedTabId
     {

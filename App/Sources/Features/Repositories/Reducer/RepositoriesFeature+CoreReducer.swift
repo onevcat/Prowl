@@ -372,25 +372,71 @@ extension RepositoriesFeature {
       return .none
 
     case .selectArchivedWorktrees:
-      state.isShelfActive = false
-      // Toggle: if already showing archived, return to the previous worktree.
+      // Toggle: if already showing archived, return to the previous layout and worktree.
       if state.isShowingArchivedWorktrees {
-        defer { state.preArchivedWorktreeID = nil }
-        if let previousID = state.preArchivedWorktreeID,
+        let previousSegment = state.preArchivedTopSegment ?? .tabbed
+        defer {
+          state.preArchivedSelection = nil
+          state.preArchivedWorkspaceChildID = nil
+          state.preArchivedCanvasCard = nil
+          state.preArchivedTopSegment = nil
+        }
+        if previousSegment == .canvas, state.canEnterShelf {
+          // `preCanvasWorktreeID` / `preCanvasTerminalTargetID` still describe the
+          // Canvas session, so re-enter it directly instead of via `.selectCanvas`,
+          // which would overwrite them with the archived list's empty selection.
+          state.selection = .canvas
+          // The saved tab can close while the list is open; a request for it would never resolve.
+          if let card = state.preArchivedCanvasCard.flatMap(terminalClient.canvasRestorableCard),
+            state.terminalWorktree(for: card.worktreeID) != nil
+          {
+            requestCanvasFocus(.tab(card.tabID), viewport: .reveal, openedWorktreeID: card.worktreeID, state: &state)
+          }
+          return .run { _ in
+            await terminalClient.send(.setCanvasMode(true))
+          }
+        }
+        if case .worktree(let previousID) = state.preArchivedSelection,
           isSelectionValid(previousID, state: state)
         {
           setSingleWorktreeSelection(previousID, state: &state, recordHistory: false)
           state.openedWorktreeIDs.insert(previousID)
           state.pendingTerminalFocusWorktreeIDs.insert(previousID)
+          if previousSegment == .shelf {
+            state.isShelfActive = true
+          }
           return .send(.delegate(.selectedWorktreeChanged(state.worktree(for: previousID))))
+        }
+        if case .repository(let repositoryID) = state.preArchivedSelection,
+          let repository = state.repositories[id: repositoryID]
+        {
+          state.selection = .repository(repositoryID)
+          state.selectedWorkspaceChildID =
+            state.resolvedWorkspaceChildren(in: repository)
+            .first { $0.id == state.preArchivedWorkspaceChildID }?.id
+          state.sidebarSelectedWorktreeIDs = []
+          if let worktree = repository.terminalWorktree {
+            state.openedWorktreeIDs.insert(worktree.id)
+            state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
+            state.isShelfActive = previousSegment == .shelf
+          }
+          return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
         }
         state.selection = nil
         state.selectedWorkspaceChildID = nil
         state.sidebarSelectedWorktreeIDs = []
+        if previousSegment == .shelf, state.canEnterShelf {
+          // The previous book is gone; let Shelf pick its usual fallback book.
+          return .send(.toggleShelf)
+        }
         return .send(.delegate(.selectedWorktreeChanged(nil)))
       }
-      // Entering archived view — remember current worktree for later restore.
-      state.preArchivedWorktreeID = state.selectedWorktreeID
+      // Entering archived view — remember the current layout and worktree for later restore.
+      state.preArchivedTopSegment = state.topSegment
+      state.isShelfActive = false
+      state.preArchivedSelection = state.selection
+      state.preArchivedWorkspaceChildID = state.selectedWorkspaceChildID
+      state.preArchivedCanvasCard = state.isShowingCanvas ? terminalClient.canvasFocusedCard() : nil
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .archivedWorktrees
       state.selectedWorkspaceChildID = nil
@@ -597,6 +643,9 @@ extension RepositoriesFeature {
       let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
       defer { repositoriesLogger.endInterval(selectRepoToken) }
       guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
+      if state.repositories[id: repositoryID]?.kind == .plain {
+        restoreShelfWhenLeavingArchivedList(state: &state)
+      }
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .repository(repositoryID)
       state.selectedWorkspaceChildID = nil
@@ -613,6 +662,7 @@ extension RepositoriesFeature {
       else {
         return .none
       }
+      restoreShelfWhenLeavingArchivedList(state: &state)
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .repository(child.workspaceID)
       state.selectedWorkspaceChildID = child.id
@@ -634,6 +684,9 @@ extension RepositoriesFeature {
     case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
       let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
       defer { repositoriesLogger.endInterval(selectWtToken) }
+      if worktreeID != nil {
+        restoreShelfWhenLeavingArchivedList(state: &state)
+      }
       setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
       if focusTerminal, let worktreeID {
         state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)

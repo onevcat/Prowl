@@ -164,8 +164,11 @@ Archiving hides a worktree from the main list without deleting it.
 - If the repo defines an **archive script**, it runs first (live progress); if it
   fails, archiving stops and the worktree stays active.
 - **View archived:** `⌘⌃A` toggles the Archived Worktrees panel (press again to
-  return to the previous worktree), grouped by repo, with **Unarchive** and
-  **Delete Selected** (`⌘⇧⌫`) buttons.
+  return to the previous worktree or folder and view mode — Default, Canvas, or Shelf),
+  grouped by repo, with **Unarchive** and **Delete Selected** (`⌘⇧⌫`) buttons.
+  When the panel was opened from Shelf, picking a worktree in the sidebar also
+  returns to Shelf and opens it as a book. Returning to Canvas restores keyboard
+  focus to the previously focused tab and its active pane.
 - **Auto-delete:** if `archivedAutoDeletePeriod` is set, archived worktrees older
   than the period are deleted automatically. When you pick a period in Settings →
   Worktree that would delete existing archived worktrees right away, Prowl lists

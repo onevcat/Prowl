@@ -149,6 +149,20 @@ func setSingleWorktreeSelection(
   }
 }
 
+/// Picking a terminal target from the sidebar while the archived list is showing
+/// leaves the list. When the list was opened from Shelf, reactivate Shelf so the
+/// pick opens as a book instead of dropping the user into the Normal layout.
+func restoreShelfWhenLeavingArchivedList(state: inout RepositoriesFeature.State) {
+  guard state.isShowingArchivedWorktrees else { return }
+  if state.preArchivedTopSegment == .shelf {
+    state.isShelfActive = true
+  }
+  state.preArchivedSelection = nil
+  state.preArchivedWorkspaceChildID = nil
+  state.preArchivedCanvasCard = nil
+  state.preArchivedTopSegment = nil
+}
+
 enum WorktreeHistoryDirection {
   case backward
   case forward

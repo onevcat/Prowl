@@ -384,7 +384,12 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
-    var preArchivedWorktreeID: Worktree.ID?
+    var preArchivedSelection: SidebarSelection?
+    var preArchivedWorkspaceChildID: String?
+    var preArchivedCanvasCard: CanvasCardRef?
+    /// Layout (Normal / Canvas / Shelf) that was showing when the archived
+    /// list was opened, so leaving the list can return to it.
+    var preArchivedTopSegment: TopSegment?
     var isShelfActive: Bool = false
     var worktreeHistoryBackStack: [Worktree.ID] = []
     var worktreeHistoryForwardStack: [Worktree.ID] = []
