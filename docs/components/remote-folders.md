@@ -13,8 +13,8 @@ their saved layouts stay stored but hidden.
 
 ## Adding a remote folder
 
-**File › Add Remote Folder...**, **Remote…** in the sidebar's add panel, or **Add Remote
-Folder** in the command palette:
+**File › Add Remote Folder...**, **Add Remote Project** in the sidebar's add panel, or
+**Add Remote Folder** in the command palette:
 
 1. Choose a host: one you added before, or a new SSH destination (`host`, `user@host`, or
    an alias from `~/.ssh/config`).

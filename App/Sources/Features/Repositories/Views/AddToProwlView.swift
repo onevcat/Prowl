@@ -11,7 +11,7 @@ struct AddToProwlView: View {
   /// Shown unless `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C1, C5).
   var onRemoteFolder: (() -> Void)?
   @State private var isDragTargeted = false
-  @State private var isWorkspaceHovered = false
+  @State private var hoveredOption: Option?
   @State private var showCloneForm = false
 
   var body: some View {
@@ -49,7 +49,24 @@ struct AddToProwlView: View {
         .padding(.bottom, 12)
         .padding(.horizontal, 2)
 
-      workspaceRow
+      VStack(spacing: 8) {
+        optionRow(
+          .workspace,
+          systemImage: "rectangle.stack",
+          title: "Add Workspace",
+          detail: "A shared task folder spanning multiple repos for one agent.",
+          action: onWorkspace
+        )
+        if let onRemoteFolder, RemoteFolders.isEnabledInThisProcess {
+          optionRow(
+            .remoteFolder,
+            systemImage: "network",
+            title: "Add Remote Project",
+            detail: "A Git repository or folder on another machine, opened over SSH.",
+            action: onRemoteFolder
+          )
+        }
+      }
 
       HStack {
         Spacer()
@@ -100,15 +117,6 @@ struct AddToProwlView: View {
           showCloneForm = true
         }
         .controlSize(.small)
-
-        if let onRemoteFolder, RemoteFolders.isEnabledInThisProcess {
-          Button("Remote…") {
-            dismiss()
-            onRemoteFolder()
-          }
-          .controlSize(.small)
-          .help("Add a folder on another machine over SSH")
-        }
       }
       .padding(.top, 14)
     }
@@ -146,13 +154,25 @@ struct AddToProwlView: View {
     }
   }
 
-  private var workspaceRow: some View {
-    Button {
+  private enum Option {
+    case workspace
+    case remoteFolder
+  }
+
+  private func optionRow(
+    _ option: Option,
+    systemImage: String,
+    title: LocalizedStringKey,
+    detail: LocalizedStringKey,
+    action: @escaping () -> Void
+  ) -> some View {
+    let isHovered = hoveredOption == option
+    return Button {
       dismiss()
-      onWorkspace()
+      action()
     } label: {
       HStack(spacing: 13) {
-        Image(systemName: "rectangle.stack")
+        Image(systemName: systemImage)
           .font(.system(size: 18))
           .foregroundStyle(.secondary)
           .frame(width: 38, height: 38)
@@ -160,9 +180,9 @@ struct AddToProwlView: View {
           .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 1) {
-          Text("Add Workspace")
+          Text(title)
             .font(.system(size: 13.5, weight: .semibold))
-          Text("A shared task folder spanning multiple repos for one agent.")
+          Text(detail)
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .lineLimit(2)
@@ -174,13 +194,13 @@ struct AddToProwlView: View {
         Image(systemName: "chevron.right")
           .font(.system(size: 12, weight: .semibold))
           .foregroundStyle(.tertiary)
-          .offset(x: isWorkspaceHovered ? 2 : 0)
+          .offset(x: isHovered ? 2 : 0)
           .accessibilityHidden(true)
       }
       .padding(.vertical, 13)
       .padding(.horizontal, 14)
       .background(
-        .quaternary.opacity(isWorkspaceHovered ? 0.7 : 0.4),
+        .quaternary.opacity(isHovered ? 0.7 : 0.4),
         in: .rect(cornerRadius: 13)
       )
       .overlay {
@@ -190,9 +210,14 @@ struct AddToProwlView: View {
       .contentShape(.rect(cornerRadius: 13))
     }
     .buttonStyle(.plain)
+    .help(Text(detail))
     .onHover { hovering in
       withAnimation(.easeOut(duration: 0.15)) {
-        isWorkspaceHovered = hovering
+        if hovering {
+          hoveredOption = option
+        } else if hoveredOption == option {
+          hoveredOption = nil
+        }
       }
     }
   }
