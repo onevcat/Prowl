@@ -157,7 +157,9 @@ func restoreShelfWhenLeavingArchivedList(state: inout RepositoriesFeature.State)
   if state.preArchivedTopSegment == .shelf {
     state.isShelfActive = true
   }
-  state.preArchivedWorktreeID = nil
+  state.preArchivedSelection = nil
+  state.preArchivedWorkspaceChildID = nil
+  state.preArchivedCanvasCard = nil
   state.preArchivedTopSegment = nil
 }
 

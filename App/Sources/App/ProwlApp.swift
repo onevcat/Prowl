@@ -414,6 +414,12 @@ struct ProwlApp: App {
       observeAgentState: { surfaceID in
         terminalManager.observeAgentState(surfaceID: surfaceID)
       },
+      canvasFocusedCard: {
+        guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
+          let tabID = terminalManager.stateIfExists(for: worktreeID)?.tabManager.selectedTabId
+        else { return nil }
+        return CanvasCardRef(worktreeID: worktreeID, tabID: tabID)
+      },
       canvasFocusedWorktreeID: {
         terminalManager.canvasFocusedWorktreeID
       },

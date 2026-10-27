@@ -869,7 +869,7 @@ struct ShelfFeatureTests {
       $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
-      $0.preArchivedWorktreeID = worktree.id
+      $0.preArchivedSelection = .worktree(worktree.id)
       $0.preArchivedTopSegment = .shelf
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -905,7 +905,7 @@ struct ShelfFeatureTests {
       $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
-      $0.preArchivedWorktreeID = worktree.id
+      $0.preArchivedSelection = .worktree(worktree.id)
       $0.preArchivedTopSegment = .shelf
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -915,7 +915,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(worktree.id)
       $0.sidebarSelectedWorktreeIDs = [worktree.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
-      $0.preArchivedWorktreeID = nil
+      $0.preArchivedSelection = nil
       $0.preArchivedTopSegment = nil
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -948,7 +948,7 @@ struct ShelfFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .archivedWorktrees
     state.openedWorktreeIDs = [worktree.id]
-    state.preArchivedWorktreeID = worktree.id
+    state.preArchivedSelection = .worktree(worktree.id)
     state.preArchivedTopSegment = .shelf
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -959,7 +959,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(restored.id)
       $0.sidebarSelectedWorktreeIDs = [restored.id]
       $0.openedWorktreeIDs = [worktree.id, restored.id]
-      $0.preArchivedWorktreeID = nil
+      $0.preArchivedSelection = nil
       $0.preArchivedTopSegment = nil
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -984,7 +984,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .archivedWorktrees
-    state.preArchivedWorktreeID = "/tmp/repo/wt-deleted"
+    state.preArchivedSelection = .worktree("/tmp/repo/wt-deleted")
     state.preArchivedTopSegment = .shelf
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -994,7 +994,7 @@ struct ShelfFeatureTests {
 
     await store.send(.selectArchivedWorktrees) {
       $0.selection = nil
-      $0.preArchivedWorktreeID = nil
+      $0.preArchivedSelection = nil
       $0.preArchivedTopSegment = nil
     }
     await store.receive(\.toggleShelf) {
@@ -1008,6 +1008,91 @@ struct ShelfFeatureTests {
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     #expect(store.state.isShowingShelf)
+    await store.finish()
+  }
+
+  @Test(.dependencies, arguments: [false, true])
+  func archivedRoundTripRestoresPlainFolderBeforeCanvasFallback(shelf: Bool) async {
+    let folders = ["a", "b"].map { name in
+      Repository(
+        id: "/tmp/folder-\(name)", rootURL: URL(fileURLWithPath: "/tmp/folder-\(name)"),
+        name: name, kind: .plain, worktrees: [])
+    }
+    var state = RepositoriesFeature.State(repositories: IdentifiedArray(uniqueElements: folders))
+    state.selection = .repository(folders[1].id)
+    state.isShelfActive = shelf
+    state.openedWorktreeIDs = Set(folders.map(\.id))
+    state.preCanvasTerminalTargetID = folders[0].id
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { folders[0].id }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.selection == .repository(folders[1].id))
+    #expect(store.state.isShowingShelf == shelf)
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.contains(folders[1].id))
+    await store.finish()
+  }
+
+  @Test(.dependencies, arguments: [false, true])
+  func archivedRoundTripRequestsThePreviouslyFocusedCanvasTab(plainFolder: Bool) async {
+    let worktree = Worktree(
+      id: "/tmp/repo", name: "main", detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"))
+    let repository = Repository(
+      id: worktree.id, rootURL: URL(fileURLWithPath: worktree.id), name: "repo",
+      kind: plainFolder ? .plain : .git, worktrees: plainFolder ? [] : [worktree])
+    let card = CanvasCardRef(worktreeID: worktree.id, tabID: TerminalTabID(rawValue: UUID()))
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedCard = { card }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.send(.selectArchivedWorktrees)
+    #expect(store.state.pendingCanvasFocusRequest?.target == .tab(card.tabID))
+    #expect(store.state.isShowingCanvas)
+    #expect(store.state.preArchivedCanvasCard == nil)
+    #expect(store.state.preArchivedSelection == nil)
+    await store.finish()
+  }
+
+  @Test(.dependencies, arguments: [false, true])
+  func archivedRoundTripRestoresWorkspaceChild(shelf: Bool) async {
+    let repository = Repository(
+      id: "/tmp/workspace", rootURL: URL(fileURLWithPath: "/tmp/workspace"),
+      name: "Workspace", kind: .plain, worktrees: [],
+      workspace: ProjectWorkspace(repositories: [
+        ProjectWorkspace.RepositoryEntry(id: "api", name: "API", path: "api", sourceKind: .existingPath)
+      ]))
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .repository(repository.id)
+    let childID = state.resolvedWorkspaceChildren(in: repository)[0].id
+    state.selectedWorkspaceChildID = childID
+    state.isShelfActive = shelf
+    let store = TestStore(initialState: state) { RepositoriesFeature() }
+    store.exhaustivity = .off
+
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.send(.selectArchivedWorktrees)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.selection == .repository(repository.id))
+    #expect(store.state.selectedWorkspaceChildID == childID)
+    #expect(store.state.isShowingShelf == shelf)
+    #expect(store.state.preArchivedWorkspaceChildID == nil)
     await store.finish()
   }
 
@@ -1042,12 +1127,14 @@ struct ShelfFeatureTests {
     await store.send(.selectArchivedWorktrees) {
       $0.selection = .archivedWorktrees
       $0.preArchivedTopSegment = .canvas
+      $0.preArchivedSelection = .canvas
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
 
     await store.send(.selectArchivedWorktrees) {
       // The Canvas exit targets survive the round trip untouched.
       $0.selection = .canvas
+      $0.preArchivedSelection = nil
       $0.preArchivedTopSegment = nil
     }
     await store.finish()
@@ -1072,7 +1159,7 @@ struct ShelfFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .archivedWorktrees
     state.sidebarSelectedWorktreeIDs = []
-    state.preArchivedWorktreeID = worktree.id
+    state.preArchivedSelection = .worktree(worktree.id)
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
@@ -1082,7 +1169,7 @@ struct ShelfFeatureTests {
       $0.sidebarSelectedWorktreeIDs = [worktree.id]
       $0.openedWorktreeIDs = [worktree.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
-      $0.preArchivedWorktreeID = nil
+      $0.preArchivedSelection = nil
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
@@ -1107,7 +1194,7 @@ struct ShelfFeatureTests {
     state.selection = .archivedWorktrees
     state.sidebarSelectedWorktreeIDs = []
     // Point to a worktree ID that no longer exists in any repository.
-    state.preArchivedWorktreeID = "/tmp/repo/wt-deleted"
+    state.preArchivedSelection = .worktree("/tmp/repo/wt-deleted")
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
@@ -1115,7 +1202,7 @@ struct ShelfFeatureTests {
     await store.send(.selectArchivedWorktrees) {
       $0.selection = nil
       $0.sidebarSelectedWorktreeIDs = []
-      $0.preArchivedWorktreeID = nil
+      $0.preArchivedSelection = nil
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()

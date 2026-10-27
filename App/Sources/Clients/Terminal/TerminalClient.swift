@@ -11,6 +11,7 @@ struct TerminalClient {
   var events: @MainActor @Sendable () -> AsyncStream<Event>
   /// Per-surface multicast stream. Independent from the single-consumer event stream.
   var observeAgentState: @MainActor @Sendable (UUID) -> AgentObservationStream
+  var canvasFocusedCard: @MainActor @Sendable () -> CanvasCardRef? = { nil }
   var canvasFocusedWorktreeID: @MainActor @Sendable () -> Worktree.ID?
   /// Active surface in the selected tab. Lets the reducer capture the target
   /// synchronously before an async dispatch races against AppKit focus reshuffle

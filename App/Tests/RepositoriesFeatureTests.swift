@@ -2807,7 +2807,7 @@ struct RepositoriesFeatureTests {
       $0.worktreeHistoryBackStack = [worktree1.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
-      $0.preArchivedWorktreeID = worktree1.id
+      $0.preArchivedSelection = .worktree(worktree1.id)
       $0.preArchivedTopSegment = .tabbed
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -7582,7 +7582,7 @@ struct RepositoriesFeatureTests {
       $0.worktreeHistoryForwardStack = []
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
-      $0.preArchivedWorktreeID = wt1.id
+      $0.preArchivedSelection = .worktree(wt1.id)
       $0.preArchivedTopSegment = .tabbed
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
