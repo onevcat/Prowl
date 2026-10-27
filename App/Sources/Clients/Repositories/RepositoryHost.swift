@@ -9,9 +9,9 @@ nonisolated enum RepositoryHostError: Error, Equatable, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .remoteUnavailable:
-      String(localized: "Remote folders are not available yet.")
+      String(localized: "Remote projects are not available yet.")
     case .hostProfileMissing:
-      String(localized: "The host of this remote folder is missing.")
+      String(localized: "The host of this remote project is missing.")
     }
   }
 }

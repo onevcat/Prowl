@@ -127,6 +127,21 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     printf 'PROWL_FOLDER\tgit\t%s\n' "$prowl_root"
     """#
 
+  /// The subfolders of a host folder, for the folder browser of the add sheet. `~` and a
+  /// relative path resolve against the host's home, as for `discoverFolder`.
+  func listFolder(_ path: String, limit: Int = RemoteFolderListing.entryLimit) async throws -> RemoteFolderListing {
+    let outcome: RemoteCommandOutcome
+    do {
+      outcome = try await lane.runScript(
+        RemoteScript(text: RemoteFolderListing.script, arguments: [path, String(limit)]), .commandLane)
+    } catch is RemoteShellCommand.ValidationError {
+      throw RemoteFolderValidationError.invalidPath
+    }
+    let command = RemoteShellCommand(executable: "sh", arguments: ["list", path])
+    return try RemoteFolderListing.parse(
+      RemoteGitShell.successfulResult(of: outcome, command: command).output, path: path)
+  }
+
   // MARK: - Repository
 
   func worktrees(in repository: RepositoryLocation) async throws -> [Worktree] {

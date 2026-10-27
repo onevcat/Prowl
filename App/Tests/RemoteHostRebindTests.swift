@@ -369,7 +369,7 @@ struct RemoteHostRebindTests {
     #expect(message.contains("mini stays in the host list"))
     #expect(
       RepositoriesFeature.removalMessage(for: .remote(hostProfileID: UUID(), path: "/srv/app"))
-        == "This removes the folder from Prowl. Its worktrees and files on its host stay as they are.")
+        == "This removes the project from Prowl. Its worktrees and files on its host stay as they are.")
     #expect(
       RepositoriesFeature.removalMessage(for: .local(URL(filePath: "/tmp/app/")))
         == "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")

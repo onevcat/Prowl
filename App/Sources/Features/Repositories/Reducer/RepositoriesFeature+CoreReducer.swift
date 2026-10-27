@@ -235,6 +235,14 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
+      // A remote repository that this load did not keep as it was came through its host.
+      let failedIDs = Set(failures.map(\.rootID))
+      state.answeredRemoteRepositoryIDs = state.answeredRemoteRepositoryIDs
+        .intersection(state.repositories.ids)
+        .union(
+          repositories.lazy
+            .filter { $0.location.hostProfileID != nil && !reusedIDs.contains($0.id) && !failedIDs.contains($0.id) }
+            .map(\.id))
       let rebindChange = recordLoadFailures(failures, state: &state)
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(

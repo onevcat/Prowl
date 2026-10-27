@@ -545,7 +545,7 @@ show a consent prompt or start detection. Direct commands such as `ssh -t host c
   holds the answer; the switch shows on until you turn it off. The environment variable
   `PROWL_REMOTE_AGENT_DETECTION` overrides the setting and never asks: `0` turns the
   feature off, any other value turns it on.
-- **Remote folders.** A tab that Prowl opens for a remote folder runs `ssh` itself. It asks
+- **Remote projects.** A tab that Prowl opens for a remote project runs `ssh` itself. It asks
   for no consent, because adding the folder already agreed to the connection, and it uses
   the folder's stored SSH settings instead of reading the command line. Its pane and agents
   show the host's alias. `PROWL_REMOTE_AGENT_DETECTION=0` still turns detection off. Once
@@ -573,7 +573,10 @@ show a consent prompt or start detection. Direct commands such as `ssh -t host c
   corner reads "Disconnected from user@host" for five seconds. A suspended `ssh` (still
   running) only removes the label. When Prowl cannot read the pane's agents (the host has
   no session for the pane, the side channel fails, or the `ssh` command is not supported),
-  the label shows a yellow warning glyph instead, whether or not an agent is listed. Its
+  the label shows a yellow warning glyph instead, whether or not an agent is listed. On a
+  macOS host, a pane with only its shell in front has no session yet (macOS hides the
+  environment of the system shell; an agent that starts in the pane maps it), so that case
+  shows no warning. `prowl agents` still reports it as `unmapped`. Its
   tooltip gives the reason, and says that only agents that report their own status
   (OSC 7501) are detected.
 - **Host label and health.** The Active Agents row shows `user@host` with a network

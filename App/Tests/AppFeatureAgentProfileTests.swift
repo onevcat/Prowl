@@ -79,7 +79,7 @@ struct AppFeatureAgentProfileTests {
 
     await store.send(.launchAgentProfile(profile.id))
     await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("Agent Profiles cannot launch in remote folders yet."))
+    #expect(store.state.repositories.statusToast == .warning("Agent Profiles cannot launch in remote projects yet."))
   }
 
   @Test(.dependencies) func openingARemoteFolderInAnAppShowsTheReason() async {
@@ -98,7 +98,7 @@ struct AppFeatureAgentProfileTests {
 
     await store.send(.openWorktree(.finder))
     await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("Finder is not available for remote folders."))
+    #expect(store.state.repositories.statusToast == .warning("Finder is not available for remote projects."))
   }
 
   @Test(.dependencies) func remotePlainFolderRefusesOpenActionsWithoutChangingTheSelection() async {
@@ -116,7 +116,7 @@ struct AppFeatureAgentProfileTests {
     store.exhaustivity = .off
     let selectionBefore = store.state.openActionSelection
     let automaticBefore = store.state.openActionIsAutomatic
-    let message = "Opening in an app is not available for remote folders."
+    let message = "Opening in an app is not available for remote projects."
 
     await store.send(.openWorktree(.editor))
     await store.receive(\.repositories.showToast)

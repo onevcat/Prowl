@@ -423,7 +423,8 @@ extension WorktreeTerminalState {
   ) {
     let current = surfaces[surfaceID]?.bridge.state.remoteIndicator
     if let foregroundSSH, let observation {
-      let issue = RemotePaneIndicator.issue(observation.correlation)
+      let issue = RemotePaneIndicator.issue(
+        observation.correlation, hostHidesShellEnvironment: observation.hostHidesShellEnvironment)
       if observation.connection != nil || issue != nil {
         let host =
           remoteHostAlias(surfaceID: surfaceID) ?? observation.connection?.label ?? String(localized: "Remote host")

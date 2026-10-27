@@ -167,6 +167,10 @@ extension RepositoriesFeature {
     case .failed(let message, let isHostUnreachable, let authority, let isConnectionFailure):
       // A login or host key problem is not "connected" either; the user must act.
       state.pollConnectionFailures[repositoryID] = isConnectionFailure ? message : nil
+      // Past the authority check and the connection, the host answered (git failed there).
+      if !isHostUnreachable, !isConnectionFailure, authority == .passed {
+        state.answeredRemoteRepositoryIDs.insert(repositoryID)
+      }
       // The last state stays; only the host's reachability changes. A host that answered
       // with another error is reachable.
       state.remoteRefreshFailureCounts[repositoryID, default: 0] += 1
@@ -181,6 +185,7 @@ extension RepositoriesFeature {
       }
       remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
     case .refreshed(let refresh):
+      state.answeredRemoteRepositoryIDs.insert(repositoryID)
       state.remoteRefreshFailureCounts[repositoryID] = nil
       state.pollUnreachableRepositoryIDs.remove(repositoryID)
       state.pollConnectionFailures[repositoryID] = nil

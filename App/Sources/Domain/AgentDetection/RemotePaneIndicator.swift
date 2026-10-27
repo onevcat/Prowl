@@ -27,10 +27,15 @@ nonisolated enum RemotePaneIndicator: Hashable, Sendable {
     return now.timeIntervalSince(endedAt) < Self.endedMarkerDuration
   }
 
-  /// The correlation states a pane reports as an issue.
-  static func issue(_ correlation: RemotePaneCorrelation) -> RemotePaneCorrelation? {
+  /// The correlation states a pane reports as an issue. On a host that hides the environment
+  /// of its system shell (macOS), a pane with only its shell in front cannot be mapped
+  /// until an agent starts in it, so an unmapped pane there is expected, not an issue.
+  static func issue(
+    _ correlation: RemotePaneCorrelation, hostHidesShellEnvironment: Bool = false
+  ) -> RemotePaneCorrelation? {
     switch correlation {
     case .pending, .correlated: nil
+    case .unmapped where hostHidesShellEnvironment: nil
     case .ambiguous, .unmapped, .probeUnavailable, .unsupported, .tmuxUnreachable: correlation
     }
   }

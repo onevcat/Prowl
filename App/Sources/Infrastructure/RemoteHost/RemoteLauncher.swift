@@ -44,8 +44,8 @@ nonisolated enum RemoteLauncher {
 
     var errorDescription: String? {
       switch self {
-      case .invalidLaunch: String(localized: "Prowl could not prepare the terminal for the remote folder.")
-      case .scriptTooLarge: String(localized: "The script is too large to run in a remote folder.")
+      case .invalidLaunch: String(localized: "Prowl could not prepare the terminal for the remote project.")
+      case .scriptTooLarge: String(localized: "The script is too large to run in a remote project.")
       case .unexpectedReply: String(localized: "The remote host did not confirm the terminal launch.")
       }
     }
