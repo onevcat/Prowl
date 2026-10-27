@@ -328,6 +328,10 @@ struct RepositoriesFeature {
     /// the user must fix (a refused login, a changed host key, the kill switch), with that
     /// reason (docs-ai 084 C1).
     var pollConnectionFailures: [Repository.ID: String] = [:]
+    /// Remote repositories whose host answered since Prowl started: a live load read them
+    /// through the host, or a poll reached it. Until then a folder shows from the snapshot
+    /// or as a reload kept it, and the toolbar says that Prowl is connecting.
+    var answeredRemoteRepositoryIDs: Set<Repository.ID> = []
     /// Remote folders whose host could not be reached, at the last load or poll.
     var unreachableRepositoryIDs: Set<Repository.ID> {
       loadUnreachableRepositoryIDs.union(pollUnreachableRepositoryIDs)

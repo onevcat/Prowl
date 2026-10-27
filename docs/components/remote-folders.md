@@ -28,7 +28,9 @@ their saved layouts stay stored but hidden.
 
 Adding a folder is your consent for that host. Prowl keeps a background SSH connection
 to it (the side channel) for git state, agent detection and terminal setup. The toolbar
-status shows that connection. `PROWL_REMOTE_AGENT_DETECTION=0` turns off every side-channel
+status shows that connection: "Connecting…" until the host answers after Prowl starts (the
+sidebar shows the last state meanwhile), then "Connected", or "Not answering" when it does
+not answer. `PROWL_REMOTE_AGENT_DETECTION=0` turns off every side-channel
 connection, and remote projects then cannot load.
 
 The folder's ID is `ssh:<host-profile-uuid>:<path>`. The CLI also accepts
