@@ -163,7 +163,7 @@ struct RemoteAgentDetectionTests {
   private func snapshot(
     _ sequence: UInt64, pane: UUID?, foreground: RemoteProbeProcess?, extraPane: UUID? = nil,
     outcome: RemoteProbeSnapshot.Outcome = .complete, anchor: Int32 = 100, epoch: UInt64 = 0,
-    bootID: String = "boot"
+    bootID: String = "boot", operatingSystem: RemoteProbeReport.OperatingSystem = .linux
   ) -> RemoteProbeSnapshot {
     func session(_ id: UUID?) -> RemoteProbeSession {
       let process = foreground ?? remoteProcess(101, name: "zsh")
@@ -176,7 +176,7 @@ struct RemoteAgentDetectionTests {
     return RemoteProbeSnapshot(
       connection: ConnectionKey(user: "onevcat", hostname: "mini.local"), connectionEpoch: epoch, sequence: sequence,
       startedAt: Self.uptime, finishedAt: Self.uptime, outcome: outcome,
-      report: RemoteProbeReport(operatingSystem: .linux, bootID: bootID, sessions: sessions))
+      report: RemoteProbeReport(operatingSystem: operatingSystem, bootID: bootID, sessions: sessions))
   }
 
   /// A snapshot whose session shows a tmux client (pid 150); its active pane runs `pane`.
@@ -427,6 +427,22 @@ struct RemoteAgentDetectionTests {
       fixture.surface.bridge.state.remoteIndicator
         == .connected(
           host: "onevcat@mini.local", ssh: sshGeneration, issue: nil))
+  }
+
+  /// macOS hides the environment of the system shell, so a pane whose shell is in front
+  /// maps only when an agent starts in it. Until then the pane is not mapped, and that is
+  /// not an issue to show.
+  @Test func anUnmappedShellOnAMacOSHostIsNotAnIssue() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: nil, foreground: nil, operatingSystem: .darwin))
+    await detect(fixture)
+    #expect(
+      fixture.surface.bridge.state.remoteIndicator
+        == .connected(host: "onevcat@mini.local", ssh: sshGeneration, issue: nil))
   }
 
   @Test func thePaneAccessibilityElementCarriesTheRemoteState() {

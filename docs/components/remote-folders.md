@@ -126,9 +126,9 @@ Prowl shows the reason in the control's tooltip, or as a toast:
 - **Paths are on the host.** A remote project's paths are on the host, not on this Mac. Do
   not run local file tools on them.
 - **macOS hosts.** On a macOS host, a plain shell session cannot be matched to its pane:
-  macOS hides the environment of system binaries. The pane then shows "Agents not
-  detected", and a split starts in the folder. An agent, a Homebrew shell or a tmux session
-  can be matched.
+  macOS hides the environment of system binaries. This is expected, so the pane shows no
+  warning for it, but a split then starts in the folder. An agent, a Homebrew shell or a
+  tmux session can be matched; an agent that starts in the pane is detected.
 - **Prowl's typed `ssh` line.** It overrides `RemoteCommand`, `SessionType`,
   `ForkAfterAuthentication` and `StdinNull` from your SSH configuration, so that the
   launcher runs. Forwardings and the agent stay as configured.

@@ -113,6 +113,9 @@ final class RemotePaneTracker {
     /// When a snapshot last confirmed the bound agent, or for an unprobed binding, when its
     /// producer last reported.
     var confirmedAt: Date?
+    /// The host hides the environment of its system shell (macOS), so a pane with only its
+    /// shell in front is not mapped until an agent starts in it.
+    var hostHidesShellEnvironment = false
 
     func context(now: Date, stateKnown: Bool = true) -> RemoteAgentContext {
       RemoteAgentContext(
@@ -283,14 +286,15 @@ final class RemotePaneTracker {
     if unprobed == nil, bound == nil, let agent = fenceHistory.unprobedAgent, correlation != .correlated {
       unprobed = makeUnprobed(agent)
     }
+    let hidesShellEnvironment = latest?.report?.operatingSystem == .darwin
     if bound == nil, let unprobed {
       return Observation(
         correlation: correlation, connection: lease?.connection, identified: unprobed, verdict: nil,
-        programStatusFence: ssh.startedAt, confirmedAt: nil)
+        programStatusFence: ssh.startedAt, confirmedAt: nil, hostHidesShellEnvironment: hidesShellEnvironment)
     }
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
-      programStatusFence: boundRecordFence, confirmedAt: confirmedAt)
+      programStatusFence: boundRecordFence, confirmedAt: confirmedAt, hostHidesShellEnvironment: hidesShellEnvironment)
   }
 
   /// The working directory of the foreground process of the pane's session (inside tmux, of
