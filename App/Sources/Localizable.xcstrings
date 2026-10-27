@@ -367,6 +367,16 @@
         }
       }
     },
+    "%@ on the host is a file, not a folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机上的 %@ 是文件，不是文件夹。"
+          }
+        }
+      }
+    },
     "%@ reached its iteration limit" : {
       "localizations" : {
         "zh-Hans" : {
@@ -810,6 +820,16 @@
         }
       }
     },
+    "%lld more folders are not shown." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %lld 个文件夹未显示。"
+          }
+        }
+      }
+    },
     "%lld percent complete" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1096,6 +1116,16 @@
     "@%@" : {
       "shouldTranslate" : false
     },
+    "A Git repository or folder on another machine, opened over SSH." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一台机器上的 Git 仓库或文件夹，通过 SSH 打开。"
+          }
+        }
+      }
+    },
     "A broken link exists at %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1346,22 +1376,22 @@
         }
       }
     },
-    "Add Remote Folder" : {
+    "Add Remote Project" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "添加远程文件夹"
+            "value" : "添加远程项目"
           }
         }
       }
     },
-    "Add Remote Folder..." : {
+    "Add Remote Project..." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "添加远程文件夹…"
+            "value" : "添加远程项目…"
           }
         }
       }
@@ -1446,22 +1476,22 @@
         }
       }
     },
-    "Add a folder on another machine over SSH" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通过 SSH 添加另一台机器上的文件夹"
-          }
-        }
-      }
-    },
     "Add a new agent profile" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加新的 Agent 配置"
+          }
+        }
+      }
+    },
+    "Add a project on another machine over SSH" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 SSH 添加另一台机器上的项目"
           }
         }
       }
@@ -1736,12 +1766,12 @@
         }
       }
     },
-    "Agent Profiles cannot launch in remote folders yet." : {
+    "Agent Profiles cannot launch in remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 配置暂时无法在远程文件夹中启动。"
+            "value" : "Agent 配置暂时无法在远程项目中启动。"
           }
         }
       }
@@ -2346,12 +2376,12 @@
         }
       }
     },
-    "Archive scripts do not run for remote folders." : {
+    "Archive scripts do not run for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "归档脚本不会为远程文件夹运行。"
+            "value" : "归档脚本不会为远程项目运行。"
           }
         }
       }
@@ -3187,6 +3217,16 @@
         }
       }
     },
+    "Cannot open" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开"
+          }
+        }
+      }
+    },
     "Cannot parse the file." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3497,12 +3537,12 @@
         }
       }
     },
-    "Check the host and add the folder (Return)" : {
+    "Check the host and add the project (Return)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查主机并添加文件夹（Return）"
+            "value" : "检查主机并添加项目（Return）"
           }
         }
       }
@@ -3843,6 +3883,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择用于显示 Agent 灵动岛的内置或外接显示器"
+          }
+        }
+      }
+    },
+    "Choose the folder from the folders on the host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从主机上的文件夹中选择"
           }
         }
       }
@@ -4557,12 +4607,12 @@
         }
       }
     },
-    "Close without adding a folder (Esc)" : {
+    "Close without adding a project (Esc)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关闭且不添加文件夹（Esc）"
+            "value" : "关闭且不添加项目（Esc）"
           }
         }
       }
@@ -5033,6 +5083,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已连接。正在检测此窗格中的 Agent。"
+          }
+        }
+      }
+    },
+    "Connecting to the host…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接主机…"
           }
         }
       }
@@ -6647,12 +6707,12 @@
         }
       }
     },
-    "Diffs are not available for remote folders." : {
+    "Diffs are not available for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹不支持 Diff。"
+            "value" : "远程项目不支持 Diff。"
           }
         }
       }
@@ -7283,6 +7343,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已启用"
+          }
+        }
+      }
+    },
+    "Enclosing Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上级文件夹"
           }
         }
       }
@@ -8099,12 +8169,12 @@
         }
       }
     },
-    "Finder is not available for remote folders." : {
+    "Finder is not available for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹不支持访达。"
+            "value" : "远程项目不支持访达。"
           }
         }
       }
@@ -8235,6 +8305,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件夹名称"
+          }
+        }
+      }
+    },
+    "Folders on the host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机上的文件夹"
           }
         }
       }
@@ -8445,6 +8525,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程主机上的 Git 拒绝了该仓库：%@"
+          }
+        }
+      }
+    },
+    "Git repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 仓库"
           }
         }
       }
@@ -8675,6 +8765,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可在每个仓库中使用的全局终端操作。已启用的命令会显示在窗口工具栏的右上角。"
+          }
+        }
+      }
+    },
+    "Go to the enclosing folder (⌘↑)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前往上级文件夹（⌘↑）"
           }
         }
       }
@@ -8959,6 +9059,16 @@
         }
       }
     },
+    "Host: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机：%@"
+          }
+        }
+      }
+    },
     "Hosts paired with an earlier version appear after you click the Remote Mirror button." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9059,12 +9169,12 @@
         }
       }
     },
-    "Icon detection is not available for remote folders." : {
+    "Icon detection is not available for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹不支持图标检测。"
+            "value" : "远程项目不支持图标检测。"
           }
         }
       }
@@ -9089,12 +9199,12 @@
         }
       }
     },
-    "Images are not available for remote folders yet." : {
+    "Images are not available for remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹暂不支持图片。"
+            "value" : "远程项目暂不支持图片。"
           }
         }
       }
@@ -9119,12 +9229,12 @@
         }
       }
     },
-    "In Place commands do not run in remote folders yet." : {
+    "In Place commands do not run in remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“就地”命令暂时无法在远程文件夹中运行。"
+            "value" : "“就地”命令暂时无法在远程项目中运行。"
           }
         }
       }
@@ -9899,12 +10009,12 @@
         }
       }
     },
-    "Line counts are not available for remote folders." : {
+    "Line counts are not available for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹不支持行数统计。"
+            "value" : "远程项目不支持行数统计。"
           }
         }
       }
@@ -9975,6 +10085,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已链接的仓库保持不变；只会移除工作区文件夹内的符号链接。"
+          }
+        }
+      }
+    },
+    "List the folder again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新列出文件夹"
           }
         }
       }
@@ -11065,6 +11185,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无字段"
+          }
+        }
+      }
+    },
+    "No folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有文件夹"
           }
         }
       }
@@ -12321,12 +12451,12 @@
         }
       }
     },
-    "Opening in an app is not available for remote folders." : {
+    "Opening in an app is not available for remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹无法在 App 中打开。"
+            "value" : "远程项目无法在 App 中打开。"
           }
         }
       }
@@ -12832,6 +12962,16 @@
         }
       }
     },
+    "Path: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径：%@"
+          }
+        }
+      }
+    },
     "Periodically checks pull request status (open, merged, checks) for this repository's branches. Turn off to skip background GitHub queries." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13263,6 +13403,16 @@
         }
       }
     },
+    "Prowl cannot open this folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 无法打开此文件夹"
+          }
+        }
+      }
+    },
     "Prowl cannot reach the tmux server that this pane shows on %@, so it does not detect the agents in it. Prowl looks for tmux servers only in the default socket directory: a server started with tmux -S is not found." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13453,12 +13603,12 @@
         }
       }
     },
-    "Prowl could not prepare the terminal for the remote folder." : {
+    "Prowl could not prepare the terminal for the remote project." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Prowl 无法为远程文件夹准备终端。"
+            "value" : "Prowl 无法为远程项目准备终端。"
           }
         }
       }
@@ -13553,6 +13703,16 @@
         }
       }
     },
+    "Prowl is connecting to the host. Until it answers, the folders show their last state." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 正在连接主机。在主机响应之前，文件夹显示的是上次的状态。"
+          }
+        }
+      }
+    },
     "Prowl is not listening for the prowl command right now." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13583,12 +13743,12 @@
         }
       }
     },
-    "Prowl keeps a background SSH connection to this host while its folders are in the sidebar." : {
+    "Prowl keeps a background SSH connection to this host while its projects are in the sidebar." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只要此主机的文件夹还在边栏中，Prowl 就会与它保持一条后台 SSH 连接。"
+            "value" : "只要此主机的项目还在边栏中，Prowl 就会与它保持一条后台 SSH 连接。"
           }
         }
       }
@@ -13713,12 +13873,12 @@
         }
       }
     },
-    "Prowl's background SSH connection to the host of this remote folder. Click to see what it does." : {
+    "Prowl's background SSH connection to the host of this remote project. Click to see what it does." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Prowl 与此远程文件夹所在主机的后台 SSH 连接。点按以查看它的作用。"
+            "value" : "Prowl 与此远程项目所在主机的后台 SSH 连接。点按以查看它的作用。"
           }
         }
       }
@@ -14444,46 +14604,6 @@
         }
       }
     },
-    "Remote folder over SSH" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通过 SSH 访问的远程文件夹"
-          }
-        }
-      }
-    },
-    "Remote folders are not available yet." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程文件夹暂不可用。"
-          }
-        }
-      }
-    },
-    "Remote folders cannot use another user's home (%@). Use an absolute path." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程文件夹不能使用其他用户的主目录（%@），请使用绝对路径。"
-          }
-        }
-      }
-    },
-    "Remote folders do not support this yet." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程文件夹暂不支持此操作。"
-          }
-        }
-      }
-    },
     "Remote host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14504,22 +14624,72 @@
         }
       }
     },
+    "Remote project on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位于 %@ 的远程项目"
+          }
+        }
+      }
+    },
+    "Remote project on an unknown host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位于未知主机的远程项目"
+          }
+        }
+      }
+    },
+    "Remote project over SSH" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 SSH 访问的远程项目"
+          }
+        }
+      }
+    },
+    "Remote projects are not available yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目暂不可用。"
+          }
+        }
+      }
+    },
+    "Remote projects cannot use another user's home (%@). Use an absolute path." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目不能使用其他用户的主目录（%@），请使用绝对路径。"
+          }
+        }
+      }
+    },
+    "Remote projects do not support this yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目暂不支持此操作。"
+          }
+        }
+      }
+    },
     "Remote receiver is too slow." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程接收端速度过慢。"
-          }
-        }
-      }
-    },
-    "Remote…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程…"
           }
         }
       }
@@ -14584,26 +14754,6 @@
         }
       }
     },
-    "Remove folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除文件夹"
-          }
-        }
-      }
-    },
-    "Remove folder?" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除文件夹？"
-          }
-        }
-      }
-    },
     "Remove from Workspace on save" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14630,6 +14780,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存时从工作区移除"
+          }
+        }
+      }
+    },
+    "Remove project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除项目"
+          }
+        }
+      }
+    },
+    "Remove project?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除项目？"
           }
         }
       }
@@ -17416,6 +17586,16 @@
         }
       }
     },
+    "Show Hidden Folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示隐藏文件夹"
+          }
+        }
+      }
+    },
     "Show Outgoing Changes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17512,6 +17692,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "相对于此 worktree 的基准显示已提交的更改"
+          }
+        }
+      }
+    },
+    "Show folders whose names start with a dot" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示名称以点开头的文件夹"
           }
         }
       }
@@ -18396,12 +18586,12 @@
         }
       }
     },
-    "Store the host's new target, then add the folder" : {
+    "Store the host's new target, then add the project" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存主机的新目标，然后添加文件夹"
+            "value" : "保存主机的新目标，然后添加项目"
           }
         }
       }
@@ -18526,12 +18716,12 @@
         }
       }
     },
-    "Suggestions are not available for remote folders yet." : {
+    "Suggestions are not available for remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程文件夹暂不支持建议。"
+            "value" : "远程项目暂不支持建议。"
           }
         }
       }
@@ -18806,12 +18996,12 @@
         }
       }
     },
-    "Terminals cannot open in remote folders yet." : {
+    "Terminals cannot open in remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "终端暂时无法在远程文件夹中打开。"
+            "value" : "终端暂时无法在远程项目中打开。"
           }
         }
       }
@@ -19117,12 +19307,12 @@
         }
       }
     },
-    "The host of this remote folder is missing." : {
+    "The host of this remote project is missing." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "找不到此远程文件夹的主机。"
+            "value" : "找不到此远程项目的主机。"
           }
         }
       }
@@ -19207,12 +19397,12 @@
         }
       }
     },
-    "The path cannot be used for a remote folder." : {
+    "The path cannot be used for a remote project." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此路径不能用于远程文件夹。"
+            "value" : "此路径不能用于远程项目。"
           }
         }
       }
@@ -19397,12 +19587,12 @@
         }
       }
     },
-    "The script is too large to run in a remote folder." : {
+    "The script is too large to run in a remote project." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "脚本太大，无法在远程文件夹中运行。"
+            "value" : "脚本太大，无法在远程项目中运行。"
           }
         }
       }
@@ -19767,32 +19957,32 @@
         }
       }
     },
-    "This removes the folder from Prowl. Its worktrees and files on %@ stay as they are, and Prowl stops connecting to %@ for it. %@ stays in the host list." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这会从 Prowl 中移除该文件夹。它在 %@ 上的 worktree 和文件保持不变，Prowl 也不再为它连接 %@。%@ 仍保留在主机列表中。"
-          }
-        }
-      }
-    },
-    "This removes the folder from Prowl. Its worktrees and files on its host stay as they are." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这会从 Prowl 中移除该文件夹。它在主机上的 worktree 和文件保持不变。"
-          }
-        }
-      }
-    },
     "This removes the profile from Prowl. No files will be deleted." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这将从 Prowl 中移除该配置。不会删除任何文件。"
+          }
+        }
+      }
+    },
+    "This removes the project from Prowl. Its worktrees and files on %@ stay as they are, and Prowl stops connecting to %@ for it. %@ stays in the host list." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从 Prowl 中移除该项目。它在 %@ 上的 worktree 和文件保持不变，Prowl 也不再为它连接 %@。%@ 仍保留在主机列表中。"
+          }
+        }
+      }
+    },
+    "This removes the project from Prowl. Its worktrees and files on its host stay as they are." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从 Prowl 中移除该项目。它在主机上的 worktree 和文件保持不变。"
           }
         }
       }
@@ -19973,6 +20163,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此工作流不会出现在启动入口中，也无法运行。"
+          }
+        }
+      }
+    },
+    "Through: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "经由：%@"
           }
         }
       }
@@ -21464,12 +21664,12 @@
         }
       }
     },
-    "Workflows cannot run in remote folders yet." : {
+    "Workflows cannot run in remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工作流暂时无法在远程文件夹中运行。"
+            "value" : "工作流暂时无法在远程项目中运行。"
           }
         }
       }
@@ -21574,12 +21774,12 @@
         }
       }
     },
-    "Workspaces cannot include remote folders." : {
+    "Workspaces cannot include remote projects." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工作区不能包含远程文件夹。"
+            "value" : "工作区不能包含远程项目。"
           }
         }
       }
@@ -21664,12 +21864,12 @@
         }
       }
     },
-    "Worktrees cannot be created in remote folders yet." : {
+    "Worktrees cannot be created in remote projects yet." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "暂时无法在远程文件夹中创建 worktree。"
+            "value" : "暂时无法在远程项目中创建 worktree。"
           }
         }
       }
