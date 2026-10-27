@@ -114,6 +114,18 @@ actor AgentProcessProbe {
   }
 }
 
+/// A process's writable open files. `failures` holds the `errno` of each vnode descriptor
+/// whose path could not be read (`EILSEQ` for a path that does not decode); callers decide
+/// what an unreadable descriptor means for them.
+nonisolated struct OpenFileInventory: Sendable, Equatable {
+  var paths: [String]
+  var failures: [Int32]
+  /// The process has more descriptors than one listing returns.
+  var isTruncated = false
+
+  var isComplete: Bool { failures.isEmpty && !isTruncated }
+}
+
 nonisolated enum ProcessDetection {
   static func foregroundJob(childPID: pid_t) -> ForegroundJob? {
     guard childPID > 0, let processGroupID = foregroundProcessGroupID(pid: childPID) else {
@@ -262,8 +274,15 @@ nonisolated enum ProcessDetection {
   /// State attribution must reject an incomplete inventory. Existing session
   /// lookup callers can still use the best-effort wrapper above.
   static func openFilePaths(pid: pid_t, complete: inout Bool) -> [String] {
-    complete = false
-    guard pid > 0 else { return [] }
+    let inventory = openFileInventory(pid: pid)
+    complete = inventory?.isComplete == true
+    return inventory?.paths ?? []
+  }
+
+  /// The writable vnode paths of `pid`, plus the descriptors that could not be read. Nil when
+  /// the descriptor list is unavailable.
+  static func openFileInventory(pid: pid_t) -> OpenFileInventory? {
+    guard pid > 0 else { return nil }
     var capacity = 256
     var descriptors: [proc_fdinfo] = []
     var count = 0
@@ -272,41 +291,44 @@ nonisolated enum ProcessDetection {
       let filled = descriptors.withUnsafeMutableBytes { buffer in
         proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, Int32(buffer.count))
       }
-      guard filled > 0 else { return [] }
+      guard filled > 0 else { return nil }
       count = Int(filled) / MemoryLayout<proc_fdinfo>.stride
       if count < capacity { break }
       capacity *= 2
     }
-    complete = count < descriptors.count
 
-    return descriptors.prefix(count).compactMap { descriptor -> String? in
-      guard descriptor.proc_fdtype == PROX_FDTYPE_VNODE else { return nil }
+    var inventory = OpenFileInventory(paths: [], failures: [], isTruncated: count >= descriptors.count)
+    for descriptor in descriptors.prefix(count) where descriptor.proc_fdtype == PROX_FDTYPE_VNODE {
       var info = vnode_fdinfowithpath()
       let size = MemoryLayout<vnode_fdinfowithpath>.size
+      var failure: Int32 = 0
       let result = withUnsafeMutablePointer(to: &info) { pointer in
-        proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, pointer, Int32(size))
+        let result = proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, pointer, Int32(size))
+        failure = errno
+        return result
       }
       guard result == Int32(size) else {
-        complete = false
-        return nil
+        inventory.failures.append(failure)
+        continue
       }
       // Only writable descriptors identify a session an agent OWNS. Agents
       // transiently open other sessions read-only (resume pickers, history
       // browsing); every legitimate signal (Codex rollout, Amp thread log,
       // Cursor store.db) is open for writing.
-      guard info.pfi.fi_openflags & UInt32(FWRITE) != 0 else { return nil }
-      return withUnsafeBytes(of: info.pvip.vip_path) { rawBuffer -> String? in
+      guard info.pfi.fi_openflags & UInt32(FWRITE) != 0 else { continue }
+      let path = withUnsafeBytes(of: info.pvip.vip_path) { rawBuffer -> String? in
         let bytes = rawBuffer.bindMemory(to: UInt8.self)
         let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
-        guard end > bytes.startIndex, end < bytes.endIndex,
-          let path = String(bytes: bytes[..<end], encoding: .utf8)
-        else {
-          complete = false
-          return nil
-        }
-        return path
+        guard end > bytes.startIndex, end < bytes.endIndex else { return nil }
+        return String(bytes: bytes[..<end], encoding: .utf8)
+      }
+      if let path {
+        inventory.paths.append(path)
+      } else {
+        inventory.failures.append(EILSEQ)
       }
     }
+    return inventory
   }
 
   static func comm(from info: proc_bsdinfo) -> String? {

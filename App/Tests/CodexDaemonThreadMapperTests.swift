@@ -95,6 +95,46 @@ struct CodexDaemonThreadMapperTests {
     #expect(Mapper.resolve(threadID: "t1", rollouts: rollouts, logs: tie) == nil)
   }
 
+  // A partial inventory may hide the rollout that holds a pane's newest submit. An older
+  // indexed submit then no longer shows where the pane is: it may have switched away.
+  @Test func partialInventoryDoesNotFallBackToAnOlderSubmit() {
+    // Pane A moved from thread A to B; B's rollout, which holds "b1", is unreadable.
+    let rollouts = [Self.rollout("A", ["a1"])]
+    let log = Self.log(Self.paneA, [("a1", 1), ("b1", 2)])
+
+    // A complete inventory proves "b1" is not written yet, so the pane is still on A.
+    #expect(Mapper.resolve(threadID: "A", rollouts: rollouts, logs: [log])?.surfaceID == Self.paneA)
+    #expect(Mapper.binding(for: log, rollouts: rollouts)?.rootID == "A")
+    #expect(Mapper.resolve(threadID: "A", rollouts: rollouts, logs: [log], isPartial: true) == nil)
+    #expect(Mapper.binding(for: log, rollouts: rollouts, isPartial: true) == nil)
+  }
+
+  @Test func partialInventoryStillResolvesANewestIndexedSubmit() {
+    let rollouts = [Self.rollout("root", ["a1"]), Self.rollout("child", parent: "root", [])]
+    // Pane B has no evidence for this thread, so its unknown submit cannot change the answer.
+    let logs = [Self.log(Self.paneA, [("a1", 1)]), Self.log(Self.paneB, [("b-unknown", 2)])]
+
+    #expect(Mapper.resolve(threadID: "child", rollouts: rollouts, logs: logs, isPartial: true)?.surfaceID == Self.paneA)
+    #expect(Mapper.binding(for: logs[0], rollouts: rollouts, isPartial: true)?.rootID == "root")
+  }
+
+  @Test func partialInventoryRejectsAnotherPaneThatMayStillDriveTheThread() {
+    let rollouts = [Self.rollout("t1", ["a1", "b1"])]
+    // Pane B's newest submit is unknown: it may be a newer turn on t1 or a turn elsewhere.
+    let logs = [Self.log(Self.paneA, [("a1", 2)]), Self.log(Self.paneB, [("b1", 1), ("b2", 3)])]
+
+    #expect(Mapper.resolve(threadID: "t1", rollouts: rollouts, logs: logs)?.surfaceID == Self.paneA)
+    #expect(Mapper.resolve(threadID: "t1", rollouts: rollouts, logs: logs, isPartial: true) == nil)
+  }
+
+  @Test func onlyDeadDescriptorsLeaveAPartialInventory() {
+    #expect(CodexDaemonInventory(OpenFileInventory(paths: ["/r"], failures: [])) == .init(paths: ["/r"]))
+    #expect(
+      CodexDaemonInventory(OpenFileInventory(paths: ["/r"], failures: [ENOENT]))
+        == .init(paths: ["/r"], isPartial: true))
+    #expect(CodexDaemonInventory(OpenFileInventory(paths: ["/r"], failures: [ENOENT, EPERM])) == nil)
+  }
+
   @Test func missingEvidenceResolvesToNoPane() {
     let rollouts = [Self.rollout("t1", ["a1"])]
 
@@ -172,7 +212,8 @@ struct CodexDaemonThreadMapperTests {
     try Data([start, submit("a1", 1), ""].joined(separator: "\n").utf8).write(to: logA)
     try Data("ignored".utf8).write(to: logs.appending(path: "notes.txt"))
     let open = [first, second, invalid].map { $0.path(percentEncoded: false) } + ["/dev/null"]
-    let mapper = CodexDaemonThreadMapper(sessionLogDirectory: logs, openFilePaths: { _ in open })
+    let mapper = CodexDaemonThreadMapper(
+      sessionLogDirectory: logs, openFiles: { _ in CodexDaemonInventory(paths: open) })
 
     #expect(await mapper.pane(threadID: "t1", daemonPID: 1)?.surfaceID == Self.paneA)
     #expect(await mapper.pane(threadID: "t2", daemonPID: 1) == nil)
@@ -185,8 +226,11 @@ struct CodexDaemonThreadMapperTests {
 
     #expect(await mapper.pane(threadID: "t2", daemonPID: 1)?.surfaceID == Self.paneA)
     #expect(await mapper.pane(threadID: "t1", daemonPID: 1) == nil)
-    let incomplete = CodexDaemonThreadMapper(sessionLogDirectory: logs, openFilePaths: { _ in nil })
+    let incomplete = CodexDaemonThreadMapper(sessionLogDirectory: logs, openFiles: { _ in nil })
     #expect(await incomplete.pane(threadID: "t2", daemonPID: 1) == nil)
+    let partial = CodexDaemonThreadMapper(
+      sessionLogDirectory: logs, openFiles: { _ in CodexDaemonInventory(paths: open, isPartial: true) })
+    #expect(await partial.pane(threadID: "t2", daemonPID: 1)?.surfaceID == Self.paneA)
   }
 
   @Test func bindingCoversTheRootFamilyAndStartsAtTheBoundTurn() {
@@ -238,7 +282,8 @@ struct CodexDaemonThreadMapperTests {
     try Data([start, submit, ""].joined(separator: "\n").utf8).write(
       to: CodexTUISessionLog.url(for: Self.paneA, in: logs))
     let open = [main, fork].map { $0.path(percentEncoded: false) }
-    let mapper = CodexDaemonThreadMapper(sessionLogDirectory: logs, openFilePaths: { _ in open })
+    let mapper = CodexDaemonThreadMapper(
+      sessionLogDirectory: logs, openFiles: { _ in CodexDaemonInventory(paths: open) })
 
     let binding = await mapper.binding(surfaceID: Self.paneA, daemonPID: 1, tuiStartedAt: tuiStart)
     #expect(binding?.rootID == "fork")

@@ -22,6 +22,27 @@ nonisolated struct CodexDaemonBinding: Sendable, Equatable {
   let liveOffsets: [String: UInt64]
 }
 
+/// The daemon's writable files (docs-ai 073.005). A partial inventory lacks descriptors whose
+/// vnode lookup failed with `ENOENT`. A Codex TUI leaks its tty into the daemon it starts, and
+/// that tty is revoked when the pane closes, so a long-lived daemon usually holds one. `ENOENT`
+/// usually means a dead vnode, but a file system can also return it for a live file, so a
+/// partial inventory only drops the fallback to older submits; it is never treated as complete.
+nonisolated struct CodexDaemonInventory: Sendable, Equatable {
+  var paths: [String]
+  var isPartial = false
+
+  init(paths: [String], isPartial: Bool = false) {
+    self.paths = paths
+    self.isPartial = isPartial
+  }
+
+  /// Nil for any other unreadable descriptor or a truncated listing.
+  init?(_ inventory: OpenFileInventory) {
+    guard !inventory.isTruncated, inventory.failures.allSatisfy({ $0 == ENOENT }) else { return nil }
+    self.init(paths: inventory.paths, isPartial: !inventory.failures.isEmpty)
+  }
+}
+
 /// A known selection change must not fall back to matching the previous thread's history.
 nonisolated enum CodexDaemonBindingLookup: Sendable {
   case unavailable
@@ -88,7 +109,7 @@ actor CodexDaemonThreadMapper {
 
   // Keep only the selection fence across read failures, never stale rollout evidence.
   private var selections: [UUID: Selection] = [:]
-  private let openFilePaths: @Sendable (pid_t) -> [String]?
+  private let openFiles: @Sendable (pid_t) -> CodexDaemonInventory?
   private var sessionLogCache: CodexTUISessionLogCache
   private let sessionLogDirectory: URL
   private let fileManager: FileManager
@@ -100,23 +121,22 @@ actor CodexDaemonThreadMapper {
     sessionLogDirectory: URL = ProwlPaths.codexTUISessionLogDirectory,
     fileManager: FileManager = .default,
     readSessionLog: @escaping @Sendable (URL) throws -> Data = CodexTUISessionLogCache.readStable,
-    openFilePaths: @escaping @Sendable (pid_t) -> [String]? = { pid in
-      var complete = false
-      let paths = ProcessDetection.openFilePaths(pid: pid, complete: &complete)
-      return complete ? paths : nil
+    openFiles: @escaping @Sendable (pid_t) -> CodexDaemonInventory? = { pid in
+      ProcessDetection.openFileInventory(pid: pid).flatMap(CodexDaemonInventory.init)
     }
   ) {
     self.sessionLogDirectory = sessionLogDirectory
     self.fileManager = fileManager
     self.sessionLogCache = CodexTUISessionLogCache(read: readSessionLog)
-    self.openFilePaths = openFilePaths
+    self.openFiles = openFiles
   }
 
   /// The pane driving `threadID`, or nil when the evidence is missing, incomplete, or ambiguous.
   func pane(threadID: String, daemonPID: pid_t) -> CodexThreadPane? {
-    guard let paths = openFilePaths(daemonPID), let rollouts = refreshRollouts(paths.filter(Self.isRolloutPath))
+    guard let inventory = openFiles(daemonPID),
+      let rollouts = refreshRollouts(inventory.paths.filter(Self.isRolloutPath))
     else { return nil }
-    return Self.resolve(threadID: threadID, rollouts: rollouts, logs: sessionLogs())
+    return Self.resolve(threadID: threadID, rollouts: rollouts, logs: sessionLogs(), isPartial: inventory.isPartial)
   }
 
   /// What the pane's current Codex TUI drives, or nil before its first indexed submit. The
@@ -139,9 +159,9 @@ actor CodexDaemonThreadMapper {
       selections[surfaceID] = Selection(
         tuiStartedAt: tuiStartedAt, logStartedAt: log.startedAt, revision: log.selectionRevision)
     }
-    guard !log.submits.isEmpty, let paths = openFilePaths(daemonPID),
-      let rollouts = refreshRollouts(paths.filter(Self.isRolloutPath)),
-      let binding = Self.binding(for: log, rollouts: rollouts)
+    guard !log.submits.isEmpty, let inventory = openFiles(daemonPID),
+      let rollouts = refreshRollouts(inventory.paths.filter(Self.isRolloutPath)),
+      let binding = Self.binding(for: log, rollouts: rollouts, isPartial: inventory.isPartial)
     else { return selections[surfaceID]?.missing ?? .unavailable }
     selections[surfaceID]?.hasBound = true
     return .bound(binding)
@@ -149,10 +169,13 @@ actor CodexDaemonThreadMapper {
 
   // MARK: - Resolution
 
-  static func binding(for log: SessionLog, rollouts: [Rollout]) -> CodexDaemonBinding? {
+  /// With a partial inventory only the newest submit counts: an unindexed one may sit in an
+  /// unread rollout instead of waiting to be written.
+  static func binding(for log: SessionLog, rollouts: [Rollout], isPartial: Bool = false) -> CodexDaemonBinding? {
     let byID = Dictionary(rollouts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     guard let owner = owners(rollouts) else { return nil }
-    guard let submit = log.submits.dropFirst(log.selectionSubmitOffset ?? 0).last(where: { owner[$0.clientID] != nil }),
+    let selected = log.submits.dropFirst(log.selectionSubmitOffset ?? 0)
+    guard let submit = isPartial ? selected.last : selected.last(where: { owner[$0.clientID] != nil }),
       let bound = owner[submit.clientID].flatMap({ byID[$0] })
     else { return nil }
     let rootID = root(of: bound.id, in: byID)
@@ -184,16 +207,25 @@ actor CodexDaemonThreadMapper {
     return current
   }
 
-  static func resolve(threadID: String, rollouts: [Rollout], logs: [SessionLog]) -> CodexThreadPane? {
+  /// With a partial inventory a pane counts only through its newest submit. A pane whose
+  /// newest submit is unindexed but whose history reaches the thread may still drive it, so
+  /// the answer is ambiguous.
+  static func resolve(
+    threadID: String, rollouts: [Rollout], logs: [SessionLog], isPartial: Bool = false
+  ) -> CodexThreadPane? {
     let byID = Dictionary(rollouts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     guard let owner = owners(rollouts) else { return nil }
     func root(_ id: String) -> String { Self.root(of: id, in: byID) }
     let target = root(threadID)
-    let bound = logs.compactMap { log -> (log: SessionLog, submittedAt: Date)? in
-      guard let submit = log.submits.last(where: { owner[$0.clientID] != nil }),
-        let thread = owner[submit.clientID], root(thread) == target
-      else { return nil }
-      return (log, submit.submittedAt)
+    func drives(_ submit: SessionLog.Submit) -> Bool { owner[submit.clientID].map(root) == target }
+    var bound: [(log: SessionLog, submittedAt: Date)] = []
+    for log in logs {
+      if isPartial, let newest = log.submits.last, owner[newest.clientID] == nil {
+        if log.submits.contains(where: drives) { return nil }
+        continue
+      }
+      guard let submit = log.submits.last(where: { owner[$0.clientID] != nil }), drives(submit) else { continue }
+      bound.append((log, submit.submittedAt))
     }
     guard let newest = bound.max(by: { $0.submittedAt < $1.submittedAt }),
       bound.filter({ $0.submittedAt == newest.submittedAt }).count == 1

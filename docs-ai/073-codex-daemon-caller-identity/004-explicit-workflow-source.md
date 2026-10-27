@@ -14,6 +14,11 @@ do not return the vnode type on failure. FD numbers can be reused. Omitting the
 newest thread's rollout can make the mapper bind an old thread to a pane that has
 already switched threads. Keep the completeness guard.
 
+Correction (2026-10-28): the descriptor is the starting pane's tty, which the Codex TUI
+leaks into the daemon. A partial inventory is now accepted when every failure is
+`ENOENT`, with newest-submit matching. See
+[005-revoked-daemon-descriptor.md](005-revoked-daemon-descriptor.md).
+
 ## Decision
 
 Use the existing explicit workflow source and step-token paths as a **workflow-only

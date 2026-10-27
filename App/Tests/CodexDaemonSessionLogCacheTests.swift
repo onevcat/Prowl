@@ -23,7 +23,7 @@ struct CodexDaemonSessionLogCacheTests {
       readSessionLog: { url in
         reads.withLock { $0 += 1 }
         return try Data(contentsOf: url)
-      }, openFilePaths: { _ in [] })
+      }, openFiles: { _ in CodexDaemonInventory(paths: []) })
     let tuiStart = Date(timeIntervalSince1970: 1_790_605_490)
     for _ in 0..<20 {
       let result = await mapper.bindingLookup(surfaceID: pane, daemonPID: 1, tuiStartedAt: tuiStart)

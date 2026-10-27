@@ -115,3 +115,4 @@ The spike that validated the session-log mapping lives on branch
 
 - Updated 2026-10-08: Use the daemon binding for transcript resolution and fence selected-session changes — see [003-daemon-transcript-resolution.md](003-daemon-transcript-resolution.md).
 - Updated 2026-10-18: Keep caller resolution fail-closed and use explicit source selection with step tokens for workflow recovery — see [004-explicit-workflow-source.md](004-explicit-workflow-source.md).
+- Updated 2026-10-28: The incomplete-inventory failure came from a revoked tty that Codex leaks into the daemon; accept `ENOENT`-only partial inventories with newest-submit matching. This replaces 004's "keep the completeness guard" — see [005-revoked-daemon-descriptor.md](005-revoked-daemon-descriptor.md).
