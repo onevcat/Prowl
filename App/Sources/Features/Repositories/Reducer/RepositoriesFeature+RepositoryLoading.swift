@@ -528,11 +528,11 @@ extension RepositoriesFeature {
     @Shared(.hostProfiles) var hostProfiles: [HostProfile]
     guard let alias = hostProfiles.first(where: { $0.id == hostProfileID })?.alias else {
       return String(
-        localized: "This removes the folder from Prowl. Its worktrees and files on its host stay as they are.")
+        localized: "This removes the project from Prowl. Its worktrees and files on its host stay as they are.")
     }
     return String(
       localized: """
-        This removes the folder from Prowl. Its worktrees and files on \(alias) stay as they are, and \
+        This removes the project from Prowl. Its worktrees and files on \(alias) stay as they are, and \
         Prowl stops connecting to \(alias) for it. \(alias) stays in the host list.
         """)
   }

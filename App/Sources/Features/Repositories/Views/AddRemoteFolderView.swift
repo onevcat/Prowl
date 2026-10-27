@@ -8,7 +8,7 @@ struct AddRemoteFolderView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
-        Text("Add Remote Folder")
+        Text("Add Remote Project")
           .font(.title3)
         Text("Open a folder on another machine over SSH.")
           .foregroundStyle(.secondary)
@@ -38,19 +38,32 @@ struct AddRemoteFolderView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("Path")
           .foregroundStyle(.secondary)
-        TextField("Path", text: $store.path, prompt: Text("~/projects/app"))
-          .textFieldStyle(.roundedBorder)
-          .monospaced()
-          .disabled(store.isValidating)
-          .focused($isPathFieldFocused)
-          .onSubmit { store.send(.addButtonTapped) }
+        HStack {
+          TextField("Path", text: $store.path, prompt: Text("~/projects/app"))
+            .textFieldStyle(.roundedBorder)
+            .monospaced()
+            .disabled(store.isValidating)
+            .focused($isPathFieldFocused)
+            .onSubmit { store.send(.addButtonTapped) }
+          Toggle(
+            "Browse…",
+            isOn: Binding(get: { store.browser != nil }, set: { _ in store.send(.browseButtonTapped) })
+          )
+          .toggleStyle(.button)
+          .disabled(!store.canBrowse && store.browser == nil)
+          .help("Choose the folder from the folders on the host")
+        }
+        if let browserStore = store.scope(state: \.browser, action: \.browser) {
+          RemoteFolderBrowserView(store: browserStore, takesFocus: store.pathFollowsBrowser)
+            .disabled(store.isValidating)
+        }
         Text("A repository adds its main worktree; any other folder is added as it is.")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
 
       Label {
-        Text("Prowl keeps a background SSH connection to this host while its folders are in the sidebar.")
+        Text("Prowl keeps a background SSH connection to this host while its projects are in the sidebar.")
           .font(.footnote)
           .fixedSize(horizontal: false, vertical: true)
       } icon: {
@@ -70,7 +83,7 @@ struct AddRemoteFolderView: View {
           store.send(.rebindButtonTapped)
         }
         .disabled(store.isValidating)
-        .help("Store the host's new target, then add the folder")
+        .help("Store the host's new target, then add the project")
       }
 
       HStack {
@@ -87,13 +100,13 @@ struct AddRemoteFolderView: View {
         }
         .keyboardShortcut(.cancelAction)
         .disabled(store.isValidating)
-        .help("Close without adding a folder (Esc)")
+        .help("Close without adding a project (Esc)")
         Button("Add") {
           store.send(.addButtonTapped)
         }
         .keyboardShortcut(.defaultAction)
         .disabled(!store.canAdd)
-        .help("Check the host and add the folder (Return)")
+        .help("Check the host and add the project (Return)")
       }
     }
     .padding(20)

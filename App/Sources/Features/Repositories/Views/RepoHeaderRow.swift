@@ -17,6 +17,10 @@ struct RepoHeaderRow: View {
   /// user-imported image filenames into absolute file URLs.
   let repositoryRootURL: URL?
   var nameTooltip: String?
+  /// The host of a remote project; nil for a local one. A globe after the name marks it, so
+  /// the names of local and remote projects stay aligned, and the name's tooltip names the
+  /// host too.
+  var remoteHost: RemoteProjectHostSummary?
 
   var body: some View {
     HStack {
@@ -28,11 +32,17 @@ struct RepoHeaderRow: View {
           size: 14
         )
       }
-      RepoDisplayName(
-        fallbackName: name,
-        customTitle: customTitle,
-        tooltip: nameTooltip
-      )
+      // The globe sits on the name's baseline, as a symbol in a label does.
+      HStack(alignment: .firstTextBaseline, spacing: 4) {
+        RepoDisplayName(
+          fallbackName: name,
+          customTitle: customTitle,
+          tooltip: [remoteHost?.details, nameTooltip].compactMap(\.self).joined(separator: "\n\n")
+        )
+        if let remoteHost {
+          RemoteProjectHostMark(summary: remoteHost)
+        }
+      }
       .foregroundStyle(.secondary)
       if isRemoving {
         Text("Removing...")

@@ -113,7 +113,7 @@ nonisolated enum WorktreePlacementError: Error, Equatable, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .anotherUsersHome(let path):
-      String(localized: "Remote folders cannot use another user's home (\(path)). Use an absolute path.")
+      String(localized: "Remote projects cannot use another user's home (\(path)). Use an absolute path.")
     }
   }
 }

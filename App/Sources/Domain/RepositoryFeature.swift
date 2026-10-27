@@ -46,29 +46,29 @@ nonisolated enum FeatureUnavailableReason: Equatable, Sendable {
     case .remoteFolder(let feature):
       switch feature {
       case .diff:
-        String(localized: "Diffs are not available for remote folders.")
+        String(localized: "Diffs are not available for remote projects.")
       case .lineCounts:
-        String(localized: "Line counts are not available for remote folders.")
+        String(localized: "Line counts are not available for remote projects.")
       case .iconDetection:
-        String(localized: "Icon detection is not available for remote folders.")
+        String(localized: "Icon detection is not available for remote projects.")
       case .openInEditor:
-        String(localized: "Opening in an app is not available for remote folders.")
+        String(localized: "Opening in an app is not available for remote projects.")
       case .finder:
-        String(localized: "Finder is not available for remote folders.")
+        String(localized: "Finder is not available for remote projects.")
       case .workspace:
-        String(localized: "Workspaces cannot include remote folders.")
+        String(localized: "Workspaces cannot include remote projects.")
       case .archiveScript:
-        String(localized: "Archive scripts do not run for remote folders.")
+        String(localized: "Archive scripts do not run for remote projects.")
       case .profileLaunch:
-        String(localized: "Agent Profiles cannot launch in remote folders yet.")
+        String(localized: "Agent Profiles cannot launch in remote projects yet.")
       case .worktreeCreation:
-        String(localized: "Worktrees cannot be created in remote folders yet.")
+        String(localized: "Worktrees cannot be created in remote projects yet.")
       case .terminalTab:
-        String(localized: "Terminals cannot open in remote folders yet.")
+        String(localized: "Terminals cannot open in remote projects yet.")
       case .inPlaceCommand:
-        String(localized: "In Place commands do not run in remote folders yet.")
+        String(localized: "In Place commands do not run in remote projects yet.")
       case .workflow:
-        String(localized: "Workflows cannot run in remote folders yet.")
+        String(localized: "Workflows cannot run in remote projects yet.")
       }
     }
   }

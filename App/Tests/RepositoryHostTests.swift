@@ -245,10 +245,10 @@ struct RepositoryHostTests {
     }
     await store.send(.suggestIconTapped)
     await store.receive(\.symbolSuggestionsFailed) {
-      $0.symbolSuggestions = .failed("Suggestions are not available for remote folders yet.")
+      $0.symbolSuggestions = .failed("Suggestions are not available for remote projects yet.")
     }
     await store.send(.importUserImage(URL(fileURLWithPath: "/tmp/icon.png"))) {
-      $0.appearanceImportError = "Images are not available for remote folders yet."
+      $0.appearanceImportError = "Images are not available for remote projects yet."
     }
   }
 
@@ -358,7 +358,7 @@ struct RepositoryHostTests {
     await store.receive(\.presentAlert) {
       $0.alert = RepositoriesFeature().messageAlert(
         title: "Unable to rename branch",
-        message: "Remote folders are not available yet."
+        message: "Remote projects are not available yet."
       )
     }
   }

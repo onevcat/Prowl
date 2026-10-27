@@ -39,6 +39,63 @@ struct RemoteFolderUIGateTests {
     return state
   }
 
+  /// At launch a remote folder shows from the snapshot before its host answered, so the
+  /// toolbar says that Prowl is connecting, not that it is connected. A load through the host
+  /// or a poll that reaches it confirms the host; a reload that keeps the folder as it was,
+  /// a poll that does not reach the host, and one stopped by a changed target do not.
+  @Test(.dependencies) func theToolbarSaysConnectingUntilTheHostAnswers() async throws {
+    @Shared(.hostProfiles) var hostProfiles: [HostProfile]
+    $hostProfiles.withLock { $0 = [Self.profile] }
+    var state = Self.remoteState()
+    let repository = try #require(state.repositories.first)
+    let worktree = try #require(repository.worktrees.first)
+    state.remoteRefreshRepositoryIDs = [repository.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.continuousClock = TestClock()
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    func status() -> RemoteFolderToolbarStatus? {
+      RemoteFolderToolbarStatus(worktree: worktree, repositories: store.state)
+    }
+    #expect(status()?.hasAnswered == false)
+    #expect(status()?.summary == "Connecting…")
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false,
+        reusedRemoteRepositoryIDs: [repository.id]))
+    #expect(status()?.hasAnswered == false)
+    await store.send(
+      .remoteRepositoryRefreshed(repository.id, .failed(message: "No answer", isHostUnreachable: true)))
+    #expect(status()?.hasAnswered == false)
+    #expect(status()?.summary == "Not answering")
+    await store.send(
+      .remoteRepositoryRefreshed(
+        repository.id, .failed(message: "changed", isHostUnreachable: false, authority: .changed)))
+    #expect(status()?.hasAnswered == false)
+
+    await store.send(
+      .repositoriesLoaded([repository], failures: [], roots: [repository.location], animated: false))
+    #expect(status()?.hasAnswered == true)
+    // A poll that passes the authority check clears the rebind mark of the poll above.
+    await store.send(.remoteRepositoryRefreshed(repository.id, .failed(message: "git", isHostUnreachable: false)))
+    #expect(status()?.summary == "Connected")
+
+    // A poll that reaches the host confirms it too, also when git fails there.
+    await store.send(.repositoriesLoaded([], failures: [], roots: [], animated: false))
+    #expect(store.state.answeredRemoteRepositoryIDs.isEmpty)
+    await store.send(
+      .repositoriesLoaded(
+        [repository], failures: [], roots: [repository.location], animated: false,
+        reusedRemoteRepositoryIDs: [repository.id]))
+    await store.send(.remoteRepositoryRefreshed(repository.id, .failed(message: "git", isHostUnreachable: false)))
+    #expect(status()?.hasAnswered == true)
+    // Each poll scheduled the next one on the test clock.
+    await store.skipInFlightEffects(strict: false)
+  }
+
   @Test func openActionsNeedFinderOrAnApp() {
     #expect(OpenWorktreeAction.finder.repositoryFeature == .finder)
     #expect(OpenWorktreeAction.editor.repositoryFeature == .openInEditor)
@@ -52,6 +109,7 @@ struct RemoteFolderUIGateTests {
     var state = Self.remoteState()
     let worktree = try #require(state.repositories.first?.worktrees.first)
 
+    state.answeredRemoteRepositoryIDs = [worktree.repositoryLocation.id]
     let connected = try #require(RemoteFolderToolbarStatus(worktree: worktree, repositories: state))
     #expect(connected == RemoteFolderToolbarStatus(hostProfileID: Self.profile.id, alias: "mini", hostStatus: nil))
     state.pollUnreachableRepositoryIDs = [worktree.repositoryLocation.id]
@@ -243,7 +301,7 @@ struct RemoteFolderUIGateTests {
     let count = sent.value.count
     await store.send(.runCustomCommand(state.selectedCustomCommands[2].id))
     await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote folders yet."))
+    #expect(store.state.repositories.statusToast == .warning("In Place commands do not run in remote projects yet."))
     await store.finish()
     #expect(sent.value.count == count)
   }

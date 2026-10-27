@@ -30,7 +30,7 @@ nonisolated enum RemoteRepositoryHostError: Error, Equatable, LocalizedError {
       String(localized: "The SSH configuration of this remote host now reaches another user, host or port.")
     case .gitMissing: String(localized: "Git was not found on the remote host.")
     case .outputTooLarge: String(localized: "The remote host sent more output than Prowl reads.")
-    case .unsupported: String(localized: "Remote folders do not support this yet.")
+    case .unsupported: String(localized: "Remote projects do not support this yet.")
     case .sideChannelDisabled:
       String(localized: "Remote connections are turned off (PROWL_REMOTE_AGENT_DETECTION=0).")
     case .bundledScriptMissing:
@@ -138,6 +138,15 @@ nonisolated enum RemoteGitShell {
   /// handles it the same way. Exit 255 with one of `ssh`'s own messages is a connection
   /// error; git can exit 255 too, and then it stays a git failure.
   static func output(of outcome: RemoteCommandOutcome, command: RemoteShellCommand) throws -> ShellOutput {
+    let result = try successfulResult(of: outcome, command: command)
+    return ShellOutput(stdout: stdout(of: result), stderr: result.errorOutput, exitCode: 0)
+  }
+
+  /// The result of a command that exited with 0, with its output as bytes, for output that
+  /// is read line by line because one line can be in another encoding.
+  static func successfulResult(of outcome: RemoteCommandOutcome, command: RemoteShellCommand) throws
+    -> RemoteCommandResult
+  {
     switch outcome {
     case .timedOut:
       throw RemoteRepositoryHostError.timedOut
@@ -145,18 +154,21 @@ nonisolated enum RemoteGitShell {
       throw RemoteRepositoryHostError.connection(.launch(reason))
     case .exited(let result):
       guard !result.outputTruncated else { throw RemoteRepositoryHostError.outputTooLarge }
-      let stdout = strippingStartupOutput(
-        String(bytes: result.output, encoding: .utf8) ?? String(bytes: result.output, encoding: .isoLatin1) ?? "")
       if result.exitCode == 255, case let failure = RemoteConnectionOwner.failure(result), !failure.isExitStatus {
         throw RemoteRepositoryHostError.connection(failure)
       }
       guard result.exitCode == 0 else {
         throw ShellClientError(
           command: ([command.executable] + command.arguments).joined(separator: " "),
-          stdout: stdout, stderr: result.errorOutput, exitCode: result.exitCode)
+          stdout: stdout(of: result), stderr: result.errorOutput, exitCode: result.exitCode)
       }
-      return ShellOutput(stdout: stdout, stderr: result.errorOutput, exitCode: 0)
+      return result
     }
+  }
+
+  private static func stdout(of result: RemoteCommandResult) -> String {
+    strippingStartupOutput(
+      String(bytes: result.output, encoding: .utf8) ?? String(bytes: result.output, encoding: .isoLatin1) ?? "")
   }
 
   static func resolveGit(lane: RemoteCommandLane) async throws -> GitExecutable {

@@ -445,12 +445,12 @@ private func globalCommandItems(
     items.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.globalAddRemoteFolder,
-        title: String(localized: "Add Remote Folder"),
+        title: String(localized: "Add Remote Project"),
         subtitle: nil,
         kind: .addRemoteFolder,
         category: .app,
         defaultSuggestion: true,
-        keywords: ["Add Remote Folder", "remote", "ssh", "server", "远程", "远程文件夹"]
+        keywords: ["Add Remote Project", "remote folder", "remote", "ssh", "server", "远程", "远程项目", "远程文件夹"]
       ))
   }
   if showsNewWorktreeAction {

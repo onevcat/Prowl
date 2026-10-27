@@ -100,10 +100,10 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openRepository)))
       .help(helpText(title: "Open Repository", commandID: AppShortcuts.CommandID.openRepository))
       if RemoteFolders.isEnabledInThisProcess {
-        Button("Add Remote Folder...", systemImage: "network") {
+        Button("Add Remote Project...", systemImage: "network") {
           store.send(.repositories(.addRemoteFolderRequested))
         }
-        .help("Add a folder on another machine over SSH")
+        .help("Add a project on another machine over SSH")
       }
       Button("New Workspace...", systemImage: "folder.badge.person.crop") {
         store.send(.repositories(.workspaceCreation(.promptRequested)))

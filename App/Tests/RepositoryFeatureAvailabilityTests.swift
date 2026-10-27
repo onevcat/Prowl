@@ -33,7 +33,7 @@ struct RepositoryFeatureAvailabilityTests {
     }
     #expect(
       location.availability(of: .profileLaunch).unavailableReason?.message
-        == "Agent Profiles cannot launch in remote folders yet."
+        == "Agent Profiles cannot launch in remote projects yet."
     )
   }
 

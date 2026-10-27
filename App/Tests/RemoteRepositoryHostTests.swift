@@ -852,7 +852,7 @@ struct RemoteRepositoryHostTests {
     ])
 
     #expect(loaded.isEmpty)
-    #expect(failures.map(\.message) == ["Remote folders are not available yet."])
+    #expect(failures.map(\.message) == ["Remote projects are not available yet."])
   }
 
   // MARK: - Refresh cadence (B3f)
@@ -1306,6 +1306,113 @@ struct RemoteRepositoryHostTests {
     }
     await #expect(throws: RemoteFolderValidationError.folderInaccessible("/srv/app")) {
       _ = try await host(replying: "PROWL_FOLDER\tinaccessible\n").discoverFolder("/srv/app")
+    }
+  }
+
+  // MARK: - Browsing folders
+
+  /// The folder browser lists the subfolders of a host folder: repositories (a bare one
+  /// too) are marked, a folder that cannot be opened is listed as such, files are left
+  /// out, a link to a folder is a folder, and a name with a tab is kept whole.
+  @Test func aHostFolderListsItsSubfoldersSorted() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    let bare = try await fixture.makeUpstream()
+    let manager = FileManager.default
+    for name in ["plain", "Zeta", "日本語", ".hidden", "tab\tname", "line\nbreak", "locked"] {
+      try manager.createDirectory(at: fixture.root.appending(path: name), withIntermediateDirectories: false)
+    }
+    try manager.setAttributes([.posixPermissions: 0], ofItemAtPath: fixture.root.appending(path: "locked").path)
+    defer {
+      try? manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fixture.root.appending(path: "locked").path)
+    }
+    try manager.createSymbolicLink(at: fixture.root.appending(path: "link"), withDestinationURL: fixture.main)
+    try Data().write(to: fixture.root.appending(path: "file.txt"))
+    let host = RemoteRepositoryHost(hostProfileID: UUID(), lane: GitFixture.localLane.printingAGreetingFirst())
+    let rootPath = fixture.root.path(percentEncoded: false).trimmingSuffix("/")
+
+    let listing = try await host.listFolder(rootPath)
+
+    #expect(listing.path == rootPath)
+    #expect(
+      listing.entries == [
+        RemoteFolderListing.Entry(name: ".hidden", isRepository: false, isAccessible: true),
+        RemoteFolderListing.Entry(name: "link", isRepository: true, isAccessible: true),
+        RemoteFolderListing.Entry(name: "locked", isRepository: false, isAccessible: false),
+        RemoteFolderListing.Entry(name: "main", isRepository: true, isAccessible: true),
+        RemoteFolderListing.Entry(name: "plain", isRepository: false, isAccessible: true),
+        RemoteFolderListing.Entry(name: "tab\tname", isRepository: false, isAccessible: true),
+        RemoteFolderListing.Entry(
+          name: bare.lastPathComponent, isRepository: true, isAccessible: true),
+        RemoteFolderListing.Entry(name: "Zeta", isRepository: false, isAccessible: true),
+        RemoteFolderListing.Entry(name: "日本語", isRepository: false, isAccessible: true),
+      ])
+    #expect(listing.omittedCount == 0)
+    let home = try #require(ProcessInfo.processInfo.environment["HOME"])
+    let resolvedHome = try #require(realpath(home, nil))
+    defer { free(resolvedHome) }
+    #expect(listing.home == String(cString: resolvedHome))
+  }
+
+  /// `~` starts at the host's home; a missing path and a file are reported; a large
+  /// folder lists the first entries and counts the rest.
+  @Test func browsingResolvesTheHomeAndReportsWhatCannotBeListed() async throws {
+    let fixture = try await GitFixture()
+    defer { fixture.remove() }
+    for index in 1...5 {
+      try FileManager.default.createDirectory(
+        at: fixture.root.appending(path: "folder\(index)"), withIntermediateDirectories: false)
+    }
+    let host = RemoteRepositoryHost(hostProfileID: UUID(), lane: GitFixture.localLane)
+    let rootPath = fixture.root.path(percentEncoded: false).trimmingSuffix("/")
+
+    let home = try await host.listFolder("~")
+    #expect(home.path == home.home)
+    let limited = try await host.listFolder(rootPath, limit: 3)
+    #expect(limited.entries.map(\.name) == ["folder1", "folder2", "folder3"])
+    #expect(limited.omittedCount == 3)
+    await #expect(throws: RemoteFolderValidationError.folderNotFound(rootPath + "/none")) {
+      _ = try await host.listFolder(rootPath + "/none")
+    }
+    let file = fixture.main.appending(path: "a.txt").path(percentEncoded: false)
+    await #expect(throws: RemoteFolderValidationError.notAFolder(file)) {
+      _ = try await host.listFolder(file)
+    }
+  }
+
+  /// A name that is not UTF-8 cannot be sent back to the host as typed, so it is left out
+  /// and the other names keep their text; output without the folder line is incomplete.
+  @Test func aNameThatIsNotUTF8IsLeftOutOfTheListing() async throws {
+    func host(replying reply: Data) -> RemoteRepositoryHost {
+      let outcome = RemoteCommandOutcome.exited(
+        RemoteCommandResult(exitCode: 0, output: reply, outputTruncated: false, errorOutput: ""))
+      return RemoteRepositoryHost(
+        hostProfileID: UUID(), lane: RemoteCommandLane(run: { _, _ in outcome }, runScript: { _, _ in outcome }))
+    }
+    var reply = Data("PROWL_ENTRY\t\tbefore-the-folder-line\n".utf8)
+    reply += Data("PROWL_LIST\tfolder\t/srv\n".utf8)
+    reply += Data("PROWL_HOME\t/home/dev\n".utf8)
+    reply += Data("PROWL_ENTRY\tg\tアプリ\n".utf8)
+    reply += Data("PROWL_ENTRY\t\tbad-".utf8) + Data([0xFF, 0xFE]) + Data("\n".utf8)
+    reply += Data("PROWL_ENTRY\tx\tsecret\n".utf8)
+    reply += Data("PROWL_MORE\t12\n".utf8)
+
+    let listing = try await host(replying: reply).listFolder("/srv")
+
+    #expect(
+      listing
+        == RemoteFolderListing(
+          path: "/srv", home: "/home/dev",
+          entries: [
+            RemoteFolderListing.Entry(name: "secret", isRepository: false, isAccessible: false),
+            RemoteFolderListing.Entry(name: "アプリ", isRepository: true, isAccessible: true),
+          ],
+          omittedCount: 12))
+    await #expect(throws: RemoteRepositoryRefreshError.incompleteOutput) {
+      _ = try await host(replying: Data("PROWL_ENTRY\t\tapp\n".utf8)).listFolder("/srv")
+    }
+    await #expect(throws: RemoteFolderValidationError.folderInaccessible("/srv")) {
+      _ = try await host(replying: Data("PROWL_LIST\tinaccessible\n".utf8)).listFolder("/srv")
     }
   }
 

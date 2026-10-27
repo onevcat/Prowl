@@ -9,6 +9,9 @@ struct RemoteFolderToolbarStatus: Equatable {
   let alias: String
   /// Nil while the host answers.
   let hostStatus: RemoteHostStatus?
+  /// False until the host answered since Prowl started: the folder then shows its last
+  /// state, and Prowl is still connecting.
+  let hasAnswered: Bool
 
   /// Nil for a local worktree, and for a remote folder that holds no connection: a plain
   /// folder is not polled (B3f), and a folder without its host profile cannot connect.
@@ -19,13 +22,25 @@ struct RemoteFolderToolbarStatus: Equatable {
     @Shared(.hostProfiles) var hostProfiles: [HostProfile]
     guard let alias = hostProfiles.first(where: { $0.id == hostProfileID })?.alias else { return nil }
     self.init(
-      hostProfileID: hostProfileID, alias: alias, hostStatus: repositories.remoteHostStatus(for: repositoryID))
+      hostProfileID: hostProfileID, alias: alias, hostStatus: repositories.remoteHostStatus(for: repositoryID),
+      hasAnswered: repositories.answeredRemoteRepositoryIDs.contains(repositoryID))
   }
 
-  init(hostProfileID: HostProfile.ID, alias: String, hostStatus: RemoteHostStatus?) {
+  init(hostProfileID: HostProfile.ID, alias: String, hostStatus: RemoteHostStatus?, hasAnswered: Bool = true) {
     self.hostProfileID = hostProfileID
     self.alias = alias
     self.hostStatus = hostStatus
+    self.hasAnswered = hasAnswered
+  }
+
+  var summary: String {
+    switch hostStatus {
+    case nil where hasAnswered: String(localized: "Connected")
+    case nil: String(localized: "Connecting…")
+    case .unreachable: String(localized: "Not answering")
+    case .connectionFailed: String(localized: "Not connected")
+    case .needsRebind: String(localized: "SSH configuration changed")
+    }
   }
 }
 
@@ -48,7 +63,7 @@ struct RemoteFolderStatusButton: View {
         Text(verbatim: status.alias)
           .lineLimit(1)
           .truncationMode(.middle)
-        Text(summary)
+        Text(status.summary)
           .foregroundStyle(.secondary)
           .lineLimit(1)
       }
@@ -56,8 +71,8 @@ struct RemoteFolderStatusButton: View {
     .buttonStyle(.plain)
     .font(.caption)
     .contentShape(.rect)
-    .help("Prowl's background SSH connection to the host of this remote folder. Click to see what it does.")
-    .accessibilityLabel(Text("\(status.alias): \(summary)"))
+    .help("Prowl's background SSH connection to the host of this remote project. Click to see what it does.")
+    .accessibilityLabel(Text("\(status.alias): \(status.summary)"))
     .popover(isPresented: $isPresented, arrowEdge: .bottom) {
       RemoteFolderStatusPanel(status: status) {
         isPresented = false
@@ -73,15 +88,6 @@ struct RemoteFolderStatusButton: View {
     case .needsRebind: "exclamationmark.triangle.fill"
     }
   }
-
-  private var summary: String {
-    switch status.hostStatus {
-    case nil: String(localized: "Connected")
-    case .unreachable: String(localized: "Not answering")
-    case .connectionFailed: String(localized: "Not connected")
-    case .needsRebind: String(localized: "SSH configuration changed")
-    }
-  }
 }
 
 private struct RemoteFolderStatusPanel: View {
@@ -91,7 +97,7 @@ private struct RemoteFolderStatusPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Label {
-        Text("Remote folder over SSH")
+        Text("Remote project over SSH")
           .font(.headline)
       } icon: {
         Image(systemName: "network")
@@ -129,8 +135,10 @@ private struct RemoteFolderStatusPanel: View {
 
   private var detail: String {
     switch status.hostStatus {
-    case nil:
+    case nil where status.hasAnswered:
       String(localized: "Connected.")
+    case nil:
+      String(localized: "Prowl is connecting to the host. Until it answers, the folders show their last state.")
     case .unreachable:
       String(localized: "The host did not answer. Prowl shows the last state and tries again.")
     case .connectionFailed(let reason):

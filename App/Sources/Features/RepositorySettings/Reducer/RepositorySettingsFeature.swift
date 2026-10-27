@@ -309,7 +309,7 @@ struct RepositorySettingsFeature {
       case .importUserImage(let sourceURL):
         // Icon images live under a local repository's settings folder (C1 for remote).
         guard let rootURL = state.localRootURL else {
-          state.appearanceImportError = String(localized: "Images are not available for remote folders yet.")
+          state.appearanceImportError = String(localized: "Images are not available for remote projects yet.")
           return .none
         }
         let repositoryID = state.repositoryID
@@ -485,7 +485,7 @@ struct RepositorySettingsFeature {
     // Suggestions read the repository's files on this Mac (C1 for remote).
     guard let rootURL = state.localRootURL else {
       return .send(
-        .symbolSuggestionsFailed(String(localized: "Suggestions are not available for remote folders yet.")))
+        .symbolSuggestionsFailed(String(localized: "Suggestions are not available for remote projects yet.")))
     }
     let displayName: String =
       if let custom = state.settings.customTitle, !custom.isEmpty {

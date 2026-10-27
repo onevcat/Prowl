@@ -19,6 +19,7 @@ struct RepositorySectionView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isHovering = false
   @Shared(.repositoryAppearances) private var repositoryAppearances
+  @Shared(.hostProfiles) private var hostProfiles
 
   var body: some View {
     let state = store.state
@@ -62,7 +63,8 @@ struct RepositorySectionView: View {
             ? (isExpanded ? String(localized: "Collapse") : String(localized: "Expand"))
             : (repository.isWorkspace
               ? String(localized: "Open terminal in workspace")
-              : String(localized: "Open terminal in folder"))
+              : String(localized: "Open terminal in folder")),
+          remoteHost: RemoteProjectHostSummary(location: repository.location, hostProfiles: hostProfiles)
         )
         // Expanded git repos move the count into the worktree rows, so the
         // header stays quiet. Workspaces keep the header badge even when
