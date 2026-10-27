@@ -52,13 +52,15 @@ finishes. When the launcher cannot be staged, the tab closes with the reason.
   editing work. Prowl installs nothing on the host.
 - **Splits.** A split (`⌘D`, `prowl create pane`, a New Split custom command) is a new
   remote pane. It starts where its anchor pane is on the host. Otherwise it starts in the
-  last known directory there, and then in the folder.
+  last known directory there, then where the anchor's shell started, and then in the
+  folder.
 - **When `ssh` ends.** The pane returns to a local shell. A later `ssh` that you type in
   that pane is your own, and it follows the rules for manual SSH sessions in
   [agent detection](agent-detection.md#remote-agents-over-ssh).
 - **Restore.** After a restart, a remote folder's tabs and splits come back when you first
   open the folder. They connect again with a plain shell, where they were on the host. A
-  script never runs again. An unreachable host never affects your local layout, and the
+  pane whose session Prowl cannot read keeps the directory that its shell started in, so
+  later restarts keep it too. A script never runs again. An unreachable host never affects your local layout, and the
   folder keeps its saved layout until its panes connect again.
 
 ## Scripts and custom commands
@@ -117,7 +119,8 @@ Prowl shows the reason in the control's tooltip, or as a toast:
   not run local file tools on them.
 - **macOS hosts.** On a macOS host, a plain shell session cannot be matched to its pane:
   macOS hides the environment of system binaries. The pane then shows "Agents not
-  detected", and a split starts in the folder. An agent, a Homebrew shell or a tmux session
+  detected", and Prowl does not see a `cd` in it: its splits, the saved layout and the CLI
+  use the directory where its shell started. An agent, a Homebrew shell or a tmux session
   can be matched.
 - **Prowl's typed `ssh` line.** It overrides `RemoteCommand`, `SessionType`,
   `ForkAfterAuthentication` and `StdinNull` from your SSH configuration, so that the

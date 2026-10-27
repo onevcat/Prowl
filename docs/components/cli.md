@@ -162,7 +162,9 @@ Each item contains:
   folder's `path` and `root_path` are paths on that host, not on this Mac. Text output
   shows them as `label:path`.
 - `tab`: `id`, `title`, `selected`
-- `pane`: `id`, `title`, `cwd`, `focused`, `visible`, `agent`
+- `pane`: `id`, `title`, `cwd`, `focused`, `visible`, `agent`. In a remote folder,
+  `cwd` is the pane's directory on the host (or absent when Prowl cannot tell), not the
+  local `ssh` process's directory.
 - `task`: `status` (`running` | `idle` | null)
 
 The response also carries `caller` — `{"pane": {"id"}, "worktree": {"id"}}` — the pane

@@ -32,10 +32,7 @@ extension WorktreeTerminalState {
     let tabs: [CLITerminalTabSnapshot] = tabManager.tabs.map { tab in
       let paneIDs = trees[tab.id]?.leaves().map(\.id) ?? []
       let panes = paneIDs.map { paneID in
-        let cwd = inheritedSurfaceConfig(
-          fromSurfaceId: paneID,
-          context: GHOSTTY_SURFACE_CONTEXT_TAB
-        ).workingDirectory?.path(percentEncoded: false)
+        let cwd = cliWorkingDirectory(surfaceID: paneID)
 
         let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
         let agent = surfaceAgentStates[paneID]?.detectedAgent?.rawValue
@@ -63,6 +60,16 @@ extension WorktreeTerminalState {
       tabs: tabs,
       taskStatus: taskStatus == .running ? .running : .idle
     )
+  }
+
+  /// A pane's directory for the CLI: on the host for a remote pane's session, else the local
+  /// surface's.
+  func cliWorkingDirectory(surfaceID: UUID) -> String? {
+    if let origin = remoteLaunchOriginBySurface[surfaceID], !origin.sessionEnded {
+      return remoteWorkingDirectory(surfaceID: surfaceID)
+    }
+    return inheritedSurfaceConfig(fromSurfaceId: surfaceID, context: GHOSTTY_SURFACE_CONTEXT_TAB)
+      .workingDirectory?.path(percentEncoded: false)
   }
 
   func paneTitle(surfaceID: UUID, fallbackTabTitle: String) -> String {
@@ -125,10 +132,7 @@ extension WorktreeTerminalState {
     let focusedPaneID = focusedSurfaceIdByTab[tabId]
     let panes: [TargetResolutionSnapshot.Pane] = paneIDs.compactMap { paneID in
       guard let surfaceView = surfaces[paneID] else { return nil }
-      let cwd = inheritedSurfaceConfig(
-        fromSurfaceId: paneID,
-        context: GHOSTTY_SURFACE_CONTEXT_TAB
-      ).workingDirectory?.path(percentEncoded: false)
+      let cwd = cliWorkingDirectory(surfaceID: paneID)
       let title = paneTitle(surfaceID: paneID, fallbackTabTitle: "")
       return TargetResolutionSnapshot.Pane(
         id: paneID,

@@ -14,6 +14,10 @@ nonisolated struct RemoteLaunchOrigin: Equatable, Sendable {
   let hasFirstCommand: Bool
   /// When the pane started its `ssh` (staging is not part of the command's duration).
   var launchedAt: Date
+  /// The host directory that the pane's shell started in. Where the pane is while no
+  /// snapshot reads its session: a macOS host hides its system shell's environment, so a
+  /// pane with only that shell in front never maps.
+  var workingDirectory: String?
   /// The pane's `ssh`, once a probe saw it in the foreground: the `ssh` whose arguments
   /// carry the launch's nonce (the launcher path), never one the user typed later.
   var ssh: LocalProcessGeneration?
