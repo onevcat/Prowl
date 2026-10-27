@@ -870,9 +870,188 @@ struct ShelfFeatureTests {
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
       $0.preArchivedWorktreeID = worktree.id
+      $0.preArchivedTopSegment = .shelf
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
+  }
+
+  @Test(.dependencies) func leavingArchivedWorktreesRestoresShelf() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.sidebarSelectedWorktreeIDs = [worktree.id]
+    state.openedWorktreeIDs = [worktree.id]
+    state.isShelfActive = true
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.isShelfActive = false
+      $0.worktreeHistoryBackStack = [worktree.id]
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
+      $0.preArchivedWorktreeID = worktree.id
+      $0.preArchivedTopSegment = .shelf
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.isShelfActive = true
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+      $0.preArchivedWorktreeID = nil
+      $0.preArchivedTopSegment = nil
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.isShowingShelf)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func selectingUnarchivedWorktreeFromArchivedListOpensItOnShelf() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let restored = Worktree(
+      id: "/tmp/repo/wt2",
+      name: "wt2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt2"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree, restored])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .archivedWorktrees
+    state.openedWorktreeIDs = [worktree.id]
+    state.preArchivedWorktreeID = worktree.id
+    state.preArchivedTopSegment = .shelf
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(restored.id)) {
+      $0.isShelfActive = true
+      $0.selection = .worktree(restored.id)
+      $0.sidebarSelectedWorktreeIDs = [restored.id]
+      $0.openedWorktreeIDs = [worktree.id, restored.id]
+      $0.preArchivedWorktreeID = nil
+      $0.preArchivedTopSegment = nil
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.orderedShelfBooks().map(\.id).contains(restored.id))
+    await store.finish()
+  }
+
+  @Test(.dependencies) func leavingArchivedWorktreesWithStalePreviousIDFallsBackToShelf() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .archivedWorktrees
+    state.preArchivedWorktreeID = "/tmp/repo/wt-deleted"
+    state.preArchivedTopSegment = .shelf
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.selection = nil
+      $0.preArchivedWorktreeID = nil
+      $0.preArchivedTopSegment = nil
+    }
+    await store.receive(\.toggleShelf) {
+      $0.isShelfActive = true
+    }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.isShowingShelf)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func leavingArchivedWorktreesRestoresCanvas() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+    state.preCanvasWorktreeID = worktree.id
+    state.preCanvasTerminalTargetID = worktree.id
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.selection = .archivedWorktrees
+      $0.preArchivedTopSegment = .canvas
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await store.send(.selectArchivedWorktrees) {
+      // The Canvas exit targets survive the round trip untouched.
+      $0.selection = .canvas
+      $0.preArchivedTopSegment = nil
+    }
+    await store.finish()
+    #expect(sentCommands.value == [.setCanvasMode(true)])
   }
 
   @Test(.dependencies) func selectArchivedWorktreesTogglesBackToPreviousWorktree() async {

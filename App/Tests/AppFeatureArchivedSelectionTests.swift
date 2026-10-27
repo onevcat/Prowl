@@ -55,6 +55,7 @@ struct AppFeatureArchivedSelectionTests {
       $0.repositories.worktreeHistoryBackStack = [worktree.id]
       $0.repositories.selection = .archivedWorktrees
       $0.repositories.preArchivedWorktreeID = worktree.id
+      $0.repositories.preArchivedTopSegment = .tabbed
     }
     await store.receive(\.repositories.delegate.selectedWorktreeChanged)
     await store.finish()
