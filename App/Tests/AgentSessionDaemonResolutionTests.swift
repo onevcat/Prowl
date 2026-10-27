@@ -335,7 +335,7 @@ struct AgentSessionDaemonResolutionTests {
           try changed.write(to: url)
         }
         return data
-      }, openFilePaths: { _ in inventory.withLock { $0 } })
+      }, openFiles: { _ in inventory.withLock { $0 }.map { CodexDaemonInventory(paths: $0) } })
     let resolver = AgentSessionResolver(
       tuiOpenFilePaths: { _ in [] },
       daemonBinding: { surface, process, _ in

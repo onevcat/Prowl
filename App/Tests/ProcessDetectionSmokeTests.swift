@@ -68,9 +68,40 @@ struct ProcessDetectionSmokeTests {
     #expect(pids.contains(getpid()))
   }
 
+  // A Codex daemon inherits the tty of the pane that started it; the tty is revoked when that
+  // pane closes. The inventory names the failure; the strict wrapper still rejects it.
+  @Test func revokedTerminalIsReportedAsAnUnreadableDescriptor() throws {
+    var primary: Int32 = -1
+    var secondary: Int32 = -1
+    #expect(openpty(&primary, &secondary, nil, nil, nil) == 0)
+    defer {
+      close(secondary)
+      close(primary)
+    }
+    let terminal = try #require(ttyname(secondary).map { String(cString: $0) })
+    #expect(revoke(terminal) == 0)
+    let url = FileManager.default.temporaryDirectory.appending(path: "prowl-revoked-\(UUID().uuidString).jsonl")
+    FileManager.default.createFile(atPath: url.path, contents: Data())
+    let descriptor = open(url.path, O_WRONLY)
+    #expect(descriptor >= 0)
+    defer {
+      close(descriptor)
+      try? FileManager.default.removeItem(at: url)
+    }
+
+    let inventory = try #require(ProcessDetection.openFileInventory(pid: getpid()))
+    var complete = true
+    _ = ProcessDetection.openFilePaths(pid: getpid(), complete: &complete)
+
+    #expect(inventory.failures.contains(ENOENT))
+    #expect(inventory.paths.contains { URL(fileURLWithPath: $0).lastPathComponent == url.lastPathComponent })
+    #expect(!complete)
+  }
+
   @Test func missingProcessDoesNotReturnACompleteInventory() {
     var complete = true
     #expect(ProcessDetection.openFilePaths(pid: -1, complete: &complete).isEmpty)
     #expect(!complete)
+    #expect(ProcessDetection.openFileInventory(pid: -1) == nil)
   }
 }

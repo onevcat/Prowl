@@ -65,3 +65,6 @@ by pane X's Codex, so its parent chain reaches X's shell):
   is incomplete, a held rollout cannot be read, one rollout exceeds the read budget, or two
   rollouts share a client id, and it logs none of these. A profile launch reached the daemon
   only because its notifier preparation degraded (1 s login-shell probe or `config/read`).
+  Correction (2026-10-28): the "stopped mapping until restart" failure is a revoked tty that the
+  daemon inherits from the pane that started it; see
+  [005-revoked-daemon-descriptor.md](005-revoked-daemon-descriptor.md).
