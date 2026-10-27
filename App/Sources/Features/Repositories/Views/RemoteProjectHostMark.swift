@@ -35,14 +35,17 @@ struct RemoteProjectHostSummary: Equatable {
   }
 }
 
-/// The globe before the name of a remote project in the sidebar. Its tooltip names the host.
+/// The globe after the name of a remote project in the sidebar. Its tooltip names the host.
 struct RemoteProjectHostMark: View {
   let summary: RemoteProjectHostSummary
 
   var body: some View {
+    // The name's font, smaller, on its baseline. Project names are mostly lowercase, so the
+    // symbol moves down 1 pt to center on their x-height instead of the cap height.
     Image(systemName: "network")
-      .font(.caption)
+      .imageScale(.small)
       .foregroundStyle(.secondary)
+      .alignmentGuide(.firstTextBaseline) { $0[.firstTextBaseline] - 1 }
       .help(Text(verbatim: summary.details))
       .accessibilityLabel(Text(verbatim: summary.title))
   }

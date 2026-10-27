@@ -36,7 +36,7 @@ connection, and remote projects then cannot load.
 The folder's ID is `ssh:<host-profile-uuid>:<path>`. The CLI also accepts
 `<alias>:<path>`.
 
-In the sidebar, a globe before the name marks a remote project. The tooltip of the globe and
+In the sidebar, a globe after the name marks a remote project. The tooltip of the globe and
 of the name shows the host: its alias, the target that `ssh -G` resolves (`user@host`, the
 port when it is not 22, and jump hosts), and the path on the host.
 
