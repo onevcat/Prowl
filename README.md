@@ -37,6 +37,7 @@ You're not just typing commands anymore. You're running Claude Code in one branc
 
 - **[See every agent at once](#see-every-agent-at-once)**: Canvas and Shelf lay out all your worktrees and live sessions.
 - **[Know who needs you](#know-who-needs-you)**: Agent Island and Active Agents flag the blocked or finished agent, even while another app is in front.
+- **[Reach other machines](#reach-agents-on-other-machines)**: open a project on any SSH host, and see the agents there next to your local ones, even inside tmux.
 - **[Automate the loop](#automate-the-loop)**: launch agents from profiles, let them review each other's work in workflows, and put your daily commands on a key.
 - **[Let your agents drive](#let-your-agents-drive-the-terminal)**: the `prowl` CLI lets an agent read panes, run commands, and start helper agents.
 
@@ -117,6 +118,43 @@ Every agent across every worktree, tab, and split, in one list. Click a row to l
 Walk away: Prowl posts a macOS notification when an agent finishes or stops to ask you something. `⌘⌥U` jumps to the latest unread pane.
 
 <br clear="all">
+
+## Reach agents on other machines
+
+Some work has to run where the code, the data, or the hardware is: a build box, a GPU server, a dev VM. Prowl puts those machines in the same sidebar and watches their agents as closely as the ones on your Mac. It uses plain SSH and installs nothing on the host.
+
+<p align="center">
+  <img src="https://prowl.onev.cat/images/shots/remote-projects.webp" alt="Prowl with a remote project named new-api on the host mini: a Codex agent on the host waits at a command approval prompt, and Active Agents lists two local agents that are done next to two remote agents labelled mini, one working and one blocked">
+</p>
+
+<p align="center">
+  <sub>A remote project on the host <code>mini</code>. Its Codex waits for approval on the host, and Active Agents lists it next to the local agents.</sub>
+</p>
+
+### 🌐 Remote Projects — another machine, same sidebar
+
+<img align="right" width="320" src="https://prowl.onev.cat/images/shots/remote-browse.webp" alt="The Add Remote Project sheet: host mini, and a folder browser on the host with branch marks on the Git repositories">
+
+Choose **File → Add Remote Project…**, pick a host, and browse to a folder on it. The project shows in the sidebar next to your local repositories, with a globe after its name. Its tabs, splits, scripts, and agents run on the host.
+
+- **Nothing to install.** Prowl uses your own `ssh` and `~/.ssh/config`: aliases, jump hosts, and keys from your SSH agent. It installs nothing on the host and edits no startup file there.
+- **A tab is a shell on the host.** A new tab opens in the folder, in your login shell. A split starts where its pane is. Setup scripts and custom commands run on the host.
+- **Worktrees and branches** of the remote repository list as they do for a local one, so one branch per agent works there too.
+- **Back after a restart.** Tabs and splits connect again where they were. An unreachable host never touches your local layout.
+
+Sign-in uses a key from your SSH configuration or agent; hosts that ask for a password or a code are not supported yet.
+
+<br clear="all">
+
+### 🛰 Agents behind `ssh` — tmux included
+
+Already live in `ssh`? Type `ssh devbox` in any pane and start an agent there as usual. Prowl finds the agent on the host and shows it in Active Agents and Agent Island with its state and its host: **Working**, **Blocked**, **Done**, or **Idle**, as for a local agent.
+
+- **Asks first.** Before the first connection to a host, the toolbar asks whether to detect agents there. Prowl then opens its own SSH connection next to yours and runs a read-only check. Your session does not change.
+- **Sees into tmux.** Prowl follows the tmux client to its active pane and reads that pane's screen.
+- **Always labelled.** The pane shows `user@host` in its corner, and its tab shows a network glyph. If the host stops answering, the agent keeps its last state in grey and shows when it was last seen.
+
+See [remote projects](https://prowl.onev.cat/manual/components/remote-folders/) and [remote agent detection](https://prowl.onev.cat/manual/components/agent-detection/#remote-agents-over-ssh) in the manual.
 
 ## Automate the loop
 
