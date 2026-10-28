@@ -35,6 +35,9 @@ Verification that was run:
 | `codesign -vvv --deep --strict` on the Debug app | valid; `CodeResources` seals `MacOS/ghostty` as `symlink => ProwlApp` |
 | Release `xcodebuild archive` (ad-hoc identity) | symlink in the archived app, universal binary, `--deep --strict` valid, valid after a `ditto` zip round trip |
 | `ghostty +version` start time (Debug) | about 26 ms |
+| Review loop (`prowl.review-loop`, 2 rounds) | clean after the R1 fix |
+| Full `make test` at `406f99ba` | prowl-tests 4914 passed, 0 failed |
+| Final E2E at `406f99ba` (rebuilt Debug app, fresh isolated instance, host restored to no Ghostty terminfo first) | first `ssh mini` installs terminfo, remote `TERM=xterm-ghostty`, `tput colors` 256; remote `codex` correlated/probed; a later `ssh -t` uses the cache (no install, `TERM=xterm-ghostty`); control with `GHOSTTY_BIN_DIR=/nonexistent` fails as in #1002 (`no such file or directory: /nonexistent/ghostty`, exit 127); no `ghostty` process left after `ssh` ends |
 | E2E, isolated Debug instance, zsh, `ssh-env,ssh-terminfo`, host `mini` without Ghostty terminfo | `Setting up xterm-ghostty terminfo on onevcat@mini...`, then login; remote `TERM=xterm-ghostty`, `~/.terminfo/78/xterm-ghostty` installed; `ghostty +ssh-cache` lists `onevcat@mini`; the cache file is under the `XDG_STATE_HOME` set through the `env` key; the `ghostty` process ends with `ssh` |
 | E2E, 082 remote detection through the wrapper | `LC_PROWL_PANE` still reaches the remote shell; a remote `codex` reports `remote.correlation = correlated`, `confidence = probed` |
 
@@ -55,6 +58,8 @@ Verification that was run:
   of the ad-hoc archive, not of the entry.
 - Only zsh was run end to end. bash, fish, elvish, and nushell use the same
   `$GHOSTTY_BIN_DIR/ghostty +ssh` call.
+- `+ssh` writes the cache entry only when `ssh` exits 0 (upstream `ssh.zig`), so a session
+  that ends with a non-zero status installs the terminfo again on the next connection.
 - `+ssh` forwards `COLORTERM`, `TERM_PROGRAM`, and `TERM_PROGRAM_VERSION`; the remote
   `sshd` drops them unless its `AcceptEnv` lists them (macOS accepts only `LANG LC_*`).
 - `GhosttyRuntime+ThemeFallback.swift` still looks for an external `ghostty` for
