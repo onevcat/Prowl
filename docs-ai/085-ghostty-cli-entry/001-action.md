@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 2026-10-29 | Root cause of #1002 traced to upstream `484d6ec66` (Ghostty 1.4 `+ssh`); workaround and `env` usage posted on the issue | #1002 |
 | 2026-10-29 | Symlink build phase, `ProwlMain` entry, `GhosttyCLIEntry`, tests, `docs/components/terminal.md` | #1004 |
+| 2026-10-29 | Review round 1: an entry linked from outside the bundle exported a wrong `GHOSTTY_RESOURCES_DIR` (`Bundle.main` is the outside folder); `GhosttyCLIEntry.appBundle(executableURL:)` now resolves the symlinks to the app | #1004 |
 
 ## Outcome & current state (as of 2026-10-29)
 
@@ -15,11 +16,12 @@
 - `App/Sources/App/ProwlApp.swift`: `@main enum ProwlMain` checks the program name and
   then calls `ProwlApp.main()`. `ProwlApp` is no longer `@main`.
 - `App/Sources/Infrastructure/Ghostty/GhosttyCLIEntry.swift`: `GhosttyCLIEntry`
-  (program-name rule, `run()`), and `GhosttyBundledResources.export()`, which both the app
-  launch and the CLI entry use to set `GHOSTTY_RESOURCES_DIR`.
-- `App/Tests/GhosttyCLIEntryTests.swift`: the name rule, the symlink in the test host
-  bundle, and three runs of the real entry (`+version`, no action, unknown action) with a
-  clean child environment.
+  (program-name rule, `appBundle(executableURL:)`, `run()`), and
+  `GhosttyBundledResources.export(from:)`, which both the app launch and the CLI entry use
+  to set `GHOSTTY_RESOURCES_DIR`.
+- `App/Tests/GhosttyCLIEntryTests.swift`: the name rule, the bundle lookup, the symlink in
+  the test host bundle, and runs of the real entry (`+version`, no action, unknown action,
+  `+list-themes` through a link from outside the bundle) with a clean child environment.
 - `docs/components/terminal.md`: the `env` key and a "Ghostty CLI and SSH integration"
   section.
 
@@ -28,7 +30,7 @@ Verification that was run:
 | Check | Result |
 | --- | --- |
 | `GhosttyCLIEntryTests` before the build phase | 4 of 6 failed (no symlink) |
-| `GhosttyCLIEntryTests` after the build phase | 6 of 6 passed |
+| `GhosttyCLIEntryTests` after the build phase | 6 of 6 passed (8 of 8 after review round 1) |
 | `make check`, `make build-app` | passed |
 | `codesign -vvv --deep --strict` on the Debug app | valid; `CodeResources` seals `MacOS/ghostty` as `symlink => ProwlApp` |
 | Release `xcodebuild archive` (ad-hoc identity) | symlink in the archived app, universal binary, `--deep --strict` valid, valid after a `ditto` zip round trip |
@@ -38,8 +40,10 @@ Verification that was run:
 
 ## Deviations from plan
 
-- `GhosttyBundledResources.export()` was added so that the app and the CLI entry set
-  `GHOSTTY_RESOURCES_DIR` the same way; the plan did not name it.
+- `GhosttyBundledResources.export(from:)` was added so that the app and the CLI entry set
+  `GHOSTTY_RESOURCES_DIR` the same way; the plan did not name it. The CLI entry passes the
+  bundle that `GhosttyCLIEntry.appBundle(executableURL:)` finds through the symlinks, so a
+  link from outside the bundle (for example `~/.local/bin/ghostty`) also works.
 
 ## Open questions
 

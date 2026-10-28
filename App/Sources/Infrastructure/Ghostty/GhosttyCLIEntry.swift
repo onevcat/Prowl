@@ -16,7 +16,7 @@ nonisolated enum GhosttyCLIEntry {
   }
 
   static func run() -> Never {
-    GhosttyBundledResources.export()
+    GhosttyBundledResources.export(from: appBundle(executableURL: Bundle.main.executableURL) ?? .main)
     guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {
       writeToStandardError(
         """
@@ -43,6 +43,17 @@ nonisolated enum GhosttyCLIEntry {
     exit(1)
   }
 
+  /// The app bundle that holds the executable. A user can link the entry from outside the
+  /// bundle (for example `~/.local/bin/ghostty`); `Bundle.main` is then that folder.
+  static func appBundle(executableURL: URL?) -> Bundle? {
+    guard let executableURL else { return nil }
+    let appURL = executableURL.resolvingSymlinksInPath()
+      .deletingLastPathComponent()  // MacOS
+      .deletingLastPathComponent()  // Contents
+      .deletingLastPathComponent()
+    return Bundle(url: appURL)
+  }
+
   private static func writeToStandardError(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
   }
@@ -51,9 +62,9 @@ nonisolated enum GhosttyCLIEntry {
 nonisolated enum GhosttyBundledResources {
   /// Points libghostty at the resources in the app bundle (themes, shell integration,
   /// terminfo), whatever the parent process set.
-  static func export() {
+  static func export(from bundle: Bundle = .main) {
     // No directory hint: the value keeps no trailing slash, as it had before.
-    guard let resourceURL = Bundle.main.resourceURL?.appending(path: "ghostty") else { return }
+    guard let resourceURL = bundle.resourceURL?.appending(path: "ghostty") else { return }
     setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path(percentEncoded: false), 1)
   }
 }

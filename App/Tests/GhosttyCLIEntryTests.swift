@@ -27,10 +27,34 @@ struct GhosttyCLIEntryTests {
     #expect(destination == executable.lastPathComponent)
   }
 
+  @Test func appBundleFollowsTheEntryLinkToTheApp() throws {
+    let executable = try #require(Bundle.main.executableURL)
+    let entry = executable.deletingLastPathComponent().appending(path: GhosttyCLIEntry.programName)
+    let bundle = try #require(GhosttyCLIEntry.appBundle(executableURL: entry))
+    #expect(bundle.bundleURL.resolvingSymlinksInPath() == Bundle.main.bundleURL.resolvingSymlinksInPath())
+    #expect(GhosttyCLIEntry.appBundle(executableURL: nil) == nil)
+  }
+
   @Test func entryRunsGhosttyAction() async throws {
     let result = try await Self.runEntry(arguments: ["+version"])
     #expect(result.exitCode == 0)
     #expect(result.stdout.hasPrefix("Ghostty "))
+  }
+
+  /// A user can link the entry from outside the bundle; then `Bundle.main` is that folder,
+  /// and the bundled resources must still be found.
+  @Test func entryLinkedFromOutsideTheBundleUsesBundledResources() async throws {
+    let executable = try #require(Bundle.main.executableURL)
+    let entry = executable.deletingLastPathComponent().appending(path: GhosttyCLIEntry.programName)
+    let folder = FileManager.default.temporaryDirectory.appending(path: "GhosttyCLIEntryTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let link = folder.appending(path: GhosttyCLIEntry.programName)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: entry)
+
+    let result = try await Self.runEntry(at: link, arguments: ["+list-themes", "--plain"])
+    #expect(result.exitCode == 0)
+    #expect(result.stdout.contains("3024 Day"))
   }
 
   @Test func entryWithoutActionExitsWithoutStartingTheApp() async throws {
@@ -56,6 +80,10 @@ struct GhosttyCLIEntryTests {
   private static func runEntry(arguments: [String]) async throws -> RunResult {
     let executable = try #require(Bundle.main.executableURL)
     let entry = executable.deletingLastPathComponent().appending(path: GhosttyCLIEntry.programName)
+    return try await runEntry(at: entry, arguments: arguments)
+  }
+
+  private static func runEntry(at entry: URL, arguments: [String]) async throws -> RunResult {
     let environment = ProcessInfo.processInfo.environment
     return try await withCheckedThrowingContinuation { continuation in
       let process = Process()

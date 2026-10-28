@@ -229,7 +229,10 @@ version that Prowl embeds (`ghostty +version`, `+list-themes`, `+show-config`,
 action it prints a hint and exits with status 1. Prowl panes set
 `GHOSTTY_BIN_DIR` to that folder, and the default `path` shell integration
 feature appends it to `PATH`, so `ghostty` resolves to it unless another
-`ghostty` comes earlier in `PATH`.
+`ghostty` comes earlier in `PATH`. To use it outside Prowl, link it from a
+folder in `PATH` (for example
+`ln -s /Applications/Prowl.app/Contents/MacOS/ghostty ~/.local/bin/ghostty`);
+it still finds the resources in the app bundle.
 
 This makes Ghostty's SSH features work in Prowl panes:
 `shell-integration-features = ssh-env,ssh-terminfo` wraps `ssh` in
