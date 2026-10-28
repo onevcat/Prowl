@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.10.29](https://github.com/onevcat/Prowl/releases/tag/v2026.10.29)
+
+This release brings SSH remote projects to Prowl and improves Canvas, worktree management, and session reliability.
+
+### New
+
+- Work with projects over SSH, including remote terminals, splits, scripts, and worktree creation. Choose **Add Remote Project** in the add panel, enter a host with key-based authentication, then type a path or use **Browse…** to select a folder on the host. Hosts that ask for a password or a verification code are not supported yet.
+- Remote projects show connection status and refresh Git and pull request information automatically. Saved terminal layouts reconnect when you open the project, without rerunning scripts, and remain saved while the host is unavailable.
+
+### Fixed
+
+- Fixed blank terminal cards when entering Canvas and a Canvas crash on macOS versions before 26.4. Leaving Archived Worktrees now restores your previous view, selection, and Canvas pane focus; unarchiving keeps the list open for further restores.
+- Git operations now use your login shell’s PATH, fixing worktree creation failures involving tools such as `mise` and `git-lfs`. Failure alerts stay open and show clearer errors.
+- Repositories with the same folder name now keep separate settings, with existing settings copied automatically. Repository load failures no longer erase pins, archived entries, or Prowl-created worktree markers.
+- Returning to Prowl now refreshes repositories and change counts reliably. Switching away saves the terminal layout and pauses remote polling, which resumes on return.
+- Fixed Codex workflow commands failing with `SOURCE_REQUIRED` and transcript binding stopping after the pane that started its shared daemon was closed.
+- Git operations and file transfers over SSH no longer trigger remote-agent detection prompts for their transport connections.
+
 ## [2026.10.21](https://github.com/onevcat/Prowl/releases/tag/v2026.10.21)
 
 Prowl now detects coding agents that run on another machine over SSH, including inside remote tmux. This release also adds TraeCode CLI support and makes agent status and dispatch waits more reliable.
