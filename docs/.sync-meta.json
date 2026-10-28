@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.agents/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "192adc08ae5011aa5238130a034043729fdf81f0",
-  "last_synced_date": "2026-10-21",
-  "note": "SSH remote agents L0 (#924-#937), TRAE CLI (#947), Claude idle background shells (#940) and dispatch evidence (#948) updated the manual in their PRs; #924/#925/#928 are internal or already covered."
+  "last_synced_commit": "7ed828d2759f8579e18b887409cadef78b8e9d98",
+  "last_synced_date": "2026-10-29",
+  "note": "SSH remote projects (084, #952-#999), Codex daemon revoked tty (#1001), archive restore (#1000), scene phase (#991), git hook login PATH (#951) and SSH transport (#949) updated the manual in their PRs; key-only sign-in documented in 7ed828d2; #950/#987/#990/#992 are internal."
 }
