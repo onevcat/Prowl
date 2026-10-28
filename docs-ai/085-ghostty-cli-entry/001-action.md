@@ -5,7 +5,7 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-10-29 | Root cause of #1002 traced to upstream `484d6ec66` (Ghostty 1.4 `+ssh`); workaround and `env` usage posted on the issue | #1002 |
-| 2026-10-29 | Symlink build phase, `ProwlMain` entry, `GhosttyCLIEntry`, tests, `docs/components/terminal.md` | PR_REF |
+| 2026-10-29 | Symlink build phase, `ProwlMain` entry, `GhosttyCLIEntry`, tests, `docs/components/terminal.md` | #1004 |
 
 ## Outcome & current state (as of 2026-10-29)
 

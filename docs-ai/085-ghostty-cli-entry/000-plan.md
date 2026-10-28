@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-10-29 |
-| **Primary PRs** | (fill in) |
+| **Primary PRs** | #1004 |
 | **Related** | [078-ghostty-1-4-upgrade-rehearsal](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md), [075-terminal-config-source](../075-terminal-config-source/000-plan.md), [082-ssh-remote-agents](../082-ssh-remote-agents/000-plan.md), `docs/components/terminal.md`, issue #1002 |
 
 ## Background
