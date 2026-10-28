@@ -124,7 +124,7 @@ Walk away: Prowl posts a macOS notification when an agent finishes or stops to a
 Some work has to run where the code, the data, or the hardware is: a build box, a GPU server, a dev VM. Prowl puts those machines in the same sidebar and watches their agents as closely as the ones on your Mac. It uses plain SSH and installs nothing on the host.
 
 <p align="center">
-  <img src="https://prowl.onev.cat/images/shots/remote-projects.webp" alt="Prowl with a remote project named new-api on the host mini: a Codex agent on the host waits at a command approval prompt, and Active Agents lists two local agents that are done next to two remote agents labelled mini, one working and one blocked">
+  <img width="760" src="https://prowl.onev.cat/images/shots/remote-projects-crop.webp" alt="Prowl with a remote project named new-api on the host mini: a Codex agent on the host waits at a command approval prompt, and Active Agents lists two local agents that are done next to two remote agents labelled mini, one working and one blocked">
 </p>
 
 <p align="center">
