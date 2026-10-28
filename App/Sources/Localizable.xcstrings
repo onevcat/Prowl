@@ -13843,6 +13843,16 @@
         }
       }
     },
+    "Prowl signs in to the host without a prompt: use a key or an SSH agent. Hosts that ask for a password or a code do not work yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 登录主机时不会弹出提示，请使用密钥或 SSH agent。暂不支持需要输入密码或验证码的主机。"
+          }
+        }
+      }
+    },
     "Prowl starts a new agent from an Agent Profile for this role." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19527,12 +19537,12 @@
         }
       }
     },
-    "The remote host refused the SSH login." : {
+    "The remote host refused the SSH login. Prowl signs in only with a key or an SSH agent, without a password prompt." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "远程主机拒绝了 SSH 登录。"
+            "value" : "远程主机拒绝了 SSH 登录。Prowl 只能通过密钥或 SSH agent 登录，不会弹出密码提示。"
           }
         }
       }

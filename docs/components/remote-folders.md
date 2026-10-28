@@ -26,6 +26,13 @@ their saved layouts stay stored but hidden.
 3. Prowl checks the destination with `ssh -G`, connects, resolves the path with
    `pwd -P`, and checks for git. Then it stores the folder.
 
+Prowl signs in to the host without a prompt (`BatchMode=yes`), so the host must accept a
+key from `~/.ssh/config` or from your SSH agent. A key with a passphrase works when the
+agent or the macOS keychain holds it (`AddKeysToAgent yes`, `UseKeychain yes`). A host
+that asks for a password or a verification code does not work yet: adding it fails with
+"The remote host refused the SSH login." Install a key on it (for example with
+`ssh-copy-id`) first.
+
 Adding a folder is your consent for that host. Prowl keeps a background SSH connection
 to it (the side channel) for git state, agent detection and terminal setup. The toolbar
 status shows that connection: "Connecting…" until the host answers after Prowl starts (the
@@ -127,6 +134,9 @@ Prowl shows the reason in the control's tooltip, or as a toast:
 
 ## Gotchas for agents
 
+- **Key sign-in only.** A host that asks for a password or a code cannot be a remote
+  project yet. Do not try to type a password for the background connection: it never
+  shows a prompt.
 - **Paths are on the host.** A remote project's paths are on the host, not on this Mac. Do
   not run local file tools on them.
 - **macOS hosts.** On a macOS host, a plain shell session cannot be matched to its pane:

@@ -573,7 +573,11 @@ struct RemoteRepositoryHostTests {
     await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.promptLoadFailed, timeout: .seconds(30)) {
       $0.alert = RepositoriesFeature().messageAlert(
-        title: "Unable to create worktree", message: "The remote host refused the SSH login.")
+        title: "Unable to create worktree",
+        message: """
+          The remote host refused the SSH login. Prowl signs in only with a key or an SSH agent, \
+          without a password prompt.
+          """)
     }
     #expect(store.state.worktreeCreationPrompt == nil)
   }

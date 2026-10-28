@@ -72,6 +72,21 @@ struct AddRemoteFolderView: View {
       }
       .foregroundStyle(.secondary)
 
+      Label {
+        Text(
+          """
+          Prowl signs in to the host without a prompt: use a key or an SSH agent. Hosts that ask \
+          for a password or a code do not work yet.
+          """
+        )
+        .font(.footnote)
+        .fixedSize(horizontal: false, vertical: true)
+      } icon: {
+        Image(systemName: "key")
+          .accessibilityHidden(true)
+      }
+      .foregroundStyle(.secondary)
+
       if let errorMessage = store.errorMessage {
         Text(errorMessage)
           .font(.footnote)

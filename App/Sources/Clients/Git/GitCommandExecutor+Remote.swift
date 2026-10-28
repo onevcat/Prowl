@@ -43,7 +43,12 @@ extension RemoteProbeFailure {
   /// The reason shown when a remote folder operation fails to connect.
   nonisolated var remoteFolderDescription: String {
     switch self {
-    case .authentication: String(localized: "The remote host refused the SSH login.")
+    case .authentication:
+      String(
+        localized: """
+          The remote host refused the SSH login. Prowl signs in only with a key or an SSH agent, \
+          without a password prompt.
+          """)
     case .hostKey: String(localized: "The remote host key is unknown or has changed.")
     case .unresolvableHost: String(localized: "The remote host name could not be resolved.")
     case .unreachable: String(localized: "The remote host could not be reached.")
