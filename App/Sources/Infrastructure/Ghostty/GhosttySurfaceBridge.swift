@@ -79,6 +79,7 @@ final class GhosttySurfaceBridge {
 
   func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
     if let handled = handleAppAction(action) { return handled }
+    if let handled = handleOpenURL(action) { return handled }
     if let handled = handleSplitAction(action) { return handled }
     if handleTitleAndPath(action) { return false }
     if handleCommandStatus(action) { return false }
@@ -130,6 +131,26 @@ final class GhosttySurfaceBridge {
 
   func closeSurface(processAlive: Bool) {
     onCloseRequest?(processAlive)
+  }
+
+  /// Links from terminal output (OSC 8 and `link` config matches) go through
+  /// `TerminalLink`. Returning `false` for them would make libghostty fall
+  /// back to its own opener, which refuses them on macOS. Links that Ghostty
+  /// itself produces (`text`, `html`) still use that fallback.
+  private func handleOpenURL(_ action: ghostty_action_s) -> Bool? {
+    guard action.tag == GHOSTTY_ACTION_OPEN_URL else { return nil }
+    let openURL = action.action.open_url
+    guard let value = string(from: openURL.url, length: openURL.len) else { return true }
+    switch openURL.kind {
+    case GHOSTTY_ACTION_OPEN_URL_KIND_OSC8:
+      TerminalLinkOpener.open(TerminalLink(value))
+      return true
+    case GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN:
+      TerminalLinkOpener.open(TerminalLink(unknownKindValue: value))
+      return true
+    default:
+      return false
+    }
   }
 
   private func handleAppAction(_ action: ghostty_action_s) -> Bool? {
@@ -453,12 +474,6 @@ final class GhosttySurfaceBridge {
 
     case GHOSTTY_ACTION_RENDERER_HEALTH:
       state.rendererHealth = action.action.renderer_health
-      return true
-
-    case GHOSTTY_ACTION_OPEN_URL:
-      let openUrl = action.action.open_url
-      state.openUrlKind = openUrl.kind
-      state.openUrl = string(from: openUrl.url, length: openUrl.len)
       return true
 
     case GHOSTTY_ACTION_COLOR_CHANGE:
