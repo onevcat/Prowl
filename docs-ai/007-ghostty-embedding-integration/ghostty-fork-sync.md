@@ -9,70 +9,45 @@ Prowl embeds GhosttyKit from `ThirdParty/ghostty`. The submodule points to the `
 - Upstream remote: `https://github.com/ghostty-org/ghostty`
 - Fork remote: `git@github.com:onevcat/ghostty.git`
 - Per-version patched branches: `release/v<UPSTREAM_TAG>-patched`
-- Current patched branch: `release/v1.3.1-patched`
-- Current pinned tip: `5afdc9cf7315ef78533f245b97ef142dc50da67a`, published on
-  `fix/prowl-display-snapshot-state` ahead of that branch.
+- Current patched branch: `release/v1.4.0-patched`
+- Current pinned tip: `c141458f04c16b49edb582537103f8f39d6d3a57` (upstream `v1.4.0` +
+  5 patches)
 
 Each patched branch starts at the matching upstream tag and only adds onevcat patches. Do not rewrite an existing patched branch after publishing it.
 
 ## Current Patches
 
-Listed in topological order through the current pinned tip. When upgrading to a
-new upstream tag, carry all patches, including the follow-up after the release branch.
+Listed in topological order on `release/v1.4.0-patched`. When upgrading to a new upstream
+tag, cherry-pick these commits, not older copies on previous branches.
 
-1. `76dce319f55db097b2b7ae3cad2f6267475936f0` — `embedded: expose surface child PID`
+1. `5a9ce021f` — `embedded: expose surface child PID`
    - Adds `ghostty_surface_pid(ghostty_surface_t)` to the embedded C API.
    - Returns the local surface child process PID, or `0` when unavailable or exited.
-2. `a284127166ce76d872320d7dfa2a5c57268be9de` — `embedded: expose surface foreground process group`
-   - Adds `ghostty_surface_foreground_process_group(ghostty_surface_t)` to the
-     embedded C API for callers that need the pty's foreground job, not just the
-     shell PID.
-3. `fe714860c12da41442b63135d09ba80e293b66ad` — `surface: use libc tcgetpgrp for foreground group`
-   - Switches the foreground-group lookup from `proc_bsdinfo.e_tpgid` to
-     `tcgetpgrp` on the pty fd, which is more reliable when the shell PID
-     itself is not the controlling process.
-4. `48365577c1ae8e422c0dd90489921f07b9f79171` — `Backport Ghostty text free ABI fix`
-   - Backports upstream `ghostty-org/ghostty#12025` before an upstream tag that includes it exists.
-   - Keeps the public `ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*)`
-     API shape and fixes the Zig export to accept the unused surface parameter.
-   - Drop this patch when upgrading to an upstream tag that contains `4803d58`.
-5. `a0671ce9bf8a8e5ac8079021385adf2047462cc6` — `Backport Ghostty lazy display link creation`
-   - Backports upstream `ghostty-org/ghostty#13639` (`a177ba90af`, merged 2026-08-05) before an
-     upstream tag that includes it exists.
-   - Makes CoreVideo display link creation lazy and non-fatal in `src/renderer/generic.zig`
-     (`syncDisplayLink`), so `ghostty_surface_new` succeeds with zero active displays (display
-     asleep, locked session) and falls back to change-driven rendering until a display-id update
-     recreates the link. `pkg/macos/video/display_link.zig` reports `CreationFailed` instead of
-     `OutOfMemory`. Background: `docs-ai/063-agent-workflows/009-display-sleep-surface-spike.md`.
-   - Drop this patch when upgrading to an upstream tag that contains `a177ba90af`.
-6. `a00717e450f93d691037af00731e205b6501799e` — `Merge pull request #2 from Awhisper/feat/mobile-mirror-bridge`
-   - Includes `02b3c6704` (active-screen VT snapshot) and `df5b32481` (bounded terminal text capture), contributed by Awhisper.
-   - Adds `ghostty_surface_read_snapshot` and `ghostty_surface_read_text_bounded` for remote mirror display and bounded history.
-   - Both exports are read-only and use `ghostty_surface_free_text` to release returned buffers.
-7. `5afdc9cf7315ef78533f245b97ef142dc50da67a` — preserve mirror keyboard and styled blank-row state
-   - Exports modifyOtherKeys and Kitty keyboard state in active-screen VT snapshots so replica input uses the Host's negotiated encoding.
-   - Preserves background-only styled cells in VT output; plain-text and HTML trimming remain unchanged.
-   - Keep this patch until the upstream snapshot/formatter paths preserve the same state. Recheck both actual key bytes and effective cell colors when dropping it.
-   - This is the commit the submodule currently points at. Matching artifacts use release tag `xcframework-5afdc9cf7315ef78533f245b97ef142dc50da67a-prowl-v1`.
+2. `e0e70c18c` — `Add active-screen VT snapshot bridge for embedded surfaces`
+   - Adds `ghostty_surface_read_snapshot` for the remote mirror display (contributed by
+     Awhisper). Read-only; release the buffer with `ghostty_surface_free_text`.
+3. `318ca0789` — `Expose bounded read-only terminal text capture`
+   - Adds `ghostty_surface_read_text_bounded` for bounded mirror history (contributed by
+     Awhisper). Read-only; release the buffer with `ghostty_surface_free_text`.
+4. `f4fde9cab` — `Preserve keyboard modes in display snapshots`
+   - Exports modifyOtherKeys and Kitty keyboard state in active-screen VT snapshots so replica
+     input uses the Host's negotiated encoding.
+   - On `v1.3.1` this patch also changed the VT formatter to keep background-only blank rows.
+     Upstream `v1.4.0` does that itself (`152bdbc68`, `c7cbc9bfd`), so only the snapshot tests
+     remain. The background test fails when the upstream check is removed, so it guards the
+     upstream behavior. Keep the patch until upstream snapshots carry the keyboard state.
+5. `c141458f0` — `embedded: expose program status reports (OSC 7501) as an action`
+   - Routes validated OSC 7501 reports from termio to the apprt as
+     `GHOSTTY_ACTION_PROGRAM_STATUS` (upstream `v1.4.0` parses them, but its GUI ignores them).
+   - Answers the support query with `osc.program_status.query_reply` (protocol revision 0.4:
+     `?:states=…:kinds=…`), the same bytes as the libghostty-vt path.
+   - This is the commit the submodule points at. Matching artifacts use release tag
+     `xcframework-c141458f04c16b49edb582537103f8f39d6d3a57-prowl-v1`.
 
-## Rehearsed Upgrade To Upstream Tip (2026-10-10, pre-1.4.0)
-
-[078](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md) replayed the patch set on upstream
-`main` `9d479dcb1` ahead of the 1.4.0 tag. What the tagged port inherits:
-
-- Patch set shrinks to four: `76dce319f` (child PID), `02b3c6704` + `df5b32481` (snapshot and
-  bounded text) and `5afdc9cf7` (keyboard modes). Patches 2 and 3 are replaced by upstream
-  `ghostty_surface_foreground_pid`; patches 4 and 5 are upstream. The replayed commits with the
-  Zig 0.16 fixes live on `rehearsal/tip-9d479dcb1-patched` (`6ae199337`); cherry-pick them
-  instead of the `v1.3.1` originals.
-- Zig 0.16.0 (`mise.toml`). The Xcode 26.3 requirement below no longer applies: Zig 0.16 links
-  against the Xcode 27 SDK, and the full xcframework build takes about 2 minutes.
-- The xcframework keeps one `macos-arm64_x86_64` slice whose archive is `ghostty-internal.a`;
-  `Headers/` holds only `ghostty.h` and `module.modulemap`. The Makefile syncs it with
-  `rsync --delete` and the prebuilt installer accepts either archive name.
-- Prowl-side API breaks and their fixes are listed in
-  [078 001-action.md](../078-ghostty-1-4-upgrade-rehearsal/001-action.md); the argv lifetime
-  fix (`ghostty_init` keeps the pointer) is required on tip and safe on `v1.3.1`.
+Patches dropped on the way to `v1.4.0`: the foreground process group patches (replaced by
+upstream `ghostty_surface_foreground_pid`) and the text free ABI and lazy display link
+backports (both upstream). [078](../078-ghostty-1-4-upgrade-rehearsal/001-action.md) records
+the rehearsal on upstream tip and the tagged port.
 
 ## Upgrade To A New Ghostty Tag
 
@@ -82,9 +57,9 @@ cd ThirdParty/ghostty
 git fetch upstream --tags
 git fetch onevcat
 
-PREV=v1.3.1
-NEXT=v1.3.2
-PATCH_TIP=5afdc9cf7315ef78533f245b97ef142dc50da67a
+PREV=v1.4.0
+NEXT=v1.4.1
+PATCH_TIP=c141458f04c16b49edb582537103f8f39d6d3a57
 
 git checkout -b "release/${NEXT}-patched" "${NEXT}"
 git cherry-pick $(git rev-list --reverse --no-merges "${PREV}..${PATCH_TIP}")
@@ -140,25 +115,27 @@ Do not force-push `release/v*-patched` branches. If a cherry-pick needs repair, 
 
 ## Build Note
 
-Build GhosttyKit with Xcode 26.3:
+Ghostty `v1.4.0` requires Zig 0.17.0 (`minimum_zig_version` in `build.zig.zon`; the build
+checks the major and minor version). `mise.toml` pins it, and `make sync-ghostty` builds the
+universal xcframework with the default Xcode (27.0 at the time of writing). No
+`DEVELOPER_DIR` override is needed.
 
-```bash
-DEVELOPER_DIR=/Applications/Xcode-26.3.0.app/Contents/Developer make sync-ghostty
-```
+The Xcode 26.3 requirement of the `v1.3.1` line is gone: it came from Zig 0.15.2, whose Mach-O
+linker could not match the `arm64e`-only `libSystem.tbd` in SDK 26.4 and later
+(ziglang/zig#31658). Zig 0.16 and later link against those SDKs. A freshly installed Xcode may
+still lack the Metal toolchain that `Ghostty.metallib` needs;
+`xcodebuild -downloadComponent MetalToolchain` fixes `cannot execute tool 'metal'`.
 
-Xcode 26.3 is a hard requirement for the Zig side, not a preference: from Xcode 26.4 on, the
-macOS SDK's `libSystem.tbd` lists `arm64e-macos` instead of `arm64-macos`, and zig 0.15.2's
-Mach-O linker cannot match its `aarch64-macos` target to it, so `zig build` fails while linking
-its own build runner with a wall of undefined libc symbols (`_waitpid`, `_sigaction`, …;
-ziglang/zig#31658, fixed on the 0.16 line but never released for 0.15). Xcode 26.3 ships SDK
-26.2, the last one with the old target list. Revisit when the fork moves to a Ghostty release
-that requires zig 0.16. A freshly installed Xcode 26.x may also lack the Metal toolchain that
-`Ghostty.metallib` needs; `xcodebuild -downloadComponent MetalToolchain` fixes
-`cannot execute tool 'metal'`.
+The Makefile's GhosttyKit target runs `git submodule update` first. Stage a new submodule
+pointer (`git add ThirdParty/ghostty`) before you build, or the target checks out the
+previously committed commit and builds that instead.
+
+`zig build test` on macOS also runs the upstream Ghostty.app tests through `xcodebuild`.
+To run only the Zig unit tests, pass a filter: an empty `-Dtest-filter=` matches every test
+and skips the app test step.
 
 Build Prowl itself with the current Xcode (27.0 at the time of writing, verified on macOS 27.0);
-no `DEVELOPER_DIR` is needed for `make build-app`. The Xcode 26.3 recipe above still links
-GhosttyKit correctly on macOS 27.
+no `DEVELOPER_DIR` is needed for `make build-app`.
 
 The app target links `GameController` explicitly (`OTHER_LDFLAGS`). `libghostty.a` bundles
 Dear ImGui's macOS backend (`imgui_impl_osx.o`), which references `GCController` but is never
