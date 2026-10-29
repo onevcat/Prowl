@@ -231,8 +231,8 @@ struct RepositoriesFeature {
 
   @CasePathable
   enum WorktreeOrderingAction: Equatable {
-    /// Offsets index `visibleKeys`, the top-level keys that the sidebar showed for the drag.
-    case repositoriesMoved(IndexSet, Int, visibleKeys: [String])
+    /// A sidebar drag of a repository or a group (docs-ai 086 S2).
+    case sidebarItemMoved(SidebarDragItem, SidebarDropDestination)
     case pinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
     case unpinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
     case pinWorktree(Worktree.ID)

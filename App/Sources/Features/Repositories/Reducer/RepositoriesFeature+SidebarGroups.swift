@@ -51,14 +51,16 @@ extension RepositoriesFeature {
   }
 
   /// Applies `edit` to the layout that the sidebar shows (with every root in it) and
-  /// saves the result when it changed.
+  /// saves the result when the edit changed it. An edit that changes nothing, such
+  /// as a drop at the current place, saves nothing.
   func editSidebarLayout(
     state: inout State,
     _ edit: (inout SidebarLayout) -> Void
   ) -> Effect<Action> {
-    var layout = state.materializedSidebarLayout()
+    let materialized = state.materializedSidebarLayout()
+    var layout = materialized
     edit(&layout)
-    guard layout != state.sidebarLayout else { return .none }
+    guard layout != materialized else { return .none }
     state.sidebarLayout = layout
     let savedLayout = layout
     return .run { _ in

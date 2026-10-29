@@ -9,7 +9,7 @@ struct SidebarPresentation: Equatable {
   }
 
   /// The keys of the shown top-level entries in order: repository IDs and group keys.
-  /// Repository drop offsets index this list (docs-ai 086).
+  /// Top-level drop destinations use these keys as anchors (docs-ai 086).
   var topLevelKeys: [String] {
     items.compactMap(\.topLevelKey)
   }
@@ -34,6 +34,15 @@ enum SidebarItem: Equatable, Identifiable {
       return .group(model.id)
     case .archivedWorktrees:
       return .archivedWorktrees
+    }
+  }
+
+  /// The repository of a repository or failed-repository row.
+  var repositoryID: Repository.ID? {
+    switch self {
+    case .repository(let model): model.repositoryID
+    case .failedRepository(let model): model.id
+    case .listHeader, .group, .archivedWorktrees: nil
     }
   }
 

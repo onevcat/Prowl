@@ -54,9 +54,8 @@ struct SidebarListView: View {
   @Binding var collapsedGroupIDs: Set<RepositoryGroup.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
-  @State private var isDragActive = false
-  @State private var draggingRepositoryID: Repository.ID?
-  @State private var targetedRepositoryDropDestination: Int?
+  @State private var draggedSidebarItem: SidebarDragItem?
+  @State private var targetedSidebarDropDestination: SidebarDropDestination?
   @State private var sidebarHeight = 0.0
   @State private var sidebarFooterHeight = 0.0
   @State private var resizingPanelHeight: Double?
@@ -73,6 +72,7 @@ struct SidebarListView: View {
     let repositoryItems = presentation.items.filter { $0.topLevelKey != nil }
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
     let pendingSidebarReveal = state.pendingSidebarReveal
+    let dragContext = sidebarLayoutDragContext
 
     let maximumPanelHeight =
       sidebarHeight > 0
@@ -111,6 +111,14 @@ struct SidebarListView: View {
               hotkeyRows: hotkeyRows,
               selectedWorktreeIDs: selectedWorktreeIDs
             )
+          }
+          if dragContext.isActive {
+            // Takes a drop after the last entry, also when that entry is an open group.
+            Color.clear
+              .frame(maxWidth: .infinity, minHeight: 28)
+              .contentShape(.rect)
+              .sidebarLayoutDropTarget(.listEnd, context: dragContext)
+              .accessibilityHidden(true)
           }
         }
         .padding(.vertical, 2)
@@ -179,7 +187,7 @@ struct SidebarListView: View {
         return true
       }
       .onAppear {
-        resetSidebarDrag()
+        endSidebarDrag()
       }
       .task(id: pendingSidebarReveal?.id) {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
@@ -350,6 +358,20 @@ struct SidebarListView: View {
     .padding(.bottom, 4)
   }
 
+  private var sidebarLayoutDragContext: SidebarLayoutDragContext {
+    SidebarLayoutDragContext(
+      draggedItem: draggedSidebarItem,
+      targetedDestination: $targetedSidebarDropDestination,
+      beginDrag: beginSidebarDrag,
+      onDrop: { item, destination in
+        withAnimation(.easeOut(duration: 0.2)) {
+          _ = store.send(.worktreeOrdering(.sidebarItemMoved(item, destination)))
+        }
+      },
+      onDragEnded: endSidebarDrag
+    )
+  }
+
   @ViewBuilder
   private func repositoryItemView(
     _ item: SidebarItem,
@@ -358,65 +380,80 @@ struct SidebarListView: View {
     hotkeyRows: [WorktreeRowModel],
     selectedWorktreeIDs: Set<Worktree.ID>
   ) -> some View {
-    Group {
-      switch item {
-      case .group(let model):
-        SidebarGroupSectionView(
-          model: model,
-          hasTopSpacing: index > 0,
-          onToggleExpanded: {
-            withAnimation(.easeOut(duration: 0.2)) {
-              if model.isExpanded {
-                collapsedGroupIDs.insert(model.id)
-              } else {
-                collapsedGroupIDs.remove(model.id)
-              }
+    let dragContext = sidebarLayoutDragContext
+    let nextKey = topLevelKeys.indices.contains(index + 1) ? topLevelKeys[index + 1] : nil
+    let isLast = index == topLevelKeys.count - 1
+    switch item {
+    case .group(let model):
+      let groupKey = SidebarLayoutItem.groupKey(model.id)
+      SidebarGroupSectionView(
+        model: model,
+        hasTopSpacing: index > 0,
+        nextKey: nextKey,
+        dragContext: dragContext,
+        onToggleExpanded: {
+          withAnimation(.easeOut(duration: 0.2)) {
+            if model.isExpanded {
+              collapsedGroupIDs.insert(model.id)
+            } else {
+              collapsedGroupIDs.remove(model.id)
             }
-          },
-          store: store,
-          members: {
-            ForEach(Array(model.members.enumerated()), id: \.element.id) { memberIndex, member in
+          }
+        },
+        store: store,
+        members: {
+          let memberIDs = model.members.compactMap(\.repositoryID)
+          ForEach(Array(model.members.enumerated()), id: \.element.id) { memberIndex, member in
+            if let memberID = member.repositoryID {
+              let nextMemberID = memberIDs.indices.contains(memberIndex + 1) ? memberIDs[memberIndex + 1] : nil
               repositoryRowView(
                 member,
                 hasTopSpacing: memberIndex > 0,
-                isDraggable: false,
                 hotkeyRows: hotkeyRows,
-                selectedWorktreeIDs: selectedWorktreeIDs
+                selectedWorktreeIDs: selectedWorktreeIDs,
+                dragContext: dragContext
+              )
+              .sidebarLayoutDropIndicators(
+                top: .group(model.id, before: memberID),
+                bottom: nextMemberID == nil ? .group(model.id, before: nil) : nil,
+                context: dragContext
+              )
+              .sidebarLayoutDropTarget(
+                .groupMember(model.id, repositoryID: memberID, nextMemberID: nextMemberID, nextKey: nextKey),
+                context: dragContext
               )
             }
           }
-        )
+        }
+      )
+      // The container draws the top-level lines; its header and member rows are
+      // the drop targets, so the targets do not nest.
+      .sidebarLayoutDropIndicators(
+        top: .topLevel(before: groupKey),
+        bottom: isLast ? .topLevel(before: nil) : nil,
+        context: dragContext
+      )
 
-      case .repository, .failedRepository:
+    case .repository, .failedRepository:
+      if let key = item.topLevelKey {
         repositoryRowView(
           item,
           hasTopSpacing: index > 0,
-          isDraggable: true,
           hotkeyRows: hotkeyRows,
-          selectedWorktreeIDs: selectedWorktreeIDs
+          selectedWorktreeIDs: selectedWorktreeIDs,
+          dragContext: dragContext
         )
-
-      case .listHeader, .archivedWorktrees:
-        EmptyView()
+        .sidebarLayoutDropIndicators(
+          top: .topLevel(before: key),
+          bottom: isLast ? .topLevel(before: nil) : nil,
+          context: dragContext
+        )
+        .sidebarLayoutDropTarget(.repository(key: key, nextKey: nextKey), context: dragContext)
       }
+
+    case .listHeader, .archivedWorktrees:
+      EmptyView()
     }
-    // S1 drags only ungrouped repositories; a group is one top-level drop
-    // position (docs-ai 086).
-    .repositoryDropTarget(
-      index: index,
-      repositoryOrderIDs: topLevelKeys,
-      isEnabled: isDragActive,
-      targetedDestination: $targetedRepositoryDropDestination,
-      actions: SidebarDropTargetActions(
-        draggedItemID: draggingRepositoryID,
-        onDrop: { offsets, destination in
-          withAnimation(.easeOut(duration: 0.2)) {
-            _ = store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination, visibleKeys: topLevelKeys)))
-          }
-        },
-        onDragEnded: endSidebarDrag
-      )
-    )
   }
 
   /// One repository or failed-repository row, at the top level or in a group.
@@ -424,9 +461,9 @@ struct SidebarListView: View {
   private func repositoryRowView(
     _ item: SidebarItem,
     hasTopSpacing: Bool,
-    isDraggable: Bool,
     hotkeyRows: [WorktreeRowModel],
-    selectedWorktreeIDs: Set<Worktree.ID>
+    selectedWorktreeIDs: Set<Worktree.ID>,
+    dragContext: SidebarLayoutDragContext
   ) -> some View {
     switch item {
     case .repository(let model):
@@ -434,7 +471,7 @@ struct SidebarListView: View {
         RepositorySectionView(
           repository: repository,
           hasTopSpacing: hasTopSpacing,
-          isDragActive: isDragActive,
+          isDragActive: dragContext.isActive,
           hotkeyRows: hotkeyRows,
           selectedWorktreeIDs: selectedWorktreeIDs,
           expandedRepoIDs: $expandedRepoIDs,
@@ -444,12 +481,10 @@ struct SidebarListView: View {
             selectRepository(repository)
           }
         )
-        .draggableRepository(
-          id: model.repositoryID,
-          isEnabled: isDraggable && !model.isRemoving,
-          beginDrag: {
-            beginSidebarDrag(repositoryID: model.repositoryID)
-          }
+        .draggableSidebarItem(
+          .repository(model.repositoryID),
+          isEnabled: !model.isRemoving,
+          context: dragContext
         )
       }
 
@@ -480,12 +515,10 @@ struct SidebarListView: View {
             .accessibilityHidden(true)
         }
       }
-      .draggableRepository(
-        id: model.id,
-        isEnabled: isDraggable && model.isReorderable,
-        beginDrag: {
-          beginSidebarDrag(repositoryID: model.id)
-        }
+      .draggableSidebarItem(
+        .repository(model.id),
+        isEnabled: model.isReorderable,
+        context: dragContext
       )
 
     case .group, .listHeader, .archivedWorktrees:
@@ -493,24 +526,15 @@ struct SidebarListView: View {
     }
   }
 
-  private func beginSidebarDrag(repositoryID: Repository.ID) {
-    guard !isDragActive else { return }
-    draggingRepositoryID = repositoryID
-    isDragActive = true
+  private func beginSidebarDrag(_ item: SidebarDragItem) {
+    guard draggedSidebarItem == nil else { return }
+    draggedSidebarItem = item
     store.send(.worktreeOrdering(.setSidebarDragActive(true)))
   }
 
   private func endSidebarDrag() {
-    targetedRepositoryDropDestination = nil
-    draggingRepositoryID = nil
-    isDragActive = false
-    store.send(.worktreeOrdering(.setSidebarDragActive(false)))
-  }
-
-  private func resetSidebarDrag() {
-    targetedRepositoryDropDestination = nil
-    draggingRepositoryID = nil
-    isDragActive = false
+    targetedSidebarDropDestination = nil
+    draggedSidebarItem = nil
     store.send(.worktreeOrdering(.setSidebarDragActive(false)))
   }
 

@@ -140,7 +140,7 @@ struct RepositoriesFeatureSidebarGroupsTests {
     }
   }
 
-  @Test(.dependencies) func repositoriesMovedTreatsAGroupAsOnePosition() async {
+  @Test(.dependencies) func sidebarItemMovedMovesARepositoryIntoAGroup() async {
     let repoA = makeRepository(id: "/tmp/a")
     let repoB = makeRepository(id: "/tmp/b")
     let repoC = makeRepository(id: "/tmp/c")
@@ -150,18 +150,94 @@ struct RepositoriesFeatureSidebarGroupsTests {
       .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: [repoB.id])),
       .repository(repoC.id),
     ])
+    let saved = LockIsolated<SidebarLayout?>(nil)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
+    }
+
+    await store.send(
+      .worktreeOrdering(.sidebarItemMoved(.repository(repoC.id), .group(existingGroupID, before: repoB.id)))
+    ) {
+      $0.sidebarLayout = SidebarLayout(items: [
+        .repository(repoA.id),
+        .group(RepositoryGroup(id: self.existingGroupID, title: "G", repositoryIDs: [repoC.id, repoB.id])),
+      ])
+    }
+    await store.finish()
+    #expect(saved.value == store.state.sidebarLayout)
+  }
+
+  @Test(.dependencies) func sidebarItemMovedMovesAWholeGroupAndKeepsItsCollapse() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    var state = makeState(repositories: [repoA, repoB])
+    state.sidebarLayout = SidebarLayout(items: [
+      .repository(repoA.id),
+      .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: [repoB.id])),
+    ])
+    state.$collapsedGroupIDs.withLock { $0 = [existingGroupID.uuidString] }
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
 
-    let visibleKeys = [repoA.id, SidebarLayoutItem.groupKey(existingGroupID), repoC.id]
-    await store.send(.worktreeOrdering(.repositoriesMoved(IndexSet(integer: 2), 0, visibleKeys: visibleKeys))) {
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.group(existingGroupID), .topLevel(before: repoA.id)))) {
       $0.sidebarLayout = SidebarLayout(items: [
-        .repository(repoC.id),
-        .repository(repoA.id),
         .group(RepositoryGroup(id: self.existingGroupID, title: "G", repositoryIDs: [repoB.id])),
+        .repository(repoA.id),
       ])
     }
+    #expect(store.state.collapsedGroupIDs == [existingGroupID.uuidString])
+  }
+
+  @Test(.dependencies) func sidebarItemMovedPlacesARootThatTheStoredLayoutLacks() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    var state = makeState(repositories: [repoA, repoB])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: [repoA.id]))
+    ])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .worktreeOrdering(.sidebarItemMoved(.repository(repoB.id), .group(existingGroupID, before: nil)))
+    ) {
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(RepositoryGroup(id: self.existingGroupID, title: "G", repositoryIDs: [repoA.id, repoB.id]))
+      ])
+    }
+  }
+
+  @Test(.dependencies) func aNoOpDropSavesNothing() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    var state = makeState(repositories: [repoA, repoB])
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoA.id, repoB.id])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveSidebarLayout = { _ in Issue.record("A no-op drop must not save") }
+    }
+
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.repository(repoA.id), .topLevel(before: repoB.id))))
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.group(existingGroupID), .topLevel(before: nil))))
+  }
+
+  @Test(.dependencies) func aNoOpDropSavesNothingWhenTheStoredLayoutLacksARoot() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    var state = makeState(repositories: [repoA, repoB])
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoA.id])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveSidebarLayout = { _ in Issue.record("A no-op drop must not save") }
+    }
+
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.repository(repoB.id), .topLevel(before: nil))))
   }
 
   // MARK: - Order and visibility

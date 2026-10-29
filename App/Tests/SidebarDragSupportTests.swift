@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import Prowl
@@ -50,5 +51,78 @@ struct SidebarDragSupportTests {
       )
         == .none
     )
+  }
+
+  // MARK: - Sidebar layout drops (docs-ai 086 S2)
+
+  private let group = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+  private var groupKey: String { SidebarLayoutItem.groupKey(group) }
+
+  @Test func aRepositoryRowSplitsAtItsHeader() {
+    let row = SidebarDropRow.repository(key: "/a", nextKey: groupKey)
+
+    #expect(row.destination(for: .repository("/x"), locationY: 10) == .topLevel(before: "/a"))
+    #expect(row.destination(for: .repository("/x"), locationY: 40) == .topLevel(before: groupKey))
+    #expect(row.destination(for: .group(group), locationY: 10) == .topLevel(before: "/a"))
+  }
+
+  @Test func aGroupHeaderTakesARepositoryAtTheGroupEnd() {
+    let row = SidebarDropRow.groupHeader(group, nextKey: "/d")
+
+    #expect(row.destination(for: .repository("/x"), locationY: 4) == .topLevel(before: groupKey))
+    #expect(row.destination(for: .repository("/x"), locationY: 14) == .group(group, before: nil))
+  }
+
+  @Test func aGroupHeaderPutsAGroupBeforeOrAfterIt() {
+    let row = SidebarDropRow.groupHeader(group, nextKey: "/d")
+    let other = UUID()
+
+    #expect(row.destination(for: .group(other), locationY: 6) == .topLevel(before: groupKey))
+    #expect(row.destination(for: .group(other), locationY: 20) == .topLevel(before: "/d"))
+  }
+
+  @Test func aGroupMemberRowSplitsInTheGroup() {
+    let row = SidebarDropRow.groupMember(group, repositoryID: "/b", nextMemberID: "/c", nextKey: "/d")
+
+    #expect(row.destination(for: .repository("/x"), locationY: 10) == .group(group, before: "/b"))
+    #expect(row.destination(for: .repository("/x"), locationY: 40) == .group(group, before: "/c"))
+  }
+
+  @Test func aGroupMemberRowPutsAGroupAfterTheContainingGroup() {
+    let row = SidebarDropRow.groupMember(group, repositoryID: "/c", nextMemberID: nil, nextKey: nil)
+
+    #expect(row.destination(for: .repository("/x"), locationY: 40) == .group(group, before: nil))
+    #expect(row.destination(for: .group(UUID()), locationY: 10) == .topLevel(before: nil))
+  }
+
+  @Test func theGapAboveAGroupPutsEitherItemBeforeIt() {
+    let gap = SidebarDropRow.aboveGroup(group)
+
+    #expect(gap.destination(for: .repository("/x"), locationY: 2) == .topLevel(before: groupKey))
+    #expect(gap.destination(for: .group(UUID()), locationY: 2) == .topLevel(before: groupKey))
+  }
+
+  @Test func theGroupEndAndTheListEnd() {
+    let placeholder = SidebarDropRow.groupEnd(group, nextKey: "/d")
+
+    #expect(placeholder.destination(for: .repository("/x"), locationY: 0) == .group(group, before: nil))
+    #expect(placeholder.destination(for: .group(UUID()), locationY: 0) == .topLevel(before: "/d"))
+    #expect(SidebarDropRow.listEnd.destination(for: .repository("/x"), locationY: 0) == .topLevel(before: nil))
+    #expect(SidebarDropRow.listEnd.destination(for: .group(group), locationY: 0) == .topLevel(before: nil))
+  }
+
+  @Test func layoutDropIndicatorEdges() {
+    let top = SidebarDropDestination.topLevel(before: "/a")
+    let bottom = SidebarDropDestination.topLevel(before: nil)
+
+    #expect(SidebarDropIndicatorEdge.edge(targetedDestination: top, top: top, bottom: bottom) == .top)
+    #expect(SidebarDropIndicatorEdge.edge(targetedDestination: bottom, top: top, bottom: bottom) == .bottom)
+    #expect(SidebarDropIndicatorEdge.edge(targetedDestination: bottom, top: top, bottom: nil) == .none)
+    #expect(SidebarDropIndicatorEdge.edge(targetedDestination: nil, top: top, bottom: bottom) == .none)
+  }
+
+  @Test func aDestinationKnowsItsGroup() {
+    #expect(SidebarDropDestination.group(group, before: nil).groupID == group)
+    #expect(SidebarDropDestination.topLevel(before: groupKey).groupID == nil)
   }
 }
