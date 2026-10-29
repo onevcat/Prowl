@@ -134,10 +134,10 @@ extension RepositoriesFeature {
           })
       }
       if applyResult.didPruneRepositoryOrder {
-        let repositoryOrderIDs = state.repositoryOrderIDs
+        let sidebarLayout = state.sidebarLayout
         allEffects.append(
           .run { _ in
-            await repositoryPersistence.saveRepositoryOrderIDs(repositoryOrderIDs)
+            await repositoryPersistence.saveSidebarLayout(sidebarLayout)
           })
       }
       if applyResult.didPruneWorktreeOrder {

@@ -11,8 +11,8 @@ struct RepositoryPersistenceClient {
   var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
   var loadArchivedWorktrees: @Sendable () async -> [ArchivedWorktree]
   var saveArchivedWorktrees: @Sendable ([ArchivedWorktree]) async -> Void
-  var loadRepositoryOrderIDs: @Sendable () async -> [Repository.ID]
-  var saveRepositoryOrderIDs: @Sendable ([Repository.ID]) async -> Void
+  var loadSidebarLayout: @Sendable () async -> SidebarLayout
+  var saveSidebarLayout: @Sendable (SidebarLayout) async -> Void
   var loadWorktreeOrderByRepository: @Sendable () async -> [Repository.ID: [Worktree.ID]]
   var saveWorktreeOrderByRepository: @Sendable ([Repository.ID: [Worktree.ID]]) async -> Void
   var loadLastFocusedWorktreeID: @Sendable () async -> Worktree.ID?
@@ -79,15 +79,14 @@ extension RepositoryPersistenceClient: DependencyKey {
           $0 = normalized
         }
       },
-      loadRepositoryOrderIDs: {
-        @Shared(.appStorage("repositoryOrderIDs")) var order: [Repository.ID] = []
-        return RepositoryOrderNormalizer.normalizeRepositoryIDs(order)
+      loadSidebarLayout: {
+        @Shared(.sidebarLayout) var layout: SidebarLayout
+        return layout
       },
-      saveRepositoryOrderIDs: { ids in
-        @Shared(.appStorage("repositoryOrderIDs")) var sharedOrder: [Repository.ID] = []
-        let normalized = RepositoryOrderNormalizer.normalizeRepositoryIDs(ids)
-        $sharedOrder.withLock {
-          $0 = normalized
+      saveSidebarLayout: { layout in
+        @Shared(.sidebarLayout) var sharedLayout: SidebarLayout
+        $sharedLayout.withLock {
+          $0 = layout
         }
       },
       loadWorktreeOrderByRepository: {
@@ -193,8 +192,8 @@ extension RepositoryPersistenceClient: DependencyKey {
     savePinnedWorktreeIDs: { _ in },
     loadArchivedWorktrees: { [] },
     saveArchivedWorktrees: { _ in },
-    loadRepositoryOrderIDs: { [] },
-    saveRepositoryOrderIDs: { _ in },
+    loadSidebarLayout: { SidebarLayout() },
+    saveSidebarLayout: { _ in },
     loadWorktreeOrderByRepository: { [:] },
     saveWorktreeOrderByRepository: { _ in },
     loadLastFocusedWorktreeID: { nil },

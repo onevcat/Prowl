@@ -22,7 +22,7 @@ struct ToolbarNotificationGroupingTests {
 
     var state = RepositoriesFeature.State(repositories: [repoA, repoB])
     state.repositoryRoots = [repoA.location, repoB.location]
-    state.repositoryOrderIDs = [repoB.id, repoA.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoB.id, repoA.id])
     state.worktreeOrderByRepository[repoA.id] = [repoATwo.id, repoAOne.id]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())

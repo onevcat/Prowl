@@ -1,5 +1,7 @@
+import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import Prowl
@@ -50,16 +52,12 @@ struct SidebarPresentationTests {
       .local(URL(fileURLWithPath: "/tmp/missing")),
       repoA.location,
     ]
-    state.repositoryOrderIDs = ["/tmp/missing", repoA.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: ["/tmp/missing", repoA.id])
     state.loadFailuresByID["/tmp/missing"] = "missing"
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repoA.id])
 
-    #expect(presentation.repositoryOrderIDs == ["/tmp/missing", repoA.id])
-    #expect(
-      presentation.repositoryOrderAfterMove(fromOffsets: IndexSet(integer: 0), toOffset: 2) == [
-        repoA.id, "/tmp/missing",
-      ])
+    #expect(presentation.topLevelKeys == ["/tmp/missing", repoA.id])
     guard case .failedRepository(let failed) = presentation.repositoryRowItems.first else {
       Issue.record("Expected failed repository first")
       return
@@ -119,18 +117,61 @@ struct SidebarPresentationTests {
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repoA.id, repoB.id])
 
-    #expect(presentation.repositoryOrderIDs == [repoA.id, repoB.id])
+    #expect(presentation.topLevelKeys == [repoA.id, repoB.id])
   }
 
   @Test func customOrderedRootsUseSamePresentationRules() {
     let repoA = makeRepository(id: "/tmp/a", worktrees: [])
     let repoB = makeRepository(id: "/tmp/b", worktrees: [])
     var state = makeState(repositories: [repoA, repoB])
-    state.repositoryOrderIDs = [repoB.id, repoA.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoB.id, repoA.id])
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repoA.id, repoB.id])
 
-    #expect(presentation.repositoryOrderIDs == [repoB.id, repoA.id])
+    #expect(presentation.topLevelKeys == [repoB.id, repoA.id])
+  }
+
+  @Test(.dependencies) func groupIsOneTopLevelItemWithItsMemberRows() {
+    let groupID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+    let repoA = makeRepository(id: "/tmp/a", worktrees: [])
+    let repoB = makeRepository(id: "/tmp/b", worktrees: [])
+    var state = makeState(repositories: [repoA, repoB])
+    state.repositoryRoots.append(.local(URL(fileURLWithPath: "/tmp/missing")))
+    state.loadFailuresByID["/tmp/missing"] = "missing"
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: groupID, title: "G", repositoryIDs: [repoB.id, "/tmp/missing", "/tmp/gone"]))
+    ])
+
+    let presentation = state.sidebarPresentation(expandedRepositoryIDs: [])
+
+    #expect(presentation.topLevelKeys == [SidebarLayoutItem.groupKey(groupID), repoA.id])
+    guard case .group(let group) = presentation.repositoryRowItems.first else {
+      Issue.record("Expected the group first")
+      return
+    }
+    #expect(group.isExpanded)
+    #expect(group.memberCount == 2)
+    #expect(group.members.map(\.id) == [.repository(repoB.id), .failedRepository("/tmp/missing")])
+  }
+
+  @Test(.dependencies) func collapsedGroupHasNoMemberRows() {
+    let groupID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+    let repoA = makeRepository(id: "/tmp/a", worktrees: [])
+    var state = makeState(repositories: [repoA])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: groupID, title: "G", repositoryIDs: [repoA.id]))
+    ])
+    state.$collapsedGroupIDs.withLock { $0 = [groupID.uuidString] }
+
+    let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repoA.id])
+
+    guard case .group(let group) = presentation.repositoryRowItems.first else {
+      Issue.record("Expected the group")
+      return
+    }
+    #expect(!group.isExpanded)
+    #expect(group.memberCount == 1)
+    #expect(group.members.isEmpty)
   }
 
   @Test func worktreeDropDestinationsMapToExistingOrderingActions() {
@@ -199,6 +240,6 @@ struct SidebarPresentationTests {
 
 extension SidebarPresentation {
   fileprivate var repositoryRowItems: [SidebarItem] {
-    items.filter { $0.repositoryOrderID != nil }
+    items.filter { $0.topLevelKey != nil }
   }
 }

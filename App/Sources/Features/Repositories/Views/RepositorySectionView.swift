@@ -336,11 +336,43 @@ struct RepositorySectionView: View {
     }
     .help("Repo Settings")
     Divider()
+    groupMenuItems
+      .disabled(isRemovingRepository)
+    Divider()
     Button("Remove Repository") {
       store.send(.repositoryManagement(.requestRemoveRepository(repository.id)))
     }
     .help("Remove repository")
     .disabled(isRemovingRepository)
+  }
+
+  /// Sidebar group membership (docs-ai 086).
+  @ViewBuilder
+  private var groupMenuItems: some View {
+    let layout = store.sidebarLayout
+    let currentGroupID = layout.groupID(containing: repository.id)
+    let otherGroups = layout.groups.filter { $0.id != currentGroupID }
+    Button("New Group…") {
+      store.send(.sidebarGroups(.newGroupRequested(containing: repository.id)))
+    }
+    .help("Put this repository into a new group")
+    if !otherGroups.isEmpty {
+      Menu("Move to Group") {
+        ForEach(otherGroups) { group in
+          Button(group.title) {
+            store.send(.sidebarGroups(.moveRepositoryToGroup(repository.id, group.id)))
+          }
+          .help("Move this repository to the end of \(group.title)")
+        }
+      }
+      .help("Move this repository to another group")
+    }
+    if currentGroupID != nil {
+      Button("Remove from Group") {
+        store.send(.sidebarGroups(.removeRepositoryFromGroup(repository.id)))
+      }
+      .help("Move this repository out of its group")
+    }
   }
 
   private var headerCellHeight: CGFloat {

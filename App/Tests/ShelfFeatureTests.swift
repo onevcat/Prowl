@@ -292,7 +292,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repo.id])
     state.selection = .worktree(wt1.id)
     state.isShelfActive = true
     state.openedWorktreeIDs = [wt1.id, wt2.id]
@@ -327,7 +327,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repo.id])
     state.selection = .worktree(wt1.id)
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -361,7 +361,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repo.id])
     state.selection = .worktree(wt2.id)  // Currently on the last book.
     state.openedWorktreeIDs = [wt1.id, wt2.id]
     let store = TestStore(initialState: state) {
@@ -403,7 +403,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repo.id])
     state.selection = .worktree(wt1.id)  // Currently on the first book.
     state.openedWorktreeIDs = [wt1.id, wt2.id]
     let store = TestStore(initialState: state) {
@@ -615,7 +615,7 @@ struct ShelfFeatureTests {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
     state.repositoryRoots = [fixture.repo.location]
-    state.repositoryOrderIDs = [fixture.repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [fixture.repo.id])
     state.selection = .worktree(fixture.worktrees[1].id)  // Middle book open.
     state.isShelfActive = true
     state.openedWorktreeIDs = Set(fixture.worktrees.map(\.id))
@@ -645,7 +645,7 @@ struct ShelfFeatureTests {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
     state.repositoryRoots = [fixture.repo.location]
-    state.repositoryOrderIDs = [fixture.repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [fixture.repo.id])
     state.selection = .worktree(fixture.worktrees[2].id)  // Last book open.
     state.isShelfActive = true
     state.openedWorktreeIDs = Set(fixture.worktrees.map(\.id))
@@ -685,7 +685,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repo.id])
     state.selection = .repository(repo.id)
     state.isShelfActive = true
     state.openedWorktreeIDs = [repo.id]
@@ -732,7 +732,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [gitRepo, plainRepo])
     state.repositoryRoots = [.local(gitRootURL), .local(plainRootURL)]
-    state.repositoryOrderIDs = [gitRepo.id, plainRepo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [gitRepo.id, plainRepo.id])
     state.selection = .worktree(worktree.id)
     state.isShelfActive = true
     state.openedWorktreeIDs = [worktree.id, plainRepo.id]

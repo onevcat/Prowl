@@ -281,6 +281,10 @@ struct CommandPaletteFeature {
         )
       )
     }
+    if repositories.selectedWorktreeID == nil, repositories.selectedRepository != nil {
+      // A selected folder or workspace can be revealed in its group (docs-ai 086).
+      items.append(revealInSidebarCommandItem())
+    }
     if opensTerminals {
       // A command that cannot run in the target is left out (docs-ai 084 C3c).
       items.append(
@@ -743,14 +747,18 @@ private func worktreeNavigationCommandItems(includesFinder: Bool = true) -> [Com
       kind: .copyPath,
       keywords: ["copy", "path", "clipboard", "复制", "路径", "剪贴板"]
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalRevealInSidebar,
-      title: "Reveal in Sidebar",
-      category: .navigation,
-      kind: .revealInSidebar,
-      keywords: ["reveal", "locate", "find worktree", "显示", "定位", "工作树"]
-    ),
+    revealInSidebarCommandItem(),
   ]
+}
+
+private func revealInSidebarCommandItem() -> CommandPaletteItem {
+  .appShortcut(
+    id: CommandPaletteItemID.globalRevealInSidebar,
+    title: "Reveal in Sidebar",
+    category: .navigation,
+    kind: .revealInSidebar,
+    keywords: ["reveal", "locate", "find worktree", "显示", "定位", "工作树"]
+  )
 }
 
 private func selectedWorktreeViewCommandItems() -> [CommandPaletteItem] {

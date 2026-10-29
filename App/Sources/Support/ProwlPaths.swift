@@ -292,6 +292,10 @@ nonisolated enum ProwlPaths {
     baseDirectory.appending(path: "repository-appearances.json", directoryHint: .notDirectory)
   }
 
+  static var sidebarLayoutURL: URL {
+    baseDirectory.appending(path: "sidebar-layout.json", directoryHint: .notDirectory)
+  }
+
   /// Directory where user-imported repository icon images live, scoped
   /// per-repo so cleanup is automatic when the per-repo settings
   /// directory is removed.

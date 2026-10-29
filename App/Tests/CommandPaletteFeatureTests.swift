@@ -118,6 +118,16 @@ struct CommandPaletteFeatureTests {
     #expect(ids.contains("global.reveal-in-sidebar"))
   }
 
+  @Test func commandPaletteItems_offersRevealInSidebarForASelectedFolder() {
+    let repository = makeRepository(rootPath: "/tmp/folder-reveal", name: "folder", kind: .plain, worktrees: [])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .repository(repository.id)
+
+    let ids = Set(CommandPaletteFeature.commandPaletteItems(from: state).map(\.id))
+
+    #expect(ids.contains("global.reveal-in-sidebar"))
+  }
+
   @Test func commandPaletteItems_omitsWorktreeNavigationWithoutSelectedWorktree() {
     let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
     let ids = Set(items.map(\.id))

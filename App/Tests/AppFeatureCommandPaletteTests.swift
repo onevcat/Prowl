@@ -693,6 +693,30 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }
 
+  @Test(.dependencies) func revealInSidebarForASelectedFolderRevealsIt() async {
+    let folder = Repository(
+      id: "/tmp/folder-reveal",
+      rootURL: URL(fileURLWithPath: "/tmp/folder-reveal"),
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [folder]
+    repositoriesState.selection = .repository(folder.id)
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.revealInSidebar)))
+    await store.receive(\.repositories.revealSelectedWorktreeInSidebar) {
+      $0.repositories.pendingSidebarReveal = PendingSidebarReveal(id: 1, target: .repository(folder.id))
+    }
+  }
+
   @Test(.dependencies) func revealInSidebarWithoutSelectedWorktreeIsNoop() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
