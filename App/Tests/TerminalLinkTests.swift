@@ -71,6 +71,32 @@ struct TerminalLinkTests {
     #expect(TerminalLink(link.absoluteString).decision == .deny(.unsafeFile))
   }
 
+  private func makeAlias(_ name: String, to target: URL, in directory: URL) throws -> URL {
+    let alias = directory.appending(path: name)
+    let data = try target.bookmarkData(options: .suitableForBookmarkFile)
+    try URL.writeBookmarkData(data, to: alias)
+    return alias
+  }
+
+  @Test func finderAliasesAreClassifiedByTheirTarget() throws {
+    let directory = try makeDirectory()
+    let executable = try makeFile("tool", in: directory, executable: true)
+    let notes = try makeFile("notes.txt", in: directory)
+    let appAlias = try makeAlias("Report", to: URL(filePath: "/System/Applications/Calculator.app"), in: directory)
+    let toolAlias = try makeAlias("Tool alias", to: executable, in: directory)
+    let notesAlias = try makeAlias("Notes alias", to: notes, in: directory)
+    let symlinkToAlias = directory.appending(path: "readme.txt")
+    try FileManager.default.createSymbolicLink(at: symlinkToAlias, withDestinationURL: appAlias)
+
+    #expect(TerminalLink(appAlias.absoluteString).decision == .deny(.unsafeFile))
+    #expect(TerminalLink(toolAlias.absoluteString).decision == .deny(.unsafeFile))
+    #expect(TerminalLink(symlinkToAlias.absoluteString).decision == .deny(.unsafeFile))
+    // A safe target opens, and the alert text names the same file.
+    let canonicalNotes = notes.resolvingSymlinksInPath()
+    #expect(TerminalLink(notesAlias.absoluteString).decision == .allow(canonicalNotes))
+    #expect(TerminalLink(notesAlias.absoluteString).displayString == canonicalNotes.path(percentEncoded: false))
+  }
+
   @Test func plainFilesAndFoldersOpenAtTheirCanonicalPath() throws {
     let directory = try makeDirectory()
     let file = try makeFile("notes.txt", in: directory)

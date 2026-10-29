@@ -108,13 +108,18 @@ nonisolated struct TerminalLink: Equatable, Sendable {
   }
 
   /// A single-line form of the effective target for the alert. File URLs are
-  /// shown exactly as they are opened (standardized, symlinks resolved), so
-  /// traversal and padding cannot make the shown and opened targets differ.
+  /// shown exactly as they are opened (standardized, symlinks and aliases
+  /// resolved), so traversal, padding, and aliases cannot make the shown and
+  /// opened targets differ.
   var displayString: String {
     let normalized: String
     if let url = URL(string: string), url.scheme != nil {
-      normalized =
-        url.isFileURL ? url.standardizedFileURL.resolvingSymlinksInPath().path(percentEncoded: false) : string
+      if url.isFileURL {
+        let effective = Self.effectiveFileURL(url) ?? url.standardizedFileURL.resolvingSymlinksInPath()
+        normalized = effective.path(percentEncoded: false)
+      } else {
+        normalized = string
+      }
     } else {
       normalized = URL(filePath: string).standardizedFileURL.path(percentEncoded: false)
     }
@@ -149,8 +154,11 @@ nonisolated extension TerminalLink {
     }
 
     // Classify the effective object, not the spelling in the output, so a
-    // harmless-looking symlink cannot hide an executable target.
-    let canonicalURL = url.standardizedFileURL.resolvingSymlinksInPath()
+    // harmless-looking symlink or Finder alias cannot hide an executable
+    // target.
+    guard let canonicalURL = effectiveFileURL(url) else {
+      return .deny(.inaccessibleFile)
+    }
     let values: URLResourceValues
     do {
       values = try canonicalURL.resourceValues(forKeys: [
@@ -170,6 +178,26 @@ nonisolated extension TerminalLink {
       return .deny(.unsafeFile)
     }
     return .allow(canonicalURL)
+  }
+
+  /// The file a local URL finally names: standardized, symlinks resolved,
+  /// and Finder aliases followed. An alias needs no executable bit, yet
+  /// Launch Services opens its target, so an alias to an app must be judged
+  /// as the app. `nil` when an alias cannot be resolved without UI or
+  /// mounting, or the chain is too long.
+  fileprivate static func effectiveFileURL(_ url: URL) -> URL? {
+    var current = url.standardizedFileURL.resolvingSymlinksInPath()
+    for _ in 0..<8 {
+      // A missing file has no resource values; the caller reports it.
+      guard (try? current.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true else {
+        return current
+      }
+      guard let target = try? URL(resolvingAliasFileAt: current, options: [.withoutUI, .withoutMounting]) else {
+        return nil
+      }
+      current = target.standardizedFileURL.resolvingSymlinksInPath()
+    }
+    return nil
   }
 
   fileprivate static func isUnsafeFile(_ url: URL, values: URLResourceValues) -> Bool {

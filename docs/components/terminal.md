@@ -213,8 +213,9 @@ such a link, so Prowl checks the target first:
 | Any other scheme (for example `vscode://`) | Opens after a confirmation that names the app |
 | Application bundles, scripts, executables, installer and shortcut files, missing files, remote `file` hosts, targets with invisible or line-breaking characters, values without a scheme | Blocked with an alert that offers **Copy Link** |
 
-A relative path is resolved against Prowl's own working directory, not the
-pane's, so it is usually blocked as missing.
+Symlinks and Finder aliases are judged by the file they point to, and that file
+is what opens. A relative path is resolved against Prowl's own working
+directory, not the pane's, so it is usually blocked as missing.
 
 ## Ghostty config
 

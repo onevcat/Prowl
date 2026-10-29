@@ -193,7 +193,9 @@ Pi.
   Prowl now handles the `unknown` and `osc8` kinds itself with `TerminalLink` (a port of that
   policy: web and mail links and existing non-executable files open, other schemes ask
   first, everything else is blocked with an alert) and keeps the libghostty fallback for the
-  `text` and `html` kinds. Tests: `App/Tests/TerminalLinkTests.swift`.
+  `text` and `html` kinds. Review round 2 found that a Finder alias to an app passed as a
+  plain file (upstream has the same gap); `TerminalLink` follows alias chains and judges the
+  final target. Tests: `App/Tests/TerminalLinkTests.swift`.
 - Prowl sends dropped text through `ghostty_surface_text`. Upstream moved drag and drop to
   `ghostty_surface_paste_text` (GHSA-v8cw-fg4j-jcc4). While Prowl approves every clipboard
   confirmation without a dialog, both calls behave the same (bracketed paste, no prompt), so
