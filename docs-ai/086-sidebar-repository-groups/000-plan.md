@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented — see [001-action.md](001-action.md) |
 | **Anchor date** | 2026-10-29 |
-| **Primary PRs** | #1006 (plan), #1007 (S1), #S2PR (S2) |
+| **Primary PRs** | #1006 (plan), #1007 (S1), #1008 (S2) |
 | **Related** | Issue #996, #413 (Canvas groups), #601 (cross-repository pins), `docs/components/repositories-and-worktrees.md` |
 
 ## Background
