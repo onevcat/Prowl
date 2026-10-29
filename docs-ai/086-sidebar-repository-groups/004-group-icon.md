@@ -34,4 +34,4 @@ closes, and for a custom icon that is set the same way as a repository icon.
 
 ## Refs
 
-PR: (pending)
+PR: #1009

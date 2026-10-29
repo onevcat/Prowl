@@ -7,7 +7,7 @@
 | 2026-10-29 | Plan merged | #1006 |
 | 2026-10-29 | S1: layout tree in `sidebar-layout.json` with migration from `repositoryOrderIDs`, flattened order for every order consumer, group containers, own versus effective collapse, header toggle over groups, context menus, and the color background (S3 folded in) | #1007, [002-s1.md](002-s1.md) |
 | 2026-10-29 | S2: drag and drop for repositories in, into, and out of groups, and for whole groups, through one pure `SidebarLayout.move(_:to:)` | #1008, [003-s2.md](003-s2.md) |
-| 2026-10-29 | Group icon: default folder (`folder` collapsed, `folder.fill` open), user SF Symbol or imported image in `~/.prowl/group-icons/` | [004-group-icon.md](004-group-icon.md) |
+| 2026-10-29 | Group icon: default folder (`folder` collapsed, `folder.fill` open), user SF Symbol or imported image in `~/.prowl/group-icons/` | #1009, [004-group-icon.md](004-group-icon.md) |
 
 ## Outcome & current state (as of 2026-10-29)
 
