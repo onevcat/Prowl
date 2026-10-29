@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented (rehearsal merged in #886 on 2026-10-10; tagged `v1.4.0` port on 2026-10-30) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #886 (rehearsal on upstream tip), PR_NUMBER (tagged `v1.4.0` port); see [001-action.md](001-action.md) |
+| **Primary PRs** | #886 (rehearsal on upstream tip), #1010 (tagged `v1.4.0` port); see [001-action.md](001-action.md) |
 | **Related** | [007-ghostty-embedding-integration/ghostty-fork-sync.md](../007-ghostty-embedding-integration/ghostty-fork-sync.md), [041-ghosttykit-prebuilt-artifacts](../041-ghosttykit-prebuilt-artifacts/000-plan.md), [063.009 display sleep spike](../063-agent-workflows/009-display-sleep-surface-spike.md), [069-undo-close-terminal](../069-undo-close-terminal/000-plan.md), [075-terminal-config-source](../075-terminal-config-source/000-plan.md) |
 
 ## Background
