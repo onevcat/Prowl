@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Replay harness for the OSC 7501 program status protocol.
 
-Spawns a program in a pty, answers its support query (`OSC 7501 ; ?`, echoed
-back with the same terminator), DA1 and the kitty keyboard query, sends
-scripted keys, and prints every OSC 7501 report with a timestamp. Use it to
-record what a producer actually sends before relying on it in Prowl
-(docs-ai/079-program-status-osc-7501).
+Spawns a program in a pty, answers its support query (`OSC 7501 ; ?`) with
+Ghostty's protocol revision 0.4 reply and the same terminator, DA1 and the
+kitty keyboard query, sends scripted keys, and prints every OSC 7501 report
+with a timestamp. Use it to record what a producer actually sends before
+relying on it in Prowl (docs-ai/079-program-status-osc-7501).
 
     scripts/program_status_probe.py --seconds 40 \
       --keys '3:\\x1b[B;3.3:\\r;7:reply with just the word ok\\r' -- claude
@@ -25,6 +25,8 @@ import termios
 import time
 
 QUERY = re.compile(rb"\x1b\]7501;\?(\x07|\x1b\\)")
+# Ghostty's reply body (`osc.program_status.query_reply`), revision 0.4.
+QUERY_REPLY = b"\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth"
 REPORT = re.compile(rb"\x1b\]7501;([^\x07\x1b]*)(\x07|\x1b\\)")
 DA1 = re.compile(rb"\x1b\[0?c")
 KITTY_KEYBOARD_QUERY = re.compile(rb"\x1b\[\?u")
@@ -91,7 +93,7 @@ def main():
         if not chunk:
             break
         output += chunk
-        answer("7501 query", QUERY, lambda m: b"\x1b]7501;?" + m.group(1))
+        answer("7501 query", QUERY, lambda m: QUERY_REPLY + m.group(1))
         answer("DA1", DA1, b"\x1b[?65;1;9c")
         answer("kitty keyboard query", KITTY_KEYBOARD_QUERY, b"\x1b[?0u")
         for match in REPORT.finditer(chunk):
