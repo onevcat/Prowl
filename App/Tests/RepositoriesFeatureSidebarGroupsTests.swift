@@ -224,13 +224,17 @@ struct RepositoriesFeatureSidebarGroupsTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.uuid = .incrementing
       $0.groupIconAssetStore = recordingAssetStore(
         imported: imported, removed: removed, importedFilename: "new.svg")
       $0.repositoryPersistence.saveSidebarLayout = { _ in }
     }
 
-    await store.send(.sidebarGroups(.importGroupImage(existingGroupID, source)))
+    await store.send(.sidebarGroups(.importGroupImage(existingGroupID, source))) {
+      $0.pendingGroupImageImports = [self.existingGroupID: self.firstUUID]
+    }
     await store.receive(\.sidebarGroups.groupImageImported) {
+      $0.pendingGroupImageImports = [:]
       $0.sidebarLayout = SidebarLayout(items: [
         .group(
           RepositoryGroup(
@@ -252,7 +256,8 @@ struct RepositoriesFeatureSidebarGroupsTests {
       $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
     }
 
-    await store.send(.sidebarGroups(.groupImageImported(existingGroupID, filename: "orphan.png")))
+    await store.send(
+      .sidebarGroups(.groupImageImported(existingGroupID, importID: firstUUID, filename: "orphan.png")))
     await store.finish()
     #expect(removed.value == ["orphan.png"])
     #expect(saved.value == nil)
@@ -266,6 +271,7 @@ struct RepositoriesFeatureSidebarGroupsTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.uuid = .incrementing
       $0.groupIconAssetStore.importImage = { _, _ in throw CocoaError(.fileReadNoPermission) }
     }
     store.exhaustivity = .off
@@ -273,7 +279,64 @@ struct RepositoriesFeatureSidebarGroupsTests {
     await store.send(.sidebarGroups(.importGroupImage(existingGroupID, URL(fileURLWithPath: "/tmp/x.png"))))
     await store.receive(\.sidebarGroups.groupImageImportFailed)
     #expect(store.state.alert != nil)
+    #expect(store.state.pendingGroupImageImports.isEmpty)
     #expect(store.state.sidebarLayout.group(id: existingGroupID)?.icon == nil)
+  }
+
+  @Test(.dependencies) func aLaterChoiceWinsOverAnImportInFlight() async {
+    var state = makeState(repositories: [])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: []))
+    ])
+    state.pendingGroupImageImports = [existingGroupID: firstUUID]
+    let removed = LockIsolated<[String]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(removed: removed)
+      $0.repositoryPersistence.saveSidebarLayout = { _ in }
+    }
+
+    await store.send(.sidebarGroups(.setGroupIcon(existingGroupID, .sfSymbol("leaf.fill")))) {
+      $0.pendingGroupImageImports = [:]
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(RepositoryGroup(id: self.existingGroupID, title: "G", icon: .sfSymbol("leaf.fill"), repositoryIDs: []))
+      ])
+    }
+    await store.send(.sidebarGroups(.groupImageImported(existingGroupID, importID: firstUUID, filename: "a.png")))
+    await store.finish()
+    #expect(removed.value == ["a.png"])
+  }
+
+  @Test(.dependencies) func anOlderImportDoesNotReplaceANewerOne() async {
+    var state = makeState(repositories: [])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(
+        RepositoryGroup(id: existingGroupID, title: "G", icon: .userImage(filename: "old.png"), repositoryIDs: []))
+    ])
+    let newerImportID = UUID(1)
+    state.pendingGroupImageImports = [existingGroupID: newerImportID]
+    let removed = LockIsolated<[String]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(removed: removed)
+      $0.repositoryPersistence.saveSidebarLayout = { _ in }
+    }
+
+    await store.send(
+      .sidebarGroups(.groupImageImported(existingGroupID, importID: newerImportID, filename: "b.png"))
+    ) {
+      $0.pendingGroupImageImports = [:]
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(
+          RepositoryGroup(id: self.existingGroupID, title: "G", icon: .userImage(filename: "b.png"), repositoryIDs: []))
+      ])
+    }
+    await store.finish()
+    await store.send(.sidebarGroups(.groupImageImported(existingGroupID, importID: firstUUID, filename: "a.png")))
+    await store.finish()
+    #expect(removed.value == ["old.png", "a.png"])
   }
 
   @Test(.dependencies) func ungroupDeletesTheImportedImageAndClosesThePicker() async {

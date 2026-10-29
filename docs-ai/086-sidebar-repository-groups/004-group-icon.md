@@ -25,7 +25,9 @@ closes, and for a custom icon that is set the same way as a repository icon.
   `GroupIconAssetStoreKey` reuses `RepositoryIconAssetStore` with that directory as its root.
 - `RepositoriesFeature+SidebarGroups.swift`: `setGroupIcon`, the symbol picker flow
   (`chooseGroupSymbolRequested`, `symbolPickerApplied`, `symbolPickerCanceled`), and the image import
-  (`importGroupImage` → `groupImageImported` or `groupImageImportFailed`, which shows an alert). A
+  (`importGroupImage` → `groupImageImported` or `groupImageImportFailed`, which shows an alert). Each
+  import has an ID in `pendingGroupImageImports`; a later import, an explicit icon choice, or ungroup
+  makes it stale, and a stale completion only deletes its own file, so the latest choice stays. A
   replaced icon, an ungrouped group, and an image that arrives after its group is gone delete the
   image file. The picker closes when its group disappears.
 - `RepositoryIconImage` resolves an image from a repository or from the group icons directory

@@ -264,8 +264,8 @@ struct RepositoriesFeature {
     case symbolPickerApplied(String?)
     case symbolPickerCanceled
     case importGroupImage(RepositoryGroup.ID, URL)
-    case groupImageImported(RepositoryGroup.ID, filename: String)
-    case groupImageImportFailed(String)
+    case groupImageImported(RepositoryGroup.ID, importID: UUID, filename: String)
+    case groupImageImportFailed(RepositoryGroup.ID, importID: UUID, message: String)
     case ungroup(RepositoryGroup.ID)
   }
 
@@ -512,6 +512,8 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedGroupIDs")) var collapsedGroupIDs: [String] = []
     var groupTitlePrompt: GroupTitlePrompt?
     var groupSymbolPicker: GroupSymbolPicker?
+    /// The latest image import of each group. A completion with another ID is stale.
+    var pendingGroupImageImports: [RepositoryGroup.ID: UUID] = [:]
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
     /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
