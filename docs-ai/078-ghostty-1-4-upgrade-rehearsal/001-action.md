@@ -143,6 +143,44 @@ rehearsal (`f35f9a84d` = tip `9d479dcb1` + five patches), so the port only had t
 | 5 | `c141458f0` OSC 7501 action | The termio support reply now uses `osc.program_status.query_reply`, the same bytes as the libghostty-vt path, plus a unit test. |
 | 6 | `5a6f04461` styled cells in VT rows | New. A wide character split by an insert inside left/right margins (`ESC[7m界ESC[0m ESC[?69h ESC[2;6s ESC[1;2H ESC[L`) leaves inverse cells without text; upstream's rule dropped their rows, so a mirror replica lost them. The fork restores the `v1.3.1` rule; the regression test fails without the patch. |
 
+### Live verification of the tagged port (isolated Debug instance, screen unlocked)
+
+Driven through the bundle's `prowl` CLI, CGEvent/HID input, AX, and window screenshots on
+macOS 27.0 with the pin at `c141458f0` (rows marked † were rerun on `5a6f04461` with the link
+policy).
+
+| Scenario | Outcome | Evidence |
+| --- | --- | --- |
+| Shell, CJK/emoji round trip, `GHOSTTY_SURFACE_ID` | PASS | `REG:xterm-ghostty:prowl:0x…:日本語 中文 émoji 🐱 🏴‍☠️ ✓` |
+| Legacy key encoding (`cat -v`) | PASS | `^A^[OP^[[A^[[Z^[[H^[x^[^H` (ctrl+alt+shift+backspace is `ESC BS`, new in 1.4) |
+| ⌘V of text with CR and LF | PASS (auto-approved, no prompt; Prowl policy) | pasted lines reached `cat` |
+| OSC 52 write / read | PASS | `pbpaste` and the base64 reply match |
+| `ghostty +version`, `+ssh` wrapper (085) to a macOS host | PASS | `Ghostty 1.4.0-release-v1-4-0-patched+c141458f0`; remote `TERM=xterm-ghostty`, `tput colors` 256. The first install attempt on a host without `~/.terminfo` failed once (`InstallFailed`, fallback used); two clean retries installed it |
+| New VT reports | PASS | `CSI 19 t` → `ESC[9;49;141t`, DECXCPR → `ESC[?1;1;1R`, DECRQM 2033/67, XTVERSION |
+| OSC 7501 support reply from the termio patch | PASS | `ESC]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth ESC\` |
+| Visibility reports (mode 2033) driven by Prowl's occlusion | PASS | `?999;1n` → new tab hides it → `?999;2n` → focus back → `?999;1n` |
+| Close a pane three times during heavy `yes` output | PASS | 61–94 ms per close, no leftover process after SIGHUP, CPU back to 0 |
+| Undo close (⌘Z) | PASS | same pane id restored, shell pid alive, scrollback intact |
+| 200 000 lines, idle scrollback compression | PASS | phys_footprint 191 → 256 MB after the fill → 201 MB within 15 s idle; `read --last` of 40 938 retained rows in 0.21 s (50 MB `scrollback-limit-bytes`) |
+| Split, glyph rendering, reflow on split | PASS | bold/italic/curly/overline/strike, 256 and truecolor, box/braille/powerline/nerd, CJK, Hangul, ZWJ family and pirate flag (VS fix) |
+| Hidden vs visible streaming, tab switch first frame | PASS | 3 M lines: hidden 164 % / visible 236 % CPU (rendering only when visible); first frame at 0.4 s shows the latest output |
+| Kitty graphics: static PNG, 3-frame animation | PASS | burst capture cycles green → blue → red; animation pauses when hidden (0 % CPU) and resumes; 12–15 % CPU while animating (upstream Ghostty.app 1.4.0: 6–10 %) |
+| Mouse drag selection + ⌘C, double-click words | PASS | `SELECT-ME-TOKEN-XYZ 選択テスト` incl. wide edge; double-click selects `選択テスト`; `copy-on-select` default `none` |
+| Japanese IME (Kotoeri) | PASS | underlined preedit, commit bytes equal `printf '日本語版' \| cat -v` |
+| AX value | PASS | `AXTextArea` contains the printed token |
+| Claude Code 2.1.312, Codex 0.164.0, Pi 1.4.0 with the revision 0.4 reply | PASS | `osc.idle` → `osc.working` → `osc.done`; Claude `osc.blocked.permission` on a tool prompt |
+| Ctrl+L at a prompt | PASS | screen cleared, all lines in scrollback |
+| Window resize ×4 with 40 k-row scrollback | PASS | 200–450 ms per resize incl. AppleScript; no row lost; prompt not duplicated |
+| Random storm: 8 tabs/splits with output, random close order | PASS | children and RSS back to baseline after `undo-timeout` |
+| † ⌘-click OSC 8 `https://example.com` text pointing at Calculator.app | PASS (blocked) | before the fix: nothing happened; after: "Prowl Blocked This Link" alert, Calculator not launched |
+| † ⌘-click OSC 8 folder link, plain path text | PASS | Finder opens the folder |
+| † ⌘-click custom scheme | PASS | confirmation alert, Cancel keeps it closed |
+| † ⌘-click plain `file:///System/Applications/Calculator.app` text | PASS (blocked) | alert, Calculator not launched |
+
+Not covered live: the iOS mirror client (the styled-cell fix is covered by the Zig snapshot
+round-trip test and the mirror suites in `make test`), display sleep and hot-plug, and Oh My
+Pi.
+
 ### Findings outside the port
 
 - **Terminal links.** Prowl's `GhosttySurfaceBridge` returned `false` for
