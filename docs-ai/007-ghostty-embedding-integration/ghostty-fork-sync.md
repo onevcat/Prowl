@@ -10,8 +10,7 @@ Prowl embeds GhosttyKit from `ThirdParty/ghostty`. The submodule points to the `
 - Fork remote: `git@github.com:onevcat/ghostty.git`
 - Per-version patched branches: `release/v<UPSTREAM_TAG>-patched`
 - Current patched branch: `release/v1.4.0-patched`
-- Current pinned tip: `c141458f04c16b49edb582537103f8f39d6d3a57` (upstream `v1.4.0` +
-  5 patches)
+- Current pinned tip: `5a6f04461` (upstream `v1.4.0` + 6 patches)
 
 Each patched branch starts at the matching upstream tag and only adds onevcat patches. Do not rewrite an existing patched branch after publishing it.
 
@@ -32,17 +31,24 @@ tag, cherry-pick these commits, not older copies on previous branches.
 4. `f4fde9cab` — `Preserve keyboard modes in display snapshots`
    - Exports modifyOtherKeys and Kitty keyboard state in active-screen VT snapshots so replica
      input uses the Host's negotiated encoding.
-   - On `v1.3.1` this patch also changed the VT formatter to keep background-only blank rows.
-     Upstream `v1.4.0` does that itself (`152bdbc68`, `c7cbc9bfd`), so only the snapshot tests
-     remain. The background test fails when the upstream check is removed, so it guards the
-     upstream behavior. Keep the patch until upstream snapshots carry the keyboard state.
+   - On `v1.3.1` this patch also changed the VT formatter's blank-row rule; on `v1.4.0` that
+     part moved to patch 6. Keep the patch until upstream snapshots carry the keyboard state.
 5. `c141458f0` — `embedded: expose program status reports (OSC 7501) as an action`
    - Routes validated OSC 7501 reports from termio to the apprt as
      `GHOSTTY_ACTION_PROGRAM_STATUS` (upstream `v1.4.0` parses them, but its GUI ignores them).
    - Answers the support query with `osc.program_status.query_reply` (protocol revision 0.4:
      `?:states=…:kinds=…`), the same bytes as the libghostty-vt path.
+6. `5a6f04461` — `formatter: keep styled cells without text in VT rows`
+   - Upstream `v1.4.0` keeps VT rows whose cells only carry a background color (`152bdbc68`,
+     `c7cbc9bfd`) but still skips rows whose cells carry a style without text, such as the
+     inverse cells left when a wide character is split. Mirror snapshots replay VT output, so
+     the replica lost those cells. A VT row is blank only without text, background cells, and
+     styled cells (the `v1.3.1` rule).
+   - Tests: `display snapshot preserves background-only cells after reset` (upstream rule) and
+     `display snapshot preserves styled cells without text after reset` (this patch; it fails
+     without it). Drop the patch when upstream keeps styled cells in VT rows.
    - This is the commit the submodule points at. Matching artifacts use release tag
-     `xcframework-c141458f04c16b49edb582537103f8f39d6d3a57-prowl-v1`.
+     `xcframework-5a6f0446160ef0b4806c7fc19e3f212324c2c0d9-prowl-v1`.
 
 Patches dropped on the way to `v1.4.0`: the foreground process group patches (replaced by
 upstream `ghostty_surface_foreground_pid`) and the text free ABI and lazy display link
@@ -59,7 +65,7 @@ git fetch onevcat
 
 PREV=v1.4.0
 NEXT=v1.4.1
-PATCH_TIP=c141458f04c16b49edb582537103f8f39d6d3a57
+PATCH_TIP=5a6f0446160ef0b4806c7fc19e3f212324c2c0d9
 
 git checkout -b "release/${NEXT}-patched" "${NEXT}"
 git cherry-pick $(git rev-list --reverse --no-merges "${PREV}..${PATCH_TIP}")

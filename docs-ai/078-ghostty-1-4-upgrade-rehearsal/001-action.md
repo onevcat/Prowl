@@ -12,8 +12,9 @@
 | 2026-10-10 | Launch crash on tip fixed: libghostty keeps the argv pointer; Prowl passed a Swift array buffer that was freed after `ghostty_init` | `78994f1a` |
 | 2026-10-10 | `make check`, `make build-app` (0 warnings), `make test` 3695 pass / 0 fail; live scenarios in an isolated Debug instance (below) | logs in the session scratchpad |
 | 2026-10-10 | Second live pass with the screen unlocked: rendering, glyphs, mouse selection, Japanese IME, AX; prebuilt GhosttyKit published for the pinned commit; artifact scripts fixed for the `App/` layout | release `xcframework-6ae1993379cf06f4e6ee9784b60c0e1e75b01ae1-prowl-v1` |
-| 2026-10-30 | Tagged port: upstream `v1.4.0` (`83fb95624`, 350 commits after `9d479dcb1`, Zig 0.17.0); five patches replayed on `release/v1.4.0-patched` (`c141458f0`) | `onevcat/ghostty` branch `release/v1.4.0-patched` |
+| 2026-10-30 | Tagged port: upstream `v1.4.0` (`83fb95624`, 350 commits after `9d479dcb1`, Zig 0.17.0); five patches replayed on `release/v1.4.0-patched` (`c141458f0`; a sixth followed review) | `onevcat/ghostty` branch `release/v1.4.0-patched` |
 | 2026-10-30 | GhosttyKit built with Zig 0.17.0 on the Xcode 27.0 SDK; fork Zig tests 4087 pass / 26 skipped / 0 fail; Prowl builds with no source change | release `xcframework-c141458f04c16b49edb582537103f8f39d6d3a57-prowl-v1` |
+| 2026-10-30 | Review round 1: styled cells without text dropped from VT rows (fork patch 6). Live test: ⌘-click on links did nothing; Prowl now checks and opens terminal links itself (`TerminalLink`) | release `xcframework-5a6f0446160ef0b4806c7fc19e3f212324c2c0d9-prowl-v1` |
 
 ## Outcome & current state (as of 2026-10-10)
 
@@ -138,16 +139,23 @@ rehearsal (`f35f9a84d` = tip `9d479dcb1` + five patches), so the port only had t
 | 1 | `5a9ce021f` child PID | Clean. |
 | 2 | `e0e70c18c` VT snapshot | Clean. |
 | 3 | `318ca0789` bounded text | `dupeZ` → `dupeSentinel`. |
-| 4 | `f4fde9cab` snapshot keyboard modes | Conflict in `formatter.zig`; took upstream. The fork's VT blank-row check (no text and no style) and upstream's (no text and no background cell) serve the same case: rows erased while a background color is set. The fork test `display snapshot preserves background-only cells after reset` passes on upstream's check and fails when that check is removed, so the formatter hunk is dropped and the test stays. |
+| 4 | `f4fde9cab` snapshot keyboard modes | Conflict in `formatter.zig`; took upstream for this commit. Upstream keeps VT rows whose cells only carry a background color; the fork's `v1.3.1` rule also kept rows of styled cells without text. The first replay treated the two as equivalent because the background test passed; review found a counterexample (patch 6). |
 | 5 | `c141458f0` OSC 7501 action | The termio support reply now uses `osc.program_status.query_reply`, the same bytes as the libghostty-vt path, plus a unit test. |
+| 6 | `5a6f04461` styled cells in VT rows | New. A wide character split by an insert inside left/right margins (`ESC[7m界ESC[0m ESC[?69h ESC[2;6s ESC[1;2H ESC[L`) leaves inverse cells without text; upstream's rule dropped their rows, so a mirror replica lost them. The fork restores the `v1.3.1` rule; the regression test fails without the patch. |
 
 ### Findings outside the port
 
-- Prowl's `GhosttySurfaceBridge.handleAction` returns `false` for `GHOSTTY_ACTION_OPEN_URL`,
-  so libghostty falls back to `internal_os.open` (`/usr/bin/open`) for every cmd-clicked link,
-  whatever the scheme or local target. Upstream fixed the matching advisories
-  (GHSA-cw69-wm67-5pv8, GHSA-mfw9-xcr3-7gfp) in its macOS Swift layer (`UntrustedURL`), which
-  Prowl does not use. The issue predates the port; it is handled separately.
+- **Terminal links.** Prowl's `GhosttySurfaceBridge` returned `false` for
+  `GHOSTTY_ACTION_OPEN_URL`, so libghostty fell back to `internal_os.open`. On the rehearsal
+  pin that fallback already refused OSC 8 links on macOS (`UnsafeOSC8Link`) and passed
+  `link`-matched text to `/usr/bin/open` unchecked (the class of GHSA-mfw9-xcr3-7gfp: a
+  printed `file:///System/Applications/Calculator.app` launches it). `v1.4.0` (`f9e8ef02d`)
+  refuses that kind as well, so ⌘-click on a plain URL stopped working in the live test.
+  Upstream's fix lives in its macOS Swift layer (`UntrustedURL`), which Prowl does not use.
+  Prowl now handles the `unknown` and `osc8` kinds itself with `TerminalLink` (a port of that
+  policy: web and mail links and existing non-executable files open, other schemes ask
+  first, everything else is blocked with an alert) and keeps the libghostty fallback for the
+  `text` and `html` kinds. Tests: `App/Tests/TerminalLinkTests.swift`.
 - Prowl sends dropped text through `ghostty_surface_text`. Upstream moved drag and drop to
   `ghostty_surface_paste_text` (GHSA-v8cw-fg4j-jcc4). While Prowl approves every clipboard
   confirmation without a dialog, both calls behave the same (bracketed paste, no prompt), so
