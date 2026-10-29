@@ -176,6 +176,7 @@ policy).
 | † ⌘-click OSC 8 folder link, plain path text | PASS | Finder opens the folder |
 | † ⌘-click custom scheme | PASS | confirmation alert, Cancel keeps it closed |
 | † ⌘-click plain `file:///System/Applications/Calculator.app` text | PASS (blocked) | alert, Calculator not launched |
+| † ⌘-click OSC 8 link to a Finder alias of Calculator.app (review round 2) | PASS (blocked) | alert names `/System/Applications/Calculator.app/`, Calculator not launched |
 
 Not covered live: the iOS mirror client (the styled-cell fix is covered by the Zig snapshot
 round-trip test and the mirror suites in `make test`), display sleep and hot-plug, and Oh My
