@@ -100,6 +100,28 @@ extension SidebarLayoutItem: Codable {
   }
 }
 
+/// What a sidebar drag moves (docs-ai 086 S2).
+nonisolated enum SidebarDragItem: Equatable, Hashable, Sendable {
+  case repository(Repository.ID)
+  case group(RepositoryGroup.ID)
+}
+
+/// Where a sidebar drop puts the dragged item. The position is the place before an
+/// anchor, or the end when the anchor is nil, so a stale position cannot point at a
+/// different item.
+nonisolated enum SidebarDropDestination: Equatable, Hashable, Sendable {
+  /// A top-level position, before the entry with this `SidebarLayoutItem.key`.
+  case topLevel(before: String?)
+  /// A position in a group, before this member.
+  case group(RepositoryGroup.ID, before: Repository.ID?)
+
+  /// The group that the destination is in, or nil for a top-level position.
+  var groupID: RepositoryGroup.ID? {
+    guard case .group(let groupID, _) = self else { return nil }
+    return groupID
+  }
+}
+
 /// The sidebar order: ungrouped repositories and groups at the top level. It is
 /// the only source of repository order (docs-ai 086). A repository that is not
 /// in the layout shows at the end of the top level.
@@ -225,24 +247,55 @@ nonisolated struct SidebarLayout: Codable, Equatable, Hashable, Sendable {
     return true
   }
 
-  /// Moves top-level items within `visibleKeys`, the top-level keys that the
-  /// sidebar shows, in their shown order. Items that the sidebar does not show,
-  /// such as hidden remote folders, keep their places.
-  mutating func moveTopLevelItems(visibleKeys: [String], fromOffsets source: IndexSet, toOffset destination: Int) {
-    let sourceIndexes = source.sorted().filter { visibleKeys.indices.contains($0) }
-    var movedKeys = visibleKeys
-    for index in sourceIndexes.reversed() {
-      movedKeys.remove(at: index)
+  /// Moves a dragged repository or group to `destination` (docs-ai 086 S2). The
+  /// other items keep their relative order, also the items that the sidebar does
+  /// not show, such as hidden remote folders. Returns false and changes nothing
+  /// when the move is not allowed (a group into a group, a missing item or anchor)
+  /// or when the item is already at the destination.
+  @discardableResult
+  mutating func move(_ item: SidebarDragItem, to destination: SidebarDropDestination) -> Bool {
+    var moved = self
+    switch (item, destination) {
+    case (.group, .group):
+      return false
+
+    case (.group(let groupID), .topLevel(let anchor)):
+      let key = SidebarLayoutItem.groupKey(groupID)
+      guard anchor != key, let index = items.firstIndex(where: { $0.key == key }) else { return false }
+      let group = moved.items.remove(at: index)
+      guard moved.insertTopLevel(group, before: anchor) else { return false }
+
+    case (.repository(let repositoryID), .topLevel(let anchor)):
+      guard anchor != repositoryID, repositoryIDs.contains(repositoryID) else { return false }
+      moved.removeRepository(repositoryID)
+      guard moved.insertTopLevel(.repository(repositoryID), before: anchor) else { return false }
+
+    case (.repository(let repositoryID), .group(let groupID, let anchor)):
+      guard anchor != repositoryID, repositoryIDs.contains(repositoryID),
+        let targetGroup = group(id: groupID),
+        anchor.map({ targetGroup.repositoryIDs.contains($0) }) ?? true
+      else { return false }
+      moved.removeRepository(repositoryID)
+      moved.updateGroup(groupID) { group in
+        let index = anchor.flatMap(group.repositoryIDs.firstIndex(of:)) ?? group.repositoryIDs.endIndex
+        group.repositoryIDs.insert(repositoryID, at: index)
+      }
     }
-    let insertionIndex = min(destination, visibleKeys.count) - sourceIndexes.count(where: { $0 < destination })
-    movedKeys.insert(contentsOf: sourceIndexes.map { visibleKeys[$0] }, at: max(0, insertionIndex))
-    let visible = Set(movedKeys)
-    var mergedKeys = movedKeys
-    for (index, item) in items.enumerated() where !visible.contains(item.key) {
-      mergedKeys.insert(item.key, at: min(index, mergedKeys.count))
+    guard moved != self else { return false }
+    self = moved
+    return true
+  }
+
+  /// Inserts `item` before the top-level entry with the key `anchor`, or at the
+  /// end when `anchor` is nil. Returns false when the anchor does not exist.
+  private mutating func insertTopLevel(_ item: SidebarLayoutItem, before anchor: String?) -> Bool {
+    guard let anchor else {
+      items.append(item)
+      return true
     }
-    let itemsByKey = Dictionary(items.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
-    items = mergedKeys.compactMap { itemsByKey[$0] }
+    guard let index = items.firstIndex(where: { $0.key == anchor }) else { return false }
+    items.insert(item, at: index)
+    return true
   }
 
   /// Removes the repositories that `isRemoved` matches, also from groups. Groups

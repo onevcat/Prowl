@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | In progress |
+| **Status** | Implemented — see [001-action.md](001-action.md) |
 | **Anchor date** | 2026-10-29 |
-| **Primary PRs** | #1006 (plan), #1007 (S1) |
+| **Primary PRs** | #1006 (plan), #1007 (S1), #S2PR (S2) |
 | **Related** | Issue #996, #413 (Canvas groups), #601 (cross-repository pins), `docs/components/repositories-and-worktrees.md` |
 
 ## Background
@@ -168,3 +168,4 @@ Each slice updates `docs/components/repositories-and-worktrees.md` and gets a De
 ## Amendments
 
 - Updated 2026-10-29: S1 shipped the layout, groups, collapse, menus, and the color background (S3 folded into S1) — see [002-s1.md](002-s1.md)
+- Updated 2026-10-29: S2 shipped drag and drop with anchor destinations through `SidebarLayout.move(_:to:)` — see [003-s2.md](003-s2.md)

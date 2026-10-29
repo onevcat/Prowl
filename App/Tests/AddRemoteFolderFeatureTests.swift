@@ -210,13 +210,11 @@ struct AddRemoteFolderFeatureTests {
       $0.repositoryPersistence.saveSidebarLayout = { layout in saved.setValue(layout) }
     }
 
-    await store.send(
-      .worktreeOrdering(.repositoriesMoved(IndexSet(integer: 1), 0, visibleKeys: ["/tmp/a/", "/tmp/b/"]))
-    ) {
-      $0.sidebarLayout = SidebarLayout(repositoryIDs: ["/tmp/b/", remote, "/tmp/a/"])
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.repository("/tmp/b/"), .topLevel(before: "/tmp/a/")))) {
+      $0.sidebarLayout = SidebarLayout(repositoryIDs: ["/tmp/b/", "/tmp/a/", remote])
     }
     await store.finish()
-    #expect(saved.value?.repositoryIDs == ["/tmp/b/", remote, "/tmp/a/"])
+    #expect(saved.value?.repositoryIDs == ["/tmp/b/", "/tmp/a/", remote])
   }
 
   /// A snapshot without remote repositories, as a session without the flag writes it,

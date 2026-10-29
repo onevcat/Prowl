@@ -139,18 +139,165 @@ struct SidebarLayoutTests {
       layout.group(id: groupA) == RepositoryGroup(id: groupA, title: "Product", color: .green, repositoryIDs: ["/a"]))
   }
 
-  @Test func moveTopLevelItemsKeepsHiddenItemsInPlace() {
+  // MARK: - Drag and drop moves (S2)
+
+  private var groupKeyA: String { SidebarLayoutItem.groupKey(groupA) }
+  private var groupKeyB: String { SidebarLayoutItem.groupKey(groupB) }
+
+  private func dragLayout() -> SidebarLayout {
+    SidebarLayout(items: [
+      .repository("/a"),
+      .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b", "/c"])),
+      .repository("/d"),
+      .group(RepositoryGroup(id: groupB, title: "B", repositoryIDs: [])),
+    ])
+  }
+
+  @Test func moveReordersATopLevelRepository() {
+    var layout = dragLayout()
+
+    let moved1 = layout.move(.repository("/d"), to: .topLevel(before: "/a"))
+    #expect(moved1)
+
+    #expect(layout.items.map(\.key) == ["/d", "/a", groupKeyA, groupKeyB])
+  }
+
+  @Test func moveToTheTopLevelEndAppendsTheRepository() {
+    var layout = dragLayout()
+
+    let moved2 = layout.move(.repository("/a"), to: .topLevel(before: nil))
+    #expect(moved2)
+
+    #expect(layout.items.map(\.key) == [groupKeyA, "/d", groupKeyB, "/a"])
+  }
+
+  @Test func moveReordersMembersInAGroup() {
+    var layout = dragLayout()
+
+    let moved3 = layout.move(.repository("/c"), to: .group(groupA, before: "/b"))
+    #expect(moved3)
+
+    #expect(layout.group(id: groupA)?.repositoryIDs == ["/c", "/b"])
+    #expect(layout.items.map(\.key) == ["/a", groupKeyA, "/d", groupKeyB])
+  }
+
+  @Test func moveIntoAGroupTakesTheRepositoryFromTheTopLevel() {
+    var layout = dragLayout()
+
+    let moved4 = layout.move(.repository("/a"), to: .group(groupA, before: "/c"))
+    #expect(moved4)
+
+    #expect(layout.group(id: groupA)?.repositoryIDs == ["/b", "/a", "/c"])
+    #expect(layout.items.map(\.key) == [groupKeyA, "/d", groupKeyB])
+  }
+
+  @Test func moveToTheGroupEndFillsAnEmptyGroup() {
+    var layout = dragLayout()
+
+    let moved5 = layout.move(.repository("/b"), to: .group(groupB, before: nil))
+    #expect(moved5)
+
+    #expect(layout.group(id: groupA)?.repositoryIDs == ["/c"])
+    #expect(layout.group(id: groupB)?.repositoryIDs == ["/b"])
+  }
+
+  @Test func moveOutOfAGroupKeepsTheEmptiedGroup() {
+    var layout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b"])),
+      .repository("/d"),
+    ])
+
+    let moved6 = layout.move(.repository("/b"), to: .topLevel(before: groupKeyA))
+    #expect(moved6)
+
+    #expect(
+      layout.items == [
+        .repository("/b"),
+        .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: [])),
+        .repository("/d"),
+      ])
+  }
+
+  @Test func moveReordersAWholeGroup() {
+    var layout = dragLayout()
+
+    let moved7 = layout.move(.group(groupA), to: .topLevel(before: nil))
+    #expect(moved7)
+    #expect(layout.items.map(\.key) == ["/a", "/d", groupKeyB, groupKeyA])
+
+    let moved8 = layout.move(.group(groupA), to: .topLevel(before: "/a"))
+    #expect(moved8)
+    #expect(layout.items.map(\.key) == [groupKeyA, "/a", "/d", groupKeyB])
+    #expect(layout.group(id: groupA)?.repositoryIDs == ["/b", "/c"])
+  }
+
+  @Test func aGroupDoesNotGoIntoAGroup() {
+    var layout = dragLayout()
+
+    let moved9 = layout.move(.group(groupB), to: .group(groupA, before: nil))
+    #expect(!moved9)
+    let moved10 = layout.move(.group(groupA), to: .group(groupA, before: "/b"))
+    #expect(!moved10)
+
+    #expect(layout == dragLayout())
+  }
+
+  @Test func aDropAtTheCurrentPlaceChangesNothing() {
+    var layout = dragLayout()
+
+    let moved11 = layout.move(.repository("/a"), to: .topLevel(before: "/a"))
+    #expect(!moved11)
+    let moved12 = layout.move(.repository("/a"), to: .topLevel(before: groupKeyA))
+    #expect(!moved12)
+    let moved13 = layout.move(.repository("/b"), to: .group(groupA, before: "/c"))
+    #expect(!moved13)
+    let moved14 = layout.move(.repository("/c"), to: .group(groupA, before: nil))
+    #expect(!moved14)
+    let moved15 = layout.move(.group(groupA), to: .topLevel(before: "/d"))
+    #expect(!moved15)
+    let moved16 = layout.move(.group(groupB), to: .topLevel(before: nil))
+    #expect(!moved16)
+
+    #expect(layout == dragLayout())
+  }
+
+  @Test func aDropOnAMissingAnchorOrItemChangesNothing() {
+    var layout = dragLayout()
+
+    let moved17 = layout.move(.repository("/a"), to: .topLevel(before: "/missing"))
+    #expect(!moved17)
+    let moved18 = layout.move(.repository("/a"), to: .group(groupA, before: "/d"))
+    #expect(!moved18)
+    let moved19 = layout.move(.repository("/a"), to: .group(UUID(), before: nil))
+    #expect(!moved19)
+    let moved20 = layout.move(.repository("/missing"), to: .topLevel(before: nil))
+    #expect(!moved20)
+    let moved21 = layout.move(.group(UUID()), to: .topLevel(before: nil))
+    #expect(!moved21)
+
+    #expect(layout == dragLayout())
+  }
+
+  @Test func moveKeepsTheRelativeOrderOfHiddenItems() {
     var layout = SidebarLayout(items: [
       .repository("/a"),
       .repository("ssh:hidden:/x"),
-      .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b"])),
-      .repository("/c"),
+      .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b", "ssh:hidden:/y", "/c"])),
+      .repository("/d"),
     ])
-    let groupKey = SidebarLayoutItem.groupKey(groupA)
 
-    layout.moveTopLevelItems(visibleKeys: ["/a", groupKey, "/c"], fromOffsets: IndexSet(integer: 2), toOffset: 0)
+    let moved22 = layout.move(.repository("/d"), to: .topLevel(before: "/a"))
+    #expect(moved22)
+    let moved23 = layout.move(.repository("/c"), to: .group(groupA, before: "/b"))
+    #expect(moved23)
 
-    #expect(layout.items.map(\.key) == ["/c", "ssh:hidden:/x", "/a", groupKey])
+    #expect(
+      layout.items == [
+        .repository("/d"),
+        .repository("/a"),
+        .repository("ssh:hidden:/x"),
+        .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/c", "/b", "ssh:hidden:/y"])),
+      ])
   }
 
   @Test func removeRepositoriesPrunesGroupMembersAndKeepsEmptyGroups() {

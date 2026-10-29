@@ -6,6 +6,9 @@ import SwiftUI
 struct SidebarGroupSectionView<Members: View>: View {
   let model: SidebarGroupModel
   let hasTopSpacing: Bool
+  /// The key of the top-level entry after this group, for drop destinations.
+  let nextKey: String?
+  let dragContext: SidebarLayoutDragContext
   let onToggleExpanded: () -> Void
   let store: StoreOf<RepositoriesFeature>
   @ViewBuilder let members: () -> Members
@@ -41,6 +44,8 @@ struct SidebarGroupSectionView<Members: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
+        .contentShape(.rect)
+        .sidebarLayoutDropTarget(.emptyGroup(model.id, nextKey: nextKey), context: dragContext)
     } else {
       members()
     }
@@ -94,6 +99,15 @@ struct SidebarGroupSectionView<Members: View>: View {
     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
     .padding(.horizontal, 12)
     .contentShape(.interaction, .rect)
+    .background {
+      // A drop into this group, from the header or a member row.
+      if dragContext.targetedDestination.wrappedValue?.groupID == model.id {
+        RoundedRectangle(cornerRadius: 5)
+          .fill(Color.accentColor.opacity(0.18))
+          .padding(.horizontal, 6)
+          .accessibilityHidden(true)
+      }
+    }
     .onHover { hovering in
       if reduceMotion {
         isHovering = hovering
@@ -117,6 +131,9 @@ struct SidebarGroupSectionView<Members: View>: View {
     .contextMenu {
       menuItems
     }
+    .contentShape(.dragPreview, .rect)
+    .draggableSidebarItem(.group(model.id), isEnabled: true, context: dragContext)
+    .sidebarLayoutDropTarget(.groupHeader(model.id, nextKey: nextKey), context: dragContext)
   }
 
   @ViewBuilder
