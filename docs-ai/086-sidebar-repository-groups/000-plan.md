@@ -169,3 +169,4 @@ Each slice updates `docs/components/repositories-and-worktrees.md` and gets a De
 
 - Updated 2026-10-29: S1 shipped the layout, groups, collapse, menus, and the color background (S3 folded into S1) — see [002-s1.md](002-s1.md)
 - Updated 2026-10-29: S2 shipped drag and drop with anchor destinations through `SidebarLayout.move(_:to:)` — see [003-s2.md](003-s2.md)
+- Updated 2026-10-29: groups have an icon: a folder that opens with the group by default, or a user symbol or image — see [004-group-icon.md](004-group-icon.md)

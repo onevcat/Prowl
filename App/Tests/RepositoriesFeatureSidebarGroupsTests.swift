@@ -140,6 +140,167 @@ struct RepositoriesFeatureSidebarGroupsTests {
     }
   }
 
+  // MARK: - Group icon
+
+  @Test(.dependencies) func symbolPickerSetsTheGroupIcon() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    var state = makeState(repositories: [repoA])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: existingGroupID, title: "G", icon: .sfSymbol("star"), repositoryIDs: [repoA.id]))
+    ])
+    let saved = LockIsolated<SidebarLayout?>(nil)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
+    }
+
+    await store.send(.sidebarGroups(.chooseGroupSymbolRequested(existingGroupID))) {
+      $0.groupSymbolPicker = GroupSymbolPicker(groupID: self.existingGroupID, currentSymbol: "star")
+    }
+    await store.send(.sidebarGroups(.symbolPickerApplied("leaf.fill"))) {
+      $0.groupSymbolPicker = nil
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(
+          RepositoryGroup(
+            id: self.existingGroupID, title: "G", icon: .sfSymbol("leaf.fill"), repositoryIDs: [repoA.id]))
+      ])
+    }
+    await store.finish()
+    #expect(saved.value == store.state.sidebarLayout)
+  }
+
+  @Test(.dependencies) func resetToTheDefaultIconRemovesTheImportedImage() async {
+    var state = makeState(repositories: [])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(
+        RepositoryGroup(id: existingGroupID, title: "G", icon: .userImage(filename: "old.png"), repositoryIDs: []))
+    ])
+    state.groupSymbolPicker = GroupSymbolPicker(groupID: existingGroupID, currentSymbol: nil)
+    let removed = LockIsolated<[String]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(removed: removed)
+      $0.repositoryPersistence.saveSidebarLayout = { _ in }
+    }
+
+    await store.send(.sidebarGroups(.symbolPickerApplied(nil))) {
+      $0.groupSymbolPicker = nil
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(RepositoryGroup(id: self.existingGroupID, title: "G", repositoryIDs: []))
+      ])
+    }
+    await store.finish()
+    #expect(removed.value == ["old.png"])
+  }
+
+  @Test(.dependencies) func canceledSymbolPickerChangesNothing() async {
+    var state = makeState(repositories: [])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: []))
+    ])
+    state.groupSymbolPicker = GroupSymbolPicker(groupID: existingGroupID, currentSymbol: nil)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.sidebarGroups(.symbolPickerCanceled)) {
+      $0.groupSymbolPicker = nil
+    }
+  }
+
+  @Test(.dependencies) func importedImageReplacesTheGroupIcon() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    var state = makeState(repositories: [repoA])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(
+        RepositoryGroup(
+          id: existingGroupID, title: "G", icon: .userImage(filename: "old.png"), repositoryIDs: [repoA.id]))
+    ])
+    let imported = LockIsolated<[URL]>([])
+    let removed = LockIsolated<[String]>([])
+    let source = URL(fileURLWithPath: "/tmp/logo.svg")
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(
+        imported: imported, removed: removed, importedFilename: "new.svg")
+      $0.repositoryPersistence.saveSidebarLayout = { _ in }
+    }
+
+    await store.send(.sidebarGroups(.importGroupImage(existingGroupID, source)))
+    await store.receive(\.sidebarGroups.groupImageImported) {
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(
+          RepositoryGroup(
+            id: self.existingGroupID, title: "G", icon: .userImage(filename: "new.svg"), repositoryIDs: [repoA.id]))
+      ])
+    }
+    await store.finish()
+    #expect(imported.value == [source])
+    #expect(removed.value == ["old.png"])
+  }
+
+  @Test(.dependencies) func anImageImportedForARemovedGroupIsDeleted() async {
+    let removed = LockIsolated<[String]>([])
+    let saved = LockIsolated<SidebarLayout?>(nil)
+    let store = TestStore(initialState: makeState(repositories: [])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(removed: removed)
+      $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
+    }
+
+    await store.send(.sidebarGroups(.groupImageImported(existingGroupID, filename: "orphan.png")))
+    await store.finish()
+    #expect(removed.value == ["orphan.png"])
+    #expect(saved.value == nil)
+  }
+
+  @Test(.dependencies) func aFailedImportShowsAnAlert() async {
+    var state = makeState(repositories: [])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: existingGroupID, title: "G", repositoryIDs: []))
+    ])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore.importImage = { _, _ in throw CocoaError(.fileReadNoPermission) }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.sidebarGroups(.importGroupImage(existingGroupID, URL(fileURLWithPath: "/tmp/x.png"))))
+    await store.receive(\.sidebarGroups.groupImageImportFailed)
+    #expect(store.state.alert != nil)
+    #expect(store.state.sidebarLayout.group(id: existingGroupID)?.icon == nil)
+  }
+
+  @Test(.dependencies) func ungroupDeletesTheImportedImageAndClosesThePicker() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    var state = makeState(repositories: [repoA])
+    state.sidebarLayout = SidebarLayout(items: [
+      .group(
+        RepositoryGroup(
+          id: existingGroupID, title: "G", icon: .userImage(filename: "old.png"), repositoryIDs: [repoA.id]))
+    ])
+    state.groupSymbolPicker = GroupSymbolPicker(groupID: existingGroupID, currentSymbol: nil)
+    let removed = LockIsolated<[String]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.groupIconAssetStore = recordingAssetStore(removed: removed)
+      $0.repositoryPersistence.saveSidebarLayout = { _ in }
+    }
+
+    await store.send(.sidebarGroups(.ungroup(existingGroupID))) {
+      $0.sidebarLayout = SidebarLayout(repositoryIDs: [repoA.id])
+      $0.groupSymbolPicker = nil
+    }
+    await store.finish()
+    #expect(removed.value == ["old.png"])
+  }
+
   @Test(.dependencies) func sidebarItemMovedMovesARepositoryIntoAGroup() async {
     let repoA = makeRepository(id: "/tmp/a")
     let repoB = makeRepository(id: "/tmp/b")
@@ -375,6 +536,23 @@ struct RepositoriesFeatureSidebarGroupsTests {
       name: URL(fileURLWithPath: id).lastPathComponent,
       kind: kind,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
+    )
+  }
+
+  private func recordingAssetStore(
+    imported: LockIsolated<[URL]> = LockIsolated([]),
+    removed: LockIsolated<[String]> = LockIsolated([]),
+    importedFilename: String = "imported.png"
+  ) -> RepositoryIconAssetStore {
+    RepositoryIconAssetStore(
+      importImage: { source, _ in
+        imported.withValue { $0.append(source) }
+        return importedFilename
+      },
+      remove: { filename, _ in
+        removed.withValue { $0.append(filename) }
+      },
+      exists: { _, _ in true }
     )
   }
 

@@ -44,9 +44,88 @@ extension RepositoriesFeature {
     case .setGroupColor(let groupID, let color):
       return editSidebarLayout(state: &state) { $0.setGroupColor(groupID, to: color) }
 
+    case .setGroupIcon, .chooseGroupSymbolRequested, .symbolPickerApplied, .symbolPickerCanceled,
+      .importGroupImage, .groupImageImported, .groupImageImportFailed:
+      return reduceGroupIcon(state: &state, action: action)
+
     case .ungroup(let groupID):
+      let icon = state.sidebarLayout.group(id: groupID)?.icon
       state.$collapsedGroupIDs.withLock { $0.removeAll { $0 == groupID.uuidString } }
-      return editSidebarLayout(state: &state) { $0.ungroup(groupID) }
+      return .merge(
+        editSidebarLayout(state: &state) { $0.ungroup(groupID) },
+        removeGroupImage(icon)
+      )
+    }
+  }
+
+  private func reduceGroupIcon(
+    state: inout State,
+    action: SidebarGroupAction
+  ) -> Effect<Action> {
+    switch action {
+    case .setGroupIcon(let groupID, let icon):
+      return setGroupIcon(state: &state, groupID: groupID, to: icon)
+
+    case .chooseGroupSymbolRequested(let groupID):
+      guard let group = state.sidebarLayout.group(id: groupID) else { return .none }
+      let currentSymbol: String? =
+        if case .sfSymbol(let name) = group.icon { name } else { nil }
+      state.groupSymbolPicker = GroupSymbolPicker(groupID: groupID, currentSymbol: currentSymbol)
+      return .none
+
+    case .symbolPickerApplied(let symbolName):
+      guard let picker = state.groupSymbolPicker else { return .none }
+      state.groupSymbolPicker = nil
+      return setGroupIcon(state: &state, groupID: picker.groupID, to: symbolName.map(RepositoryIconSource.sfSymbol))
+
+    case .symbolPickerCanceled:
+      state.groupSymbolPicker = nil
+      return .none
+
+    case .importGroupImage(let groupID, let sourceURL):
+      let store = groupIconAssetStore
+      return .run { send in
+        do {
+          let filename = try store.importImage(sourceURL, ProwlPaths.groupIconsDirectory)
+          await send(.sidebarGroups(.groupImageImported(groupID, filename: filename)))
+        } catch {
+          await send(.sidebarGroups(.groupImageImportFailed(error.localizedDescription)))
+        }
+      }
+
+    case .groupImageImported(let groupID, let filename):
+      // The group can be gone when the copy ends. Then nothing refers to the file.
+      guard state.sidebarLayout.group(id: groupID) != nil else {
+        return removeGroupImage(.userImage(filename: filename))
+      }
+      return setGroupIcon(state: &state, groupID: groupID, to: .userImage(filename: filename))
+
+    case .groupImageImportFailed(let message):
+      state.alert = messageAlert(title: String(localized: "Unable to use this image"), message: message)
+      return .none
+
+    default:
+      return .none
+    }
+  }
+
+  /// Sets the icon and deletes the image file that the old icon used.
+  private func setGroupIcon(
+    state: inout State,
+    groupID: RepositoryGroup.ID,
+    to icon: RepositoryIconSource?
+  ) -> Effect<Action> {
+    let previousIcon = state.sidebarLayout.group(id: groupID)?.icon
+    let edit = editSidebarLayout(state: &state) { $0.setGroupIcon(groupID, to: icon) }
+    guard previousIcon != icon else { return edit }
+    return .merge(edit, removeGroupImage(previousIcon))
+  }
+
+  private func removeGroupImage(_ icon: RepositoryIconSource?) -> Effect<Action> {
+    guard let filename = icon?.storedImageFilename else { return .none }
+    let store = groupIconAssetStore
+    return .run { _ in
+      try? store.remove(filename, ProwlPaths.groupIconsDirectory)
     }
   }
 

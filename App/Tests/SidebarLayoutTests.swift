@@ -139,6 +139,21 @@ struct SidebarLayoutTests {
       layout.group(id: groupA) == RepositoryGroup(id: groupA, title: "Product", color: .green, repositoryIDs: ["/a"]))
   }
 
+  @Test func setGroupIconChangesOnlyTheGroup() {
+    var layout = SidebarLayout(items: [
+      .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/a"]))
+    ])
+
+    let setIcon = layout.setGroupIcon(groupA, to: .sfSymbol("star.fill"))
+    #expect(setIcon)
+    let setMissing = layout.setGroupIcon(groupB, to: .sfSymbol("star.fill"))
+    #expect(!setMissing)
+
+    #expect(
+      layout.group(id: groupA)
+        == RepositoryGroup(id: groupA, title: "A", icon: .sfSymbol("star.fill"), repositoryIDs: ["/a"]))
+  }
+
   // MARK: - Drag and drop moves (S2)
 
   private var groupKeyA: String { SidebarLayoutItem.groupKey(groupA) }
@@ -337,6 +352,8 @@ struct SidebarLayoutTests {
     let layout = SidebarLayout(items: [
       .repository("/a"),
       .group(RepositoryGroup(id: groupA, title: "A", color: .blue, repositoryIDs: ["/b"])),
+      .group(
+        RepositoryGroup(id: groupB, title: "B", icon: .userImage(filename: "b.svg"), repositoryIDs: [])),
     ])
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -346,6 +363,7 @@ struct SidebarLayoutTests {
 
     #expect(json.contains(#"{"id":"\/a","type":"repository"}"#))
     #expect(json.contains(#""type":"group""#))
+    #expect(json.contains(#""icon":"@file:b.svg""#))
     #expect(try JSONDecoder().decode(SidebarLayout.self, from: data) == layout)
   }
 
@@ -366,6 +384,19 @@ struct SidebarLayoutTests {
         .repository("/a"),
         .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b"])),
       ])
+  }
+
+  @Test func decodingKeepsAGroupWithABlankIcon() throws {
+    let json = """
+      {"items": [
+        {"type": "group", "id": "00000000-0000-0000-0000-00000000000A", "title": "A", "icon": " ",
+         "repositoryIDs": ["/b"]}
+      ]}
+      """
+
+    let layout = try JSONDecoder().decode(SidebarLayout.self, from: Data(json.utf8))
+
+    #expect(layout.items == [.group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/b"]))])
   }
 
   @Test func normalizedTitleTrimsAndRejectsBlank() {

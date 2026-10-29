@@ -100,9 +100,22 @@ nonisolated enum RepositoryIconAssetStoreKey: DependencyKey {
   static var testValue: RepositoryIconAssetStore { .liveValue }
 }
 
+/// The same store for sidebar group icons. Its root argument is the icons
+/// directory itself, `ProwlPaths.groupIconsDirectory`.
+nonisolated enum GroupIconAssetStoreKey: DependencyKey {
+  static var liveValue: RepositoryIconAssetStore { .fileSystemValue(repositoryIconsDirectory: { $0 }) }
+  static var previewValue: RepositoryIconAssetStore { liveValue }
+  static var testValue: RepositoryIconAssetStore { liveValue }
+}
+
 extension DependencyValues {
   nonisolated var repositoryIconAssetStore: RepositoryIconAssetStore {
     get { self[RepositoryIconAssetStoreKey.self] }
     set { self[RepositoryIconAssetStoreKey.self] = newValue }
+  }
+
+  nonisolated var groupIconAssetStore: RepositoryIconAssetStore {
+    get { self[GroupIconAssetStoreKey.self] }
+    set { self[GroupIconAssetStoreKey.self] = newValue }
   }
 }

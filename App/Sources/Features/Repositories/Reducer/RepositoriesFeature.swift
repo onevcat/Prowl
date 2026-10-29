@@ -64,6 +64,14 @@ struct GroupTitlePrompt: Equatable, Identifiable, Sendable {
   var id: Target { target }
 }
 
+/// The SF Symbol picker for a sidebar group icon (docs-ai 086).
+struct GroupSymbolPicker: Equatable, Identifiable, Sendable {
+  let groupID: RepositoryGroup.ID
+  let currentSymbol: String?
+
+  var id: RepositoryGroup.ID { groupID }
+}
+
 struct PendingRenameBranchRequest: Equatable, Identifiable, Sendable {
   let id: Int
   let worktreeID: Worktree.ID
@@ -251,6 +259,13 @@ struct RepositoriesFeature {
     case moveRepositoryToGroup(Repository.ID, RepositoryGroup.ID)
     case removeRepositoryFromGroup(Repository.ID)
     case setGroupColor(RepositoryGroup.ID, RepositoryColorChoice?)
+    case setGroupIcon(RepositoryGroup.ID, RepositoryIconSource?)
+    case chooseGroupSymbolRequested(RepositoryGroup.ID)
+    case symbolPickerApplied(String?)
+    case symbolPickerCanceled
+    case importGroupImage(RepositoryGroup.ID, URL)
+    case groupImageImported(RepositoryGroup.ID, filename: String)
+    case groupImageImportFailed(String)
     case ungroup(RepositoryGroup.ID)
   }
 
@@ -496,6 +511,7 @@ struct RepositoriesFeature {
     /// Collapsed sidebar groups, as UUID strings (docs-ai 086).
     @Shared(.appStorage("sidebarCollapsedGroupIDs")) var collapsedGroupIDs: [String] = []
     var groupTitlePrompt: GroupTitlePrompt?
+    var groupSymbolPicker: GroupSymbolPicker?
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
     /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
@@ -743,6 +759,7 @@ struct RepositoriesFeature {
   @Dependency(\.uuid) var uuid
   @Dependency(\.repositoryIconDetector) var repositoryIconDetector
   @Dependency(\.repositoryIconAssetStore) var repositoryIconAssetStore
+  @Dependency(\.groupIconAssetStore) var groupIconAssetStore
 
   var body: some Reducer<State, Action> {
     CombineReducers {
@@ -776,9 +793,12 @@ struct RepositoriesFeature {
         return .none
       }
       Reduce { state, _ in
-        guard let prompt = state.groupTitlePrompt, !state.isGroupTitlePromptTargetAvailable(prompt.target)
-        else { return .none }
-        state.groupTitlePrompt = nil
+        if let prompt = state.groupTitlePrompt, !state.isGroupTitlePromptTargetAvailable(prompt.target) {
+          state.groupTitlePrompt = nil
+        }
+        if let picker = state.groupSymbolPicker, state.sidebarLayout.group(id: picker.groupID) == nil {
+          state.groupSymbolPicker = nil
+        }
         return .none
       }
     }
