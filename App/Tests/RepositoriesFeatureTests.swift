@@ -676,7 +676,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreesLoaded)
-    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.sidebarLayoutLoaded)
     await store.receive(\.worktreeOrderByRepositoryLoaded)
     await store.receive(\.lastFocusedWorktreeIDLoaded) {
       $0.lastFocusedWorktreeID = worktreeID
@@ -724,7 +724,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreesLoaded)
-    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.sidebarLayoutLoaded)
     await store.receive(\.worktreeOrderByRepositoryLoaded)
     await store.receive(\.lastFocusedWorktreeIDLoaded) {
       $0.shouldRestoreLastFocusedWorktree = true
@@ -1850,7 +1850,7 @@ struct RepositoriesFeatureTests {
     await store.send(.revealSelectedWorktreeInSidebar) {
       $0.$collapsedRepositoryIDs.withLock { $0 = [] }
       $0.nextPendingSidebarRevealID = 1
-      $0.pendingSidebarReveal = .init(id: 1, worktreeID: worktree.id)
+      $0.pendingSidebarReveal = .init(id: 1, target: .worktree(worktree.id))
     }
   }
 
@@ -1881,7 +1881,7 @@ struct RepositoriesFeatureTests {
     await store.send(.revealSelectedWorktreeInSidebar) {
       $0.$collapsedRepositoryIDs.withLock { $0 = [repoB.id] }
       $0.nextPendingSidebarRevealID = 1
-      $0.pendingSidebarReveal = .init(id: 1, worktreeID: worktree1.id)
+      $0.pendingSidebarReveal = .init(id: 1, target: .worktree(worktree1.id))
     }
   }
 
@@ -1890,7 +1890,7 @@ struct RepositoriesFeatureTests {
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
     initialState.nextPendingSidebarRevealID = 1
-    initialState.pendingSidebarReveal = .init(id: 1, worktreeID: worktree.id)
+    initialState.pendingSidebarReveal = .init(id: 1, target: .worktree(worktree.id))
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     }
@@ -1905,7 +1905,7 @@ struct RepositoriesFeatureTests {
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
     initialState.nextPendingSidebarRevealID = 2
-    initialState.pendingSidebarReveal = .init(id: 2, worktreeID: worktree.id)
+    initialState.pendingSidebarReveal = .init(id: 2, target: .worktree(worktree.id))
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     }
@@ -4951,7 +4951,7 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  @Test func orderedWorktreeRowsRespectRepositoryOrderIDs() {
+  @Test func orderedWorktreeRowsRespectSidebarLayout() {
     let repoA = makeRepository(
       id: "/tmp/repo-a",
       worktrees: [
@@ -4965,7 +4965,7 @@ struct RepositoriesFeatureTests {
       ]
     )
     var state = makeState(repositories: [repoA, repoB])
-    state.repositoryOrderIDs = [repoB.id, repoA.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoB.id, repoA.id])
 
     expectNoDifference(
       state.orderedWorktreeRows().map(\.id),
@@ -4990,7 +4990,7 @@ struct RepositoriesFeatureTests {
       ]
     )
     var state = makeState(repositories: [repoA, repoB])
-    state.repositoryOrderIDs = [repoA.id, repoB.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoA.id, repoB.id])
 
     expectNoDifference(
       state.orderedWorktreeRows(includingRepositoryIDs: [repoB.id]).map(\.id),
@@ -5004,7 +5004,7 @@ struct RepositoriesFeatureTests {
     let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [])
     let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [])
     var state = makeState(repositories: [repoA, repoB])
-    state.repositoryOrderIDs = [repoB.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoB.id])
 
     expectNoDifference(
       state.orderedRepositoryRoots().map(\.path),
@@ -5321,7 +5321,7 @@ struct RepositoriesFeatureTests {
     var initialState = RepositoriesFeature.State()
     initialState.pinnedWorktreeIDs = [fixture.failedWorktreeID]
     initialState.archivedWorktrees = archived
-    initialState.repositoryOrderIDs = [fixture.failedRoot, fixture.loadedRoot]
+    initialState.sidebarLayout = SidebarLayout(repositoryIDs: [fixture.failedRoot, fixture.loadedRoot])
     initialState.worktreeOrderByRepository = worktreeOrder
     initialState.$prowlCreatedWorktreeIDs.withLock { $0 = [fixture.failedWorktreeID] }
     let store = TestStore(initialState: initialState) {
@@ -5338,7 +5338,7 @@ struct RepositoriesFeatureTests {
     #expect(store.state.pinnedWorktreeIDs == [fixture.failedWorktreeID])
     #expect(store.state.archivedWorktrees == archived)
     #expect(store.state.prowlCreatedWorktreeIDs == [fixture.failedWorktreeID])
-    #expect(store.state.repositoryOrderIDs == [fixture.failedRoot, fixture.loadedRoot])
+    #expect(store.state.sidebarLayout.repositoryIDs == [fixture.failedRoot, fixture.loadedRoot])
     #expect(store.state.worktreeOrderByRepository == worktreeOrder)
   }
 
@@ -8432,7 +8432,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreesLoaded)
-    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.sidebarLayoutLoaded)
     await store.receive(\.worktreeOrderByRepositoryLoaded)
     await store.receive(\.lastFocusedWorktreeIDLoaded) {
       $0.lastFocusedWorktreeID = worktreeB.id

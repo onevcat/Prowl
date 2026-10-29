@@ -133,7 +133,9 @@ change that a watcher missed.
 - **`⌃1`–`⌃9`** jump to worktree 1–9.
 - **`⌘⌃↓` / `⌘⌃↑`** select next / previous worktree.
 - **`⌘⌥[` / `⌘⌥]`** go back / forward through worktree selection history.
-- **`⌘⇧L`** reveals the currently focused worktree in the sidebar.
+- **`⌘⇧L`** reveals the currently focused worktree (or selected folder) in the
+  sidebar. It opens a collapsed repository and a collapsed group to show it.
+  Selecting a worktree any other way does not open a collapsed group.
 
 ## Pinning & ordering
 
@@ -142,17 +144,44 @@ change that a watcher missed.
   the main worktree.)
 - **Reorder:** drag repositories or worktrees to rearrange; a thin accent line
   shows the drop target. Order is persisted. You can repeat the drag or cancel
-  with Escape and start another drag without reopening the app.
+  with Escape and start another drag without reopening the app. A repository in
+  a group cannot be dragged yet, and a group counts as one drop position.
 - **Expand / Collapse:** click the chevron on a repo header, or cycle the
   sidebar's header button: from all-collapsed it offers **Expand Active**
   (double chevron `»` — expands only repos/workspaces that have open terminal
-  tabs), then **Expand All** (single chevron `›`), then **Collapse All**
-  (chevron rotated down). Expand Active is skipped when no repo (or every
-  repo) has open tabs. Collapsed state is remembered.
+  tabs, and the groups that contain a repo or folder with open tabs), then
+  **Expand All** (single chevron `›`), then **Collapse All** (chevron rotated
+  down). The button acts on groups and repositories together. Expand Active is
+  skipped when no repo (or every repo) has open tabs. Collapsed state is
+  remembered.
 - **Tab count badges:** a collapsed repo header shows its total open-tab count;
   expanding a git repo moves the count onto the individual worktree rows
   (hidden at zero). Workspaces and plain folders always show the count on the
   header.
+
+## Repository groups
+
+Groups put related repositories under one collapsible header in the sidebar.
+Groups and ungrouped repositories mix at the top level. A group holds
+repositories only; groups do not nest.
+
+- **Create:** right-click a repository → **New Group…**, then type a name. The
+  group takes the repository's place.
+- **Move:** right-click a repository → **Move to Group** → a group. The
+  repository goes to the end of that group. **Remove from Group** puts it right
+  after the group.
+- **Edit:** right-click a group header (or hover it → `…`) → **Rename Group…**,
+  **Group Color** (a quiet background behind the group, or None), or
+  **Ungroup**. Ungroup keeps the repositories in the group's place and removes
+  no repository.
+- **Collapse:** click a group header or its chevron. A collapsed group keeps the
+  expansion of each repository in it, and its worktrees are skipped by `⌃1`–`⌃9`
+  and `⌘⌃↓` / `⌘⌃↑`.
+- **Order:** the sidebar order, groups included, is the order of worktree
+  hotkeys, `prowl list`, Shelf, and toolbar notifications. Repositories in a
+  group keep the order in which they joined it.
+- **Storage:** the layout is saved in `~/.prowl/sidebar-layout.json` at the
+  first change. Before that file exists, the existing repository order is used.
 
 ## Archiving a worktree
 

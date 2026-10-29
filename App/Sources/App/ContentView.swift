@@ -95,6 +95,18 @@ struct ContentView: View {
       promptStore in
       WorkspaceEditorView(store: promptStore)
     }
+    .sheet(item: groupTitlePrompt) { prompt in
+      GroupTitlePromptView(
+        prompt: prompt,
+        onCancel: {
+          repositoriesStore.send(.sidebarGroups(.titlePromptCanceled))
+        },
+        onSubmit: { title in
+          repositoriesStore.send(.sidebarGroups(.titlePromptSubmitted(title)))
+        }
+      )
+      .id(prompt.id)
+    }
     .sheet(item: renameBranchPromptRequest) { request in
       RenameBranchPromptView(
         currentName: request.currentName,
@@ -191,6 +203,16 @@ struct ContentView: View {
     return WindowTabbingDisabler(dispatchUndoRedoKey: { manager.performAppUndoRedoKey($0) })
   }
 
+  private var groupTitlePrompt: Binding<GroupTitlePrompt?> {
+    Binding(
+      get: { repositoriesStore.groupTitlePrompt },
+      set: { newPrompt in
+        guard newPrompt == nil, repositoriesStore.groupTitlePrompt != nil else { return }
+        repositoriesStore.send(.sidebarGroups(.titlePromptCanceled))
+      }
+    )
+  }
+
   private var renameBranchPromptRequest: Binding<PendingRenameBranchRequest?> {
     Binding(
       get: { repositoriesStore.pendingRenameBranchRequest },
@@ -239,7 +261,8 @@ struct ContentView: View {
   }
 
   private var revealInSidebarAction: (() -> Void)? {
-    guard store.repositories.selectedWorktreeID != nil else { return nil }
+    guard store.repositories.selectedWorktreeID != nil || store.repositories.selectedRepository != nil
+    else { return nil }
     return {
       store.send(.showLeftSidebar)
       store.send(.repositories(.revealSelectedWorktreeInSidebar))

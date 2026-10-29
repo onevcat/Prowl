@@ -48,7 +48,20 @@ nonisolated struct WorktreeCreationProgressUpdateThrottle {
 
 struct PendingSidebarReveal: Equatable, Sendable {
   let id: Int
-  let worktreeID: Worktree.ID
+  let target: SidebarScrollID
+}
+
+/// The title prompt for a new or renamed sidebar group (docs-ai 086).
+struct GroupTitlePrompt: Equatable, Identifiable, Sendable {
+  enum Target: Equatable, Hashable, Sendable {
+    case newGroup(containing: Repository.ID)
+    case rename(RepositoryGroup.ID)
+  }
+
+  let target: Target
+  let currentTitle: String
+
+  var id: Target { target }
 }
 
 struct PendingRenameBranchRequest: Equatable, Identifiable, Sendable {
@@ -218,7 +231,8 @@ struct RepositoriesFeature {
 
   @CasePathable
   enum WorktreeOrderingAction: Equatable {
-    case repositoriesMoved(IndexSet, Int)
+    /// Offsets index `visibleKeys`, the top-level keys that the sidebar showed for the drag.
+    case repositoriesMoved(IndexSet, Int, visibleKeys: [String])
     case pinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
     case unpinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
     case pinWorktree(Worktree.ID)
@@ -226,6 +240,18 @@ struct RepositoriesFeature {
     case worktreeNotificationReceived(Worktree.ID)
     case setSidebarDragActive(Bool)
     case setMoveNotifiedWorktreeToTop(Bool)
+  }
+
+  @CasePathable
+  enum SidebarGroupAction: Equatable {
+    case newGroupRequested(containing: Repository.ID)
+    case renameGroupRequested(RepositoryGroup.ID)
+    case titlePromptSubmitted(String)
+    case titlePromptCanceled
+    case moveRepositoryToGroup(Repository.ID, RepositoryGroup.ID)
+    case removeRepositoryFromGroup(Repository.ID)
+    case setGroupColor(RepositoryGroup.ID, RepositoryColorChoice?)
+    case ungroup(RepositoryGroup.ID)
   }
 
   @CasePathable
@@ -316,7 +342,7 @@ struct RepositoriesFeature {
   struct State: Equatable {
     var repositories: IdentifiedArrayOf<Repository> = []
     var repositoryRoots: [RepositoryLocation] = []
-    var repositoryOrderIDs: [Repository.ID] = []
+    var sidebarLayout = SidebarLayout()
     var loadFailuresByID: [Repository.ID: String] = [:]
     var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
     /// Remote folders whose host did not answer at the last load (docs-ai 084 B3e).
@@ -467,6 +493,9 @@ struct RepositoriesFeature {
     /// from WorkflowRunsFeature state (docs-ai 063 C2).
     var workflowRoleBadgesBySurfaceID: [UUID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
+    /// Collapsed sidebar groups, as UUID strings (docs-ai 086).
+    @Shared(.appStorage("sidebarCollapsedGroupIDs")) var collapsedGroupIDs: [String] = []
+    var groupTitlePrompt: GroupTitlePrompt?
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var workspaceEditor: WorkspaceEditorFeature.State?
     /// The Add Remote Folder sheet (docs-ai 084 C1), unless `PROWL_REMOTE_FOLDERS=0`.
@@ -501,6 +530,7 @@ struct RepositoriesFeature {
     case worktreeCreation(WorktreeCreationAction)
     case worktreeLifecycle(WorktreeLifecycleAction)
     case worktreeOrdering(WorktreeOrderingAction)
+    case sidebarGroups(SidebarGroupAction)
     case githubIntegration(GithubIntegrationAction)
     case repositoryManagement(RepositoryManagementAction)
     case workspaceCreation(WorkspaceCreationAction)
@@ -515,7 +545,7 @@ struct RepositoriesFeature {
     case setArchivedAutoDeletePeriod(AutoDeletePeriod?, initialTargets: [ArchivedAutoDeleteTarget]? = nil)
     case autoDeleteExpiredArchivedWorktrees
     case deleteExpiredArchivedWorktree(ArchivedAutoDeleteTarget, period: AutoDeletePeriod)
-    case repositoryOrderIDsLoaded([Repository.ID])
+    case sidebarLayoutLoaded(SidebarLayout)
     case worktreeOrderByRepositoryLoaded([Repository.ID: [Worktree.ID]])
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
@@ -723,6 +753,7 @@ struct RepositoriesFeature {
       worktreeCreationReducer
       worktreeLifecycleReducer
       worktreeOrderingReducer
+      sidebarGroupsReducer
       githubIntegrationReducer
       repositoryManagementReducer
       workspaceCreationReducer
@@ -742,6 +773,12 @@ struct RepositoriesFeature {
           return .none
         }
         state.pendingRenameBranchRequest = nil
+        return .none
+      }
+      Reduce { state, _ in
+        guard let prompt = state.groupTitlePrompt, !state.isGroupTitlePromptTargetAvailable(prompt.target)
+        else { return .none }
+        state.groupTitlePrompt = nil
         return .none
       }
     }

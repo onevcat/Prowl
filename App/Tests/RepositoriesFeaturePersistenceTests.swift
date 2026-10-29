@@ -33,11 +33,11 @@ struct RepositoriesFeaturePersistenceTests {
           return []
         },
         saveArchivedWorktrees: { _ in },
-        loadRepositoryOrderIDs: {
-          calls.withValue { $0.append("loadRepositoryOrderIDs") }
-          return repositoryOrder
+        loadSidebarLayout: {
+          calls.withValue { $0.append("loadSidebarLayout") }
+          return SidebarLayout(repositoryIDs: repositoryOrder)
         },
-        saveRepositoryOrderIDs: { _ in },
+        saveSidebarLayout: { _ in },
         loadWorktreeOrderByRepository: {
           calls.withValue { $0.append("loadWorktreeOrderByRepository") }
           return worktreeOrder
@@ -64,7 +64,7 @@ struct RepositoriesFeaturePersistenceTests {
         "loadPinnedWorktreeIDs",
         "loadArchivedWorktrees",
         "loadLastFocusedWorktreeID",
-        "loadRepositoryOrderIDs",
+        "loadSidebarLayout",
         "loadWorktreeOrderByRepository",
         "loadRepositorySnapshot",
         "loadRoots",

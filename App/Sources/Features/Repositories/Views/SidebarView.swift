@@ -7,6 +7,7 @@ struct SidebarView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) private var collapsedRepositoryIDs: [Repository.ID] = []
+  @Shared(.appStorage("sidebarCollapsedGroupIDs")) private var collapsedGroupIDs: [String] = []
   @State private var sidebarSelections: Set<SidebarSelection> = []
 
   var body: some View {
@@ -17,7 +18,9 @@ struct SidebarView: View {
       repositoryIDs: repositoryIDs,
       expandedRepoIDs: expandedRepoIDs
     )
-    let visibleHotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
+    // Hotkeys and navigation skip the rows of collapsed groups (docs-ai 086).
+    let visibleHotkeyRows = state.orderedWorktreeRows(
+      includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs))
     let visibleWorktreeIDs = Set(visibleHotkeyRows.map(\.id))
     let effectiveSelectedRows = selectedRows(state: state)
     let confirmWorktreeAction = makeConfirmWorktreeAction(state: state)
@@ -27,6 +30,7 @@ struct SidebarView: View {
     return SidebarListView(
       store: store,
       expandedRepoIDs: expandedRepoIDsBinding,
+      collapsedGroupIDs: collapsedGroupIDsBinding,
       sidebarSelections: $sidebarSelections,
       terminalManager: terminalManager
     )
@@ -78,6 +82,19 @@ struct SidebarView: View {
         let collapsed = repositoryIDs.subtracting(newValue)
         $collapsedRepositoryIDs.withLock {
           $0 = Self.storedCollapsedIDs(collapsed, previous: $0, loaded: repositoryIDs)
+        }
+      }
+    )
+  }
+
+  /// Own collapse state of the groups. Ungroup drops the ID of its group; a write here
+  /// keeps every ID, so a write before the layout loads loses nothing.
+  private var collapsedGroupIDsBinding: Binding<Set<RepositoryGroup.ID>> {
+    Binding(
+      get: { Set(collapsedGroupIDs.compactMap(UUID.init(uuidString:))) },
+      set: { newValue in
+        $collapsedGroupIDs.withLock {
+          $0 = newValue.map(\.uuidString).sorted()
         }
       }
     )

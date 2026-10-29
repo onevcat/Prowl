@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | In progress |
 | **Anchor date** | 2026-10-29 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #1006 (plan) |
 | **Related** | Issue #996, #413 (Canvas groups), #601 (cross-repository pins), `docs/components/repositories-and-worktrees.md` |
 
 ## Background
@@ -143,7 +143,7 @@ Two things are separate: the **own expansion** of a group or a repository (what 
 | --- | --- |
 | S1 | Layout model, persistence, migration, flattened order, group container rendering, collapse, header toggle, context menus, docs |
 | S2 | Drag and drop: repositories in and between groups and the top level, whole-group drag |
-| S3 | Group color background (can move into S1 after the visual check) |
+| S3 | Group color background (moved into S1, see [002-s1.md](002-s1.md)) |
 
 Each slice updates `docs/components/repositories-and-worktrees.md` and gets a Debug visual check.
 
@@ -166,3 +166,5 @@ Each slice updates `docs/components/repositories-and-worktrees.md` and gets a De
   A separate file follows the repository appearances file.
 
 ## Amendments
+
+- Updated 2026-10-29: S1 shipped the layout, groups, collapse, menus, and the color background (S3 folded into S1) — see [002-s1.md](002-s1.md)

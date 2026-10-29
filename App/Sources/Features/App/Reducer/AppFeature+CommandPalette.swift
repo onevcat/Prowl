@@ -194,7 +194,8 @@ extension AppFeature {
       }
 
     case .revealInSidebar:
-      guard state.repositories.selectedWorktreeID != nil else { return .none }
+      guard state.repositories.selectedWorktreeID != nil || state.repositories.selectedRepository != nil
+      else { return .none }
       return .merge(
         .send(.showLeftSidebar),
         .send(.repositories(.revealSelectedWorktreeInSidebar))

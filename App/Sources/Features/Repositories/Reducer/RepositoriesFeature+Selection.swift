@@ -319,19 +319,16 @@ func prunePinnedWorktreeIDs(
   return false
 }
 
-func pruneRepositoryOrderIDs(
+/// Removes the layout entries of repositories that are neither roots nor loaded, also
+/// from groups. Groups stay, and `isKept` IDs keep their places (docs-ai 086).
+func pruneSidebarLayout(
   roots: [RepositoryLocation],
   state: inout RepositoriesFeature.State,
   keeping isKept: (Repository.ID) -> Bool = { _ in false }
 ) -> Bool {
   let rootIDs = roots.map { $0.standardized.id }
   let availableIDs = Set(rootIDs + state.repositories.map(\.id))
-  let pruned = state.repositoryOrderIDs.filter { availableIDs.contains($0) || isKept($0) }
-  if pruned != state.repositoryOrderIDs {
-    state.repositoryOrderIDs = pruned
-    return true
-  }
-  return false
+  return state.sidebarLayout.removeRepositories { !availableIDs.contains($0) && !isKept($0) }
 }
 
 func pruneWorktreeOrderByRepository(

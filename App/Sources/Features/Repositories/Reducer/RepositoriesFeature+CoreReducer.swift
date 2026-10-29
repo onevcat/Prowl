@@ -10,7 +10,7 @@ extension RepositoriesFeature {
     action: Action
   ) -> Effect<Action> {
     switch action {
-    case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .githubIntegration,
+    case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .sidebarGroups, .githubIntegration,
       .repositoryManagement,
       .workspaceCreation,
       .workspaceEditing:
@@ -67,13 +67,13 @@ extension RepositoriesFeature {
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktrees()
           let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
-          let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
+          let sidebarLayout = await repositoryPersistence.loadSidebarLayout()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
           let repositorySnapshot = await repositoryPersistence.loadRepositorySnapshot()
           await send(.pinnedWorktreeIDsLoaded(pinned))
           await send(.archivedWorktreesLoaded(archived))
-          await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
+          await send(.sidebarLayoutLoaded(sidebarLayout))
           await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
           await send(.lastFocusedWorktreeIDLoaded(lastFocused))
           await send(.repositorySnapshotLoaded(repositorySnapshot))
@@ -163,8 +163,8 @@ extension RepositoriesFeature {
           target.worktreeID, target.repositoryID, deleteBranch: shouldDeleteBranch
         ))
 
-    case .repositoryOrderIDsLoaded(let repositoryOrderIDs):
-      state.repositoryOrderIDs = repositoryOrderIDs
+    case .sidebarLayoutLoaded(let sidebarLayout):
+      state.sidebarLayout = sidebarLayout
       return .none
 
     case .worktreeOrderByRepositoryLoaded(let worktreeOrderByRepository):
@@ -266,10 +266,10 @@ extension RepositoriesFeature {
           })
       }
       if applyResult.didPruneRepositoryOrder {
-        let repositoryOrderIDs = state.repositoryOrderIDs
+        let sidebarLayout = state.sidebarLayout
         allEffects.append(
           .run { _ in
-            await repositoryPersistence.saveRepositoryOrderIDs(repositoryOrderIDs)
+            await repositoryPersistence.saveSidebarLayout(sidebarLayout)
           })
       }
       if applyResult.didPruneWorktreeOrder {
@@ -810,16 +810,33 @@ extension RepositoriesFeature {
       return navigateWorktreeHistory(direction: .forward, state: &state)
 
     case .revealSelectedWorktreeInSidebar:
-      guard let worktreeID = state.selectedWorktreeID,
-        let repositoryID = state.repositoryID(containing: worktreeID)
-      else { return .none }
-      state.$collapsedRepositoryIDs.withLock {
-        $0.removeAll { $0 == repositoryID }
+      let repositoryID: Repository.ID
+      let target: SidebarScrollID
+      if let worktreeID = state.selectedWorktreeID,
+        let containingRepositoryID = state.repositoryID(containing: worktreeID)
+      {
+        repositoryID = containingRepositoryID
+        target = .worktree(worktreeID)
+        state.$collapsedRepositoryIDs.withLock {
+          $0.removeAll { $0 == repositoryID }
+        }
+      } else if let selectedRepositoryID = state.selectedRepositoryID,
+        state.repositories[id: selectedRepositoryID] != nil
+      {
+        repositoryID = selectedRepositoryID
+        target = .repository(selectedRepositoryID)
+      } else {
+        return .none
+      }
+      if let groupID = state.sidebarLayout.groupID(containing: repositoryID) {
+        state.$collapsedGroupIDs.withLock {
+          $0.removeAll { $0 == groupID.uuidString }
+        }
       }
       state.nextPendingSidebarRevealID += 1
       state.pendingSidebarReveal = .init(
         id: state.nextPendingSidebarRevealID,
-        worktreeID: worktreeID
+        target: target
       )
       return .none
 

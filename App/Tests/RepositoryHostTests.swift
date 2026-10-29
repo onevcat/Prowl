@@ -297,7 +297,7 @@ struct RepositoryHostTests {
     let remote = RemoteRepositoryFixtures.gitRepository()
     let local = Repository(location: .local(URL(fileURLWithPath: "/tmp/local-app/")), name: "local-app", worktrees: [])
     var state = RepositoriesFeature.State()
-    state.repositoryOrderIDs = [remote.id, local.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [remote.id, local.id])
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -308,7 +308,7 @@ struct RepositoryHostTests {
     await store.send(.repositorySnapshotLoaded([local, remote]))
 
     #expect(store.state.repositoryRoots == [local.location, remote.location])
-    #expect(store.state.repositoryOrderIDs == [remote.id, local.id])
+    #expect(store.state.sidebarLayout.repositoryIDs == [remote.id, local.id])
     #expect(store.state.orderedRepositoryIDs() == [remote.id, local.id])
   }
 

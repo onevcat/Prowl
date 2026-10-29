@@ -8,14 +8,11 @@ extension RepositoriesFeature {
     action: WorktreeOrderingAction
   ) -> Effect<Action> {
     switch action {
-    case .repositoriesMoved(let source, let destination):
-      var orderedRepositoryIDs = state.orderedRepositoryIDs()
-      orderedRepositoryIDs.move(fromOffsets: source, toOffset: destination)
-      state.repositoryOrderIDs = Self.mergingHiddenRepositoryIDs(
-        orderedRepositoryIDs, into: state.repositoryOrderIDs, isHidden: keepsHiddenRemoteID)
-      let repositoryOrderIDs = state.repositoryOrderIDs
-      return .run { _ in
-        await repositoryPersistence.saveRepositoryOrderIDs(repositoryOrderIDs)
+    case .repositoriesMoved(let source, let destination, let visibleKeys):
+      // Entries that the sidebar did not show, such as hidden remote folders,
+      // keep their places.
+      return editSidebarLayout(state: &state) {
+        $0.moveTopLevelItems(visibleKeys: visibleKeys, fromOffsets: source, toOffset: destination)
       }
 
     case .pinnedWorktreesMoved(let repositoryID, let source, let destination):

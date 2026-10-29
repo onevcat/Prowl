@@ -70,7 +70,7 @@ extension RepositoriesFeature.State {
   }
 
   func worktreeID(byOffset offset: Int) -> Worktree.ID? {
-    let rows = orderedWorktreeRows(includingRepositoryIDs: expandedRepositoryIDs)
+    let rows = orderedWorktreeRows(includingRepositoryIDs: visibleExpandedRepositoryIDs)
     guard !rows.isEmpty else { return nil }
     if let currentID = selectedWorktreeID,
       let currentIndex = rows.firstIndex(where: { $0.id == currentID })
@@ -433,7 +433,7 @@ extension RepositoriesFeature.State {
     let rootsByID = Dictionary(roots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     var ordered: [RepositoryLocation] = []
     var seen: Set<Repository.ID> = []
-    for id in repositoryOrderIDs {
+    for id in sidebarLayout.repositoryIDs {
       if let root = rootsByID[id], seen.insert(id).inserted {
         ordered.append(root)
       }

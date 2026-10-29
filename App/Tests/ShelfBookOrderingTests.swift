@@ -28,7 +28,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     // Empty `openedWorktreeIDs` → no spines even though the worktree
     // exists. The Shelf only shows interactive books.
     #expect(state.orderedShelfBooks().isEmpty)
@@ -58,7 +58,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [main.id, feature.id]
 
     let books = state.orderedShelfBooks()
@@ -95,7 +95,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [feature.id]  // only feature has been opened
 
     let books = state.orderedShelfBooks()
@@ -114,7 +114,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [repository.id]
 
     let books = state.orderedShelfBooks()
@@ -150,7 +150,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [gitRepo, plainRepo])
     state.repositoryRoots = [.local(gitRootURL), .local(plainRootURL)]
-    state.repositoryOrderIDs = [gitRepo.id, plainRepo.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [gitRepo.id, plainRepo.id])
     state.openedWorktreeIDs = [gitMain.id, plainRepo.id]
 
     let books = state.orderedShelfBooks()
@@ -199,7 +199,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.selection = .worktree(worktree.id)
     state.openedWorktreeIDs = []
 
@@ -241,7 +241,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [main.id]
 
     let books = state.orderedShelfBooks(customTitles: [repository.id: "My Custom Repo"])
@@ -264,7 +264,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [repository.id]
 
     let books = state.orderedShelfBooks(customTitles: [repository.id: "Plain Folder Alias"])
@@ -286,7 +286,7 @@ struct ShelfBookOrderingTests {
     )
     var state = RepositoriesFeature.State(repositories: [repository])
     state.repositoryRoots = [.local(rootURL)]
-    state.repositoryOrderIDs = [repository.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repository.id])
     state.openedWorktreeIDs = [repository.id]
 
     let books = state.orderedShelfBooks(customTitles: [:])

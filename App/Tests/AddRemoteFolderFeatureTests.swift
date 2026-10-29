@@ -165,7 +165,7 @@ struct AddRemoteFolderFeatureTests {
       ])
     var state = RepositoriesFeature.State()
     state.pinnedWorktreeIDs = [remoteWorktreeID]
-    state.repositoryOrderIDs = [remote.id, localPath]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [remote.id, localPath])
     state.worktreeOrderByRepository = [remote.id: [remoteWorktreeID]]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -191,7 +191,7 @@ struct AddRemoteFolderFeatureTests {
     #expect(store.state.loadFailuresByID.isEmpty)
     #expect(hostCalls.value == 0)
     #expect(store.state.pinnedWorktreeIDs == [remoteWorktreeID])
-    #expect(store.state.repositoryOrderIDs == [remote.id, localPath])
+    #expect(store.state.sidebarLayout.repositoryIDs == [remote.id, localPath])
     #expect(store.state.worktreeOrderByRepository == [remote.id: [remoteWorktreeID]])
     #expect(saved.value.allSatisfy { $0 == entries })
   }
@@ -199,26 +199,24 @@ struct AddRemoteFolderFeatureTests {
   /// A reorder while remote folders are off keeps the hidden folders' places.
   @Test(.dependencies) func aReorderWhileTheFlagIsOffKeepsTheHiddenPlaces() async {
     let remote = RemoteRepositoryFixtures.location("/home/dev/app").id
-    let saved = LockIsolated<[Repository.ID]?>(nil)
+    let saved = LockIsolated<SidebarLayout?>(nil)
     var state = RepositoriesFeature.State()
     state.repositoryRoots = [.local(URL(filePath: "/tmp/a/")), .local(URL(filePath: "/tmp/b/"))]
-    state.repositoryOrderIDs = ["/tmp/a/", remote, "/tmp/b/"]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: ["/tmp/a/", remote, "/tmp/b/"])
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
       $0[RemoteFoldersEnabledKey.self] = false
-      $0.repositoryPersistence.saveRepositoryOrderIDs = { ids in saved.setValue(ids) }
+      $0.repositoryPersistence.saveSidebarLayout = { layout in saved.setValue(layout) }
     }
 
-    await store.send(.worktreeOrdering(.repositoriesMoved(IndexSet(integer: 1), 0))) {
-      $0.repositoryOrderIDs = ["/tmp/b/", remote, "/tmp/a/"]
+    await store.send(
+      .worktreeOrdering(.repositoriesMoved(IndexSet(integer: 1), 0, visibleKeys: ["/tmp/a/", "/tmp/b/"]))
+    ) {
+      $0.sidebarLayout = SidebarLayout(repositoryIDs: ["/tmp/b/", remote, "/tmp/a/"])
     }
     await store.finish()
-    #expect(saved.value == ["/tmp/b/", remote, "/tmp/a/"])
-    #expect(
-      RepositoriesFeature.mergingHiddenRepositoryIDs(
-        ["x", "y"], into: [remote, "y", "x", "gone"], isHidden: { $0 == remote })
-        == [remote, "x", "y"])
+    #expect(saved.value?.repositoryIDs == ["/tmp/b/", remote, "/tmp/a/"])
   }
 
   /// A snapshot without remote repositories, as a session without the flag writes it,
@@ -230,7 +228,7 @@ struct AddRemoteFolderFeatureTests {
     let local = Repository(location: localLocation, name: "local", kind: .plain, worktrees: [])
     var state = RepositoriesFeature.State()
     state.pinnedWorktreeIDs = [remoteWorktree]
-    state.repositoryOrderIDs = [remote, localLocation.id]
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [remote, localLocation.id])
     state.worktreeOrderByRepository = [remote: [remoteWorktree]]
     state.$prowlCreatedWorktreeIDs.withLock { $0 = [remoteWorktree] }
     let store = TestStore(initialState: state) {
@@ -241,7 +239,7 @@ struct AddRemoteFolderFeatureTests {
     await store.send(.repositorySnapshotLoaded([local]))
     #expect(store.state.repositories.map(\.id) == [localLocation.id])
     #expect(store.state.pinnedWorktreeIDs == [remoteWorktree])
-    #expect(store.state.repositoryOrderIDs == [remote, localLocation.id])
+    #expect(store.state.sidebarLayout.repositoryIDs == [remote, localLocation.id])
     #expect(store.state.worktreeOrderByRepository == [remote: [remoteWorktree]])
     #expect(store.state.prowlCreatedWorktreeIDs == [remoteWorktree])
   }
