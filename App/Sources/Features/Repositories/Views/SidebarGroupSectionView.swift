@@ -19,20 +19,36 @@ struct SidebarGroupSectionView<Members: View>: View {
 
   var body: some View {
     let color = model.group.color
+    // The gap above and the strip below are drop targets too, so a drag that
+    // crosses them keeps its destination.
     VStack(spacing: 0) {
-      header
-      if isExpanded {
-        content
+      if hasTopSpacing {
+        dropStrip(.aboveGroup(model.id))
+      }
+      VStack(spacing: 0) {
+        header
+        if isExpanded {
+          content
+          if color != nil {
+            dropStrip(.groupEnd(model.id, nextKey: nextKey))
+          }
+        }
+      }
+      .background {
+        if let color {
+          groupBackground(color)
+        }
       }
     }
-    .padding(.bottom, isExpanded && color != nil ? 4 : 0)
-    .background {
-      if let color {
-        groupBackground(color)
-      }
-    }
-    .padding(.top, hasTopSpacing ? 4 : 0)
     .id(SidebarScrollID.group(model.id))
+  }
+
+  private func dropStrip(_ row: SidebarDropRow) -> some View {
+    Color.clear
+      .frame(maxWidth: .infinity, minHeight: 4, maxHeight: 4)
+      .contentShape(.rect)
+      .sidebarLayoutDropTarget(row, context: dragContext)
+      .accessibilityHidden(true)
   }
 
   @ViewBuilder
@@ -45,7 +61,7 @@ struct SidebarGroupSectionView<Members: View>: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .contentShape(.rect)
-        .sidebarLayoutDropTarget(.emptyGroup(model.id, nextKey: nextKey), context: dragContext)
+        .sidebarLayoutDropTarget(.groupEnd(model.id, nextKey: nextKey), context: dragContext)
     } else {
       members()
     }

@@ -95,8 +95,15 @@ struct SidebarDragSupportTests {
     #expect(row.destination(for: .group(UUID()), locationY: 10) == .topLevel(before: nil))
   }
 
-  @Test func theEmptyGroupPlaceholderAndTheListEnd() {
-    let placeholder = SidebarDropRow.emptyGroup(group, nextKey: "/d")
+  @Test func theGapAboveAGroupPutsEitherItemBeforeIt() {
+    let gap = SidebarDropRow.aboveGroup(group)
+
+    #expect(gap.destination(for: .repository("/x"), locationY: 2) == .topLevel(before: groupKey))
+    #expect(gap.destination(for: .group(UUID()), locationY: 2) == .topLevel(before: groupKey))
+  }
+
+  @Test func theGroupEndAndTheListEnd() {
+    let placeholder = SidebarDropRow.groupEnd(group, nextKey: "/d")
 
     #expect(placeholder.destination(for: .repository("/x"), locationY: 0) == .group(group, before: nil))
     #expect(placeholder.destination(for: .group(UUID()), locationY: 0) == .topLevel(before: "/d"))

@@ -416,7 +416,7 @@ struct SidebarListView: View {
               .sidebarLayoutDropIndicators(
                 top: .group(model.id, before: memberID),
                 bottom: nextMemberID == nil ? .group(model.id, before: nil) : nil,
-                targetedDestination: dragContext.targetedDestination.wrappedValue
+                context: dragContext
               )
               .sidebarLayoutDropTarget(
                 .groupMember(model.id, repositoryID: memberID, nextMemberID: nextMemberID, nextKey: nextKey),
@@ -431,7 +431,7 @@ struct SidebarListView: View {
       .sidebarLayoutDropIndicators(
         top: .topLevel(before: groupKey),
         bottom: isLast ? .topLevel(before: nil) : nil,
-        targetedDestination: dragContext.targetedDestination.wrappedValue
+        context: dragContext
       )
 
     case .repository, .failedRepository:
@@ -446,7 +446,7 @@ struct SidebarListView: View {
         .sidebarLayoutDropIndicators(
           top: .topLevel(before: key),
           bottom: isLast ? .topLevel(before: nil) : nil,
-          targetedDestination: dragContext.targetedDestination.wrappedValue
+          context: dragContext
         )
         .sidebarLayoutDropTarget(.repository(key: key, nextKey: nextKey), context: dragContext)
       }

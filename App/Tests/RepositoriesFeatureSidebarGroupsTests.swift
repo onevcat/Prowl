@@ -226,6 +226,20 @@ struct RepositoriesFeatureSidebarGroupsTests {
     await store.send(.worktreeOrdering(.sidebarItemMoved(.group(existingGroupID), .topLevel(before: nil))))
   }
 
+  @Test(.dependencies) func aNoOpDropSavesNothingWhenTheStoredLayoutLacksARoot() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    var state = makeState(repositories: [repoA, repoB])
+    state.sidebarLayout = SidebarLayout(repositoryIDs: [repoA.id])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveSidebarLayout = { _ in Issue.record("A no-op drop must not save") }
+    }
+
+    await store.send(.worktreeOrdering(.sidebarItemMoved(.repository(repoB.id), .topLevel(before: nil))))
+  }
+
   // MARK: - Order and visibility
 
   @Test func orderedRepositoryIDsFlattenGroupsAndAppendUnknownRoots() {

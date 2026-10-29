@@ -63,8 +63,11 @@ enum SidebarDropRow: Equatable {
     nextMemberID: Repository.ID?,
     nextKey: String?
   )
-  /// The placeholder of an open group without members.
-  case emptyGroup(RepositoryGroup.ID, nextKey: String?)
+  /// The gap above a group container.
+  case aboveGroup(RepositoryGroup.ID)
+  /// The end of an open group: the placeholder of an empty group, or the strip
+  /// below the last member of a colored group.
+  case groupEnd(RepositoryGroup.ID, nextKey: String?)
   /// The drop area after the last entry.
   case listEnd
 
@@ -99,7 +102,10 @@ enum SidebarDropRow: Equatable {
         return .topLevel(before: nextKey)
       }
 
-    case .emptyGroup(let groupID, let nextKey):
+    case .aboveGroup(let groupID):
+      return .topLevel(before: SidebarLayoutItem.groupKey(groupID))
+
+    case .groupEnd(let groupID, let nextKey):
       switch item {
       case .repository: return .group(groupID, before: nil)
       case .group: return .topLevel(before: nextKey)
@@ -306,9 +312,13 @@ extension View {
   func sidebarLayoutDropIndicators(
     top: SidebarDropDestination,
     bottom: SidebarDropDestination?,
-    targetedDestination: SidebarDropDestination?
+    context: SidebarLayoutDragContext
   ) -> some View {
-    let edge = SidebarDropIndicatorEdge.edge(targetedDestination: targetedDestination, top: top, bottom: bottom)
+    let edge = SidebarDropIndicatorEdge.edge(
+      targetedDestination: context.targetedDestination.wrappedValue,
+      top: top,
+      bottom: bottom
+    )
     return
       self
       .overlay(alignment: .top) {
