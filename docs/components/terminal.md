@@ -216,6 +216,33 @@ and a change of source applies to running terminals immediately.
 Prowl-only keys such as `prowl-split-divider-width` are read from the active
 source's file.
 
+**Environment variables.** The Ghostty `env` key (`env = NAME=value`, one line
+per variable) sets variables in every terminal that Prowl starts. It applies
+after the variables that Ghostty sets, so it can also override them.
+
+## Ghostty CLI and SSH integration
+
+The app bundle contains `Contents/MacOS/ghostty`, a link to the app executable.
+Under that name, the executable runs Ghostty CLI actions with the Ghostty
+version that Prowl embeds (`ghostty +version`, `+list-themes`, `+show-config`,
+`+ssh`, `+ssh-cache`, …) and exits; it never opens a window, and without an
+action it prints a hint and exits with status 1. Prowl panes set
+`GHOSTTY_BIN_DIR` to that folder, and the default `path` shell integration
+feature appends it to `PATH`, so `ghostty` resolves to it unless another
+`ghostty` comes earlier in `PATH`. To use it outside Prowl, link it from a
+folder in `PATH` (for example
+`ln -s /Applications/Prowl.app/Contents/MacOS/ghostty ~/.local/bin/ghostty`);
+it still finds the resources in the app bundle.
+
+This makes Ghostty's SSH features work in Prowl panes:
+`shell-integration-features = ssh-env,ssh-terminfo` wraps `ssh` in
+`ghostty +ssh`, which installs the `xterm-ghostty` terminfo on a remote host on
+the first connection and forwards `COLORTERM`, `TERM_PROGRAM`, and
+`TERM_PROGRAM_VERSION`. The install cache (`ghostty +ssh-cache`) is
+`$XDG_STATE_HOME/ghostty/ssh_cache` (default `~/.local/state/ghostty/`), the
+same file that Ghostty.app uses. Remote folders that Prowl opens over ssh run
+`/usr/bin/ssh` directly and do not use this wrapper.
+
 ## Color scheme
 
 The terminal theme automatically follows the macOS light/dark appearance. There's

@@ -114,7 +114,18 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
 
 }
 
+/// The process entry. The app executable is also Ghostty's CLI through the
+/// `Contents/MacOS/ghostty` symlink (docs-ai 085), so this check runs before any app setup.
 @main
+enum ProwlMain {
+  static func main() {
+    if GhosttyCLIEntry.isGhosttyInvocation(argv0: CommandLine.arguments.first) {
+      GhosttyCLIEntry.run()
+    }
+    ProwlApp.main()
+  }
+}
+
 @MainActor
 struct ProwlApp: App {
   @NSApplicationDelegateAdaptor(ProwlAppDelegate.self) private var appDelegate
@@ -227,9 +238,7 @@ struct ProwlApp: App {
       userOverrides: initialSettings.keybindingUserOverrides
     )
     Self.bootstrapTelemetry(initialSettings: initialSettings)
-    if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
-      setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
-    }
+    GhosttyBundledResources.export()
     Self.initializeGhostty(resolvedKeybindings: initialResolvedKeybindings)
     let runtime = Self.makeGhosttyRuntime(initialSettings: initialSettings)
     _ghostty = State(initialValue: runtime)

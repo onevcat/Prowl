@@ -50,6 +50,13 @@ let verifyEmbeddedToolsScript = """
   done
   """
 
+// Ghostty's shell integration runs `$GHOSTTY_BIN_DIR/ghostty`, and libghostty sets that
+// folder to `Contents/MacOS`. The app executable runs Ghostty CLI actions when it starts
+// under this name (docs-ai 085). The symlink is relative so that the signed bundle can move.
+let linkGhosttyCLIScript = """
+  ln -sfh "$EXECUTABLE_NAME" "$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/ghostty"
+  """
+
 let project = Project(
   name: "Prowl",
   options: .options(
@@ -99,6 +106,12 @@ let project = Project(
         .pre(
           script: verifyEmbeddedToolsScript,
           name: "Verify prowl-cli binary",
+          basedOnDependencyAnalysis: false
+        ),
+        .post(
+          script: linkGhosttyCLIScript,
+          name: "Link ghostty CLI entry",
+          outputPaths: ["$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/ghostty"],
           basedOnDependencyAnalysis: false
         ),
       ],
