@@ -62,23 +62,42 @@ enum SidebarLayoutItem: Codable, Equatable {
   `sidebarCollapsedRepositoryIDs`. Collapse is view state, so it does not go into the layout file.
 - Invariants: a repository occurs one time in the layout. A new repository goes to the end of the top level. A
   removed repository leaves its group. An empty group stays and shows a drop placeholder. Normalization keeps
-  the IDs of hidden remote folders in place (`keepsHiddenRemoteID`, `mergingHiddenRepositoryIDs`, docs-ai 084).
+  the IDs of hidden remote folders in place, inside their groups too (`keepsHiddenRemoteID`, docs-ai 084). The
+  flat `mergingHiddenRepositoryIDs` helper does not fit a tree, so the layout gets its own merge with the same
+  rules: prune against roots and loaded repositories, skip pruning for a snapshot, keep hidden remote-form IDs.
 
 ### Order consumers
 
-`RepositoriesFeature.State.orderedRepositoryRoots()` flattens the layout. All current consumers go through
-`orderedRepositoryIDs()`: `orderedWorktreeRows` (hotkeys and Cmd+Ctrl+Up/Down), `ListRuntimeSnapshotBuilder`,
-`ShelfBook`, `ToolbarNotificationGroup`, and `WorktreeCommands`. They follow the sidebar with no other change.
+`RepositoriesFeature.State.orderedRepositoryRoots()` flattens the layout. These consumers go through
+`orderedRepositoryIDs()` and follow the sidebar with no other change: `orderedWorktreeRows` (hotkeys,
+Cmd+Ctrl+Up/Down, command palette worktrees), `ListRuntimeSnapshotBuilder` (`prowl list`, and through the CLI
+router the Remote Mirror list and new-pane catalog), `ShelfBook`, `ToolbarNotificationGroup`, and
+`WorktreeCommands`. Orders that do not use the sidebar order today stay as they are: Canvas card layout, Agent
+Island navigation, and the initial fallback selection in `RepositoriesFeature+Selection.swift`.
 
 ### Collapse semantics
 
-- A worktree row is visible when its group (if any) is expanded and its repository is expanded. The worktrees
-  of a collapsed group are not in the hotkey rows or the keyboard navigation, the same as a collapsed repository.
-- A sidebar reveal (`pendingSidebarReveal`) of a worktree in a collapsed group expands the group and the repository.
-- The header toggle treats groups and repositories as one set of expandable nodes, so
-  `SidebarListView.repositoryListHeaderAction` keeps its pure derivation. Collapse All leaves only group headers
-  and ungrouped repository headers. Expand Active expands the groups that contain an active repository, and those
-  repositories.
+Two things are separate: the **own expansion** of a group or a repository (what the user set), and the
+**effective visibility** of a repository's rows (its own expansion and its group's expansion).
+
+- Own expansion persists as now: `sidebarCollapsedRepositoryIDs` for repositories, `sidebarCollapsedGroupIDs` for
+  groups. Collapsing a group does not change the own expansion of its members, so reopening the group restores them.
+  The `SidebarView` binding writes own expansion only; it must not write the effective projection back.
+- A new effective projection feeds hotkey rows and keyboard navigation (`orderedWorktreeRows`, the
+  `worktreeID(byOffset:)` path). The worktrees of a collapsed group are not in it, the same as a collapsed repository.
+- A reveal or selection of a worktree or a repository whose group is collapsed expands the group (and, for a
+  worktree, its repository). This covers `pendingSidebarReveal` and plain folder and workspace headers.
+- The header toggle derives its action from effective state: a node is expanded when it is a group that is open,
+  or a repository that is visible and open. With every group shut, nothing is effectively expanded, so the toggle
+  offers Expand Active or Expand All. `SidebarListView.repositoryListHeaderAction` stays pure but gets
+  group-aware inputs.
+- Header actions write own expansion for both kinds: Expand All opens all groups and expandable repositories.
+  Collapse All shuts all of them. Expand Active opens the groups that contain an active member and the active
+  expandable repositories, and shuts the rest.
+- Group activity counts open tabs of **all** member kinds, including plain folders (the tab count in
+  `RepositorySectionView` already supports them). Today `SidebarListView.activeRepositoryIDs` excludes plain
+  folders, which was harmless while their headers could not collapse. Repository expansion still applies only to
+  expandable members.
 
 ### Sidebar rendering
 
@@ -95,6 +114,14 @@ enum SidebarLayoutItem: Codable, Equatable {
 - Group header context menu: Rename…, Color, Ungroup. Ungroup puts the members at the group's position and
   removes no repository.
 - All layout changes are reducer actions with tests (`RepositoriesFeature`).
+- The menus give a path for membership and group edits, not for arbitrary order. In S1, members keep the order
+  in which they joined the group, and groups keep their creation position.
+
+### Edge cases
+
+- A repository that fails to load stays in its group and shows its failure row inside the group container.
+- A group title is trimmed and must not be empty. Duplicate titles are allowed; the group ID is a UUID.
+- A new repository goes to the end of the top level, also when a group is selected.
 
 ### Drag and drop
 
@@ -102,6 +129,9 @@ enum SidebarLayoutItem: Codable, Equatable {
   (row, top or bottom half, top level or in a group). Unit tests cover the edge cases before the
   `DropDelegate` uses it. The current code is in `App/Sources/Features/Repositories/Views/SidebarDragSupport.swift`.
 - A group drops only at a top-level position. A drop on a group header puts a repository at the end of that group.
+- S1 changes the list from flat rows to a tree, so the current flat-index repository drag cannot stay as is. In
+  S1, only ungrouped top-level repositories are drag sources, and their drop positions are top-level layout
+  positions (groups count as one position). Group headers and group members are not drag sources until S2.
 
 ### Slices
 
@@ -122,7 +152,10 @@ Each slice updates `docs/components/repositories-and-worktrees.md` and gets a De
   repositories after them. Mixed order is more general, and a user who wants groups first can drag them there.
 - **A collapsed group does not contribute hotkey rows** (onevcat, 2026-10-29). Same rule as a collapsed repository.
 - **Context menus first, drag in a separate slice** (onevcat, 2026-10-29). Drag is the highest risk. The menus
-  give a reliable and accessible path for every operation, and S1 can ship without drag.
+  give a reliable and accessible path for group membership and group edits, and S1 can ship without drag.
+  Arbitrary order inside a group and group moves wait for S2.
+- **Own expansion separate from effective visibility.** Filtering the stored expansion by group state would let
+  the existing binding record hidden members as collapsed, and a reopened group would lose their state.
 - **Group color is a background only, not inherited** (onevcat, 2026-10-29). Inheritance changes what a repository color means in
   Active Agents, Shelf, and Canvas. A quiet background separates the group and keeps the sidebar calm.
 - **Not in `settings.json`.** #996 suggests `settings.json`, but repository order is not stored there today.
