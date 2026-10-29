@@ -85,8 +85,12 @@ Two things are separate: the **own expansion** of a group or a repository (what 
   The `SidebarView` binding writes own expansion only; it must not write the effective projection back.
 - A new effective projection feeds hotkey rows and keyboard navigation (`orderedWorktreeRows`, the
   `worktreeID(byOffset:)` path). The worktrees of a collapsed group are not in it, the same as a collapsed repository.
-- A reveal or selection of a worktree or a repository whose group is collapsed expands the group (and, for a
-  worktree, its repository). This covers `pendingSidebarReveal` and plain folder and workspace headers.
+- Only an explicit reveal expands a collapsed group, the same rule as a collapsed repository today:
+  `revealSelectedWorktreeInSidebar` removes the group from `sidebarCollapsedGroupIDs` as well as the repository
+  from `sidebarCollapsedRepositoryIDs`. The reveal also covers a selected plain folder or workspace header in a
+  collapsed group. Selection by itself does not change collapse state. The command palette toggle and terminal
+  layout restore send `selectWorktree` / `selectRepository` for the current target
+  (`AppFeature+TerminalEvents.swift`), and these must leave a collapsed group shut.
 - The header toggle derives its action from effective state: a node is expanded when it is a group that is open,
   or a repository that is visible and open. With every group shut, nothing is effectively expanded, so the toggle
   offers Expand Active or Expand All. `SidebarListView.repositoryListHeaderAction` stays pure but gets
