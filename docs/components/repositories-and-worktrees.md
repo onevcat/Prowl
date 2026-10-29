@@ -178,9 +178,17 @@ repositories only; groups do not nest.
   the last entry, drop below it. A repository dropped into a collapsed group
   stays hidden until you open the group.
 - **Edit:** right-click a group header (or hover it → `…`) → **Rename Group…**,
-  **Group Color** (a quiet background behind the group, or None), or
-  **Ungroup**. Ungroup keeps the repositories in the group's place and removes
+  **Group Color** (a quiet background behind the group, or None), **Group Icon**,
+  or **Ungroup**. Ungroup keeps the repositories in the group's place and removes
   no repository.
+- **Icon:** a group shows a folder before its name: an empty folder when the
+  group is collapsed and a filled folder when it is open. **Group Icon** →
+  **Choose Symbol…** picks an SF Symbol, **Choose Image…** imports an image file,
+  and **Use Default Icon** brings the folder back. A chosen icon stays the same
+  when the group opens or closes. Symbols and SVG images take the group color;
+  other images keep their own colors. Imported images are copied to
+  `~/.prowl/group-icons/` and deleted when the icon changes or the group is
+  ungrouped.
 - **Collapse:** click a group header or its chevron. A collapsed group keeps the
   expansion of each repository in it, and its worktrees are skipped by `⌃1`–`⌃9`
   and `⌘⌃↓` / `⌘⌃↑`.

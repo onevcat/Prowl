@@ -6,17 +6,21 @@ nonisolated struct RepositoryGroup: Codable, Equatable, Hashable, Identifiable, 
   let id: UUID
   var title: String
   var color: RepositoryColorChoice?
+  /// A user-chosen icon. Nil shows the default folder, which opens with the group.
+  var icon: RepositoryIconSource?
   var repositoryIDs: [Repository.ID]
 
   init(
     id: UUID,
     title: String,
     color: RepositoryColorChoice? = nil,
+    icon: RepositoryIconSource? = nil,
     repositoryIDs: [Repository.ID] = []
   ) {
     self.id = id
     self.title = title
     self.color = color
+    self.icon = icon
     self.repositoryIDs = repositoryIDs
   }
 
@@ -59,6 +63,7 @@ extension SidebarLayoutItem: Codable {
     case id
     case title
     case color
+    case icon
     case repositoryIDs
   }
 
@@ -79,6 +84,7 @@ extension SidebarLayoutItem: Codable {
           title: try container.decode(String.self, forKey: .title),
           // An unknown color must not drop the whole group.
           color: (try? container.decodeIfPresent(RepositoryColorChoice.self, forKey: .color)) ?? nil,
+          icon: (try? container.decodeIfPresent(RepositoryIconSource.self, forKey: .icon)) ?? nil,
           repositoryIDs: try container.decodeIfPresent([Repository.ID].self, forKey: .repositoryIDs) ?? []
         ))
     }
@@ -95,6 +101,7 @@ extension SidebarLayoutItem: Codable {
       try container.encode(group.id, forKey: .id)
       try container.encode(group.title, forKey: .title)
       try container.encodeIfPresent(group.color, forKey: .color)
+      try container.encodeIfPresent(group.icon, forKey: .icon)
       try container.encode(group.repositoryIDs, forKey: .repositoryIDs)
     }
   }
@@ -235,6 +242,11 @@ nonisolated struct SidebarLayout: Codable, Equatable, Hashable, Sendable {
   @discardableResult
   mutating func setGroupColor(_ groupID: RepositoryGroup.ID, to color: RepositoryColorChoice?) -> Bool {
     updateGroup(groupID) { $0.color = color }
+  }
+
+  @discardableResult
+  mutating func setGroupIcon(_ groupID: RepositoryGroup.ID, to icon: RepositoryIconSource?) -> Bool {
+    updateGroup(groupID) { $0.icon = icon }
   }
 
   /// Removes the group and puts its members at its place. No repository is removed.

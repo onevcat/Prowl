@@ -1,5 +1,7 @@
+import AppKit
 import ComposableArchitecture
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A sidebar group: a header with the member rows below it, in one container so
 /// the optional color fills behind both (docs-ai 086).
@@ -76,6 +78,7 @@ struct SidebarGroupSectionView<Members: View>: View {
 
   private var header: some View {
     HStack(spacing: 6) {
+      groupIcon
       Text(model.group.title)
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -152,6 +155,16 @@ struct SidebarGroupSectionView<Members: View>: View {
     .sidebarLayoutDropTarget(.groupHeader(model.id, nextKey: nextKey), context: dragContext)
   }
 
+  /// The user's icon, or a folder that opens with the group. Tintable icons take
+  /// the group color, like a repository icon takes the repository color.
+  private var groupIcon: some View {
+    RepositoryIconImage(
+      groupIcon: model.group.icon ?? .sfSymbol(isExpanded ? "folder.fill" : "folder"),
+      tintColor: model.group.color?.color ?? .secondary,
+      size: 14
+    )
+  }
+
   @ViewBuilder
   private var menuItems: some View {
     Button("Rename Group…") {
@@ -172,10 +185,45 @@ struct SidebarGroupSectionView<Members: View>: View {
       }
     }
     .help("Choose the background color of this group")
+    Menu("Group Icon") {
+      Button("Choose Symbol…") {
+        store.send(.sidebarGroups(.chooseGroupSymbolRequested(model.id)))
+      }
+      .help("Pick an SF Symbol for this group")
+      Button("Choose Image…") {
+        presentImageImporter()
+      }
+      .help("Use an image file as the icon of this group")
+      if model.group.icon != nil {
+        Divider()
+        Button("Use Default Icon") {
+          store.send(.sidebarGroups(.setGroupIcon(model.id, nil)))
+        }
+        .help("Show a folder that opens with the group")
+      }
+    }
+    .help("Choose the icon of this group")
     Divider()
     Button("Ungroup") {
       store.send(.sidebarGroups(.ungroup(model.id)))
     }
     .help("Remove the group and keep its repositories in its place")
+  }
+
+  // Same panel as the repository icon picker. SVG is listed because it does not
+  // always conform to `.image`.
+  private func presentImageImporter() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.image, .svg]
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.prompt = String(localized: "Choose")
+    panel.message = String(localized: "Choose an image to use as this group's icon.")
+    let groupID = model.id
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else { return }
+      store.send(.sidebarGroups(.importGroupImage(groupID, url)))
+    }
   }
 }

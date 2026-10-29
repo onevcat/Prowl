@@ -296,6 +296,11 @@ nonisolated enum ProwlPaths {
     baseDirectory.appending(path: "sidebar-layout.json", directoryHint: .notDirectory)
   }
 
+  /// Images that the user imported as sidebar group icons (docs-ai 086).
+  static var groupIconsDirectory: URL {
+    baseDirectory.appending(path: "group-icons", directoryHint: .isDirectory)
+  }
+
   /// Directory where user-imported repository icon images live, scoped
   /// per-repo so cleanup is automatic when the per-repo settings
   /// directory is removed.
