@@ -79,7 +79,8 @@ struct AgentCoordinatorProgramStatusTests {
   /// Only producers whose baseline replayed inside Prowl may drive the decision.
   @Test func defaultTableVerifiesKnownProducers() async {
     for agent in DetectedAgent.allCases {
-      let expected: ProgramStatusSupport = [.claude, .pi, .omp, .codex].contains(agent) ? .verified : .unverified
+      let verified: [DetectedAgent] = [.claude, .pi, .omp, .codex, .amp, .antigravity, .devin, .droid, .grok]
+      let expected: ProgramStatusSupport = verified.contains(agent) ? .verified : .unverified
       #expect(ProgramStatusSupport.level(for: agent) == expected, "\(agent)")
     }
     // With the default table a Claude root decides on the tick that sees it, the
@@ -128,6 +129,40 @@ struct AgentCoordinatorProgramStatusTests {
     #expect(codexDecision?.reason.identifier == "osc.idle")
     #expect(codexDecision?.screenReason == .delegated)
     #expect(codex.isDelegated)
+  }
+
+  @Test(arguments: [
+    (DetectedAgent.amp, "amp"),
+    (.antigravity, "antigravity"),
+    (.devin, "devin"),
+    (.droid, "droid"),
+    (.grok, "grok-build"),
+  ])
+  func screenOnlyProducerDecidesUnderItsOwnApp(agent: DetectedAgent, app: String) async {
+    #expect(agent.programStatusApp == app)
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      Issue.record("\(agent) has no provider to sample")
+      return [.unavailable]
+    })
+
+    let decision = await coordinator.observe(
+      agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.idle, app: app), 1)]))
+
+    #expect(decision?.state == .idle)
+    #expect(decision?.reason.identifier == "osc.idle")
+    #expect(decision?.screenReason == .delegated)
+    #expect(coordinator.isDelegated)
+
+    // Another program's root is not this agent's state: the screen keeps deciding.
+    let fenced = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+    let fencedDecision = await fenced.observe(
+      agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.idle, app: "foreign"), 1)]))
+
+    #expect(fencedDecision?.state == .working)
+    #expect(fencedDecision?.reason.isProgramStatus == false)
+    #expect(fenced.isDelegated == false)
   }
 
   @Test func codexReportsDriveLifecycleAndClearRestoresTheProvider() async {

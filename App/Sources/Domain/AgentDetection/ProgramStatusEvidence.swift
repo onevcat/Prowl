@@ -13,10 +13,11 @@ nonisolated enum ProgramStatusSupport: Equatable, Sendable {
   /// A producer is flipped once its baseline has replayed inside Prowl: Claude Code
   /// (2.1.295 and later, docs-ai 079.004) in slice 3, Pi (1.1.0 and later,
   /// docs-ai 079.005) in slice 4, Oh My Pi (18.8.7 and later, docs-ai 079.006),
-  /// and Codex (0.163.0 and later, docs-ai 079.007).
+  /// Codex (0.163.0 and later, docs-ai 079.007), and Amp, Antigravity, Devin, Droid,
+  /// and Grok Build (docs-ai 079.008).
   static func level(for agent: DetectedAgent) -> ProgramStatusSupport {
     switch agent {
-    case .claude, .pi, .omp, .codex: .verified
+    case .claude, .pi, .omp, .codex, .amp, .antigravity, .devin, .droid, .grok: .verified
     default: .unverified
     }
   }
@@ -32,6 +33,11 @@ extension DetectedAgent {
     case .pi: "pi"
     case .omp: "omp"
     case .codex: "codex"
+    case .amp: "amp"
+    case .antigravity: "antigravity"
+    case .devin: "devin"
+    case .droid: "droid"
+    case .grok: "grok-build"
     default: nil
     }
   }

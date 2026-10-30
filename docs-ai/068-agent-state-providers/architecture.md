@@ -25,7 +25,9 @@ screen; a static support table decides whether a producer's records drive the de
 see [claude.md](claude.md); Pi since [079 slice 4](../079-program-status-osc-7501/005-pi-verified.md),
 see [pi.md](pi.md); Oh My Pi since [079.006](../079-program-status-osc-7501/006-omp-verified.md),
 see [omp.md](omp.md); Codex since [079.007](../079-program-status-osc-7501/007-codex-verified.md),
-see [codex.md](codex.md)) or are only compared with it (`.unverified`: every other agent).
+see [codex.md](codex.md); Amp, Antigravity, Devin, Droid, and Grok Build since
+[079.008](../079-program-status-osc-7501/008-more-producers.md)) or are only compared
+with it (`.unverified`: every other agent).
 This is a shared decision path, not a general plugin interface for arbitrary providers.
 
 | Responsibility | Current source |

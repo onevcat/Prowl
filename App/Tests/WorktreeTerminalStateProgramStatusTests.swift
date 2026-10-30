@@ -296,6 +296,41 @@ struct WorktreeTerminalStateProgramStatusTests {
     #expect(codex.state.surfaceAgentStates[codex.surfaceID]?.displayState == .idle)
   }
 
+  @Test(arguments: [
+    (DetectedAgent.amp, "amp", "amp"),
+    (.antigravity, "agy", "antigravity"),
+    (.devin, "devin", "devin"),
+    (.droid, "droid", "droid"),
+    (.grok, "grok", "grok-build"),
+  ])
+  func productionTableVerifiesScreenOnlyProducer(agent: DetectedAgent, executable: String, app: String) async {
+    let probe = Probe()
+    let fixture = makeFixture(support: nil, probe: probe)
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(
+          pid: getpid(), parentProcessID: getppid(), name: executable, argv0: executable, cmdline: executable)
+      ])
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: agent, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    #expect(await detect(fixture))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == agent)
+
+    fixture.state.handleProgramStatus(report(.working, app: app), surfaceID: fixture.surfaceID)
+
+    let pane = fixture.state.surfaceAgentStates[fixture.surfaceID]
+    #expect(pane?.state == .working)
+    #expect(pane?.decision?.reason.identifier == "osc.working")
+    #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.isDelegated == true)
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .delegated)
+
+    fixture.state.handleProgramStatus(report(.blocked, app: app, kind: .permission), surfaceID: fixture.surfaceID)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+    #expect(
+      fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.blocked.permission")
+  }
+
   @Test func withdrawalPublishesNothingUntilAnObserveThatStartedAfterIt() async {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)

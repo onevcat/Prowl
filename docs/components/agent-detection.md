@@ -465,8 +465,8 @@ in the app, not a setting:
 
 | Support | Meaning |
 | --- | --- |
-| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Every agent except Claude Code, Pi, Oh My Pi, and Codex today. |
-| verified | The root record is the first-priority state evidence, applied the moment the report arrives. Claude Code (2.1.295 and later, `app=claude-code`), Pi (1.1.0 and later, `app=pi`), Oh My Pi (18.8.7 and later, `app=omp`), and Codex (0.163.0 and later, `app=codex`). |
+| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Every agent without a row in the verified list today. |
+| verified | The root record is the first-priority state evidence, applied the moment the report arrives. Claude Code (2.1.295 and later, `app=claude-code`), Pi (1.1.0 and later, `app=pi`), Oh My Pi (18.8.7 and later, `app=omp`), Codex (0.163.0 and later, `app=codex`), Amp (`app=amp`), Antigravity (`app=antigravity`), Devin (`app=devin`), Droid (`app=droid`), and Grok Build (`app=grok-build`). The last five were replayed on Amp 0.0.1793376030, Antigravity 1.4.11, Devin 3000.11.234, Droid 1.0.0, and Grok Build 1.0.70; older versions that do not report keep the screen rules. |
 
 For a verified producer the pane follows the **root** record only: `working` → Working
 (`osc.working`), `blocked` → Blocked (`osc.blocked.<kind>`, `unspecified` without a
@@ -488,7 +488,8 @@ there and releases the entry when it is gone. There is no silence timeout.
 
 Producers that never report (older versions, `CLAUDE_CODE_DISABLE_TERMINAL_TITLE`,
 `PI_PROGRAM_STATUS=0`, Oh My Pi's `terminal.programStatus: false`) get today's screen and provider detection unchanged. The
-available producer controls are the escape hatch; Codex 0.163.0 has none for OSC.
+available producer controls are the escape hatch; Codex 0.163.0, Amp, Antigravity, Devin, Droid, and Grok Build have none
+that Prowl knows of.
 Prowl has no setting for this.
 
 Independently of the support table, Ghostty's shell integration tells Prowl when the

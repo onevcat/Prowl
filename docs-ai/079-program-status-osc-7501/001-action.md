@@ -105,7 +105,7 @@ the index and the state after the last merge.
 
 PRs #887, #892, #893, #895, #896, #900. Records [002](002-fork-action-and-bridge.md),
 [003](003-generic-provider.md), [004](004-claude-verified.md), [005](005-pi-verified.md),
-[006](006-omp-verified.md);
+[006](006-omp-verified.md), [007](007-codex-verified.md), [008](008-more-producers.md);
 [producer-baseline.md](producer-baseline.md). Living docs:
 [068/architecture.md](../068-agent-state-providers/architecture.md),
 [068/claude.md](../068-agent-state-providers/claude.md), [068/pi.md](../068-agent-state-providers/pi.md),

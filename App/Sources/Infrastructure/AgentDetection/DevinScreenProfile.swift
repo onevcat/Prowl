@@ -59,7 +59,7 @@ enum DevinScreenProfile {
   private nonisolated static func composerIndex(in lines: [String]) -> Int? {
     guard let index = lines.lastIndex(where: { $0 == "❭" || $0.hasPrefix("❭ ") }),
       index > 0, index + 2 < lines.count,
-      isSeparator(lines[index - 1]),
+      isComposerTopRule(lines[index - 1]),
       let end = lines.indices.last(where: { isSeparator(lines[$0]) }), end > index,
       lines.count - end <= 3
     else { return nil }
@@ -68,6 +68,12 @@ enum DevinScreenProfile {
 
   private nonisolated static func isSeparator(_ line: String) -> Bool {
     line.count >= 3 && line.allSatisfy { $0 == "─" }
+  }
+
+  /// Devin embeds the session title in the top rule once a conversation has one:
+  /// `───── Output the word second ─`.
+  private nonisolated static func isComposerTopRule(_ line: String) -> Bool {
+    isSeparator(line) || (line.hasPrefix("───") && line.hasSuffix(" ─"))
   }
 
   private nonisolated static func isSelectionFooter(_ line: String) -> Bool {
