@@ -219,10 +219,6 @@ The font follows the first CJK language in the system language list (a
 
 Set `font-family` or `font-codepoint-map` to take over; Prowl then adds nothing.
 
-**Clipboard confirmations.** Prowl approves every clipboard request that Ghostty
-asks to confirm, without a dialog: pastes that Ghostty's paste protection flags
-(text with newlines), OSC 52 reads, and Kitty clipboard protocol reads.
-
 **Links.** ⌘-click opens a link from terminal output: an OSC 8 hyperlink or text
 that matches a Ghostty `link` entry (by default, URLs). Any program can print
 such a link, so Prowl checks the target first:
