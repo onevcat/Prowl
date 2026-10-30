@@ -213,6 +213,11 @@ nonisolated struct SidebarLayout: Codable, Equatable, Hashable, Sendable {
     items.insert(group, at: wasTopLevel ? index : index + 1)
   }
 
+  /// Adds a group with no members at the end of the top level.
+  mutating func createEmptyGroup(id: RepositoryGroup.ID, title: String) {
+    items.append(.group(RepositoryGroup(id: id, title: title)))
+  }
+
   /// Moves `repositoryID` to the end of the group. Returns false when the group
   /// does not exist or already holds it.
   @discardableResult

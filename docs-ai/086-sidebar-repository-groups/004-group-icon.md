@@ -8,8 +8,9 @@ closes, and for a custom icon that is set the same way as a repository icon.
 
 ## Decisions (onevcat, 2026-10-29)
 
-- SF Symbols has no open-folder symbol. The default icon is `folder` (outline) when the group is
-  collapsed and `folder.fill` when it is open.
+- SF Symbols has no open-folder symbol. The default icon is `folder.fill` when the group is collapsed
+  and `folder` (outline) when it is open. The first version had these the other way around; onevcat
+  flipped them after using it.
 - A custom icon does not change with the group state. The chevron shows the state.
 - Custom icons are SF Symbols and imported images. Icon suggestions are not offered: they read the
   contents of a repository, and a group has none.

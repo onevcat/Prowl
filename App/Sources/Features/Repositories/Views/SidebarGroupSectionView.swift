@@ -56,11 +56,12 @@ struct SidebarGroupSectionView<Members: View>: View {
   @ViewBuilder
   private var content: some View {
     if model.members.isEmpty {
-      Text("No repositories")
+      Text("Drag projects here to add them")
         .font(.caption)
         .foregroundStyle(.tertiary)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
+        .padding(.leading, 12 + SidebarListView.groupMemberIndent)
+        .padding(.trailing, 12)
         .padding(.vertical, 4)
         .contentShape(.rect)
         .sidebarLayoutDropTarget(.groupEnd(model.id, nextKey: nextKey), context: dragContext)
@@ -159,7 +160,7 @@ struct SidebarGroupSectionView<Members: View>: View {
   /// the group color, like a repository icon takes the repository color.
   private var groupIcon: some View {
     RepositoryIconImage(
-      groupIcon: model.group.icon ?? .sfSymbol(isExpanded ? "folder.fill" : "folder"),
+      groupIcon: model.group.icon ?? .sfSymbol(isExpanded ? "folder" : "folder.fill"),
       tintColor: model.group.color?.color ?? .secondary,
       size: 14
     )
@@ -172,14 +173,18 @@ struct SidebarGroupSectionView<Members: View>: View {
     }
     .help("Rename this group")
     Menu("Group Color") {
-      Button("None") {
+      Button {
         store.send(.sidebarGroups(.setGroupColor(model.id, nil)))
+      } label: {
+        colorMenuLabel("None", color: nil)
       }
       .help("Show this group without a color")
       Divider()
       ForEach(RepositoryColorChoice.presets, id: \.self) { color in
-        Button(color.displayName) {
+        Button {
           store.send(.sidebarGroups(.setGroupColor(model.id, color)))
+        } label: {
+          colorMenuLabel(color.displayName, color: color.color)
         }
         .help("Show this group with \(color.displayName)")
       }
@@ -208,6 +213,36 @@ struct SidebarGroupSectionView<Members: View>: View {
       store.send(.sidebarGroups(.ungroup(model.id)))
     }
     .help("Remove the group and keep its repositories in its place")
+  }
+
+  private func colorMenuLabel(_ title: String, color: Color?) -> some View {
+    Label {
+      Text(title)
+    } icon: {
+      Image(nsImage: Self.colorDot(color))
+        .renderingMode(.original)
+        .accessibilityHidden(true)
+    }
+    // A context menu shows only the title of a label with the default style.
+    .labelStyle(.titleAndIcon)
+  }
+
+  /// Not a template image, so that the menu keeps the color. No color is an empty circle.
+  private static func colorDot(_ color: Color?) -> NSImage {
+    let fill = color.map { NSColor($0) }
+    let image = NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+      let dot = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
+      if let fill {
+        fill.setFill()
+        dot.fill()
+      } else {
+        NSColor.secondaryLabelColor.setStroke()
+        dot.stroke()
+      }
+      return true
+    }
+    image.isTemplate = false
+    return image
   }
 
   // Same panel as the repository icon picker. SVG is listed because it does not

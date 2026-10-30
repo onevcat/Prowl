@@ -49,6 +49,10 @@ struct SidebarListView: View {
     }
   }
 
+  /// How much further a group member sits than a top-level row. The whole member
+  /// moves, so its worktree rows stay nested under it.
+  static let groupMemberIndent: CGFloat = 10
+
   @Bindable var store: StoreOf<RepositoriesFeature>
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var collapsedGroupIDs: Set<RepositoryGroup.ID>
@@ -60,6 +64,7 @@ struct SidebarListView: View {
   @State private var sidebarFooterHeight = 0.0
   @State private var resizingPanelHeight: Double?
   @State private var isAddChoicePresented = false
+  @State private var isClonePresented = false
   @Namespace private var topSegmentNamespace
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -127,6 +132,24 @@ struct SidebarListView: View {
       .scrollIndicators(.never)
       .frame(minWidth: 220)
       .clipped()
+      // Rows with their own menu keep it; this one takes the rest of the list.
+      .contentShape(.rect)
+      .contextMenu {
+        SidebarBackgroundMenu(
+          store: store,
+          expandedRepoIDs: $expandedRepoIDs,
+          collapsedGroupIDs: $collapsedGroupIDs,
+          onClone: { isClonePresented = true }
+        )
+      }
+      .sheet(isPresented: $isClonePresented) {
+        CloneRepositoryView(
+          dismiss: { isClonePresented = false },
+          onCloned: { url in
+            store.send(.repositoryManagement(.openRepositories([url])))
+          }
+        )
+      }
       .onGeometryChange(for: Double.self) { proxy in
         Double(proxy.size.height)
       } action: { newHeight in
@@ -217,6 +240,9 @@ struct SidebarListView: View {
               },
               onRemoteFolder: {
                 store.send(.addRemoteFolderRequested)
+              },
+              onNewGroup: {
+                store.send(.sidebarGroups(.newEmptyGroupRequested))
               }
             )
           }
@@ -418,6 +444,7 @@ struct SidebarListView: View {
                 bottom: nextMemberID == nil ? .group(model.id, before: nil) : nil,
                 context: dragContext
               )
+              .padding(.leading, Self.groupMemberIndent)
               .sidebarLayoutDropTarget(
                 .groupMember(model.id, repositoryID: memberID, nextMemberID: nextMemberID, nextKey: nextKey),
                 context: dragContext

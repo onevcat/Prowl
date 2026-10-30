@@ -39,6 +39,72 @@ struct RepositoriesFeatureSidebarGroupsTests {
     #expect(saved.value == store.state.sidebarLayout)
   }
 
+  @Test(.dependencies) func newEmptyGroupPromptAddsAGroupAtTheEndAndRevealsIt() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let repoB = makeRepository(id: "/tmp/b")
+    let saved = LockIsolated<SidebarLayout?>(nil)
+    let store = TestStore(initialState: makeState(repositories: [repoA, repoB])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
+    }
+
+    await store.send(.sidebarGroups(.newEmptyGroupRequested)) {
+      $0.groupTitlePrompt = GroupTitlePrompt(target: .newEmptyGroup, currentTitle: "")
+    }
+    await store.send(.sidebarGroups(.titlePromptSubmitted("  Empty  "))) {
+      $0.groupTitlePrompt = nil
+      $0.sidebarLayout = SidebarLayout(items: [
+        .repository(repoA.id),
+        .repository(repoB.id),
+        .group(RepositoryGroup(id: self.firstUUID, title: "Empty")),
+      ])
+      $0.nextPendingSidebarRevealID = 1
+      $0.pendingSidebarReveal = PendingSidebarReveal(id: 1, target: .group(self.firstUUID))
+    }
+    await store.finish()
+    #expect(saved.value == store.state.sidebarLayout)
+  }
+
+  @Test(.dependencies) func newEmptyGroupPromptWorksWithNoRepositories() async {
+    let saved = LockIsolated<SidebarLayout?>(nil)
+    let store = TestStore(initialState: makeState(repositories: [])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.repositoryPersistence.saveSidebarLayout = { saved.setValue($0) }
+    }
+
+    await store.send(.sidebarGroups(.newEmptyGroupRequested)) {
+      $0.groupTitlePrompt = GroupTitlePrompt(target: .newEmptyGroup, currentTitle: "")
+    }
+    await store.send(.sidebarGroups(.titlePromptSubmitted("First"))) {
+      $0.groupTitlePrompt = nil
+      $0.sidebarLayout = SidebarLayout(items: [
+        .group(RepositoryGroup(id: self.firstUUID, title: "First"))
+      ])
+      $0.nextPendingSidebarRevealID = 1
+      $0.pendingSidebarReveal = PendingSidebarReveal(id: 1, target: .group(self.firstUUID))
+    }
+    await store.finish()
+    #expect(saved.value == store.state.sidebarLayout)
+  }
+
+  @Test(.dependencies) func canceledEmptyGroupPromptAddsNothing() async {
+    let repoA = makeRepository(id: "/tmp/a")
+    let store = TestStore(initialState: makeState(repositories: [repoA])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.sidebarGroups(.newEmptyGroupRequested)) {
+      $0.groupTitlePrompt = GroupTitlePrompt(target: .newEmptyGroup, currentTitle: "")
+    }
+    await store.send(.sidebarGroups(.titlePromptCanceled)) {
+      $0.groupTitlePrompt = nil
+    }
+  }
+
   @Test(.dependencies) func aBlankTitleCreatesNoGroup() async {
     let repoA = makeRepository(id: "/tmp/a")
     var state = makeState(repositories: [repoA])

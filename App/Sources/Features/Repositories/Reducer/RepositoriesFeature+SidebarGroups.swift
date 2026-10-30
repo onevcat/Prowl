@@ -11,6 +11,10 @@ extension RepositoriesFeature {
       state.groupTitlePrompt = GroupTitlePrompt(target: .newGroup(containing: repositoryID), currentTitle: "")
       return .none
 
+    case .newEmptyGroupRequested:
+      state.groupTitlePrompt = GroupTitlePrompt(target: .newEmptyGroup, currentTitle: "")
+      return .none
+
     case .renameGroupRequested(let groupID):
       guard let group = state.sidebarLayout.group(id: groupID) else { return .none }
       state.groupTitlePrompt = GroupTitlePrompt(target: .rename(groupID), currentTitle: group.title)
@@ -27,6 +31,12 @@ extension RepositoriesFeature {
         return editSidebarLayout(state: &state) {
           $0.createGroup(id: groupID, title: title, containing: repositoryID)
         }
+      case .newEmptyGroup:
+        let groupID = uuid()
+        // The new group is at the end of the list, which can be out of view.
+        state.nextPendingSidebarRevealID += 1
+        state.pendingSidebarReveal = .init(id: state.nextPendingSidebarRevealID, target: .group(groupID))
+        return editSidebarLayout(state: &state) { $0.createEmptyGroup(id: groupID, title: title) }
       case .rename(let groupID):
         return editSidebarLayout(state: &state) { $0.renameGroup(groupID, to: title) }
       }
@@ -198,6 +208,8 @@ extension RepositoriesFeature.State {
     switch target {
     case .newGroup(let repositoryID):
       repositories[id: repositoryID] != nil || repositoryRoots.contains { $0.standardized.id == repositoryID }
+    case .newEmptyGroup:
+      true
     case .rename(let groupID):
       sidebarLayout.group(id: groupID) != nil
     }

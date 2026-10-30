@@ -66,6 +66,20 @@ struct SidebarLayoutTests {
     #expect(layout.items.last == .group(RepositoryGroup(id: groupA, title: "A", repositoryIDs: ["/z"])))
   }
 
+  @Test func createEmptyGroupGoesToTheEndWithNoMembers() {
+    let existing = RepositoryGroup(id: groupA, title: "Old", repositoryIDs: ["/b"])
+    var layout = SidebarLayout(items: [.repository("/a"), .group(existing)])
+
+    layout.createEmptyGroup(id: groupB, title: "New")
+
+    #expect(
+      layout.items == [
+        .repository("/a"),
+        .group(existing),
+        .group(RepositoryGroup(id: groupB, title: "New")),
+      ])
+  }
+
   @Test func moveRepositoryToGroupAppendsItAndLeavesTheOldPlace() {
     var layout = SidebarLayout(items: [
       .repository("/a"),
