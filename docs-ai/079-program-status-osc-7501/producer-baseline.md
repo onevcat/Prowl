@@ -345,14 +345,14 @@ the key or command and CLI-polled at 250 ms.
 
 | Scenario | Observation |
 | --- | --- |
-| Launch | `osc.idle` within 2 s for all five, except Amp: `legacy.detector` until its first report, when the first prompt is entered |
+| Launch | `osc.idle` within 2 s for four. Amp stays on `legacy.detector`: its only `idle` is ignored (see 008), and `osc.working` takes over 2–3.5 s into the first turn |
 | Trust dialog (Antigravity, Grok Build) | `osc.blocked.permission` 0.7 s after launch; Enter → `osc.idle` within 0.3 s |
-| Prompt, finish | `osc.working` within 0.5 s, `osc.done`, Done badge while unviewed |
+| Prompt, finish | `osc.working` within 0.5 s, except Amp's first turn (above); `osc.done`, Done badge while unviewed |
 | Cancel | `osc.idle` within 0.4 s for Antigravity, Devin, Droid, Grok Build; `osc.done` for Amp, which reports the cancel as `done` |
 | Approval | `osc.blocked.permission` for four; `osc.blocked.unspecified` for Amp. Enter → `osc.working` within 0.3 s |
 | Question tool | `osc.blocked.question` for four; `osc.blocked.unspecified` for Amp |
 | Invalid key (Droid) | `osc.idle` on mount, `osc.working` then `osc.error` 0.3 s later |
-| `agents wait --until idle` while working | resolved only after the turn, for Amp, Antigravity, Droid, Grok Build |
+| `agents wait --until idle` while working | resolved only after the turn, for Amp, Antigravity, Droid, Grok Build. A wait armed right after Amp's first prompt resolved after 18.3 s, at the end of that turn; the pane read Working throughout |
 | Session rotation | Antigravity `/clear` moved to the new id in 2.8 s and Devin `/clear` in 0.7 s, both `exact`. Amp and Grok Build `/new` kept the old id, the same as the control build. Droid had no session in either build |
 | Exit | released in 0.5 s (Droid `/quit`), 0.3 s (Amp Ctrl+C twice), 0.7 s (Antigravity `/exit`), 1.5–2.1 s (Grok Build, Devin `/exit`) |
 | `kill -9` | released in 0.2–0.3 s (Amp, Antigravity, Droid, Grok Build), 3.0 s (Devin) |

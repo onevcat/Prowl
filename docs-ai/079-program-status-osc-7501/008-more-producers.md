@@ -16,7 +16,8 @@ survey and every observation are in [producer-baseline.md](producer-baseline.md)
 | Docs | `docs/components/agent-detection.md`, `docs/components/terminal.md`, `docs-ai/068-agent-state-providers/architecture.md`, [producer-baseline.md](producer-baseline.md) | producer list and replay tables |
 
 The push path, delegated schedule, settle window, release paths, readiness, and CLI surface are
-unchanged. Screen rules stay as the fallback for versions that do not report.
+unchanged, except that Amp's `idle` root is ignored (see Boundaries). Screen rules stay as the
+fallback for versions that do not report.
 
 ## Decisions
 
@@ -32,7 +33,7 @@ unchanged. Screen rules stay as the fallback for versions that do not report.
 
 | Boundary | Handling |
 | --- | --- |
-| Amp reports nothing until the first prompt is entered | `legacy.detector` until then |
+| Amp's only `idle` arrives when the first prompt is entered, 2–3.5 s before `working` | `ProgramStatusEvidence` ignores an Amp `idle` root, so the screen rules decide until `working`. Otherwise an idle wait could pass during the first turn |
 | Amp reports a cancelled turn as `done` | Done badge on the cancelled turn; follows the producer |
 | Amp `blocked` has no kind | `osc.blocked.unspecified` |
 | Antigravity `blocked:kind=auth` for about 0.03 s at launch | not visible in the 250 ms poll; `idle` replaces it |

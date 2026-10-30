@@ -147,10 +147,10 @@ struct AgentCoordinatorProgramStatusTests {
 
     let decision = await coordinator.observe(
       agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
-      programStatus: store([(report(.idle, app: app), 1)]))
+      programStatus: store([(report(.done, app: app), 1)]))
 
     #expect(decision?.state == .idle)
-    #expect(decision?.reason.identifier == "osc.idle")
+    #expect(decision?.reason.identifier == "osc.done")
     #expect(decision?.screenReason == .delegated)
     #expect(coordinator.isDelegated)
 
@@ -158,11 +158,34 @@ struct AgentCoordinatorProgramStatusTests {
     let fenced = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
     let fencedDecision = await fenced.observe(
       agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
-      programStatus: store([(report(.idle, app: "foreign"), 1)]))
+      programStatus: store([(report(.done, app: "foreign"), 1)]))
 
     #expect(fencedDecision?.state == .working)
     #expect(fencedDecision?.reason.isProgramStatus == false)
     #expect(fenced.isDelegated == false)
+  }
+
+  @Test func ampIdleRootLeavesTheFirstTurnToTheScreen() async {
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+
+    // Amp's first report is `idle`, seconds before the `working` of the prompt it was
+    // entered for. A wait armed in that window must keep seeing the Working screen.
+    let first = await coordinator.observe(
+      agent: .amp, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.idle, app: "amp"), 1)]))
+    #expect(first?.state == .working)
+    #expect(first?.reason.isProgramStatus == false)
+    #expect(coordinator.isDelegated == false)
+    #expect(coordinator.receive(programStatus: store([(report(.idle, app: "amp"), 1)])) == .none)
+
+    let idle = (report(.idle, app: "amp"), TimeInterval(1))
+    let working = (report(.working, app: "amp"), TimeInterval(2))
+    #expect(coordinator.receive(programStatus: store([idle, working])) != .none)
+    #expect(coordinator.decision?.reason.identifier == "osc.working")
+    #expect(coordinator.isDelegated)
+
+    _ = coordinator.receive(programStatus: store([idle, working, (report(.done, app: "amp"), 3)]))
+    #expect(coordinator.decision?.reason.identifier == "osc.done")
   }
 
   @Test func codexReportsDriveLifecycleAndClearRestoresTheProvider() async {

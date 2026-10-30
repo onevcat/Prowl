@@ -101,6 +101,9 @@ nonisolated struct ProgramStatusEvidence: Equatable, Sendable {
       store.app(of: record) == app && record.arrivedAt >= notBefore
     }
     guard let root = store.root, eligible(root) else { return nil }
+    // Amp sends its only `idle` when the first prompt is entered, seconds before that
+    // turn's `working`, so it says nothing about the pane: the screen rules decide.
+    if root.state == .idle, app == DetectedAgent.amp.programStatusApp { return nil }
     let blocked = store.children.first { $0.state == .blocked && eligible($0) }
     self.init(
       root: root.state,
