@@ -9,7 +9,8 @@
     "App/Sources/Clients/BranchNameSuggestion/**": "agent-prompt",
     "App/Sources/Support/**": "developer: diagnostics and helpers without UI",
     "App/Sources/Domain/Handoff/**": "agent-prompt: handoff documents written for agents",
-    "App/Sources/Infrastructure/Ghostty/GhosttyCJKFontFallback.swift": "identifier: system font family names given to Ghostty"
+    "App/Sources/Infrastructure/Ghostty/GhosttyCJKFontFallback.swift": "identifier: system font family names given to Ghostty",
+    "App/Sources/Infrastructure/Ghostty/GhosttyCLIEntry.swift": "protocol: Ghostty CLI text on stderr stays in English"
   },
   "exemptLinePatterns": {
     "ProwlLogger\\(|[Ll]ogger\\.|\\.log\\(|Diagnostics\\.log|sentryCapture": "log",

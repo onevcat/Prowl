@@ -1176,6 +1176,26 @@
         }
       }
     },
+    "A program in this terminal asks for the clipboard contents. If you allow it, the program receives the contents shown below." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此终端中的程序请求读取剪贴板内容。如果允许，程序将收到下方显示的内容。"
+          }
+        }
+      }
+    },
+    "A program in this terminal asks to replace the clipboard contents with the text shown below." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此终端中的程序请求将剪贴板内容替换为下方显示的文本。"
+          }
+        }
+      }
+    },
     "A prompt template. Prowl sends one instruction to the agent in the current pane and collects its answer." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1376,6 +1396,16 @@
         }
       }
     },
+    "Add Project Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加项目分组"
+          }
+        }
+      }
+    },
     "Add Remote Project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1387,6 +1417,16 @@
       }
     },
     "Add Remote Project..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加远程项目…"
+          }
+        }
+      }
+    },
+    "Add Remote Project…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1442,6 +1482,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加工作区"
+          }
+        }
+      }
+    },
+    "Add Workspace…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加工作区…"
           }
         }
       }
@@ -1502,6 +1552,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加一个仓库以创建工作区。"
+          }
+        }
+      }
+    },
+    "Add an empty group to the sidebar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在边栏中添加一个空分组"
           }
         }
       }
@@ -1996,6 +2056,16 @@
         }
       }
     },
+    "Allow" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许"
+          }
+        }
+      }
+    },
     "Allow Unrestricted" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2012,6 +2082,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许不受限制的执行？"
+          }
+        }
+      }
+    },
+    "Allow a Program to Read the Clipboard?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许程序读取剪贴板吗？"
+          }
+        }
+      }
+    },
+    "Allow a Program to Write to the Clipboard?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许程序写入剪贴板吗？"
           }
         }
       }
@@ -3827,6 +3917,16 @@
         }
       }
     },
+    "Choose an image to use as this group's icon." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一张图像作为此分组的图标。"
+          }
+        }
+      }
+    },
     "Choose an image to use as this repository's icon." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3877,6 +3977,16 @@
         }
       }
     },
+    "Choose the background color of this group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此分组的背景颜色"
+          }
+        }
+      }
+    },
     "Choose the built-in or external monitor that shows Agent Island" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3893,6 +4003,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从主机上的文件夹中选择"
+          }
+        }
+      }
+    },
+    "Choose the icon of this group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此分组的图标"
           }
         }
       }
@@ -4157,6 +4277,26 @@
         }
       }
     },
+    "Clipboard contents" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪贴板内容"
+          }
+        }
+      }
+    },
+    "Clipboard image" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪贴板图像"
+          }
+        }
+      }
+    },
     "Clone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4193,6 +4333,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "克隆 %1$@，新建分支 %2$@"
+          }
+        }
+      }
+    },
+    "Clone Repository…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "克隆仓库…"
           }
         }
       }
@@ -4723,6 +4873,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部折叠"
+          }
+        }
+      }
+    },
+    "Collapse Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折叠分组"
+          }
+        }
+      }
+    },
+    "Collapse all groups and repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折叠所有分组和仓库"
           }
         }
       }
@@ -5273,6 +5443,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制详细信息"
+          }
+        }
+      }
+    },
+    "Copy Link" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制链接"
           }
         }
       }
@@ -6547,6 +6727,16 @@
         }
       }
     },
+    "Deny" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒绝"
+          }
+        }
+      }
+    },
     "Description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7073,6 +7263,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拖动空白区域、按住中键拖动，或双指轻扫"
+          }
+        }
+      }
+    },
+    "Drag projects here to add them" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将项目拖到此处以添加"
           }
         }
       }
@@ -7734,6 +7934,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部展开"
+          }
+        }
+      }
+    },
+    "Expand Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开分组"
+          }
+        }
+      }
+    },
+    "Expand all groups and repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开所有分组和仓库"
           }
         }
       }
@@ -8795,6 +9015,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "绿色"
+          }
+        }
+      }
+    },
+    "Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组"
+          }
+        }
+      }
+    },
+    "Group Color" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组颜色"
+          }
+        }
+      }
+    },
+    "Group Icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组图标"
+          }
+        }
+      }
+    },
+    "Group name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组名称"
+          }
+        }
+      }
+    },
+    "Group options" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组选项"
           }
         }
       }
@@ -10039,6 +10309,16 @@
         }
       }
     },
+    "Link target" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "链接目标"
+          }
+        }
+      }
+    },
     "Link the bundled %@ skill into %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10669,6 +10949,46 @@
         }
       }
     },
+    "Move this repository out of its group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此仓库移出所在分组"
+          }
+        }
+      }
+    },
+    "Move this repository to another group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此仓库移到其他分组"
+          }
+        }
+      }
+    },
+    "Move this repository to the end of %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此仓库移到 %@ 的末尾"
+          }
+        }
+      }
+    },
+    "Move to Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移到分组"
+          }
+        }
+      }
+    },
     "Move to Trash" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10845,6 +11165,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建分支"
+          }
+        }
+      }
+    },
+    "New Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建分组"
+          }
+        }
+      }
+    },
+    "New Group…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建分组…"
           }
         }
       }
@@ -11889,6 +12229,26 @@
         }
       }
     },
+    "Open Link" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开链接"
+          }
+        }
+      }
+    },
+    "Open Link from Terminal Output?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要打开终端输出中的链接吗？"
+          }
+        }
+      }
+    },
     "Open Prowl" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12471,6 +12831,16 @@
         }
       }
     },
+    "Opening this local target could run code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此本地目标可能会运行代码。"
+          }
+        }
+      }
+    },
     "Opens in a background tab" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12648,6 +13018,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将卡片整理为规则网格"
+          }
+        }
+      }
+    },
+    "Organizes the sidebar: keeps related projects and workspaces together." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理边栏：将相关的项目和工作区放在一起。"
           }
         }
       }
@@ -12922,6 +13302,16 @@
         }
       }
     },
+    "Paste Text That Can Run Commands?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要粘贴可能运行命令的文本吗？"
+          }
+        }
+      }
+    },
     "Paste connection details from Host into any field below, or enter the address and pairing code manually." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13032,12 +13422,32 @@
         }
       }
     },
+    "Pick a preset or enter any SF Symbol name. The default folder opens with the group." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择预设，或输入任意 SF Symbol 名称。默认的文件夹图标会随分组展开而打开。"
+          }
+        }
+      }
+    },
     "Pick a preset or enter any SF Symbol name. The icon marks this workflow in menus and the palette." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择一个预设，或输入任意 SF Symbol 名称。此图标用于在菜单和命令面板中标识该工作流。"
+          }
+        }
+      }
+    },
+    "Pick an SF Symbol for this group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为此分组选择 SF Symbol"
           }
         }
       }
@@ -13359,6 +13769,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl"
+          }
+        }
+      }
+    },
+    "Prowl Blocked This Link" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 已阻止此链接"
           }
         }
       }
@@ -13993,6 +14413,16 @@
         }
       }
     },
+    "Put this repository into a new group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此仓库放入新分组"
+          }
+        }
+      }
+    },
     "Queued" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14504,6 +14934,16 @@
         }
       }
     },
+    "Remember this choice for this session" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在本次会话中记住此选择"
+          }
+        }
+      }
+    },
     "Remote" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14764,6 +15204,16 @@
         }
       }
     },
+    "Remove from Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从分组中移除"
+          }
+        }
+      }
+    },
     "Remove from Workspace on save" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14870,6 +15320,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除 %2$@ 处的 %1$@ 技能链接；内置技能仍保留在应用中"
+          }
+        }
+      }
+    },
+    "Remove the group and keep its repositories in its place" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此分组，并将其中的仓库保留在原位置"
           }
         }
       }
@@ -15064,6 +15524,26 @@
         }
       }
     },
+    "Rename Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名分组"
+          }
+        }
+      }
+    },
+    "Rename Group…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名分组…"
+          }
+        }
+      }
+    },
     "Rename Host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15110,6 +15590,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名此主机，或忘记其已保存的访问权限"
+          }
+        }
+      }
+    },
+    "Rename this group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名此分组"
           }
         }
       }
@@ -17626,6 +18116,16 @@
         }
       }
     },
+    "Show a folder that opens with the group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示随分组展开而打开的文件夹"
+          }
+        }
+      }
+    },
     "Show a notification when a command exceeds the duration threshold" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17862,6 +18362,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Prowl 程序坞图标上显示未读 worktree 数量。"
+          }
+        }
+      }
+    },
+    "Show this group with %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用%@显示此分组"
+          }
+        }
+      }
+    },
+    "Show this group without a color" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不为此分组显示颜色"
           }
         }
       }
@@ -19357,6 +19877,16 @@
         }
       }
     },
+    "The local target does not exist or is not a regular file or folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地目标不存在，或不是普通文件或文件夹。"
+          }
+        }
+      }
+    },
     "The name is shown instead of %@ on this Mac only." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19677,6 +20207,26 @@
         }
       }
     },
+    "The target contains invisible or line-breaking characters." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标包含不可见字符或换行字符。"
+          }
+        }
+      }
+    },
+    "The target is not an absolute URL with a scheme." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标不是带协议的绝对 URL。"
+          }
+        }
+      }
+    },
     "The terminal on %@ did not start: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19693,6 +20243,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "值中含有不支持的字符——启动时会忽略此行。"
+          }
+        }
+      }
+    },
+    "The web target does not contain a valid host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网页目标不包含有效的主机。"
           }
         }
       }
@@ -19917,6 +20477,26 @@
         }
       }
     },
+    "This link opens in %@. Continue only if you recognize and trust the destination." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此链接将在 %@ 中打开。请仅在你认识并信任该目标时继续。"
+          }
+        }
+      }
+    },
+    "This link opens in its default app. Continue only if you recognize and trust the destination." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此链接将在默认 App 中打开。请仅在你认识并信任该目标时继续。"
+          }
+        }
+      }
+    },
     "This pairing code expired. Refresh Code on Host and scan again." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20083,6 +20663,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此步骤已跳过。"
+          }
+        }
+      }
+    },
+    "This text contains line breaks or a paste end sequence. If you paste it into a shell, it can run commands immediately." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文本包含换行符或粘贴结束序列。如果粘贴到 shell 中，可能会立即运行命令。"
           }
         }
       }
@@ -20623,6 +21213,16 @@
         }
       }
     },
+    "Unable to use this image" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法使用此图像"
+          }
+        }
+      }
+    },
     "Unarchive worktree" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20789,6 +21389,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "收到非预期的主机视口。"
+          }
+        }
+      }
+    },
+    "Ungroup" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消分组"
           }
         }
       }
@@ -21024,6 +21634,16 @@
         }
       }
     },
+    "Use Default Icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认图标"
+          }
+        }
+      }
+    },
     "Use Ghostty's Config" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21064,6 +21684,16 @@
         }
       }
     },
+    "Use an image file as the icon of this group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用图像文件作为此分组的图标"
+          }
+        }
+      }
+    },
     "Use for Prowl" : {
       "localizations" : {
         "zh-Hans" : {
@@ -21100,6 +21730,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用卡片标题栏上的按钮"
+          }
+        }
+      }
+    },
+    "Use the default folder icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认文件夹图标"
           }
         }
       }
@@ -21997,6 +22637,16 @@
         }
       }
     },
+    "^[%lld repository](inflect: true)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个仓库"
+          }
+        }
+      }
+    },
     "`%@`" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22778,6 +23428,16 @@
     },
     "•" : {
       "shouldTranslate" : false
+    },
+    "… %lld more characters not shown" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… 还有 %lld 个字符未显示"
+          }
+        }
+      }
     },
     "⌘ + scroll, or pinch gesture" : {
       "localizations" : {

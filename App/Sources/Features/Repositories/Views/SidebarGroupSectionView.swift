@@ -176,7 +176,7 @@ struct SidebarGroupSectionView<Members: View>: View {
       Button {
         store.send(.sidebarGroups(.setGroupColor(model.id, nil)))
       } label: {
-        colorMenuLabel("None", color: nil)
+        colorMenuLabel(String(localized: "None"), color: nil)
       }
       .help("Show this group without a color")
       Divider()

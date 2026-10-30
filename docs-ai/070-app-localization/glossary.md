@@ -129,6 +129,14 @@ folder browser stays 文件夹.
 | host list | 主机列表 |
 | is not available for remote projects / … yet | 远程项目不支持… / 暂不支持…, 暂时无法… |
 
+## Sidebar groups, clipboard, and links
+
+| English | 中文 |
+| --- | --- |
+| group / project group / Ungroup | 分组 / 项目分组 / 取消分组 |
+| clipboard / paste / Allow / Deny | 剪贴板 / 粘贴 / 允许 / 拒绝 |
+| link target / blocked | 链接目标 / 已阻止 |
+
 ## Playful copy
 
 The loading messages of `App/Sources/App/AppLoadingView.swift` are jokes. Do not translate them
