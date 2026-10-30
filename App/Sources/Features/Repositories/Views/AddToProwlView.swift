@@ -10,6 +10,7 @@ struct AddToProwlView: View {
   let onDrop: ([URL]) -> Void
   /// Shown unless `PROWL_REMOTE_FOLDERS=0` (docs-ai 084 C1, C5).
   var onRemoteFolder: (() -> Void)?
+  var onNewGroup: (() -> Void)?
   @State private var isDragTargeted = false
   @State private var hoveredOption: Option?
   @State private var showCloneForm = false
@@ -64,6 +65,15 @@ struct AddToProwlView: View {
             title: "Add Remote Project",
             detail: "A Git repository or folder on another machine, opened over SSH.",
             action: onRemoteFolder
+          )
+        }
+        if let onNewGroup {
+          optionRow(
+            .group,
+            systemImage: "folder",
+            title: "Add Project Group",
+            detail: "Organizes the sidebar: keeps related projects and workspaces together.",
+            action: onNewGroup
           )
         }
       }
@@ -157,6 +167,7 @@ struct AddToProwlView: View {
   private enum Option {
     case workspace
     case remoteFolder
+    case group
   }
 
   private func optionRow(

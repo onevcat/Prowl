@@ -34,6 +34,9 @@ struct EmptyStateView: View {
           },
           onRemoteFolder: {
             store.send(.addRemoteFolderRequested)
+          },
+          onNewGroup: {
+            store.send(.sidebarGroups(.newEmptyGroupRequested))
           }
         )
       }

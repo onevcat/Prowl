@@ -55,6 +55,7 @@ struct PendingSidebarReveal: Equatable, Sendable {
 struct GroupTitlePrompt: Equatable, Identifiable, Sendable {
   enum Target: Equatable, Hashable, Sendable {
     case newGroup(containing: Repository.ID)
+    case newEmptyGroup
     case rename(RepositoryGroup.ID)
   }
 
@@ -253,6 +254,7 @@ struct RepositoriesFeature {
   @CasePathable
   enum SidebarGroupAction: Equatable {
     case newGroupRequested(containing: Repository.ID)
+    case newEmptyGroupRequested
     case renameGroupRequested(RepositoryGroup.ID)
     case titlePromptSubmitted(String)
     case titlePromptCanceled
