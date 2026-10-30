@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.10.31](https://github.com/onevcat/Prowl/releases/tag/v2026.10.31)
+
+Organize projects with sidebar groups and get more control over terminal clipboard access and links.
+
+### New
+
+- Create named, collapsible sidebar groups: right-click an empty sidebar area and choose **New Group**, or choose **Add Project Group** in the add panel. Customize groups with colors, symbols, or images.
+- Drag projects into or out of groups, reorder members, and move entire groups by their headers. Press ⌘⇧L to reveal the selected project, folder, or workspace inside a collapsed group.
+- Right-click an empty sidebar area to add projects, expand or collapse the list, and show or hide Active Agents.
+- Updated the terminal engine to Ghostty 1.4.0.
+
+### Fixed
+
+- Clipboard confirmation settings now work: Prowl asks before potentially unsafe pastes and program clipboard access when configured to do so. Requests from background panes wait until you focus them; Return and Escape cancel or deny.
+- ⌘-clicked terminal links now receive safety checks. Web and email links open directly, other URL schemes require confirmation, and unsafe file targets—including apps and executables—are blocked with an option to copy the link.
+- Fixed SSH failing when Ghostty’s `ssh-env` or `ssh-terminfo` shell integration is enabled.
+- Fixed styled terminal cells without text appearing blank in remote mirror views.
+
 ## [2026.10.29](https://github.com/onevcat/Prowl/releases/tag/v2026.10.29)
 
 This release brings SSH remote projects to Prowl and improves Canvas, worktree management, and session reliability.
