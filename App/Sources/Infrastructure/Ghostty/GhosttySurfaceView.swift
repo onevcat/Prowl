@@ -227,6 +227,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
     }
   }
+  /// The clipboard request that waits for the user. A surface has at most one;
+  /// see `GhosttySurfaceView+ClipboardConfirmation.swift`.
+  var pendingClipboardConfirmation: GhosttyClipboardConfirmation?
+  var clipboardConfirmationAlert: NSAlert?
   var onFocusChange: ((Bool) -> Void)?
   var onKeyInput: (() -> Void)?
   var onCommittedText: ((String) -> Void)?
@@ -458,6 +462,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   /// process keeps running until `closeSurface()` or `resumeFromPendingClose()`.
   func suspendForPendingClose() {
     isPendingClose = true
+    denyPendingClipboardConfirmation()
     focusDidChange(false)
     setOcclusion(false)
     scrollWrapper = nil
@@ -472,6 +477,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func closeSurface() {
     isPendingClose = false
+    // libghostty owns the request state until it is completed or denied, so
+    // deny it while the surface still exists.
+    denyPendingClipboardConfirmation()
     clearNotificationObservers()
     if let surface {
       if let surfaceRef {
@@ -678,6 +686,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     self.focused = focused
     if focused {
       bridge.state.bellCount = 0
+      presentPendingClipboardConfirmation()
     }
     setSurfaceFocus(focused)
     onFocusChange?(focused)

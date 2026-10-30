@@ -106,24 +106,17 @@ extension GhosttyRuntime {
     // The confirmation payload is borrowed from libghostty: copy it before
     // leaving the calling thread.
     let payload = confirm.map { GhosttyClipboardPayload(confirm: $0.pointee) }
+    let canRemember = confirm?.pointee.can_remember ?? false
     let userdataBits = userdata.map { UInt(bitPattern: $0) }
     let stateBits = state.map { UInt(bitPattern: $0) }
-    if Thread.isMainThread {
-      MainActor.assumeIsolated {
-        confirmReadClipboard(
-          userdataBits: userdataBits,
-          payload: payload,
-          stateBits: stateBits,
-          request: request
-        )
-      }
-      return
-    }
+    // Always defer, also on the main thread: completing or denying a request
+    // from inside the libghostty callback that created it is not safe.
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
         confirmReadClipboard(
           userdataBits: userdataBits,
           payload: payload,
+          canRemember: canRemember,
           stateBits: stateBits,
           request: request
         )
@@ -161,23 +154,24 @@ extension GhosttyRuntime {
       }
       if consumed { return }
     }
+    if confirm {
+      // `clipboard-write = ask`: the user decides, so the write waits.
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          confirmWriteClipboard(userdataBits: exportUserdataBits, location: location, items: items)
+        }
+      }
+      return
+    }
     if Thread.isMainThread {
       MainActor.assumeIsolated {
-        writeClipboard(
-          location: location,
-          items: items,
-          confirm: confirm
-        )
+        writeClipboard(location: location, items: items)
       }
       return
     }
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
-        writeClipboard(
-          location: location,
-          items: items,
-          confirm: confirm
-        )
+        writeClipboard(location: location, items: items)
       }
     }
   }
@@ -309,28 +303,61 @@ extension GhosttyRuntime {
     return GHOSTTY_CLIPBOARD_READ_STARTED
   }
 
-  /// Prowl approves every clipboard read that libghostty asks to confirm
-  /// (unsafe paste, OSC 52 and Kitty reads) without a dialog, as it did before
-  /// the Kitty clipboard protocol. The payload libghostty handed over is
-  /// completed as confirmed, so the pasteboard is never read a second time.
+  /// Asks the user about a request that libghostty holds for confirmation: an
+  /// unsafe paste, or a program's clipboard read (or Kitty write) under an
+  /// `ask` policy. On approval the payload libghostty handed over completes
+  /// the request, so the pasteboard is never read a second time.
   static func confirmReadClipboard(
     userdataBits: UInt?,
     payload: GhosttyClipboardPayload?,
+    canRemember: Bool,
     stateBits: UInt?,
     request: ghostty_clipboard_request_e
   ) {
-    _ = request
     let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
-    let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
     guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
       return
     }
-    guard let payload else {
-      ghostty_surface_deny_clipboard_request(surface, state)
+    guard let payload, let kind = GhosttyClipboardRequestKind(request), let view = bridge.surfaceView else {
+      ghostty_surface_deny_clipboard_request(surface, stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) })
       return
     }
-    if payload.hasText { bridge.surfaceView?.recordEditingActivity() }
-    completeClipboardRequest(surface, payload: payload, state: state, confirmed: true)
+    let confirmation = GhosttyClipboardConfirmation(
+      kind: kind,
+      preview: GhosttyClipboardPreview(contents: payload.contents),
+      canRemember: canRemember
+    ) { [weak bridge] allowed, remember in
+      // The surface can be gone by now; its close denies first.
+      guard let bridge, let surface = bridge.surface else { return }
+      let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+      guard allowed else {
+        ghostty_surface_deny_clipboard_request(surface, state)
+        return
+      }
+      if kind == .paste, payload.hasText { bridge.surfaceView?.recordEditingActivity() }
+      completeClipboardRequest(surface, payload: payload, state: state, confirmed: true, remember: remember)
+    }
+    view.requestClipboardConfirmation(confirmation)
+  }
+
+  /// Asks the user about an OSC 52 write under `clipboard-write = ask`. Unlike
+  /// a read, libghostty keeps no state for it: a denied write is dropped.
+  static func confirmWriteClipboard(
+    userdataBits: UInt?,
+    location: ghostty_clipboard_e,
+    items: [(mime: String, data: String)]
+  ) {
+    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    guard let view = surfaceBridge(fromUserdata: userdata)?.surfaceView else { return }
+    let contents = items.map { GhosttyClipboardContent(mime: $0.mime, data: Data($0.data.utf8)) }
+    let confirmation = GhosttyClipboardConfirmation(
+      kind: .osc52Write,
+      preview: GhosttyClipboardPreview(contents: contents)
+    ) { allowed, _ in
+      guard allowed else { return }
+      writeClipboard(location: location, items: items)
+    }
+    view.requestClipboardConfirmation(confirmation)
   }
 
   /// Marshals `payload` into C memory for the duration of
@@ -340,7 +367,8 @@ extension GhosttyRuntime {
     _ surface: ghostty_surface_t,
     payload: GhosttyClipboardPayload,
     state: UnsafeMutableRawPointer?,
-    confirmed: Bool = false
+    confirmed: Bool = false,
+    remember: Bool = false
   ) {
     var cStrings: [UnsafeMutablePointer<CChar>] = []
     var cBuffers: [UnsafeMutableRawPointer] = []
@@ -384,7 +412,7 @@ extension GhosttyRuntime {
           available: available.baseAddress,
           available_len: available.count,
           confirmed: confirmed,
-          remember: false
+          remember: remember
         )
         ghostty_surface_complete_clipboard_request(surface, &complete, state)
       }
@@ -393,11 +421,8 @@ extension GhosttyRuntime {
 
   static func writeClipboard(
     location: ghostty_clipboard_e,
-    items: [(mime: String, data: String)],
-    confirm: Bool
+    items: [(mime: String, data: String)]
   ) {
-    _ = confirm
-
     guard let pasteboard = NSPasteboard.ghostty(location) else { return }
     let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
     pasteboard.declareTypes(types, owner: nil)

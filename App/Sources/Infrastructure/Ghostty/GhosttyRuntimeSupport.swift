@@ -239,7 +239,7 @@ extension NSPasteboard {
 }
 
 /// One clipboard representation crossing the libghostty boundary.
-struct GhosttyClipboardContent: Equatable {
+nonisolated struct GhosttyClipboardContent: Equatable, Sendable {
   var mime: String
   var data: Data
 }

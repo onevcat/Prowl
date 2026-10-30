@@ -178,6 +178,27 @@ Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
 with its defaults. Customize terminal behavior in the Ghostty config that Prowl
 uses (see [Ghostty config](#ghostty-config)).
 
+**Clipboard confirmations.** Prowl asks before a clipboard action that Ghostty
+holds for confirmation. The Ghostty config decides which actions these are:
+
+| Action | Config (default) | When Prowl asks |
+| --- | --- | --- |
+| Paste (⌘V, **Edit > Paste**) | `clipboard-paste-protection` (`true`), `clipboard-paste-bracketed-safe` (`true`) | The text contains a line break or carriage return and the program has not turned on bracketed paste, or the text contains the bracketed paste end sequence `ESC [ 2 0 1 ~` |
+| A program reads the clipboard (OSC 52, Kitty clipboard protocol) | `clipboard-read` (`ask`) | Every read, while the value is `ask` |
+| A program writes the clipboard (OSC 52, Kitty clipboard protocol) | `clipboard-write` (`allow`) | Every write, while the value is `ask` |
+
+The sheet shows the text that would be pasted, read, or written, with control
+characters shown as `\u{…}`, or the image for an image read. **Cancel** or
+**Deny** is the default button. For a Kitty clipboard request that carries a
+password, **Remember this choice for this session** with **Allow** lets later
+requests with that password in the same pane through without a question. A request from a pane that is not focused
+waits and rings that pane's bell; the sheet opens when you focus the pane. A
+pane has at most one waiting request: a newer request denies the older one,
+and closing the pane denies it. Set `clipboard-paste-protection = false` or
+`clipboard-read = allow` to turn the questions off. Text that Prowl or the
+`prowl` CLI sends to a pane does not go through the clipboard and is never
+held. Dropped text is not checked yet.
+
 **CJK font fallback.** When the active Ghostty config sets neither `font-family`
 nor `font-codepoint-map` (including its `config-file` includes, the active theme
 file, and `--font-family=…` launch arguments), Prowl maps kana, CJK punctuation,
