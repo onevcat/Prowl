@@ -122,7 +122,8 @@ sequences:
   tab's activity indicator and task status. Task status *also* folds in detected
   agent activity (Working/Blocked, incl. background workflows) — see
   [agent-detection](agent-detection.md#worktree-running-indicator).
-- **Program status (OSC 7501)** — Prowl answers the support query, so programs
+- **Program status (OSC 7501)** — Prowl answers the support query (protocol
+  revision 0.4: `?` plus the states and kinds it accepts), so programs
   that speak the protocol (Claude Code 2.1.295+, Pi 1.1.0+, Oh My Pi 18.8.7+,
   Codex 0.163.0+) report their state. Codex sends idle/working/blocked; the other
   verified producers also send done/error. Reports without a support query are accepted. Prowl keeps one record tree per pane with the
@@ -196,6 +197,25 @@ The font follows the first CJK language in the system language list (a
 | Simplified Chinese, or no CJK language | PingFang SC |
 
 Set `font-family` or `font-codepoint-map` to take over; Prowl then adds nothing.
+
+**Clipboard confirmations.** Prowl approves every clipboard request that Ghostty
+asks to confirm, without a dialog: pastes that Ghostty's paste protection flags
+(text with newlines), OSC 52 reads, and Kitty clipboard protocol reads.
+
+**Links.** ⌘-click opens a link from terminal output: an OSC 8 hyperlink or text
+that matches a Ghostty `link` entry (by default, URLs). Any program can print
+such a link, so Prowl checks the target first:
+
+| Target | Result |
+|---|---|
+| `http`/`https` with a host, `mailto` with an address | Opens directly |
+| Local file or folder (`file://` or a plain path such as `~/notes.txt`) that exists and cannot run code | Opens directly |
+| Any other scheme (for example `vscode://`) | Opens after a confirmation that names the app |
+| Application bundles, scripts, executables, installer and shortcut files, missing files, remote `file` hosts, targets with invisible or line-breaking characters, values without a scheme | Blocked with an alert that offers **Copy Link** |
+
+Symlinks and Finder aliases are judged by the file they point to, and that file
+is what opens. A relative path is resolved against Prowl's own working
+directory, not the pane's, so it is usually blocked as missing.
 
 ## Ghostty config
 

@@ -17,8 +17,6 @@ final class GhosttySurfaceState {
   var mouseVisibility: ghostty_action_mouse_visibility_e?
   var mouseOverLink: String?
   var rendererHealth: ghostty_action_renderer_health_e?
-  var openUrl: String?
-  var openUrlKind: ghostty_action_open_url_kind_e?
   var colorChangeKind: ghostty_action_color_kind_e?
   var colorChangeR: UInt8?
   var colorChangeG: UInt8?

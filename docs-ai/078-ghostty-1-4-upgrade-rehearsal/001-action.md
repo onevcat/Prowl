@@ -12,6 +12,9 @@
 | 2026-10-10 | Launch crash on tip fixed: libghostty keeps the argv pointer; Prowl passed a Swift array buffer that was freed after `ghostty_init` | `78994f1a` |
 | 2026-10-10 | `make check`, `make build-app` (0 warnings), `make test` 3695 pass / 0 fail; live scenarios in an isolated Debug instance (below) | logs in the session scratchpad |
 | 2026-10-10 | Second live pass with the screen unlocked: rendering, glyphs, mouse selection, Japanese IME, AX; prebuilt GhosttyKit published for the pinned commit; artifact scripts fixed for the `App/` layout | release `xcframework-6ae1993379cf06f4e6ee9784b60c0e1e75b01ae1-prowl-v1` |
+| 2026-10-30 | Tagged port: upstream `v1.4.0` (`83fb95624`, 350 commits after `9d479dcb1`, Zig 0.17.0); five patches replayed on `release/v1.4.0-patched` (`c141458f0`; a sixth followed review) | `onevcat/ghostty` branch `release/v1.4.0-patched` |
+| 2026-10-30 | GhosttyKit built with Zig 0.17.0 on the Xcode 27.0 SDK; fork Zig tests 4087 pass / 26 skipped / 0 fail; Prowl builds with no source change | release `xcframework-c141458f04c16b49edb582537103f8f39d6d3a57-prowl-v1` |
+| 2026-10-30 | Review round 1: styled cells without text dropped from VT rows (fork patch 6). Live test: ⌘-click on links did nothing; Prowl now checks and opens terminal links itself (`TerminalLink`) | release `xcframework-5a6f0446160ef0b4806c7fc19e3f212324c2c0d9-prowl-v1` |
 
 ## Outcome & current state (as of 2026-10-10)
 
@@ -99,3 +102,106 @@ ends with `ESC \`, not BEL. Sending ctrl-g released it. No Ghostty defect.
   Prowl still routes them through `ghostty_surface_text` (paste semantics). Decide separately.
 - Prowl auto-approves clipboard confirmations, now including Kitty clipboard protocol reads.
   Whether that needs a prompt is a product decision for the port.
+
+## Tagged v1.4.0 port (2026-10-30)
+
+Upstream tagged `v1.4.0` at `83fb95624` on 2026-10-27. Prowl `main` already pinned the
+rehearsal (`f35f9a84d` = tip `9d479dcb1` + five patches), so the port only had to absorb the
+350 commits between the rehearsal base and the tag.
+
+### What the 350 commits change for Prowl
+
+- **Toolchain.** `minimum_zig_version` is `0.17.0`, and the build checks the major and minor
+  version. Most of the delta is the treewide Zig 0.17 migration (`dupeZ` → `dupeSentinel`,
+  `@intFromEnum` → `@backingInt`, `stackFallback` → `BufferFirstAllocator`, `builtin.os` →
+  `builtin.target.os`). `mise.toml` pins Zig 0.17.0. The default Xcode 27.0 SDK links; no
+  `DEVELOPER_DIR` override.
+- **Embedded C API.** One addition, `ghostty_surface_paste_text` (paste protection for text
+  that does not come from the clipboard, used by upstream for drag and drop). No removals or
+  signature changes, so Prowl builds unchanged.
+- **OSC 7501.** Protocol revision 0.4 (`b7207b2ef`): the support reply now lists the accepted
+  states and kinds (`?:states=idle,working,done,blocked,error:kinds=permission,question,auth`).
+  Ids with disallowed bytes now discard the whole report (`dcaf6984e`); Prowl's own ids
+  (`prowl-launch/<16 hex>/<status>`) are valid. A record without `app` inherits it from its
+  nearest ancestor; `ProgramStatusRecordStore.app(of:)` already does that.
+- **VT formatter.** Upstream now keeps background-only cells, empty gaps, hyperlinks and
+  trailing blank rows in VT output (`152bdbc68`, `510b253db`, `c7cbc9bfd`). This overlaps
+  with fork patch 4.
+- **Security fixes in the core** that Prowl gets for free: carriage returns count as line
+  endings for paste protection (`5c9a3d8a9`), shell integration escapes directory names
+  (`6eb24a0f0`), tmux control-mode layout validation (`1851e121b`), cursor-page prune
+  use-after-free (`65ff54c67`, `e257bb45e`).
+
+### Patch replay
+
+| # | Patch on `release/v1.4.0-patched` | Replay |
+| --- | --- | --- |
+| 1 | `5a9ce021f` child PID | Clean. |
+| 2 | `e0e70c18c` VT snapshot | Clean. |
+| 3 | `318ca0789` bounded text | `dupeZ` → `dupeSentinel`. |
+| 4 | `f4fde9cab` snapshot keyboard modes | Conflict in `formatter.zig`; took upstream for this commit. Upstream keeps VT rows whose cells only carry a background color; the fork's `v1.3.1` rule also kept rows of styled cells without text. The first replay treated the two as equivalent because the background test passed; review found a counterexample (patch 6). |
+| 5 | `c141458f0` OSC 7501 action | The termio support reply now uses `osc.program_status.query_reply`, the same bytes as the libghostty-vt path, plus a unit test. |
+| 6 | `5a6f04461` styled cells in VT rows | New. A wide character split by an insert inside left/right margins (`ESC[7m界ESC[0m ESC[?69h ESC[2;6s ESC[1;2H ESC[L`) leaves inverse cells without text; upstream's rule dropped their rows, so a mirror replica lost them. The fork restores the `v1.3.1` rule; the regression test fails without the patch. |
+
+### Live verification of the tagged port (isolated Debug instance, screen unlocked)
+
+Driven through the bundle's `prowl` CLI, CGEvent/HID input, AX, and window screenshots on
+macOS 27.0 with the pin at `c141458f0` (rows marked † were rerun on `5a6f04461` with the link
+policy).
+
+| Scenario | Outcome | Evidence |
+| --- | --- | --- |
+| Shell, CJK/emoji round trip, `GHOSTTY_SURFACE_ID` | PASS | `REG:xterm-ghostty:prowl:0x…:日本語 中文 émoji 🐱 🏴‍☠️ ✓` |
+| Legacy key encoding (`cat -v`) | PASS | `^A^[OP^[[A^[[Z^[[H^[x^[^H` (ctrl+alt+shift+backspace is `ESC BS`, new in 1.4) |
+| ⌘V of text with CR and LF | PASS (auto-approved, no prompt; Prowl policy) | pasted lines reached `cat` |
+| OSC 52 write / read | PASS | `pbpaste` and the base64 reply match |
+| `ghostty +version`, `+ssh` wrapper (085) to a macOS host | PASS | `Ghostty 1.4.0-release-v1-4-0-patched+c141458f0`; remote `TERM=xterm-ghostty`, `tput colors` 256. The first install attempt on a host without `~/.terminfo` failed once (`InstallFailed`, fallback used); two clean retries installed it |
+| New VT reports | PASS | `CSI 19 t` → `ESC[9;49;141t`, DECXCPR → `ESC[?1;1;1R`, DECRQM 2033/67, XTVERSION |
+| OSC 7501 support reply from the termio patch | PASS | `ESC]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth ESC\` |
+| Visibility reports (mode 2033) driven by Prowl's occlusion | PASS | `?999;1n` → new tab hides it → `?999;2n` → focus back → `?999;1n` |
+| Close a pane three times during heavy `yes` output | PASS | 61–94 ms per close, no leftover process after SIGHUP, CPU back to 0 |
+| Undo close (⌘Z) | PASS | same pane id restored, shell pid alive, scrollback intact |
+| 200 000 lines, idle scrollback compression | PASS | phys_footprint 191 → 256 MB after the fill → 201 MB within 15 s idle; `read --last` of 40 938 retained rows in 0.21 s (50 MB `scrollback-limit-bytes`) |
+| Split, glyph rendering, reflow on split | PASS | bold/italic/curly/overline/strike, 256 and truecolor, box/braille/powerline/nerd, CJK, Hangul, ZWJ family and pirate flag (VS fix) |
+| Hidden vs visible streaming, tab switch first frame | PASS | 3 M lines: hidden 164 % / visible 236 % CPU (rendering only when visible); first frame at 0.4 s shows the latest output |
+| Kitty graphics: static PNG, 3-frame animation | PASS | burst capture cycles green → blue → red; animation pauses when hidden (0 % CPU) and resumes; 12–15 % CPU while animating (upstream Ghostty.app 1.4.0: 6–10 %) |
+| Mouse drag selection + ⌘C, double-click words | PASS | `SELECT-ME-TOKEN-XYZ 選択テスト` incl. wide edge; double-click selects `選択テスト`; `copy-on-select` default `none` |
+| Japanese IME (Kotoeri) | PASS | underlined preedit, commit bytes equal `printf '日本語版' \| cat -v` |
+| AX value | PASS | `AXTextArea` contains the printed token |
+| Claude Code 2.1.312, Codex 0.164.0, Pi 1.4.0 with the revision 0.4 reply | PASS | `osc.idle` → `osc.working` → `osc.done`; Claude `osc.blocked.permission` on a tool prompt |
+| Ctrl+L at a prompt | PASS | screen cleared, all lines in scrollback |
+| Window resize ×4 with 40 k-row scrollback | PASS | 200–450 ms per resize incl. AppleScript; no row lost; prompt not duplicated |
+| Random storm: 8 tabs/splits with output, random close order | PASS | children and RSS back to baseline after `undo-timeout` |
+| † ⌘-click OSC 8 `https://example.com` text pointing at Calculator.app | PASS (blocked) | before the fix: nothing happened; after: "Prowl Blocked This Link" alert, Calculator not launched |
+| † ⌘-click OSC 8 folder link, plain path text | PASS | Finder opens the folder |
+| † ⌘-click custom scheme | PASS | confirmation alert, Cancel keeps it closed |
+| † ⌘-click plain `file:///System/Applications/Calculator.app` text | PASS (blocked) | alert, Calculator not launched |
+| † ⌘-click OSC 8 link to a Finder alias of Calculator.app (review round 2) | PASS (blocked) | alert names `/System/Applications/Calculator.app/`, Calculator not launched |
+
+Not covered live: the iOS mirror client (the styled-cell fix is covered by the Zig snapshot
+round-trip test and the mirror suites in `make test`), display sleep and hot-plug, and Oh My
+Pi.
+
+### Findings outside the port
+
+- **Terminal links.** Prowl's `GhosttySurfaceBridge` returned `false` for
+  `GHOSTTY_ACTION_OPEN_URL`, so libghostty fell back to `internal_os.open`. On the rehearsal
+  pin that fallback already refused OSC 8 links on macOS (`UnsafeOSC8Link`) and passed
+  `link`-matched text to `/usr/bin/open` unchecked (the class of GHSA-mfw9-xcr3-7gfp: a
+  printed `file:///System/Applications/Calculator.app` launches it). `v1.4.0` (`f9e8ef02d`)
+  refuses that kind as well, so ⌘-click on a plain URL stopped working in the live test.
+  Upstream's fix lives in its macOS Swift layer (`UntrustedURL`), which Prowl does not use.
+  Prowl now handles the `unknown` and `osc8` kinds itself with `TerminalLink` (a port of that
+  policy: web and mail links and existing non-executable files open, other schemes ask
+  first, everything else is blocked with an alert) and keeps the libghostty fallback for the
+  `text` and `html` kinds. Review round 2 found that a Finder alias to an app passed as a
+  plain file (upstream has the same gap); `TerminalLink` follows alias chains and judges the
+  final target. Tests: `App/Tests/TerminalLinkTests.swift`.
+- Prowl sends dropped text through `ghostty_surface_text`. Upstream moved drag and drop to
+  `ghostty_surface_paste_text` (GHSA-v8cw-fg4j-jcc4). While Prowl approves every clipboard
+  confirmation without a dialog, both calls behave the same (bracketed paste, no prompt), so
+  the switch belongs with the clipboard confirmation decision.
+- The Makefile GhosttyKit target and `scripts/ensure-ghosttykit-artifacts.sh` delete every
+  `DerivedData/Prowl-*` folder when the pinned hash changes, including a folder that a running
+  `make test` uses. Run artifact checks in another clone only when no build is running.
+

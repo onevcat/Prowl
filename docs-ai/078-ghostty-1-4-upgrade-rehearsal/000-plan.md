@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented (rehearsal executed; branch not merged) |
+| **Status** | Implemented (rehearsal merged in #886 on 2026-10-10; tagged `v1.4.0` port on 2026-10-30) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #886 (branch `ghostty-tip-rehearsal`; pins upstream tip, re-pin at the `v1.4.0` tag); see [001-action.md](001-action.md) |
+| **Primary PRs** | #886 (rehearsal on upstream tip), #1010 (tagged `v1.4.0` port); see [001-action.md](001-action.md) |
 | **Related** | [007-ghostty-embedding-integration/ghostty-fork-sync.md](../007-ghostty-embedding-integration/ghostty-fork-sync.md), [041-ghosttykit-prebuilt-artifacts](../041-ghosttykit-prebuilt-artifacts/000-plan.md), [063.009 display sleep spike](../063-agent-workflows/009-display-sleep-surface-spike.md), [069-undo-close-terminal](../069-undo-close-terminal/000-plan.md), [075-terminal-config-source](../075-terminal-config-source/000-plan.md) |
 
 ## Background
@@ -117,3 +117,5 @@ Every config key Prowl reads (`font-size`, `undo-timeout`, `scrollbar`, `backgro
 ## Amendments
 
 - Updated 2026-10-10: rehearsal executed; results, deviations and open questions in [001-action.md](001-action.md).
+- Updated 2026-10-30: the tagged `v1.4.0` port replayed the patch set on the tag with Zig 0.17.0;
+  see "Tagged v1.4.0 port" in [001-action.md](001-action.md).
