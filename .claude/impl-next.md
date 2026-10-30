@@ -92,7 +92,5 @@ the exit code of `xcsift`.
 
 - Confirm the branch before every commit. A shared checkout can be switched to `main`
   under you.
-- `origin` has a second push URL, the tangled.org mirror. Deleting a branch on GitHub does
-  not delete it there.
 - In unit tests, never use `Task.sleep`; use `TestClock`. Do not block the main thread
   inside a `Task` in tests: TCA's main serial executor stays on during the full suite.

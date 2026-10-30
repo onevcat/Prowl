@@ -64,7 +64,8 @@ terminals stay open. Background refreshes do not repeatedly open error dialogs.
 - **Sidebar context menu:** right-click an empty part of the sidebar list. The menu
   goes straight to **New Group…**, **Add Repository…**, **Clone Repository…**,
   **Add Remote Project…**, and **Add Workspace…**. It also has **Expand All**,
-  **Collapse All**, **Refresh Worktrees**, and **Archived Worktrees**.
+  **Collapse All**, **Show Active Agents** or **Hide Active Agents**,
+  **Refresh Worktrees**, and **Archived Worktrees**.
 - **Command Palette:** "Open Repository".
 
 Pick one or more directories. Prowl detects git vs plain, de-duplicates, and

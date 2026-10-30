@@ -62,6 +62,18 @@ struct SidebarBackgroundMenu: View {
     .help("Collapse all groups and repositories")
     .disabled(!canExpand)
     Divider()
+    Button(state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents") {
+      withAnimation(.easeOut(duration: 0.18)) {
+        _ = store.send(.activeAgents(.togglePanelVisibility))
+      }
+    }
+    .help(
+      AppShortcuts.helpText(
+        title: state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents",
+        commandID: AppShortcuts.CommandID.toggleActiveAgentsPanel,
+        in: resolvedKeybindings
+      )
+    )
     Button("Refresh Worktrees") {
       store.send(.refreshWorktrees)
     }
