@@ -119,7 +119,8 @@ Review that file before running the release script. If generation fails, inspect
 
 The script handles:
 1. Version bump (date-based) + signed git tag
-2. Release archive (xcodebuild Release)
+2. Release archive (xcodebuild Release): `make archive` syncs GhosttyKit to the submodule pin, and the
+   script stops unless the archived `ghostty +version` names the pinned commit
 3. Re-sign Sparkle/Sentry frameworks
 4. DMG creation with signing
 5. Notarization + stapling

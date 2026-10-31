@@ -70,16 +70,28 @@ stamp_matches() {
   [[ -f "$GHOSTTY_HASH_FILE" ]] && [[ "$(cat "$GHOSTTY_HASH_FILE")" == "$GHOSTTY_SHA" ]]
 }
 
-refresh_archive_index() {
+installed_archive() {
   # Ghostty renamed the static library from libghostty.a to ghostty-internal.a
   # (upstream main, 2026); accept either name.
-  local archive=""
   for candidate in "$XCFRAMEWORK_PATH"/macos-arm64_x86_64/*.a; do
     if [[ -f "$candidate" ]]; then
-      archive="$candidate"
-      break
+      printf '%s\n' "$candidate"
+      return 0
     fi
   done
+}
+
+# The hash file only records what an earlier step believed. The version string
+# in the library (`<version>+<commit>`) tells which commit was really built.
+installed_archive_matches_pin() {
+  local archive
+  archive="$(installed_archive)"
+  [[ -n "$archive" ]] && LC_ALL=C grep -a -q -F "+${GHOSTTY_SHA:0:7}" "$archive"
+}
+
+refresh_archive_index() {
+  local archive
+  archive="$(installed_archive)"
   if [[ -z "$archive" ]]; then
     return 0
   fi
@@ -190,8 +202,12 @@ try_fetch_prebuilt() {
 GHOSTTY_SHA="$(pinned_ghostty_sha)"
 
 if artifacts_exist && stamp_matches; then
-  echo "GhosttyKit up-to-date (SHA unchanged)"
-  exit 0
+  if installed_archive_matches_pin; then
+    echo "GhosttyKit up-to-date (SHA unchanged)"
+    exit 0
+  fi
+  echo "Installed GhosttyKit does not match the pinned ${GHOSTTY_SHA:0:12}; replacing it."
+  rm -f "$GHOSTTY_HASH_FILE"
 fi
 
 echo "Syncing GhosttyKit for submodule $GHOSTTY_SHA"

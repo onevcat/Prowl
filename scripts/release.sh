@@ -251,6 +251,12 @@ fi
 log "archiving Release build..."
 make archive APPLE_TEAM_ID="$TEAM_ID" DEVELOPER_ID_IDENTITY_SHA="$IDENTITY_SHA"
 
+log "checking the archived Ghostty against the submodule pin..."
+ARCHIVED_APP="$(find build/Prowl.xcarchive/Products/Applications -name "*.app" -maxdepth 1 -print -quit)"
+[[ -d "$ARCHIVED_APP" ]] || die "archived app not found in build/Prowl.xcarchive"
+./scripts/verify-bundled-ghostty.sh "$ARCHIVED_APP" "$(git rev-parse HEAD:ThirdParty/ghostty)" \
+  || die "the archive does not contain the pinned Ghostty"
+
 # ── Sentry: register release + upload dSYM ──────────────────────────────────
 # Done right after archive so dSYM is ready before downstream steps. Failures
 # only warn — release proceeds because dSYM can be re-uploaded later with

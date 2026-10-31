@@ -91,7 +91,7 @@ TEST_SIGNING_ARGS := CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-all test-app test-mirror-ios test-mirror-ios-unit test-mirror-android test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-all test-app test-mirror-ios test-mirror-ios-unit test-mirror-android test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
 .PHONY: test-agent-contracts _test-agent-contract-codex _test-agent-contract-export
 
 help:  # Display this help.
@@ -100,7 +100,6 @@ help:  # Display this help.
 	@-+grep -Eh "^[a-z-]+:.*#" $(CURRENT_MAKEFILE_PATH) | sed -E 's/^(.*:)(.*#+)(.*)/  \1 @@@ \3 /' | column -t -s "@@@"
 
 build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
-	@$(MAKE) _record-ghostty-hash
 
 # Internal: actually rebuild ghostty.
 $(GHOSTTY_BUILD_STAMP):
@@ -116,6 +115,7 @@ $(GHOSTTY_BUILD_STAMP):
 	mkdir -p "$$terminfo_dst"; \
 	rsync -a --delete "$$terminfo_src/" "$$terminfo_dst/"
 	touch "$(GHOSTTY_BUILD_STAMP)"
+	git -C "$(CURRENT_MAKEFILE_DIR)" rev-parse HEAD:ThirdParty/ghostty > "$(GHOSTTY_HASH_FILE)"
 
 # Public entry point: downloads pinned prebuilt artifacts when available, then
 # falls back to a local Ghostty source build.
@@ -141,10 +141,6 @@ ensure-ghostty: # Ensure GhosttyKit is up-to-date (fast path when unchanged)
 		rm -rf ~/Library/Developer/Xcode/DerivedData/Prowl-*; \
 		echo "Cleared Xcode DerivedData for ghostty header/module changes"; \
 	fi
-
-# Internal: record the current submodule SHA after a successful build.
-_record-ghostty-hash:
-	@git -C "$(CURRENT_MAKEFILE_DIR)" rev-parse HEAD:ThirdParty/ghostty > "$(GHOSTTY_HASH_FILE)"
 
 # Force a clean rebuild of GhosttyKit (ignores cached SHA, useful after submodule updates).
 sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds)
@@ -323,7 +319,7 @@ install-dev-build: build-app # Build Debug and install to /Applications
 	ditto "$$src" "$$dst"; \
 	echo "installed $$dst"
 
-install-release: build-ghostty-xcframework # Build Release, sign locally, install to /Applications
+install-release: ensure-ghostty # Build Release, sign locally, install to /Applications
 	@set -euo pipefail; \
 	SIGNING_IDENTITY="$$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application/ {print $$2; exit}')"; \
 	if [ -z "$$SIGNING_IDENTITY" ]; then \
@@ -402,7 +398,7 @@ install-release: build-ghostty-xcframework # Build Release, sign locally, instal
 	ditto "$$APP_PATH" "$$DST"; \
 	echo "installed $$DST (Release build, locally signed)"
 
-archive: build-ghostty-xcframework embed-cli embed-docs embed-skills ensure-project # Archive Release build for distribution
+archive: ensure-ghostty embed-cli embed-docs embed-skills ensure-project # Archive Release build for distribution
 	bash -o pipefail -c 'xcodebuild -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -configuration Release -archivePath build/Prowl.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" PROWL_SENTRY_DSN="$(PROWL_SENTRY_DSN)" PROWL_POSTHOG_API_KEY="$(PROWL_POSTHOG_API_KEY)" PROWL_POSTHOG_HOST="$(PROWL_POSTHOG_HOST)" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) $(XCODEBUILD_FLAGS) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 export-archive: # Export xarchive
