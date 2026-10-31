@@ -293,6 +293,10 @@ final class WorktreeTerminalState {
   @ObservationIgnored var programStatusLogForTesting: ((String) -> Void)?
   typealias AgentProcessProbeOverride =
     @MainActor (_ processGroupID: pid_t?, _ childPID: pid_t?, _ fresh: Bool) async -> ForegroundJob?
+  struct AgentExitHandoff {
+    /// The latest command title's icon, applied only when the probe finds no agent.
+    var commandIcon: TabIconSource?
+  }
   struct PendingCommandFinished: Equatable {
     /// The store revision when the 133 D arrived; the cleanup is scoped to it.
     let storeRevision: UInt64
@@ -385,6 +389,10 @@ final class WorktreeTerminalState {
   /// `learnedIdleTitlesBySurface`. Armed by `command_finished`,
   /// consumed by the next title arrival.
   var awaitingIdleTitleLearningBySurface: Set<UUID> = []
+  /// Surfaces with a detected agent whose `command_finished` waits for the fresh
+  /// probe's verdict. The agent may have exited, so the shell can already be running
+  /// the user's next command.
+  @ObservationIgnored var agentExitHandoffBySurface: [UUID: AgentExitHandoff] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }

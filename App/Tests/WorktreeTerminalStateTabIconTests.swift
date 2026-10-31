@@ -87,6 +87,182 @@ struct WorktreeTerminalStateTabIconTests {
     #expect(fixture.state.learnedIdleTitlesBySurface[fixture.surfaceID] == ["my prompt"])
   }
 
+  // MARK: - Agent exit
+
+  private func job(_ name: String, pid: pid_t = getpid()) -> ForegroundJob {
+    ForegroundJob(
+      processGroupID: pid,
+      processes: [
+        ForegroundProcess(pid: pid, parentProcessID: getppid(), name: name, argv0: name, cmdline: name)
+      ])
+  }
+
+  /// A real process outside the test host's tree (double fork), so the launcher
+  /// ancestry check sees a different launch.
+  private func spawnDetachedSleeper() throws -> pid_t {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = ["-c", "sleep 30 >/dev/null 2>&1 & echo $!"]
+    let output = Pipe()
+    process.standardOutput = output
+    try process.run()
+    process.waitUntilExit()
+    let text = try #require(String(bytes: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8))
+    return try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+  }
+
+  /// A pane where a real detection tick has bound `claude`.
+  private func makeDetectedClaude() async throws -> (fixture: Fixture, surface: GhosttySurfaceView) {
+    let fixture = try makeFixture()
+    let state = fixture.state
+    let surface = try #require(state.surfaceView(for: fixture.surfaceID))
+    let claudeJob = job("claude")
+    state.agentProcessProbeForTesting = { _, _, _ in claudeJob }
+    state.programStatusSupportForTesting = { _ in .verified }
+    state.agentDetectionTasks[fixture.surfaceID] = Task {}
+    state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(lastChangedAt: Date())
+    seedScreenScan(.claude, fixture)
+    #expect(await detect(fixture, surface))
+    #expect(state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.icon == claudeIcon)
+    return (fixture, surface)
+  }
+
+  private func seedScreenScan(_ agent: DetectedAgent, _ fixture: Fixture) {
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: agent, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+  }
+
+  @discardableResult
+  private func detect(_ fixture: Fixture, _ surface: GhosttySurfaceView) async -> Bool {
+    await fixture.state.detectAgentState(
+      for: surface, tabId: fixture.tabID,
+      resolveSession: { _, _, _, _, _ in (nil, 0) })
+  }
+
+  /// Reports `command_finished`, then runs the fresh probe it requests. `whileProbing`
+  /// runs while that probe is suspended and the previous agent is still recorded.
+  private func finishCommand(
+    _ fixture: Fixture,
+    _ surface: GhosttySurfaceView,
+    probeFinds found: ForegroundJob?,
+    whileProbing: @escaping @MainActor () -> Void
+  ) async {
+    fixture.state.agentProcessProbeForTesting = { _, _, fresh in
+      if fresh { whileProbing() }
+      return found
+    }
+    fixture.state.handleCommandFinished(exitCode: 0, durationNs: 0, surfaceId: fixture.surfaceID)
+    await detect(fixture, surface)
+  }
+
+  @Test func commandTitleDuringTheExitProbeBrandsTheTabOnceTheAgentIsReleased() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+
+    await finishCommand(fixture, surface, probeFinds: nil) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+      #expect(fixture.icon == claudeIcon)
+    }
+
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(fixture.icon == gitIcon)
+  }
+
+  /// The prompt of a shell nested in the agent also reports `command_finished`.
+  @Test func commandTitleDuringTheProbeIsDiscardedWhenTheAgentIsStillRunning() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+
+    await finishCommand(fixture, surface, probeFinds: job("claude")) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+    }
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.icon == claudeIcon)
+
+    // The discarded title does not come back when this agent exits later.
+    await finishCommand(fixture, surface, probeFinds: nil) {}
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  @Test func successorAgentBrandsTheTabInsteadOfTheCommandTitle() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+    seedScreenScan(.codex, fixture)
+    let successor = try spawnDetachedSleeper()
+    defer { kill(successor, SIGTERM) }
+
+    await finishCommand(fixture, surface, probeFinds: job("codex", pid: successor)) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+    }
+
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .codex)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .local(successor))
+    #expect(fixture.icon == codexIcon)
+
+    // The discarded title does not come back when the successor exits.
+    await finishCommand(fixture, surface, probeFinds: nil) {}
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(fixture.icon == codexIcon)
+  }
+
+  /// A topic title that precedes `command_finished` came from the agent, not the shell.
+  @Test func topicTitleBeforeTheExitIsNotAppliedAfterTheRelease() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+    fixture.noteTitle("Codex thread demo")
+
+    await finishCommand(fixture, surface, probeFinds: nil) {
+      fixture.noteTitle("my prompt")
+    }
+
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  @Test func commandTitleDuringTheExitProbeKeepsAUserIcon() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+    fixture.state.tabManager.overrideIcon(fixture.tabID, icon: codexIcon)
+
+    await finishCommand(fixture, surface, probeFinds: nil) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+    }
+
+    #expect(fixture.icon == codexIcon)
+  }
+
+  @Test func commandTitleDuringTheExitProbeDoesNotBrandAfterFocusMoved() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+    let rightID = try fixture.state.createSplit(
+      of: fixture.surfaceID, direction: .right, initialInput: nil, focusing: false
+    ).get()
+    let right = try #require(fixture.state.surfaceView(for: rightID))
+
+    await finishCommand(fixture, surface, probeFinds: nil) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+      fixture.state.recordActiveSurface(right, in: fixture.tabID)
+    }
+
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  /// Detection can release the pane before the fresh probe reports. A newer command
+  /// has then set the icon already, and the older title must not replace it.
+  @Test func newerCommandWinsOverAnOlderTitleFromTheExitProbe() async throws {
+    let (fixture, surface) = try await makeDetectedClaude()
+
+    await finishCommand(fixture, surface, probeFinds: nil) {
+      fixture.noteTitle("my prompt")
+      fixture.noteTitle("git status")
+      fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState()
+      fixture.noteTitle("codex --full-auto")
+    }
+
+    #expect(fixture.icon == codexIcon)
+  }
+
   // MARK: - Detection
 
   @Test func detectionReplacesAWrongTitleIcon() throws {

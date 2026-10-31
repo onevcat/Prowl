@@ -43,9 +43,22 @@ extension WorktreeTerminalState {
     if learnedIdleTitlesBySurface[surfaceId]?.contains(title) == true { return }
     // After the idle learner: an agent's exit reports `command_finished` before
     // detection releases the pane, and the prompt title must still disarm it.
-    if surfaceAgentStates[surfaceId]?.detectedAgent != nil { return }
     guard let icon = CommandIconMap.iconForFirstToken(title) else { return }
+    if surfaceAgentStates[surfaceId]?.detectedAgent != nil {
+      // Only a title that follows `command_finished` can be the shell's: the probe decides.
+      agentExitHandoffBySurface[surfaceId]?.commandIcon = icon
+      return
+    }
+    agentExitHandoffBySurface.removeValue(forKey: surfaceId)
     applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
+  }
+
+  /// The fresh probe found no agent: the held title was the shell's command.
+  func applyAgentExitCommandIcon(surfaceID: UUID) {
+    guard let icon = agentExitHandoffBySurface.removeValue(forKey: surfaceID)?.commandIcon,
+      let tabId = tabId(containing: surfaceID)
+    else { return }
+    applyResolvedIcon(icon, surfaceId: surfaceID, tabId: tabId)
   }
 
   /// Brand the tab with a newly detected agent. Lookup order matches
