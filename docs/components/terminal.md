@@ -109,6 +109,10 @@ can change the tab's icon. Without a detected agent, a program's title still
 counts as a command, so a title that starts with a known command name (for
 example `Codex thread`) sets that icon.
 
+In a tab with splits, focusing a pane with a detected agent gives the tab that
+agent's icon, unless a user or script icon is set. Focusing a pane without an
+agent does not change the icon: the next recognised command in that pane does.
+
 A tab with a pane whose foreground `ssh` reaches a remote host also shows a network glyph
 before its title, and the tooltip names the host. The pane itself shows `user@host` in its
 bottom-trailing corner for five seconds when the label appears or changes. Then only the

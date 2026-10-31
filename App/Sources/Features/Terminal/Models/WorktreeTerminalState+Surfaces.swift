@@ -770,6 +770,7 @@ extension WorktreeTerminalState {
 
   func recordActiveSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
     focusedSurfaceIdByTab[tabId] = surface.id
+    applyFocusedAgentIcon(surfaceID: surface.id, tabId: tabId)
     markAgentSeen(surfaceID: surface.id)
     markNotificationsRead(forSurfaceID: surface.id)
     updateTabTitle(for: tabId)
