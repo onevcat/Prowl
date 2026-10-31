@@ -125,8 +125,9 @@ sequences:
 - **Program status (OSC 7501)** — Prowl answers the support query (protocol
   revision 0.4: `?` plus the states and kinds it accepts), so programs
   that speak the protocol (Claude Code 2.1.295+, Pi 1.1.0+, Oh My Pi 18.8.7+,
-  Codex 0.163.0+) report their state. Codex sends idle/working/blocked; the other
-  verified producers also send done/error. Reports without a support query are accepted. Prowl keeps one record tree per pane with the
+  Codex 0.163.0+, and recent Amp, Antigravity, Devin, Droid, and Grok Build)
+  report their state. Codex sends idle/working/blocked; the other verified
+  producers also send done. Reports without a support query are accepted. Prowl keeps one record tree per pane with the
   protocol's lifetime rules (a report replaces its record, `clear` removes a
   subtree, `app` is inherited, at most 256 records) and feeds the root record to
   agent detection — see

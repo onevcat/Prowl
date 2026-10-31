@@ -79,7 +79,8 @@ struct AgentCoordinatorProgramStatusTests {
   /// Only producers whose baseline replayed inside Prowl may drive the decision.
   @Test func defaultTableVerifiesKnownProducers() async {
     for agent in DetectedAgent.allCases {
-      let expected: ProgramStatusSupport = [.claude, .pi, .omp, .codex].contains(agent) ? .verified : .unverified
+      let verified: [DetectedAgent] = [.claude, .pi, .omp, .codex, .amp, .antigravity, .devin, .droid, .grok]
+      let expected: ProgramStatusSupport = verified.contains(agent) ? .verified : .unverified
       #expect(ProgramStatusSupport.level(for: agent) == expected, "\(agent)")
     }
     // With the default table a Claude root decides on the tick that sees it, the
@@ -128,6 +129,63 @@ struct AgentCoordinatorProgramStatusTests {
     #expect(codexDecision?.reason.identifier == "osc.idle")
     #expect(codexDecision?.screenReason == .delegated)
     #expect(codex.isDelegated)
+  }
+
+  @Test(arguments: [
+    (DetectedAgent.amp, "amp"),
+    (.antigravity, "antigravity"),
+    (.devin, "devin"),
+    (.droid, "droid"),
+    (.grok, "grok-build"),
+  ])
+  func screenOnlyProducerDecidesUnderItsOwnApp(agent: DetectedAgent, app: String) async {
+    #expect(agent.programStatusApp == app)
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      Issue.record("\(agent) has no provider to sample")
+      return [.unavailable]
+    })
+
+    let decision = await coordinator.observe(
+      agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.done, app: app), 1)]))
+
+    #expect(decision?.state == .idle)
+    #expect(decision?.reason.identifier == "osc.done")
+    #expect(decision?.screenReason == .delegated)
+    #expect(coordinator.isDelegated)
+
+    // Another program's root is not this agent's state: the screen keeps deciding.
+    let fenced = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+    let fencedDecision = await fenced.observe(
+      agent: agent, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.done, app: "foreign"), 1)]))
+
+    #expect(fencedDecision?.state == .working)
+    #expect(fencedDecision?.reason.isProgramStatus == false)
+    #expect(fenced.isDelegated == false)
+  }
+
+  @Test func ampIdleRootLeavesTheFirstTurnToTheScreen() async {
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+
+    // Amp's first report is `idle`, seconds before the `working` of the prompt it was
+    // entered for. A wait armed in that window must keep seeing the Working screen.
+    let first = await coordinator.observe(
+      agent: .amp, process: generation, screen: legacyWorking, configRoot: nil,
+      programStatus: store([(report(.idle, app: "amp"), 1)]))
+    #expect(first?.state == .working)
+    #expect(first?.reason.isProgramStatus == false)
+    #expect(coordinator.isDelegated == false)
+    #expect(coordinator.receive(programStatus: store([(report(.idle, app: "amp"), 1)])) == .none)
+
+    let idle = (report(.idle, app: "amp"), TimeInterval(1))
+    let working = (report(.working, app: "amp"), TimeInterval(2))
+    #expect(coordinator.receive(programStatus: store([idle, working])) != .none)
+    #expect(coordinator.decision?.reason.identifier == "osc.working")
+    #expect(coordinator.isDelegated)
+
+    _ = coordinator.receive(programStatus: store([idle, working, (report(.done, app: "amp"), 3)]))
+    #expect(coordinator.decision?.reason.identifier == "osc.done")
   }
 
   @Test func codexReportsDriveLifecycleAndClearRestoresTheProvider() async {

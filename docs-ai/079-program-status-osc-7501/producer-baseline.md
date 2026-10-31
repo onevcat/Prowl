@@ -156,6 +156,56 @@ The question run entered `/plan` and requested `request_user_input`.
 | Escape at either blocker | `working` → `idle` within 0.02 s |
 | Ctrl+D at the composer | `state=clear`, without app |
 
+## Amp, Antigravity, Devin, Droid, Grok Build (2026-10-31, macOS)
+
+Recorded by running each TUI under `script -q -F` inside a Prowl pane, so real Ghostty
+answered the capability queries. Do this for OpenTUI and similar TUIs: the pty harness
+does not answer enough of their queries, and they never reach the support query there.
+Versions: Amp 0.0.1793376030, Antigravity 1.4.11, Devin 3000.11.234, Droid 1.0.0, Grok Build
+1.0.70. Droid used DeepSeek (`--settings` with `sessionDefaultSettings.model`; the Droid TUI
+has no `-m`, it reads that as a prompt). The others used their signed-in default models.
+
+| Scenario | Amp | Antigravity | Devin | Droid | Grok Build |
+| --- | --- | --- | --- | --- | --- |
+| Support query | yes | yes | no | yes | yes |
+| `app` | `amp` | `antigravity` | `devin` | `droid` | `grok-build` |
+| First report | `idle`, only when the first prompt is entered | `blocked:kind=auth` then `idle` 0.03 s later | `idle` on mount | `idle` on mount | `idle` on mount |
+| Trust dialog | not shown | `blocked:kind=permission` | not shown | not shown | `blocked:kind=permission` |
+| Prompt | `working` | `working` | `working` (`msg` Thinking, Typing, Running tools) | `working` | `working` (`msg` per stage) |
+| Turn finished | `done`, repeated when the thread title arrives | `done` (`msg` = reply excerpt) | `done` | `done` | `done` |
+| Cancel | Esc Esc → `done` | Esc → `idle` | Esc Esc → `idle` | Esc → `idle` | Ctrl+C → `idle` (Esc does nothing) |
+| Tool approval | `blocked`, no kind (needs an `ask` permission rule) | `blocked:kind=permission` | `blocked:kind=permission` | `blocked:kind=permission` (only when the model rates the command above the autonomy level) | `blocked:kind=permission` (not in `always-approve`, Shift+Tab leaves it) |
+| Question tool | `blocked`, no kind | `blocked:kind=question` | `blocked:kind=question` | `blocked:kind=question` | `blocked:kind=question` |
+| Provider failure | not run | not run | not run | `error`, no `msg` (invalid key) | not run |
+| Exit | not recorded | no `clear` | `clear` | no `clear` | `clear` |
+| Child records | none | none | none | none | `id=s1` with `title`, mirrors the root |
+
+Grok Build also reports `blocked:kind=auth` while signed out. `msg` can carry reply text
+(Antigravity) or the session title (Amp): keep it out of durable logs.
+
+## Agents without a producer (2026-10-31)
+
+Checked on the newest public release. "Live" ran the TUI in a Prowl pane and captured the
+bytes; "static" searched the shipped JavaScript or binary for the sequence.
+
+| Agent | Version | Evidence | Result |
+| --- | --- | --- | --- |
+| Cline | 3.0.74 | live, static | no query, no report |
+| Copilot | 1.0.105 | live, static | no query, no report |
+| Cursor | 2026.10.22 | static (2026.05.09 live) | none |
+| Gemini | 0.66.0 | static | none; [#29918](https://github.com/google-gemini/gemini-cli/pull/29918) is open |
+| Kimi | 1.52.0 | static | none |
+| OpenCode v1 | 1.19.5 | live, static | no query, no report |
+| Qoder | 1.1.81 | live, static | no query, no report |
+| Qwen | 0.26.4 | static | none; [#13994](https://github.com/QwenLM/qwen-code/pull/13994) is open |
+| TRAE | 0.213.1 | static | none |
+
+OpenCode v2 (2.2.4) does report: `app=opencode`, a root summary plus one child per pending
+session, `working` → `idle` with no `done` or `error`
+([#60411](https://github.com/anomalyco/opencode/issues/60411)), and no root `clear` on exit
+([#60466](https://github.com/anomalyco/opencode/issues/60466)). It stays unverified: Prowl
+supports the v1 line, and v2 needs its own work.
+
 ## Verification inside Prowl
 
 Filled in by the slice that marks a producer verified (slices 3 and 4 of
@@ -286,3 +336,27 @@ Not exercised: authentication UI, remote/multiplexed sessions, provider failures
 external editor, or live child/background work. Source inspection establishes the
 coarse root semantics, not live acceptance of those cases. Older versions were not
 installed; no-report and clear fallback are covered by the automated coordinator tests.
+
+### Amp, Antigravity, Devin, Droid, Grok Build
+
+Replayed on 2026-10-31 with the 079.008 Debug build in an isolated instance (`CFFIXED_USER_HOME`,
+own socket, launched with `open -n` so that the panes can reach the Keychain). Offsets are from
+the key or command and CLI-polled at 250 ms.
+
+| Scenario | Observation |
+| --- | --- |
+| Launch | `osc.idle` within 2 s for four. Amp stays on `legacy.detector`: its only `idle` is ignored (see 008), and `osc.working` takes over 2–3.5 s into the first turn |
+| Trust dialog (Antigravity, Grok Build) | `osc.blocked.permission` 0.7 s after launch; Enter → `osc.idle` within 0.3 s |
+| Prompt, finish | `osc.working` within 0.5 s, except Amp's first turn (above); `osc.done`, Done badge while unviewed |
+| Cancel | `osc.idle` within 0.4 s for Antigravity, Devin, Droid, Grok Build; `osc.done` for Amp, which reports the cancel as `done` |
+| Approval | `osc.blocked.permission` for four; `osc.blocked.unspecified` for Amp. Enter → `osc.working` within 0.3 s |
+| Question tool | `osc.blocked.question` for four; `osc.blocked.unspecified` for Amp |
+| Invalid key (Droid) | `osc.idle` on mount, `osc.working` then `osc.error` 0.3 s later |
+| `agents wait --until idle` while working | resolved only after the turn, for Amp, Antigravity, Droid, Grok Build. A wait armed right after Amp's first prompt resolved after 18.3 s, at the end of that turn; the pane read Working throughout |
+| Session rotation | Antigravity `/clear` moved to the new id in 2.8 s and Devin `/clear` in 0.7 s, both `exact`. Amp and Grok Build `/new` kept the old id, the same as the control build. Droid had no session in either build |
+| Exit | released in 0.5 s (Droid `/quit`), 0.3 s (Amp Ctrl+C twice), 0.7 s (Antigravity `/exit`), 1.5–2.1 s (Grok Build, Devin `/exit`) |
+| `kill -9` | released in 0.2–0.3 s (Amp, Antigravity, Droid, Grok Build), 3.0 s (Devin) |
+| Agent Profile launch and dispatch | Amp, Antigravity, Devin, and Grok Build: two receipts `completed`, `osc.done` afterwards. Droid: `hook_droid` `verified_live` at `exact`; the DeepSeek model answered without calling `dispatch-complete`, and the Stop hook closed the receipt as `DISPATCH_INCOMPLETE` |
+
+Not exercised: `kind=auth` inside Prowl, Amp, Antigravity, Devin, and Grok Build provider
+failures, a Grok Build child `blocked` record, long-running subagents, and remote panes.
