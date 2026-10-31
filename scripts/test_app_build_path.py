@@ -33,25 +33,40 @@ class AppBuildPathTests(unittest.TestCase):
             self.assertTrue((root / "arguments.json").exists(), result.stderr)
             return json.loads((root / "arguments.json").read_text())
 
-    def run_grouped_build(self, fail_mirror=False, fail_events=False):
+    def run_grouped_build(self, fail_mirror=False, fail_events=False, fail_bulk=False, fail_enumeration=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            shutil.copyfile(Path(__file__).resolve().parents[1] / "Makefile", root / "Makefile")
+            repository = Path(__file__).resolve().parents[1]
+            shutil.copyfile(repository / "Makefile", root / "Makefile")
             (root / "overrides.mk").write_text("ensure-ghostty ensure-project:\n\t@true\n")
             (root / "scripts").mkdir()
             for name in ["assert-xcresult-tests.sh", "print-xcresult-failures.sh"]:
                 (root / "scripts" / name).write_text("exit 0\n")
+            shutil.copyfile(repository / "scripts" / "test-shards.py", root / "scripts" / "test-shards.py")
+            (root / "scripts" / "test-suite-costs.json").write_text("{}")
             (root / "xcodebuild").write_text(
                 '#!/usr/bin/env python3\nimport json, sys\n'
                 'with open("calls.jsonl", "a") as out: out.write(json.dumps(sys.argv[1:]) + "\\n")\n'
+                'if "-enumerate-tests" in sys.argv:\n'
+                f'    if {fail_enumeration!r}: sys.exit(23)\n'
+                '    names = ["BulkA/one()", "BulkB/two()", "BulkC/three()", "MirrorHostTests/four()",\n'
+                '             "GitWorktreeRegistryMonitorTests/five()",\n'
+                '             "CLISocketServerTests/disconnectMonitorActivatesDuringCreation()",\n'
+                '             "CLISocketServerTests/other()"]\n'
+                '    tests = [{"identifier": "ProwlTests/" + name} for name in names]\n'
+                '    path = sys.argv[sys.argv.index("-test-enumeration-output-path") + 1]\n'
+                '    open(path, "w").write(json.dumps({"errors": [], "values": [{"enabledTests": tests}]}))\n'
+                '    sys.exit(0)\n'
                 f'fail = ({fail_mirror!r} and "-only-testing:ProwlTests/MirrorHostTests" in sys.argv) or '
-                f'({fail_events!r} and "-only-testing:ProwlTests/GitWorktreeRegistryMonitorTests" in sys.argv)\n'
+                f'({fail_events!r} and "-only-testing:ProwlTests/GitWorktreeRegistryMonitorTests" in sys.argv) or '
+                f'({fail_bulk!r} and "-only-testing:ProwlTests/BulkB" in sys.argv)\n'
                 'sys.exit(23 if fail else 0)\n'
             )
             (root / "mise").write_text("#!/bin/sh\ncat\n")
             for name in ["xcodebuild", "mise"]:
                 (root / name).chmod(0o755)
-            env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}")
+            env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}", PROWL_TEST_SHARDS="2")
+            env.pop("PROWL_DERIVED_DATA_PATH", None)
             result = subprocess.run(
                 ["make", "-f", "Makefile", "-f", "overrides.mk", "test-app", "SHELL=/bin/bash"],
                 cwd=root, env=env, capture_output=True, text=True,
@@ -59,13 +74,41 @@ class AppBuildPathTests(unittest.TestCase):
             calls = [json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()]
             return result, calls
 
+    def bulk_calls(self, calls):
+        return [call for call in calls if any(item.startswith("-only-testing:ProwlTests/Bulk") for item in call)]
+
+    def test_the_build_runs_once_before_all_tests(self):
+        _, calls = self.run_grouped_build()
+        self.assertEqual(calls[0][0], "build-for-testing")
+        self.assertFalse(any(call[0] == "test" for call in calls))
+        self.assertEqual([call[0] for call in calls[1:]], ["test-without-building"] * (len(calls) - 1))
+
+    def test_each_bulk_suite_runs_in_exactly_one_shard(self):
+        result, calls = self.run_grouped_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        shards = self.bulk_calls(calls)
+        self.assertEqual(len(shards), 2)
+        for suite in ["BulkA", "BulkB", "BulkC", "CLISocketServerTests"]:
+            self.assertEqual(sum(f"-only-testing:ProwlTests/{suite}" in shard for shard in shards), 1, suite)
+
+    def test_a_failing_shard_fails_the_app_test_target(self):
+        result, _ = self.run_grouped_build(fail_bulk=True)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_a_failed_enumeration_fails_the_app_test_target(self):
+        result, calls = self.run_grouped_build(fail_enumeration=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.bulk_calls(calls), [])
+
     def test_network_suites_run_once_outside_the_bulk_suite(self):
         result, calls = self.run_grouped_build()
         self.assertEqual(result.returncode, 0, result.stderr)
+        shards = self.bulk_calls(calls)
         for suite in ["MirrorHostTests", "MirrorDevicePairingTests", "MirrorConnectionTests",
                       "MirrorTerminalIntegrationTests", "MirrorReplicaInputTests"]:
             target = f"ProwlTests/{suite}"
-            self.assertIn(f"-skip-testing:{target}", calls[0])
+            for shard in shards:
+                self.assertIn(f"-skip-testing:{target}", shard)
             runs = [call for call in calls if f"-only-testing:{target}" in call]
             self.assertEqual(len(runs), 1)
             self.assertEqual(runs[0][0], "test-without-building")
@@ -78,13 +121,15 @@ class AppBuildPathTests(unittest.TestCase):
     def test_event_monitors_run_once_outside_the_bulk_suite(self):
         result, calls = self.run_grouped_build()
         self.assertEqual(result.returncode, 0, result.stderr)
+        shards = self.bulk_calls(calls)
         targets = [
             "ProwlTests/GitWorktreeRegistryMonitorTests",
             "ProwlTests/CLISocketServerTests/disconnectMonitorActivatesDuringCreation()",
             "ProwlTests/CLISocketServerTests/disconnectMonitorOutlivesOriginalDescriptor()",
         ]
         for target in targets:
-            self.assertIn(f"-skip-testing:{target}", calls[0])
+            for shard in shards:
+                self.assertIn(f"-skip-testing:{target}", shard)
             runs = [call for call in calls if f"-only-testing:{target}" in call]
             self.assertEqual(len(runs), 1)
             self.assertEqual(runs[0][0], "test-without-building")
@@ -98,7 +143,7 @@ class AppBuildPathTests(unittest.TestCase):
     def test_default_build_reaches_xcodebuild_with_bash_nounset(self):
         arguments = self.run_failed_build(None)
         self.assertNotIn("-derivedDataPath", arguments)
-        self.assertEqual(arguments[0], "test")
+        self.assertEqual(arguments[0], "build-for-testing")
 
     def test_explicit_build_path_preserves_spaces_and_failure(self):
         arguments = self.run_failed_build("/tmp/build path")
