@@ -26,9 +26,11 @@ extension WorktreeTerminalState {
   // A pane with a detected agent is the exception: its title is the
   // agent's own text (often the conversation topic), so `Codex thread`
   // in a Claude pane is not the `codex` command. The agent's identity
-  // brands the tab instead, once, when detection first sees it. That
-  // also covers launches the title cannot name (`alias ccr='claude'`)
-  // and replaces a topic title that arrived before detection did.
+  // brands the tab instead, when detection first sees it and when focus
+  // moves to its pane. That also covers launches the title cannot name
+  // (`alias ccr='claude'`) and replaces a topic title that arrived before
+  // detection did. A plain pane does not follow focus: it has no record
+  // of its current command, so its next command decides.
 
   func noteTitleForCommandDetection(_ rawTitle: String, surfaceId: UUID, tabId: TerminalTabID) {
     let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,17 +63,28 @@ extension WorktreeTerminalState {
     applyResolvedIcon(icon, surfaceId: surfaceID, tabId: tabId)
   }
 
-  /// Brand the tab with a newly detected agent. Lookup order matches
-  /// `ActiveAgentEntry`: the launch name (`omp`), then the agent itself.
+  /// Brand the tab with a newly detected agent.
   func applyDetectedAgentIconIfNeeded(
     _ next: PaneAgentState,
     previous: PaneAgentState,
     surfaceID: UUID,
     tabId: TerminalTabID
   ) {
-    guard let agent = next.detectedAgent, agent != previous.detectedAgent else { return }
+    guard next.detectedAgent != previous.detectedAgent else { return }
+    applyAgentIcon(of: next, surfaceID: surfaceID, tabId: tabId)
+  }
+
+  /// Brand the tab with the agent of the pane that just took focus.
+  func applyFocusedAgentIcon(surfaceID: UUID, tabId: TerminalTabID) {
+    guard let state = surfaceAgentStates[surfaceID] else { return }
+    applyAgentIcon(of: state, surfaceID: surfaceID, tabId: tabId)
+  }
+
+  /// Lookup order matches `ActiveAgentEntry`: the launch name (`omp`), then the agent itself.
+  private func applyAgentIcon(of state: PaneAgentState, surfaceID: UUID, tabId: TerminalTabID) {
+    guard let agent = state.detectedAgent else { return }
     let icon =
-      next.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
+      state.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
       ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
     guard let icon else { return }
     applyResolvedIcon(icon, surfaceId: surfaceID, tabId: tabId)
