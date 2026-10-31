@@ -10,15 +10,21 @@ runs:
     # is in the command line of many build tasks, so each runner invalidated them. Their rerun
     # relinks the macro plugins, and that recompiles the App and its tests (docs-ai 016.010).
     # After the unmount, Xcode finds the toolchain at a path that depends only on its content.
+    # The system mounts it on first use, so ask for it before the unmount too.
     - name: Give the Metal toolchain a stable path
       shell: bash
       run: |
+        xcodebuild -showComponent metalToolchain >/dev/null || true
         for mount in /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-*; do
           [ -e "$mount" ] || continue
-          # A failure only makes the build slower.
-          sudo diskutil unmount force "$mount" || echo "::warning::Could not unmount $mount"
+          sudo diskutil unmount force "$mount" || echo "Could not unmount $mount"
         done
-        xcodebuild -showComponent metalToolchain || true
+        # A random path only makes the build slower, so report it and continue.
+        toolchain="$(xcodebuild -showComponent metalToolchain 2>&1 || true)"
+        echo "$toolchain"
+        if grep -q 'cryptexd' <<<"$toolchain"; then
+          echo "::warning::The Metal toolchain path is random, so incremental builds recompile the App."
+        fi
 
     - name: Xcode cache identity
       shell: bash
