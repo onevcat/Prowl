@@ -1,0 +1,44 @@
+name: Setup Mise tools
+description: Install the Mise tools and put swift-format on PATH. Jobs that build nothing need only this action.
+
+runs:
+  using: composite
+  steps:
+    - name: Mise cache
+      id: mise_cache
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.local/share/mise
+          ~/.cache/mise
+        key: ${{ runner.os }}-${{ runner.arch }}-mise-v0-${{ hashFiles('**/mise.toml', '**/.mise.toml', '**/.tool-versions', '**/.config/mise.toml', '**/mise/config.toml', '**/mise.lock', '**/.mise.lock', '**/mise/config.lock', '**/.config/mise.lock', '**/mise.*.toml', '**/.mise.*.toml', '**/.config/mise.*.toml', '**/mise.*.lock', '**/.mise.*.lock', '**/.config/mise.*.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-mise-v0-
+    - run: brew install mise
+      shell: bash
+    - run: mise install
+      shell: bash
+    # swift-format ships inside the Xcode toolchain, not in a standard bin directory, and the
+    # Makefile calls it unqualified. Taking it from the selected Xcode keeps CI on the same
+    # swift-format as local builds instead of pinning a second copy. Link only swift-format:
+    # adding the toolchain bin directory would also put its swift and clang ahead of the
+    # /usr/bin shims for every later step.
+    - name: Put swift-format on PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        SWIFT_FORMAT="$(xcrun --find swift-format)"
+        SWIFT_FORMAT_VERSION="$("$SWIFT_FORMAT" --version)"
+        bin_dir="$RUNNER_TEMP/swift-format-bin"
+        mkdir -p "$bin_dir"
+        ln -sf "$SWIFT_FORMAT" "$bin_dir/swift-format"
+        echo "$bin_dir" >> "$GITHUB_PATH"
+        echo "swift-format $SWIFT_FORMAT_VERSION at $SWIFT_FORMAT"
+    - name: Cache keys for save-macos-caches
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "PROWL_MISE_CACHE_KEY=${{ steps.mise_cache.outputs.cache-primary-key }}"
+          echo "PROWL_MISE_CACHE_HIT=${{ steps.mise_cache.outputs.cache-hit }}"
+        } >> "$GITHUB_ENV"
