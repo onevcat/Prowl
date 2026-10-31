@@ -21,12 +21,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # These checks need no build. In their own job they do not take cores from the compiler.
+  checks:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      MISE_HTTP_TIMEOUT: 120
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-mise
+      # format-lint is the swift-format half of `make check`; without it a change that fails
+      # `make check` locally could still pass CI (#503, #575). `-k` runs every check after one
+      # fails, so a single run reports all of them.
+      - run: make -k lint format-lint check-localization test-scripts
+
   build:
     # The Swift 6.4 toolchain selects different package manifests than Swift 6.3 and earlier,
     # so .package.resolved changes with the Xcode major version. Use the same Xcode as local
     # builds and releases. GitHub marks this image as a preview until a macos-27 label exists.
     runs-on: xcode-27
-    # A green run takes 6 to 10 minutes, and a slow runner has taken 2.5 times as long. The test
+    # A green run takes 8 to 15 minutes, and a slow runner has taken 2.5 times as long. The test
     # watchdog stops a hung test run sooner; this limit stops anything else that hangs. Without
     # it the default is 6 hours, so a stuck run had to be cancelled by hand.
     timeout-minutes: 45
@@ -37,6 +55,9 @@ jobs:
       MISE_HTTP_TIMEOUT: 120
       MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # CI reads no index or debug info, so it does not pay to write them. The compilation cache
+      # needs a long validation in each run and doubles the App cache (docs-ai 016.010).
+      PROWL_CI_BUILD_SETTINGS: COMPILATION_CACHE_ENABLE_CACHING=NO COMPILER_INDEX_STORE_ENABLE=NO GCC_GENERATE_DEBUGGING_SYMBOLS=NO
     steps:
       - uses: actions/checkout@v6
         with:
@@ -97,17 +118,10 @@ jobs:
           # SwiftPM serializes access to .build; keep its checks in one branch.
           run_task cli-tests make test-cli-smoke test-cli-unit test-cli-integration &
           pid_cli=$!
-          # Lint and the localization check need no build, so they run beside it. format-lint
-          # is the swift-format half of `make check`; without it a change that fails
-          # `make check` locally could still pass CI (#503, #575). `-k` runs every check
-          # after one fails, so a single run reports all of them.
-          run_task checks make -k lint format-lint check-localization test-scripts &
-          pid_checks=$!
 
           failed=0
           wait "$pid_app" || failed=1
           wait "$pid_cli" || failed=1
-          wait "$pid_checks" || failed=1
           kill "$pid_watchdog" 2>/dev/null || true
           {
             printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
