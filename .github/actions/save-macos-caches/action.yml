@@ -25,19 +25,19 @@ runs:
           .ghostty_hash
           .ghostty_build_stamp
         key: ${{ env.PROWL_GHOSTTY_CACHE_KEY }}
-    - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+    - if: env.PROWL_SPM_CACHE_HIT != 'true' 
       uses: actions/cache/save@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
         key: ${{ env.PROWL_SPM_CACHE_KEY }}
-    - if: env.PROWL_CLI_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+    - if: env.PROWL_CLI_CACHE_HIT != 'true' 
       uses: actions/cache/save@v4
       with:
         path: |
           CLI/.build
           Mirror/Relay/.build
         key: ${{ env.PROWL_CLI_CACHE_KEY }}
-    - if: env.PROWL_APP_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+    - if: env.PROWL_APP_CACHE_HIT != 'true' 
       uses: actions/cache/save@v4
       with:
         path: ${{ env.PROWL_DERIVED_DATA_PATH }}
