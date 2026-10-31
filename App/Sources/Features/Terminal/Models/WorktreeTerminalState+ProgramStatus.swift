@@ -189,6 +189,7 @@ extension WorktreeTerminalState {
   func commitAgentState(_ next: PaneAgentState, previous: PaneAgentState, surfaceID: UUID, tabId: TerminalTabID) {
     guard next != previous else { return }
     surfaceAgentStates[surfaceID] = next
+    applyDetectedAgentIconIfNeeded(next, previous: previous, surfaceID: surfaceID, tabId: tabId)
     updateTabAgentBusyState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
   }

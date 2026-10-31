@@ -101,6 +101,14 @@ and a profile that sets launch-scoped environment variables runs as
 `env VAR=… claude`, whose first token is `env`. The slot stays claimable, so a
 later recognised command in the same tab still takes it over.
 
+While a pane has a detected agent, its titles do not change the icon: an agent's
+title is its own text, such as the conversation topic, not a command line. The
+tab takes the agent's icon when detection first sees the agent, so an agent
+started through an alias gets the right icon too. Only the focused pane of a tab
+can change the tab's icon. Without a detected agent, a program's title still
+counts as a command, so a title that starts with a known command name (for
+example `Codex thread`) sets that icon.
+
 A tab with a pane whose foreground `ssh` reaches a remote host also shows a network glyph
 before its title, and the tooltip names the host. The pane itself shows `user@host` in its
 bottom-trailing corner for five seconds when the label appears or changes. Then only the
