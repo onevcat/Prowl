@@ -67,6 +67,20 @@ jobs:
         run: make embed-cli-debug embed-docs embed-skills
       - name: Generate workspace
         run: make ensure-project
+      - name: Trial diagnostics before the build
+        shell: bash
+        run: |
+          defaults write com.apple.dt.XCBuild EnableBuildDebugging -bool YES
+          mkdir -p build/ci-logs/trial
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          {
+            echo "image=${ImageOS:-} ${ImageVersion:-} runner=${RUNNER_NAME:-}"
+            echo "sdk=$sdk"; uname -a; date
+            stat -f '%Sm %m %N' -t '%FT%T' "$sdk/usr/lib/libSystem.tbd" "$sdk/SDKSettings.json" "$sdk/System/Library/Frameworks/SwiftUI.framework/Versions/A/Modules/SwiftUI.swiftmodule" "$(xcrun -f ld)" "$(xcrun -f swiftc)"
+            echo '--- DerivedData samples'
+            find "$PROWL_DERIVED_DATA_PATH/Build/Products/Debug" -maxdepth 1 -name '*Macros*' -exec stat -f '%Sm %N' -t '%FT%T' {} +
+          } > build/ci-logs/trial/before.txt 2>&1
+          cat build/ci-logs/trial/before.txt
       - name: Build app and run tests in parallel
         shell: bash
         run: |
@@ -133,6 +147,13 @@ jobs:
             python3 scripts/summarize-xcode-build.py build/test-results/*.build.json build/test-results/*.action.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
+      - name: Trial diagnostics after the build
+        if: always()
+        shell: bash
+        run: |
+          find "$PROWL_DERIVED_DATA_PATH/Build/Intermediates.noindex" -type d -name 'buildDebugging*' | head
+          for d in $(find "$PROWL_DERIVED_DATA_PATH/Build/Intermediates.noindex" -type d -name 'buildDebugging*'); do cp -R "$d" build/ci-logs/trial/; rm -rf "$d"; done
+          du -sh build/ci-logs/trial
       - name: Collect mirror diagnostics
         if: always()
         shell: bash
