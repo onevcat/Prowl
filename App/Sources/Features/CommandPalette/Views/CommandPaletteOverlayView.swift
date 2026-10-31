@@ -907,3 +907,5 @@ private func commandPaletteShortcutLabel(for index: Int) -> String {
 }
 
 private func ciTrialBodyEdit() -> Int { 1 }
+
+private func ciTrialBodyEdit2() -> Int { 2 }

@@ -63,6 +63,17 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
+      - name: Trial remove the Metal toolchain mount
+        shell: bash
+        run: |
+          xcodebuild -showComponent metalToolchain 2>&1 | head -5 || true
+          for m in /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-*; do
+            [ -e "$m" ] || continue
+            mount | grep -F "$(basename "$m")" || true
+            sudo umount "$m" || sudo diskutil unmount force "$m" || true
+          done
+          ls -la /var/run/com.apple.security.cryptexd/mnt/ || true
+          xcodebuild -showComponent metalToolchain 2>&1 | head -5 || true
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
       - name: Generate workspace
