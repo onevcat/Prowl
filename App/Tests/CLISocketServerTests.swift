@@ -24,10 +24,8 @@ struct CLISocketServerTests {
       ))
     #expect(request.count > 32 * 1024 * 1024)
     #expect(request.count <= WorkflowSizeLimits.transportFrame)
-    let response: Data = try await withCheckedThrowingContinuation { continuation in
-      DispatchQueue.global(qos: .userInitiated).async {
-        continuation.resume(with: Result { try Self.send(requestData: request, socketPath: socketPath) })
-      }
+    let response = try await Self.runBlocking {
+      try Self.send(requestData: request, socketPath: socketPath)
     }
     #expect(try JSONDecoder().decode(CommandResponse.self, from: response).command == "workflow")
   }
@@ -173,21 +171,21 @@ struct CLISocketServerTests {
       )
     )
 
-    try await Task.detached {
+    try await Self.runBlocking {
       try Self.sendAndCloseAfterAcceptance(
         requestData: requestData,
         socketPath: socketPath,
         accepted: accepted,
         closed: closed
       )
-    }.value
-    let closedBeforeRouting = await Task.detached {
+    }
+    let closedBeforeRouting = try await Self.runBlocking {
       peerClosed.wait(timeout: .now() + 10)
-    }.value
+    }
     #expect(closedBeforeRouting)
-    let connectionRejected = await Task.detached {
+    let connectionRejected = try await Self.runBlocking {
       rejected.wait(timeout: .now() + 10)
-    }.value
+    }
 
     #expect(connectionRejected)
     #expect(recordedSignal == nil)
@@ -334,7 +332,7 @@ struct CLISocketServerTests {
     let requestData = try JSONEncoder().encode(
       CommandEnvelope(output: .json, command: .agentsHook(input))
     )
-    let sendTask = Task.detached {
+    try await Self.runBlocking {
       try Self.sendAndCloseAfterAcceptance(
         requestData: requestData,
         socketPath: socketPath,
@@ -343,14 +341,13 @@ struct CLISocketServerTests {
       )
     }
 
-    try await sendTask.value
-    let closedBeforeRouting = await Task.detached {
+    let closedBeforeRouting = try await Self.runBlocking {
       peerClosed.wait(timeout: .now() + 10)
-    }.value
+    }
     #expect(closedBeforeRouting)
-    let didRoute = await Task.detached {
+    let didRoute = try await Self.runBlocking {
       routeRecorded.wait(timeout: .now() + 10)
-    }.value
+    }
     #expect(didRoute)
     #expect(recordedInput == input)
   }
@@ -381,22 +378,22 @@ struct CLISocketServerTests {
     )
     let requestData = try JSONEncoder().encode(envelope)
 
-    try await Task.detached {
+    try await Self.runBlocking {
       try Self.sendAndCloseAfterAcceptance(
         requestData: requestData,
         socketPath: socketPath,
         accepted: accepted,
         closed: closed
       )
-    }.value
+    }
 
-    let closedBeforeRouting = await Task.detached {
+    let closedBeforeRouting = try await Self.runBlocking {
       peerClosed.wait(timeout: .now() + 10)
-    }.value
+    }
     #expect(closedBeforeRouting)
-    let cancellationObserved = await Task.detached {
+    let cancellationObserved = try await Self.runBlocking {
       probe.waitForCancellation(timeout: .now() + 10)
-    }.value
+    }
     #expect(cancellationObserved)
     #expect(probe.wasCancelled)
   }
@@ -414,9 +411,9 @@ struct CLISocketServerTests {
       )
 
       close(descriptors[1])
-      let activatedDuringCreation = await Task.detached {
+      let activatedDuringCreation = try await Self.runBlocking {
         observation.wait(timeout: .now() + 10)
-      }.value
+      }
 
       #expect(activatedDuringCreation)
       monitor.cancel()
@@ -434,9 +431,9 @@ struct CLISocketServerTests {
 
       close(descriptors[0])
       close(descriptors[1])
-      let disconnected = await Task.detached {
+      let disconnected = try await Self.runBlocking {
         observation.wait(timeout: .now() + 10)
-      }.value
+      }
 
       #expect(disconnected)
       monitor.cancel()
@@ -528,6 +525,18 @@ struct CLISocketServerTests {
     try requestData.withUnsafeBytes { try writeAll(socketFD, buffer: $0) }
     guard accepted.wait(timeout: .now() + 10) == .success else {
       throw CLIServiceError.readFailed
+    }
+  }
+
+  /// Runs blocking work on a dispatch queue. `TestStore` installs a process-global hook that runs
+  /// `Task.detached` on the main thread, where a blocking wait stops the main-actor work it waits for.
+  nonisolated private static func runBlocking<Value: Sendable>(
+    _ work: @escaping @Sendable () throws -> Value
+  ) async throws -> Value {
+    try await withCheckedThrowingContinuation { continuation in
+      DispatchQueue.global(qos: .userInitiated).async {
+        continuation.resume(with: Result { try work() })
+      }
     }
   }
 
