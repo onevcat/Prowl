@@ -6,6 +6,20 @@ runs:
   steps:
     - uses: ./.github/actions/setup-mise
 
+    # The system mounts the Metal toolchain at a path with a random suffix on each boot. The path
+    # is in the command line of many build tasks, so each runner invalidated them. Their rerun
+    # relinks the macro plugins, and that recompiles the App and its tests (docs-ai 016.010).
+    # After the unmount, Xcode finds the toolchain at a path that depends only on its content.
+    - name: Give the Metal toolchain a stable path
+      shell: bash
+      run: |
+        for mount in /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-*; do
+          [ -e "$mount" ] || continue
+          # A failure only makes the build slower.
+          sudo diskutil unmount force "$mount" || echo "::warning::Could not unmount $mount"
+        done
+        xcodebuild -showComponent metalToolchain || true
+
     - name: Xcode cache identity
       shell: bash
       run: |

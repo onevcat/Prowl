@@ -1,5 +1,7 @@
 # 016.008 — CAS Fallback, Cache Save Scope and Mirror Jobs
 
+> Correction: [010](010-stable-incremental-state.md) removed the CAS fallback, and CI no longer uses the compilation cache. The cache save scope and the mirror jobs stay as this file describes.
+
 ## Context
 
 In #851, a pull request that changed the Makefile and the test workflow spent about 10 minutes
