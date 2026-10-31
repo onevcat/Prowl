@@ -22,6 +22,13 @@ extension WorktreeTerminalState {
   // commands (`git status`, `cd foo`) and TUIs that immediately
   // overwrite their preexec title (`codex` -> repo name) - both used
   // to slip past a debounce-based detector.
+  //
+  // A pane with a detected agent is the exception: its title is the
+  // agent's own text (often the conversation topic), so `Codex thread`
+  // in a Claude pane is not the `codex` command. The agent's identity
+  // brands the tab instead, once, when detection first sees it. That
+  // also covers launches the title cannot name (`alias ccr='claude'`)
+  // and replaces a topic title that arrived before detection did.
 
   func noteTitleForCommandDetection(_ rawTitle: String, surfaceId: UUID, tabId: TerminalTabID) {
     let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,8 +41,40 @@ extension WorktreeTerminalState {
     // Drop idle prompts so they can't reach the mapping lookup.
     if Self.isLikelyIdleTitleByShape(title) { return }
     if learnedIdleTitlesBySurface[surfaceId]?.contains(title) == true { return }
+    // After the idle learner: an agent's exit reports `command_finished` before
+    // detection releases the pane, and the prompt title must still disarm it.
     guard let icon = CommandIconMap.iconForFirstToken(title) else { return }
+    if surfaceAgentStates[surfaceId]?.detectedAgent != nil {
+      // Only a title that follows `command_finished` can be the shell's: the probe decides.
+      agentExitHandoffBySurface[surfaceId]?.commandIcon = icon
+      return
+    }
+    agentExitHandoffBySurface.removeValue(forKey: surfaceId)
     applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
+  }
+
+  /// The fresh probe found no agent: the held title was the shell's command.
+  func applyAgentExitCommandIcon(surfaceID: UUID) {
+    guard let icon = agentExitHandoffBySurface.removeValue(forKey: surfaceID)?.commandIcon,
+      let tabId = tabId(containing: surfaceID)
+    else { return }
+    applyResolvedIcon(icon, surfaceId: surfaceID, tabId: tabId)
+  }
+
+  /// Brand the tab with a newly detected agent. Lookup order matches
+  /// `ActiveAgentEntry`: the launch name (`omp`), then the agent itself.
+  func applyDetectedAgentIconIfNeeded(
+    _ next: PaneAgentState,
+    previous: PaneAgentState,
+    surfaceID: UUID,
+    tabId: TerminalTabID
+  ) {
+    guard let agent = next.detectedAgent, agent != previous.detectedAgent else { return }
+    let icon =
+      next.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
+      ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
+    guard let icon else { return }
+    applyResolvedIcon(icon, surfaceId: surfaceID, tabId: tabId)
   }
 
   func noteCommandFinishedForCommandDetection(surfaceId: UUID) {

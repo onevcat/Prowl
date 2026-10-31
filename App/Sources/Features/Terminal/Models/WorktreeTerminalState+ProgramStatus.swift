@@ -89,6 +89,7 @@ extension WorktreeTerminalState {
       return
     }
     pendingCommandFinishedBySurface[surfaceID] = PendingCommandFinished(storeRevision: revision)
+    if agentExitHandoffBySurface[surfaceID] == nil { agentExitHandoffBySurface[surfaceID] = AgentExitHandoff() }
     agentDetectionFreshProbeRequests.insert(surfaceID)
     wakeAgentDetection(forSurfaceID: surfaceID)
   }
@@ -101,11 +102,17 @@ extension WorktreeTerminalState {
       identified: identified, previous: previous, isLiveAncestor: Self.processIsLiveAncestor)
     switch outcome {
     case .sameOwner:
+      // A later `command_finished` still waits for its own probe, and keeps the held title.
+      if pendingCommandFinishedBySurface[surfaceID] == nil {
+        agentExitHandoffBySurface.removeValue(forKey: surfaceID)
+      }
       return
     case .successor:
+      // The successor brands the tab when this tick commits it.
+      agentExitHandoffBySurface.removeValue(forKey: surfaceID)
       removeAgentEntryIfNeeded(surfaceID: surfaceID)
     case .released:
-      break
+      applyAgentExitCommandIcon(surfaceID: surfaceID)
     }
     programStatusStoresBySurface[surfaceID]?.commandFinished(upTo: pending.storeRevision)
   }
@@ -189,6 +196,7 @@ extension WorktreeTerminalState {
   func commitAgentState(_ next: PaneAgentState, previous: PaneAgentState, surfaceID: UUID, tabId: TerminalTabID) {
     guard next != previous else { return }
     surfaceAgentStates[surfaceID] = next
+    applyDetectedAgentIconIfNeeded(next, previous: previous, surfaceID: surfaceID, tabId: tabId)
     updateTabAgentBusyState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
   }
@@ -243,6 +251,7 @@ extension WorktreeTerminalState {
     agentDetectionFullTickRequests.remove(surfaceID)
     agentDetectionSettleUntilBySurface.removeValue(forKey: surfaceID)
     pendingCommandFinishedBySurface.removeValue(forKey: surfaceID)
+    agentExitHandoffBySurface.removeValue(forKey: surfaceID)
   }
 
   func probeForegroundJob(processGroupID: pid_t?, childPID: pid_t?, fresh: Bool) async -> ForegroundJob? {
