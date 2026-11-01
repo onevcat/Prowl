@@ -10,6 +10,7 @@ import Testing
 
 @testable import Prowl
 
+@Suite(.dependency(\.continuousClock, ImmediateClock()))
 @MainActor
 struct RepositoriesFeatureTests {
   @Test func requestCanvasCommandSetsPendingRequestWithIncrementingID() async {

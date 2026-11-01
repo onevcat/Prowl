@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import CustomDump
 import DependenciesTestSupport
@@ -9,6 +10,7 @@ import Testing
 
 @MainActor
 @Suite(
+  .dependency(\.continuousClock, ImmediateClock()),
   .serialized,
   .dependency(\.defaultAppStorage, .appFeatureSettingsChangedTests)
 )
