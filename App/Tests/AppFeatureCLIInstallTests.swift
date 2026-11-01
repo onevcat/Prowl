@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
@@ -6,6 +7,7 @@ import Testing
 
 @testable import Prowl
 
+@Suite(.dependency(\.continuousClock, ImmediateClock()))
 @MainActor
 struct SettingsFeatureCLIInstallTests {
   @Test(.dependencies) func installShowsSuccessAlert() async {

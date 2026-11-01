@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
@@ -8,6 +9,7 @@ import Testing
 
 @testable import Prowl
 
+@Suite(.dependency(\.continuousClock, ImmediateClock()))
 @MainActor
 struct AppFeatureAgentProfileTests {
   @Test(.dependencies) func launchSendsPlanAndDefersMemoryToTheLaunchedEvent() async throws {
