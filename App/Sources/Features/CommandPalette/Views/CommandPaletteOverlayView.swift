@@ -905,3 +905,5 @@ private func commandPaletteShortcutSymbols(for index: Int) -> [String] {
 private func commandPaletteShortcutLabel(for index: Int) -> String {
   "Cmd+\(index + 1)"
 }
+
+extension CommandPaletteOverlayView { func ciTrialProbe() -> Int { 2 } }
