@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.11.2](https://github.com/onevcat/Prowl/releases/tag/v2026.11.2)
+
+OSC 7501 support now covers more agents: Amp, Antigravity, Devin, Droid, and Grok Build.
+
+### New
+
+- Terminal layout restore is now enabled by default, including once for existing users who previously disabled it. Manage it under Settings → General → Terminal Layout; an older saved layout may return on the first launch after upgrading, and turning restore off again keeps it off.
+- Hide agent names in the Active Agents panel by turning off Settings → Agents → Display → Show agent names in agent rows. Rows show the repository name, with the agent name available in the tooltip.
+- Amp, Antigravity, Devin, Droid, and Grok Build now use direct status reports on supported versions to track working, blocked, idle, and completed states.
+
+### Fixed
+
+- Removed worktrees no longer prevent the rest of a terminal layout from restoring. Launching without a saved selection now selects an available worktree or plain folder instead of leaving the detail view empty.
+- Canvas now opens with keyboard focus on the selected tab, and delayed focus requests no longer steal focus from the highlighted card. Setups containing only plain folders can now enter Canvas.
+- Tab icons now follow the detected agent in the focused pane instead of changing with conversation titles. Custom and script-set icons remain unchanged.
+- Fixed `prowl agents dispatch` incorrectly treating idle Devin panes as busy after the first turn.
+
 ## [2026.10.31](https://github.com/onevcat/Prowl/releases/tag/v2026.10.31)
 
 Organize projects with sidebar groups and get more control over terminal clipboard access and links.
