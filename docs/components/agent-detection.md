@@ -476,6 +476,8 @@ idle waits, because a subagent's prompt needs an answer; a child that is `workin
 changes nothing, so background agents and subagents never keep a pane Working or block
 `agents wait --until idle`, dispatch, or workflows. `done` and `error` may show the Done
 badge; `idle` never does (it is sent at mount, on interrupt, and on a session reset).
+Prowl ignores an `idle` root from Amp, which sends its only `idle` when the first prompt
+is entered: the screen rules decide until `working` arrives.
 While the root record decides, Prowl stops reading the screen and the native/log files;
 every 2 s it only probes the process and resolves the session (against the last screen
 text it read), and `screen_reason` reports `screen.delegated`. A key press or CLI input
