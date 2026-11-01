@@ -27,6 +27,11 @@ final class GhosttyRuntime {
   // direct way to trigger app-level actions without threading the instance
   // through SwiftUI's environment or reducers.
   static weak var shared: GhosttyRuntime?
+  // A callback from another thread reaches the main queue with an unretained runtime or app
+  // pointer. A test can release its runtime before that block runs, so check that the pointer
+  // is still live before using it.
+  private static var liveRuntimeBits: Set<UInt> = []
+  private static var liveAppBits: Set<UInt> = []
 
   final class SurfaceReference {
     let surface: ghostty_surface_t
@@ -100,12 +105,22 @@ final class GhosttyRuntime {
       preconditionFailure("ghostty_app_new failed")
     }
     self.app = app
+    Self.liveRuntimeBits.insert(UInt(bitPattern: Unmanaged.passUnretained(self).toOpaque()))
+    Self.liveAppBits.insert(UInt(bitPattern: app))
     if let initialColorScheme {
       setColorScheme(initialColorScheme)
     }
 
     Self.shared = self
     registerNotificationObservers()
+  }
+
+  static func isLive(runtimeBits: UInt) -> Bool {
+    liveRuntimeBits.contains(runtimeBits)
+  }
+
+  static func isLive(appBits: UInt) -> Bool {
+    liveAppBits.contains(appBits)
   }
 
   var appliedColorSchemeForTesting: ColorScheme? {
@@ -190,6 +205,10 @@ final class GhosttyRuntime {
   }
 
   isolated deinit {
+    Self.liveRuntimeBits.remove(UInt(bitPattern: Unmanaged.passUnretained(self).toOpaque()))
+    if let app {
+      Self.liveAppBits.remove(UInt(bitPattern: app))
+    }
     let center = NotificationCenter.default
     for observer in observers {
       center.removeObserver(observer)
