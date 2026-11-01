@@ -16,7 +16,7 @@
 | 2026-04-08 | Tab title and icon persisted in the snapshot (optional fields, backward-compatible decode) | PR #186 → [022-tab-title-and-icon](../022-tab-title-and-icon/000-plan.md) |
 | 2026-06-01 | Default View launch race + restoration hang fix | PR #380 — see [002-launch-restore-races.md](002-launch-restore-races.md) |
 | 2026-06-16 | scenePhase-save-clears-snapshot launch race fix | PR #459 — see [002-launch-restore-races.md](002-launch-restore-races.md) |
-| 2026-11-01 | Promoted: default on for settings files without the field, no "experimental" label, toggle moved to General. A missing worktree no longer resets the layout; a restore without a selection falls back to the last focused worktree | #573 |
+| 2026-11-01 | Promoted: default on, also once for existing settings files, no "experimental" label, toggle moved to General. A missing worktree no longer resets the layout; a restore without a selection falls back to the last focused worktree | #573 |
 
 ## Outcome & current state (as of 2026-07-12)
 
@@ -85,6 +85,8 @@ Live checks found two blockers for default-on, both fixed in the promotion chang
   nothing. A launch with no saved tabs opened with an empty detail view. It now uses the same
   fallback as the default view.
 
-Existing settings files store `false`, because every field is encoded on save. They keep it:
-a stored `false` cannot be told apart from an explicit choice, so only settings files without
-the field get the new default.
+Existing settings files store `false` for anyone who kept the old default, because every field
+is encoded on save. onevcat chose to turn the feature on for them too, and accepted that this
+also overrides an explicit off once. The stored key changed from `restoreTerminalLayoutOnLaunch`
+to `restoreTerminalLayout`, so no migration state is needed: the old key is ignored, and a later
+off stays off. The property keeps its name.

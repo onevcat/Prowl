@@ -84,7 +84,7 @@ reads have no scheduled removal date.
 | `copyIgnoredOnWorktreeCreate` | Bool | `false` | Copy `.gitignore`'d files into new worktrees. |
 | `copyUntrackedOnWorktreeCreate` | Bool | `false` | Copy untracked files into new worktrees. |
 | `pullRequestMergeStrategy` | enum (`merge`/`squash`/`rebase`) | `merge` | Default PR merge strategy. |
-| `restoreTerminalLayoutOnLaunch` | Bool | `true` | Restore tabs/splits on launch. A settings file that already stores this field keeps its value. |
+| `restoreTerminalLayout` | Bool | `true` | Restore tabs/splits on launch. Replaces `restoreTerminalLayoutOnLaunch`: Prowl ignores the old field, so the setting turns on once for every existing settings file. |
 | `terminalFontSize` | Float32? | `nil` | Remembered terminal font size; `nil` follows Ghostty's `font-size`. A size equal to Ghostty's `font-size` is stored as `nil`, also at launch. |
 | `ghosttyConfigPath` | String? | `nil` | Dedicated Ghostty config file for Prowl; replaces Ghostty's own config files. `nil` = share Ghostty's config. |
 | `archivedAutoDeletePeriod` | enum? (days) | `nil` | Auto-delete archived worktrees after N days; `nil` = never. |

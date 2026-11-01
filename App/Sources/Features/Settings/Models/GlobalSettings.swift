@@ -281,7 +281,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case copyIgnoredOnWorktreeCreate
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
-    case restoreTerminalLayoutOnLaunch
+    // A new key turns this on once for every file that stored the old `restoreTerminalLayoutOnLaunch`,
+    // because that key stored `false` for anyone who kept the old default.
+    case restoreTerminalLayoutOnLaunch = "restoreTerminalLayout"
     case archivedAutoDeletePeriod
     case terminalFontSize
     case keybindingUserOverrides

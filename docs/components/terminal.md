@@ -300,7 +300,7 @@ no in-app Ghostty theme picker; change Ghostty colors via its config file.
 
 ## Layout persistence
 
-`restoreTerminalLayoutOnLaunch` is on by default (Settings → General → Terminal
+`restoreTerminalLayout` is on by default (Settings → General → Terminal
 Layout). Prowl saves the tab/split layout (which worktrees, tabs, split trees,
 titles, icons, each pane's folder) and restores it on next launch. Restored panes
 start a new shell: running commands and agents do not start again, and a folder
