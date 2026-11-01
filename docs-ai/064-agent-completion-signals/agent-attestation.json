@@ -2,11 +2,11 @@
   "description": "Managed-hook version baseline. Each linked record states its tested scope; headless verification does not imply GUI or interactive coverage. The original interactive baseline is preserved in agent-attestation-interactive.json. See agent-contracts-runbook.md for explicit verification/publication.",
   "runtimes": [
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "2.1.314",
+      "attested_on": "2026-11-01",
+      "attested_version": "2.1.316",
       "binary": "claude",
       "name": "Claude Code",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "claude",
       "version_command": [
         "claude",
@@ -14,11 +14,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
+      "attested_on": "2026-11-01",
       "attested_version": "0.166.0",
       "binary": "codex",
       "name": "Codex",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "codex",
       "version_command": [
         "codex",
@@ -26,11 +26,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "1.0.83",
+      "attested_on": "2026-11-01",
+      "attested_version": "1.0.105",
       "binary": "copilot",
       "name": "GitHub Copilot CLI",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "copilot",
       "version_command": [
         "copilot",
@@ -38,11 +38,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "0.210.0",
+      "attested_on": "2026-11-01",
+      "attested_version": "1.0.0",
       "binary": "droid",
       "name": "Factory Droid",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "droid",
       "version_command": [
         "droid",
@@ -50,11 +50,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "1.1.67",
+      "attested_on": "2026-11-01",
+      "attested_version": "1.1.81",
       "binary": "qodercli",
       "name": "Qoder CLI",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "qodercli",
       "version_command": [
         "qodercli",
@@ -62,11 +62,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
+      "attested_on": "2026-11-01",
       "attested_version": "1.4.0",
       "binary": "pi",
       "name": "Pi",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "pi",
       "version_command": [
         "pi",
@@ -74,11 +74,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "18.10.0",
+      "attested_on": "2026-11-01",
+      "attested_version": "18.14.0",
       "binary": "omp",
       "name": "Oh My Pi",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "omp",
       "version_command": [
         "omp",
@@ -86,11 +86,11 @@
       ]
     },
     {
-      "attested_on": "2026-10-30",
-      "attested_version": "1.18.34",
+      "attested_on": "2026-11-01",
+      "attested_version": "1.19.5",
       "binary": "opencode",
       "name": "OpenCode",
-      "record": "attestations/8d110b38e8fb12006bb0408b226e01d8760cff0affce9a5bf2f595e7f7d21bb6.json",
+      "record": "attestations/865bdda7ca809867b4708dd18fc5fa3f2c8ede6e077a2208ad8dfc2a0c340d1b.json",
       "runtime": "opencode",
       "version_command": [
         "opencode",
