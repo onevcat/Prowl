@@ -61,7 +61,7 @@ jobs:
     # so .package.resolved changes with the Xcode major version. Use the same Xcode as local
     # builds and releases. GitHub marks this image as a preview until a macos-27 label exists.
     runs-on: xcode-27
-    # A green run takes 8 to 15 minutes, and a slow runner has taken 2.5 times as long. The test
+    # A green run takes 6 to 11 minutes, and a cold App build takes 11 to 17. The test
     # watchdog stops a hung test run sooner; this limit stops anything else that hangs. Without
     # it the default is 6 hours, so a stuck run had to be cancelled by hand.
     timeout-minutes: 45
