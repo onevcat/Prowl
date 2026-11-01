@@ -28,6 +28,27 @@ class EventTests(unittest.TestCase):
         self.assertEqual(rules.validate_events('codex', [event('agent-turn-complete', 'turn-ended')], '/private/probe'), 'verified')
         self.assertEqual(rules.validate_events('opencode', [event('session.idle', 'turn-ended')], '/private/probe'), 'verified')
 
+    def test_qoder_headless_exit_may_end_one_foreign_session_last(self):
+        complete = [event('SessionStart', 'session-start'), event('Stop', 'turn-ended'), event('SessionEnd', 'session-end')]
+        foreign = event('SessionEnd', 'session-end', 'two')
+        self.assertEqual(rules.validate_events('qodercli', complete + [foreign], '/private/probe'), 'verified')
+        self.assertEqual(rules.validate_events('claude', complete + [foreign], '/private/probe'), 'session_changed')
+
+    def test_qoder_foreign_session_end_cannot_replace_or_precede_the_real_end(self):
+        start, stop, end = event('SessionStart', 'session-start'), event('Stop', 'turn-ended'), event('SessionEnd', 'session-end')
+        foreign = event('SessionEnd', 'session-end', 'two')
+        wrong_cwd = {**foreign, 'cwd': '/private/other'}
+        cases = [
+            [start, stop, foreign],
+            [start, foreign, stop, end],
+            [start, stop, foreign, end],
+            [start, stop, end, foreign, event('SessionEnd', 'session-end', 'three')],
+            [start, stop, end, wrong_cwd],
+        ]
+        for events in cases:
+            with self.subTest(events=events):
+                self.assertNotEqual(rules.validate_events('qodercli', events, '/private/probe'), 'verified')
+
 
 class ZeroTurnTests(unittest.TestCase):
     def test_expected_empty_prompt_results(self):

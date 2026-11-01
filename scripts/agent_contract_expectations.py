@@ -40,6 +40,15 @@ def validate_events(runtime, events, cwd, scope='headless'):
     # delivered, but require only the reproducible start/settled contract (064.016).
     if runtime == 'omp' and scope == 'headless':
         allowed['session_shutdown'] = 'session-end'
+    # Qoder 1.1.81 ends one extra session at a headless exit, after the real `SessionEnd`.
+    # Interactive runs do not send it, so it never reaches a pane (064.016).
+    if runtime == 'qodercli' and scope == 'headless' and len(events) >= 2 and all(isinstance(item, dict) for item in events[-2:]):
+        last, previous = events[-1], events[-2]
+        if (last.get('native_event') == previous.get('native_event') == 'SessionEnd'
+                and last.get('event') == 'session-end' and last.get('session_id') != previous.get('session_id')
+                and isinstance(last.get('session_id'), str) and last['session_id'].strip()
+                and same_directory(last.get('cwd'), cwd)):
+            events = events[:-1]
     order = {native: index for index, native in enumerate(allowed)}
     seen, sessions, ranks = set(), set(), []
     for item in events:

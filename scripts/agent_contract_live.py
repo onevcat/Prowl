@@ -161,7 +161,8 @@ def runtime_configuration(runtime, route, directory):
         core.write_json(config, {'customModels': [{'model': model, 'id': model_id, 'displayName': 'Contract Flash',
             'baseUrl': base, 'apiKey': '${' + key + '}', 'provider': 'generic-chat-completion-api',
             'maxOutputTokens': 512, 'extraArgs': {'thinking': {'type': 'disabled'}}}]})
-        arguments = ['--settings', str(config), '-m', model_id, '--enabled-tools', '', '--disable-builtin-skills']
+        # Droid 1.0 needs at least one tool ID. TodoWrite cannot read or change anything outside the session.
+        arguments = ['--settings', str(config), '-m', model_id, '--only-tools', 'TodoWrite', '--disable-builtin-skills']
         # Factory credentials remain in its normal home: BYOK may still require a Factory account.
     elif runtime in ('pi', 'omp'):
         environment['PI_CODING_AGENT_DIR'] = str(state)

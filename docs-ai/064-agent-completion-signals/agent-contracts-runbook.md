@@ -59,7 +59,10 @@ by canonical path. Requirements are fixed independently of the production decode
 OMP's one-shot host can exit before its queued shutdown relay starts. A two-second relay drain
 still did not consistently deliver shutdown; the headless contract requires start/stop and
 validates shutdown if received. This does not attest OMP interactive shutdown. Never run an
-empty OMP prompt as a zero-inference check. Codex additionally runs all configuration scenarios
+empty OMP prompt as a zero-inference check. Qoder 1.1.81 sends one `SessionEnd` for a second
+session about 40 ms after the real one at a headless exit, with or without
+`--no-session-persistence`; the contract accepts exactly that last event. An interactive run
+with two turns, `/clear`, and `/exit` did not send it. Codex additionally runs all configuration scenarios
 listed below. Unsupported zero-turn scenarios have fixed reasons; they cannot excuse a missing
 required headless event.
 A native error/StopFailure or a hook after failed authentication cannot pass. The collector
