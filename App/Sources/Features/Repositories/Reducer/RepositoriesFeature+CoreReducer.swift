@@ -1076,8 +1076,8 @@ extension RepositoriesFeature {
       case .inProgress:
         return .cancel(id: CancelID.toastAutoDismiss)
       case .success, .warning:
-        return .run { send in
-          try? await ContinuousClock().sleep(for: .seconds(3))
+        return .run { [clock] send in
+          try? await clock.sleep(for: .seconds(3))
           await send(.dismissToast)
         }
         .cancellable(id: CancelID.toastAutoDismiss, cancelInFlight: true)
