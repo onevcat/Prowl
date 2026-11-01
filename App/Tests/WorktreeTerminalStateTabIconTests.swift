@@ -341,6 +341,127 @@ struct WorktreeTerminalStateTabIconTests {
     #expect(fixture.icon == gitIcon)
   }
 
+  // MARK: - Focus
+
+  /// A tab with the fixture's focused pane on the left and an unfocused pane on the right.
+  private func makeSplit(_ fixture: Fixture) throws -> GhosttySurfaceView {
+    let rightID = try fixture.state.createSplit(
+      of: fixture.surfaceID, direction: .right, initialInput: nil, focusing: false
+    ).get()
+    #expect(fixture.state.focusedSurfaceId(in: fixture.tabID) == fixture.surfaceID)
+    return try #require(fixture.state.surfaceView(for: rightID))
+  }
+
+  private func detectClaude(in surfaceID: UUID, _ fixture: Fixture, token: String = "claude") {
+    fixture.state.commitAgentState(
+      PaneAgentState(detectedAgent: .claude, iconLookupToken: token, state: .idle),
+      previous: PaneAgentState(),
+      surfaceID: surfaceID,
+      tabId: fixture.tabID)
+  }
+
+  @Test func focusingAnAgentPaneTakesItsIcon() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: right.id, fixture)
+    #expect(fixture.icon != claudeIcon)
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  @Test func focusUsesTheProcessNameBeforeTheAgent() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: right.id, fixture, token: "omp")
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+
+    #expect(fixture.icon == "@asset:OMP")
+  }
+
+  /// A plain pane has no record of its current command, so focus leaves the icon alone,
+  /// and the next command in that pane decides.
+  @Test func focusingAPlainPaneKeepsTheIconUntilItsNextCommand() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: fixture.surfaceID, fixture)
+    #expect(fixture.icon == claudeIcon)
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+    #expect(fixture.icon == claudeIcon)
+
+    fixture.state.noteTitleForCommandDetection("git status", surfaceId: right.id, tabId: fixture.tabID)
+    #expect(fixture.icon == gitIcon)
+  }
+
+  @Test func focusMovesTheIconBackToTheAgentPane() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    let left = try #require(fixture.state.surfaceView(for: fixture.surfaceID))
+    detectClaude(in: fixture.surfaceID, fixture)
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+    fixture.state.noteTitleForCommandDetection("git status", surfaceId: right.id, tabId: fixture.tabID)
+    #expect(fixture.icon == gitIcon)
+
+    fixture.state.recordActiveSurface(left, in: fixture.tabID)
+
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  @Test func focusFollowsTheAgentOfEachPane() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    let left = try #require(fixture.state.surfaceView(for: fixture.surfaceID))
+    detectClaude(in: fixture.surfaceID, fixture)
+    fixture.state.commitAgentState(
+      PaneAgentState(detectedAgent: .codex, iconLookupToken: "codex", state: .idle),
+      previous: PaneAgentState(),
+      surfaceID: right.id,
+      tabId: fixture.tabID)
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+    #expect(fixture.icon == codexIcon)
+
+    fixture.state.recordActiveSurface(left, in: fixture.tabID)
+    #expect(fixture.icon == claudeIcon)
+  }
+
+  @Test func focusKeepsAUserIcon() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: right.id, fixture)
+    fixture.state.tabManager.overrideIcon(fixture.tabID, icon: gitIcon)
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+
+    #expect(fixture.icon == gitIcon)
+  }
+
+  @Test func focusKeepsAScriptIcon() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: right.id, fixture)
+    fixture.state.tabManager.setScriptIcon(fixture.tabID, icon: gitIcon)
+
+    fixture.state.recordActiveSurface(right, in: fixture.tabID)
+
+    #expect(fixture.icon == gitIcon)
+  }
+
+  /// The production callback: Ghostty reports focus through the surface bridge.
+  @Test func surfaceFocusCallbackTakesTheAgentIcon() throws {
+    let fixture = try makeFixture()
+    let right = try makeSplit(fixture)
+    detectClaude(in: right.id, fixture)
+    fixture.state.configureSurfaceCallbacks(for: right, tabId: fixture.tabID)
+
+    right.onFocusChange?(true)
+
+    #expect(fixture.icon == claudeIcon)
+  }
+
   /// The production path: a probe binds `claude` and `detectAgentState` commits it.
   @Test func detectionTickCorrectsTheIcon() async throws {
     let fixture = try makeFixture()
