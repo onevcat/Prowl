@@ -312,7 +312,7 @@ If a saved worktree is gone at launch (it was removed outside Prowl, or its
 repository failed to load), Prowl skips it and restores the rest. The next save
 no longer holds the skipped worktree, so its layout does not return if the folder
 comes back later. If the saved layout names no available worktree, Prowl selects
-the last focused worktree, as a launch without restore does. A saved file that
+the last focused worktree, else the first available worktree or folder. A saved file that
 cannot be read is removed without a message. A saved layout that cannot be applied
 is reset, and Prowl shows a warning.
 

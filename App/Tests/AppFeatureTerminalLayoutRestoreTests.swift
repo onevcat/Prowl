@@ -461,6 +461,67 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
   }
 
+  @Test(.dependencies) func layoutRestoredNilSelectsPlainFolderWhenNoWorktreeIsAvailable() async {
+    let plainRepository = makePlainRepository()
+    var repositoriesState = RepositoriesFeature.State(repositories: [plainRepository])
+    repositoriesState.lastFocusedWorktreeID = "/tmp/removed/worktree"
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil)))
+    await store.receive(\.repositories.selectRepository)
+  }
+
+  @Test(.dependencies) func layoutRestoreFailedSelectsPlainFolderWhenNoWorktreeIsAvailable() async {
+    let plainRepository = makePlainRepository()
+    var repositoriesState = RepositoriesFeature.State(repositories: [plainRepository])
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestoreFailed(message: "reset")))
+    await store.receive(\.repositories.selectRepository)
+  }
+
+  @Test(.dependencies) func layoutRestoredNilPrefersWorktreeOverPlainFolder() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [makePlainRepository(), repository])
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil)))
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+    }
+  }
+
   @Test(.dependencies) func layoutRestoreFailedAppliesDefaultShelf() async {
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])

@@ -83,7 +83,7 @@ Live checks found two blockers for default-on, both fixed in the promotion chang
   Only a structurally invalid snapshot fails closed.
 - `repositoriesChanged` clears the selection before restore, and `.layoutRestored(nil)` selected
   nothing. A launch with no saved tabs opened with an empty detail view. It now uses the same
-  fallback as the default view.
+  fallback as the default view, which also accepts plain folders.
 
 Existing settings files store `false` for anyone who kept the old default, because every field
 is encoded on save. onevcat chose to turn the feature on for them too, and accepted that this

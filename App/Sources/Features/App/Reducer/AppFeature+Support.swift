@@ -291,6 +291,7 @@ extension AppFeature {
     let candidateIDs =
       [repositories.lastFocusedWorktreeID].compactMap(\.self)
       + repositories.orderedWorktreeRows().map(\.id)
+      + repositories.orderedRepositoryIDs()
     return candidateIDs.first { id in
       repositories.worktree(for: id) != nil
         || repositories.repositories[id: id]?.kind == .plain
