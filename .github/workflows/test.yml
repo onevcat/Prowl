@@ -10,11 +10,15 @@ on:
       - Mirror/iOS/**
       - Mirror/Android/**
       - .github/workflows/mirror-*.yml
+      - docs-ai/**
+      - CHANGELOG.md
   pull_request:
     paths-ignore:
       - Mirror/iOS/**
       - Mirror/Android/**
       - .github/workflows/mirror-*.yml
+      - docs-ai/**
+      - CHANGELOG.md
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,6 +61,8 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       # CI reads no index or debug info, so it does not pay to write them. The compilation cache
       # needs a long validation in each run and doubles the App cache (docs-ai 016.010).
+      # Each test process has its own main thread, which is the limit on test speed.
+      PROWL_TEST_SHARDS: 3
       PROWL_CI_BUILD_SETTINGS: COMPILATION_CACHE_ENABLE_CACHING=NO COMPILER_INDEX_STORE_ENABLE=NO GCC_GENERATE_DEBUGGING_SYMBOLS=NO
     steps:
       - uses: actions/checkout@v6
