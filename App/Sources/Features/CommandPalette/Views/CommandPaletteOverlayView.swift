@@ -107,7 +107,6 @@ struct CommandPaletteOverlayView: View {
   }
 
   private func resetSelection(rows: [CommandPaletteItem]) {
-    _ = rows.count
     store.send(.resetSelection(itemsCount: rows.count))
   }
 
@@ -906,5 +905,3 @@ private func commandPaletteShortcutSymbols(for index: Int) -> [String] {
 private func commandPaletteShortcutLabel(for index: Int) -> String {
   "Cmd+\(index + 1)"
 }
-
-extension CommandPaletteOverlayView { func ciTrialProbe() -> Int { 2 } }
