@@ -1,10 +1,13 @@
+import Clocks
 import ComposableArchitecture
+import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
 import Testing
 
 @testable import Prowl
 
+@Suite(.dependency(\.continuousClock, ImmediateClock()))
 @MainActor
 struct AppFeatureWorkflowNoticeTests {
   @Test func completedRunNotifiesWithoutAToastInTheSelectedWorktree() async {

@@ -110,8 +110,8 @@ extension RepositoriesFeature {
       state.pullRequestRefreshForcedWorktreeIDs.insert(worktreeID)
       let repositoryLocation = worktree.repositoryLocation
       let worktreeIDs = repository.worktrees.map(\.id)
-      return .run { send in
-        try? await ContinuousClock().sleep(for: .seconds(2))
+      return .run { [clock] send in
+        try? await clock.sleep(for: .seconds(2))
         await send(
           .worktreeInfoEvent(
             .repositoryPullRequestRefresh(

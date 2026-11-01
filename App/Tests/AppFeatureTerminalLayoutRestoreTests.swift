@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
@@ -11,6 +12,7 @@ import Testing
 // `repositoriesChanged` kicks off workflow history maintenance, which reads the
 // date dependency. Isolate history per test so recovery cannot interrupt another test's runs.
 @Suite(
+  .dependency(\.continuousClock, ImmediateClock()),
   .dependency(\.date.now, Date(timeIntervalSince1970: 1_700_000_000)),
   .dependencies {
     $0[WorkflowHistoryStorageKey.self] = WorkflowHistoryStorage(

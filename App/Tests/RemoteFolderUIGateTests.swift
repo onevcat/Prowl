@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import ConcurrencyExtras
 import DependenciesTestSupport
@@ -10,6 +11,7 @@ import Testing
 
 /// The UI gates of remote folders and the toolbar status of their connection
 /// (docs-ai 084 A4b, C1c).
+@Suite(.dependency(\.continuousClock, ImmediateClock()))
 @MainActor
 struct RemoteFolderUIGateTests {
   private static let profile = HostProfile(

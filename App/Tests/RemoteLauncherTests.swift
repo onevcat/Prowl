@@ -101,6 +101,8 @@ nonisolated struct RemoteLauncherTests {
     return (output, launcher)
   }
 
+  private static let interrupt = "\u{03}"
+
   /// Runs the staged `launch` in a terminal (`script` gives it a controlling PTY), so the
   /// terminal's interrupt character sends SIGINT. Each step waits for its text in the output,
   /// then types its input.
@@ -135,13 +137,24 @@ nonisolated struct RemoteLauncherTests {
     reader.start()
     let text = { String(bytes: collected.data, encoding: .utf8) ?? "" }
     let deadline = Date().addingTimeInterval(30)
+    var interruptToRepeat = false
     for step in steps {
-      while !text().contains(step.waitFor), process.isRunning, Date() < deadline { usleep(20_000) }
+      var nextInterrupt = Date().addingTimeInterval(0.5)
+      while !text().contains(step.waitFor), process.isRunning, Date() < deadline {
+        usleep(20_000)
+        // An interrupt between two commands of the script reaches no running command, and the
+        // script continues. Repeat it until the awaited text shows that one took effect.
+        if interruptToRepeat, Date() >= nextInterrupt {
+          stdin.fileHandleForWriting.write(Data(Self.interrupt.utf8))
+          nextInterrupt = Date().addingTimeInterval(0.5)
+        }
+      }
       guard text().contains(step.waitFor) else {
         Issue.record("no \(step.waitFor.debugDescription) in time: \(text().debugDescription)")
         break
       }
       stdin.fileHandleForWriting.write(Data(step.send.utf8))
+      interruptToRepeat = step.send == Self.interrupt
     }
     while process.isRunning, Date() < deadline { usleep(20_000) }
     if process.isRunning {
@@ -400,7 +413,7 @@ nonisolated struct RemoteLauncherTests {
 
     let (output, launcher) = try Self.launchInTerminal(
       launch, shell: shell, home: home,
-      steps: [("FIRST_START", "\u{03}"), (marker, "echo AL\"\"IVE\nexit 4\n")])
+      steps: [("FIRST_START", Self.interrupt), (marker, "echo AL\"\"IVE\nexit 4\n")])
 
     #expect(output.components(separatedBy: "7501;").count == 2, "\(output.debugDescription)")
     #expect(output.contains(marker), "\(output.debugDescription)")
