@@ -32,7 +32,8 @@ Command Palette → "Toggle Active Agents Panel".
 - **Title** — detected command/agent name + repository (repo color-coded);
   command aliases such as `omp` are shown directly. Panes Prowl launched from
   an [agent profile](agent-profiles.md) show the profile's display name
-  instead (frozen at launch).
+  instead (frozen at launch). With `showActiveAgentNames` off, the panel title
+  shows only the repository and the agent name moves to the tooltip.
 - **Subtitle** — the agent's pane title (if `showActiveAgentTabTitles`) or branch
   name. The pane title is the surface's own terminal title, falling back to the
   tab title, so agents in different splits of one tab keep distinct subtitles.
@@ -102,6 +103,9 @@ Settings → Agents → Display:
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
 - `showActiveAgentTabTitles` — show each agent's pane title (surface title,
   falling back to the tab title) instead of its branch.
+- `showActiveAgentNames` — show the agent name before the repository name (on by
+  default). Turn it off to keep narrow rows on the repository; Agent Island rows
+  keep the name.
 - `showActiveAgentStatusInShelf` — show detected agent status markers on Shelf
   tab icons.
 - Panel height and hidden/shown state are persisted automatically.

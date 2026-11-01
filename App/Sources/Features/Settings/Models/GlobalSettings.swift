@@ -31,6 +31,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var dimUnfocusedSplits: Bool
   var autoShowActiveAgentsPanel: Bool
   var showActiveAgentTabTitles: Bool
+  var showActiveAgentNames: Bool
   var showActiveAgentStatusInShelf: Bool
   var agentIslandOnlyShowWithAgents: Bool
   var agentIslandEnabled: Bool
@@ -86,6 +87,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: true,
     autoShowActiveAgentsPanel: false,
     showActiveAgentTabTitles: false,
+    showActiveAgentNames: true,
     showActiveAgentStatusInShelf: true,
     agentIslandEnabled: false,
     agentIslandDisplayPreference: .automatic,
@@ -134,6 +136,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits: Bool = true,
     autoShowActiveAgentsPanel: Bool = false,
     showActiveAgentTabTitles: Bool = false,
+    showActiveAgentNames: Bool = true,
     showActiveAgentStatusInShelf: Bool = true,
     agentIslandOnlyShowWithAgents: Bool = false,
     agentIslandEnabled: Bool = false,
@@ -181,6 +184,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.dimUnfocusedSplits = dimUnfocusedSplits
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.showActiveAgentTabTitles = showActiveAgentTabTitles
+    self.showActiveAgentNames = showActiveAgentNames
     self.showActiveAgentStatusInShelf = showActiveAgentStatusInShelf
     self.agentIslandOnlyShowWithAgents = agentIslandOnlyShowWithAgents
     self.agentIslandEnabled = agentIslandEnabled
@@ -231,6 +235,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(dimUnfocusedSplits, forKey: .dimUnfocusedSplits)
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(showActiveAgentTabTitles, forKey: .showActiveAgentTabTitles)
+    try container.encode(showActiveAgentNames, forKey: .showActiveAgentNames)
     try container.encode(showActiveAgentStatusInShelf, forKey: .showActiveAgentStatusInShelf)
     try container.encode(agentIslandOnlyShowWithAgents, forKey: .agentIslandOnlyShowWithAgents)
     try container.encode(agentIslandEnabled, forKey: .agentIslandEnabled)
@@ -285,6 +290,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case dimUnfocusedSplits
     case autoShowActiveAgentsPanel
     case showActiveAgentTabTitles
+    case showActiveAgentNames
     case showActiveAgentStatusInShelf
     case agentIslandOnlyShowWithAgents
     case agentIslandEnabled
@@ -388,9 +394,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel =
       try container.decodeIfPresent(Bool.self, forKey: .autoShowActiveAgentsPanel)
       ?? Self.default.autoShowActiveAgentsPanel
-    showActiveAgentTabTitles =
-      try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentTabTitles)
-      ?? Self.default.showActiveAgentTabTitles
+    (showActiveAgentTabTitles, showActiveAgentNames) = try Self.decodeActiveAgentRowSettings(from: container)
     showActiveAgentStatusInShelf =
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
       ?? Self.default.showActiveAgentStatusInShelf
@@ -418,6 +422,18 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   ) throws -> RemoteAgentDetectionConsent {
     try container.decodeIfPresent(String.self, forKey: .remoteAgentDetection)
       .flatMap(RemoteAgentDetectionConsent.init(rawValue:)) ?? .undecided
+  }
+
+  private static func decodeActiveAgentRowSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> (tabTitles: Bool, agentNames: Bool) {
+    let tabTitles =
+      try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentTabTitles)
+      ?? Self.default.showActiveAgentTabTitles
+    let agentNames =
+      try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentNames)
+      ?? Self.default.showActiveAgentNames
+    return (tabTitles, agentNames)
   }
 
   private struct DecodedAgentIslandSettings {

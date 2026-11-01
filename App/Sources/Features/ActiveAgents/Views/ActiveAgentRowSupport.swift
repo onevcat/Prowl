@@ -15,11 +15,25 @@ enum ActiveAgentRowPresentation {
   static func helpText(
     for entry: ActiveAgentEntry,
     branchName: String,
-    showTabTitles: Bool
+    showTabTitles: Bool,
+    showAgentName: Bool = true
   ) -> String {
-    let text = showTabTitles ? branchName : paneTitle(for: entry)
-    guard let remote = remoteHelpText(for: entry) else { return text }
-    return "\(text)\n\(remote)"
+    [
+      showAgentName ? nil : entry.displayName,
+      showTabTitles ? branchName : paneTitle(for: entry),
+      remoteHelpText(for: entry),
+    ]
+    .compactMap(\.self)
+    .joined(separator: "\n")
+  }
+
+  /// The row's icon is hidden from accessibility, so a hidden name must still be spoken here.
+  static func repositoryAccessibilityLabel(
+    for entry: ActiveAgentEntry,
+    repositoryName: String,
+    showAgentName: Bool
+  ) -> String {
+    showAgentName ? repositoryName : "\(entry.displayName), \(repositoryName)"
   }
 
   /// The reason a remote agent's observation rests on what it does; nil for a local agent.

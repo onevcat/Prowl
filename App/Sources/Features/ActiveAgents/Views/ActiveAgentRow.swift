@@ -7,6 +7,8 @@ struct ActiveAgentRow: View {
   let subtitle: String
   let repositoryColor: RepositoryColorChoice?
   let isDimmed: Bool
+  /// The Island roster has room for the name, so only the sidebar panel passes the setting.
+  var showsAgentName = true
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
@@ -31,15 +33,26 @@ struct ActiveAgentRow: View {
 
   private var title: some View {
     HStack(alignment: .firstTextBaseline, spacing: 3) {
-      Text(entry.displayName)
-        .font(.body.weight(.medium))
-        .foregroundStyle(.primary)
-      Text("·")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.tertiary)
+      if showsAgentName {
+        Text(entry.displayName)
+          .font(.body.weight(.medium))
+          .foregroundStyle(.primary)
+        Text("·")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.tertiary)
+      }
       Text(repositoryName)
         .font(.callout.weight(.medium))
         .foregroundStyle(repositoryColor?.color ?? .secondary)
+        .accessibilityLabel(
+          Text(
+            verbatim: ActiveAgentRowPresentation.repositoryAccessibilityLabel(
+              for: entry,
+              repositoryName: repositoryName,
+              showAgentName: showsAgentName
+            )
+          )
+        )
     }
     .lineLimit(1)
   }

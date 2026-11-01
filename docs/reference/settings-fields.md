@@ -94,6 +94,7 @@ reads have no scheduled removal date.
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
 | `showActiveAgentTabTitles` | Bool | `false` | Show pane titles (surface title, falling back to the tab title; vs. branch) in the agents panel. |
+| `showActiveAgentNames` | Bool | `true` | Show the agent name before the repository name in agents panel rows; when off, the name moves to the row's tooltip. Agent Island is not affected. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `agentIslandSilentOpacity` | Double | `0.35` | Quiet floating island opacity (0.2–1.0), under Agents → Display. Notched monitors stay fully opaque. |
 | `agentIslandEnabled` | Bool | `false` | Show Agent Island, including its empty state unless `agentIslandOnlyShowWithAgents` is enabled. |
