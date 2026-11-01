@@ -78,14 +78,21 @@ runs:
     # them (docs-ai 016.010). Start fresh only for another toolchain, GhosttyKit, package set
     # or project configuration. Build flags need no key part, because a task reruns when its
     # command line changes.
+    # The version file changes with each release, and a version change does not need a clean build.
     - name: App incremental build cache
       id: app_cache
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.PROWL_DERIVED_DATA_PATH }}
-        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-trialcold-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
+<<<<<<< .merge_file_2NQh1p
+        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-app-incremental-trialcold-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-
+          ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-
+=======
+        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', '!App/Config/Version.xcconfig', 'mise.toml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', '!App/Config/Version.xcconfig', 'mise.toml') }}-
+>>>>>>> .merge_file_fN3XzL
     - name: Restore unchanged App source times
       shell: bash
       run: python3 scripts/ci-source-mtimes.py restore --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
