@@ -78,7 +78,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     copyIgnoredOnWorktreeCreate: false,
     copyUntrackedOnWorktreeCreate: false,
     pullRequestMergeStrategy: .merge,
-    restoreTerminalLayoutOnLaunch: false,
+    restoreTerminalLayoutOnLaunch: true,
     archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty,
@@ -127,7 +127,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     copyIgnoredOnWorktreeCreate: Bool = false,
     copyUntrackedOnWorktreeCreate: Bool = false,
     pullRequestMergeStrategy: PullRequestMergeStrategy = .merge,
-    restoreTerminalLayoutOnLaunch: Bool = false,
+    restoreTerminalLayoutOnLaunch: Bool = true,
     archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty,
@@ -281,7 +281,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case copyIgnoredOnWorktreeCreate
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
-    case restoreTerminalLayoutOnLaunch
+    // A new key turns this on once for every file that stored the old `restoreTerminalLayoutOnLaunch`,
+    // because that key stored `false` for anyone who kept the old default.
+    case restoreTerminalLayoutOnLaunch = "restoreTerminalLayout"
     case archivedAutoDeletePeriod
     case terminalFontSize
     case keybindingUserOverrides

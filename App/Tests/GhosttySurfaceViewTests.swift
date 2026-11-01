@@ -1,4 +1,6 @@
 import AppKit
+import Clocks
+import ConcurrencyExtras
 import Foundation
 import GhosttyKit
 import Testing
@@ -7,6 +9,58 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
+  private func makeFocusTestWindow() -> NSWindow {
+    NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: true)
+  }
+
+  private func makeFocusTestSurface(runtime: GhosttyRuntime) -> GhosttySurfaceView {
+    GhosttySurfaceView(
+      runtime: runtime, workingDirectory: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+  }
+
+  @Test func newerFocusRequestCancelsAnOlderRequestThatIsStillRetrying() async {
+    let runtime = GhosttyRuntime()
+    let clock = TestClock()
+    let requests = GhosttySurfaceView.FocusRequests()
+    let window = makeFocusTestWindow()
+    let stale = makeFocusTestSurface(runtime: runtime)
+    let latest = makeFocusTestSurface(runtime: runtime)
+    window.contentView?.addSubview(latest)
+
+    GhosttySurfaceView.moveFocus(to: stale, clock: clock, requests: requests)
+    await Task.megaYield()
+    GhosttySurfaceView.moveFocus(to: latest, clock: clock, requests: requests)
+    await Task.megaYield()
+    #expect(window.firstResponder === latest)
+
+    window.contentView?.addSubview(stale)
+    await clock.advance(by: .seconds(2))
+    await Task.megaYield()
+
+    #expect(window.firstResponder === latest)
+  }
+
+  @Test func focusRequestRetriesUntilTheSurfaceHasAWindow() async {
+    let runtime = GhosttyRuntime()
+    let clock = TestClock()
+    let requests = GhosttySurfaceView.FocusRequests()
+    let window = makeFocusTestWindow()
+    let surface = makeFocusTestSurface(runtime: runtime)
+
+    GhosttySurfaceView.moveFocus(to: surface, clock: clock, requests: requests)
+    await Task.megaYield()
+    #expect(window.firstResponder !== surface)
+
+    window.contentView?.addSubview(surface)
+    await clock.advance(by: .seconds(2))
+    await Task.megaYield()
+
+    #expect(window.firstResponder === surface)
+  }
+
   @Test func editingAndCompositionAreLocalToEachSurface() {
     let runtime = GhosttyRuntime()
     let edited = GhosttySurfaceView(

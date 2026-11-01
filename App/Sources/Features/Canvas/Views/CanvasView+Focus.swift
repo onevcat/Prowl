@@ -60,7 +60,10 @@ extension CanvasView {
     let tabID = CanvasFocusResolver.resolve(
       request: request,
       candidates: canvasCards(in: states),
-      currentPrimaryTabID: selectionState.primaryTabID
+      currentPrimaryTabID: selectionState.primaryTabID,
+      selectedTabID: { worktreeID in
+        states.first { $0.worktreeID == worktreeID }?.tabManager.selectedTabId
+      }
     )
     guard let tabID else { return }
     focusSingleCard(tabID, states: states)

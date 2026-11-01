@@ -282,7 +282,7 @@ extension AppFeature {
       {
         effects.append(defaultViewSelectionEffect(for: targetID, repositories: state.repositories))
       }
-      effects.append(.send(.repositories(.toggleCanvas)))
+      effects.append(.send(.repositories(.enterCanvasAtLaunch)))
     }
     return effects.isEmpty ? .none : .concatenate(effects)
   }
@@ -291,6 +291,7 @@ extension AppFeature {
     let candidateIDs =
       [repositories.lastFocusedWorktreeID].compactMap(\.self)
       + repositories.orderedWorktreeRows().map(\.id)
+      + repositories.orderedRepositoryIDs()
     return candidateIDs.first { id in
       repositories.worktree(for: id) != nil
         || repositories.repositories[id: id]?.kind == .plain

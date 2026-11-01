@@ -959,24 +959,32 @@ final class GhosttySurfaceView: NSView, Identifiable {
   static func moveFocus(
     to view: GhosttySurfaceView,
     from previous: GhosttySurfaceView? = nil,
-    delay: TimeInterval? = nil
+    clock: any Clock<Duration> = ContinuousClock(),
+    requests: FocusRequests = .shared
   ) {
-    let maxDelay: TimeInterval = 0.5
-    let currentDelay = delay ?? 0
-    guard currentDelay < maxDelay else { return }
-    let nextDelay: TimeInterval = if let delay { delay * 2 } else { 0.05 }
+    requests.latest &+= 1
+    let request = requests.latest
     Task { @MainActor in
-      if let delay {
-        try? await ContinuousClock().sleep(for: .seconds(delay))
+      var delay: TimeInterval = 0.05
+      while request == requests.latest {
+        if let window = view.window {
+          if let previous, previous !== view {
+            _ = previous.resignFirstResponder()
+          }
+          window.makeFirstResponder(view)
+          return
+        }
+        guard delay < 0.5 else { return }
+        try? await clock.sleep(for: .seconds(delay))
+        delay *= 2
       }
-      guard let window = view.window else {
-        moveFocus(to: view, from: previous, delay: nextDelay)
-        return
-      }
-      if let previous, previous !== view {
-        _ = previous.resignFirstResponder()
-      }
-      window.makeFirstResponder(view)
     }
+  }
+
+  /// A request retries until its view has a window, so the newest request must cancel older ones:
+  /// a retry that lands later would move first responder away from the surface that shows focus.
+  final class FocusRequests {
+    static let shared = FocusRequests()
+    fileprivate var latest = 0
   }
 }

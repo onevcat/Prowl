@@ -60,6 +60,42 @@ struct SettingsFilePersistenceTests {
     #expect(decoded.ghosttyConfigPath == "/Users/me/.config/prowl/ghostty.conf")
   }
 
+  private func storedGlobalSettings(
+    removing removedKey: String? = nil,
+    setting extra: [String: Any] = [:]
+  ) throws -> GlobalSettings {
+    let encoded = try JSONEncoder().encode(GlobalSettings.default)
+    var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    if let removedKey { object[removedKey] = nil }
+    object.merge(extra) { _, new in new }
+    return try JSONDecoder().decode(
+      GlobalSettings.self,
+      from: JSONSerialization.data(withJSONObject: object)
+    )
+  }
+
+  @Test func storedLegacyRestoreLayoutValueMigratesToOn() throws {
+    let settings = try storedGlobalSettings(
+      removing: "restoreTerminalLayout",
+      setting: ["restoreTerminalLayoutOnLaunch": false]
+    )
+
+    #expect(settings.restoreTerminalLayoutOnLaunch == true)
+  }
+
+  @Test func restoreLayoutOffStaysOffAfterMigration() throws {
+    var settings = GlobalSettings.default
+    settings.restoreTerminalLayoutOnLaunch = false
+
+    let encoded = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: encoded)
+
+    #expect(decoded.restoreTerminalLayoutOnLaunch == false)
+    let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    #expect(object["restoreTerminalLayout"] as? Bool == false)
+    #expect(object["restoreTerminalLayoutOnLaunch"] == nil)
+  }
+
   @Test(.dependencies) func loadWritesDefaultsWhenMissing() throws {
     let storage = SettingsTestStorage()
 
@@ -219,7 +255,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.mergedWorktreeAction == nil)
     #expect(settings.global.promptForWorktreeCreation == true)
     #expect(settings.global.defaultWorktreeBaseDirectoryPath == nil)
-    #expect(settings.global.restoreTerminalLayoutOnLaunch == false)
+    #expect(settings.global.restoreTerminalLayoutOnLaunch == true)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
     #expect(settings.global.showRunButtonInToolbar == true)
     #expect(settings.global.showDefaultEditorInToolbar == true)

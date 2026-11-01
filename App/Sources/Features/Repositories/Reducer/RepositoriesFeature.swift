@@ -604,6 +604,7 @@ struct RepositoriesFeature {
     case focusCanvasWorktree(Worktree.ID)
     case selectNextWorktree
     case selectPreviousWorktree
+    case enterCanvasAtLaunch
     case consumeCanvasFocusRequest(Int)
     case requestCanvasCommand(CanvasCommandRequest.Command)
     case consumeCanvasCommandRequest(Int)

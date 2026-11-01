@@ -343,7 +343,6 @@ struct AppFeature {
           ids.contains($0.key)
         }
         let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
-        let allowsMissingWorktrees = !failedRepositoryIDs.isEmpty
         appLogger.info("[LayoutRestore] restorableWorktrees count=\(restorableWorktrees.count)")
         var allEffects: [Effect<Action>] = [
           // Runs a previous app instance left behind are marked interrupted (dsl-spec §10 Restart).
@@ -377,9 +376,7 @@ struct AppFeature {
           if shouldRestoreLayout {
             effects.append(
               .run { _ in
-                await terminalClient.send(
-                  .restoreLayoutSnapshot(
-                    worktrees: restorableWorktrees, allowsMissingWorktrees: allowsMissingWorktrees))
+                await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
               }
             )
           }
@@ -405,9 +402,7 @@ struct AppFeature {
         if shouldRestoreLayout {
           effects.append(
             .run { _ in
-              await terminalClient.send(
-                .restoreLayoutSnapshot(
-                  worktrees: restorableWorktrees, allowsMissingWorktrees: allowsMissingWorktrees))
+              await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
             }
           )
         }

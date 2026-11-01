@@ -74,9 +74,8 @@ struct TerminalClient {
     case setRemoteAgentDetection(RemoteAgentDetectionConsent)
     case setSelectedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot
-    /// `allowsMissingWorktrees` skips the saved worktrees that `worktrees` does not hold
-    /// instead of resetting the whole layout; a failed repository load leaves them out.
-    case restoreLayoutSnapshot(worktrees: [Worktree], allowsMissingWorktrees: Bool = false)
+    /// Saved worktrees that `worktrees` does not hold are skipped.
+    case restoreLayoutSnapshot(worktrees: [Worktree])
     case presentTabIconPicker(Worktree)
   }
 

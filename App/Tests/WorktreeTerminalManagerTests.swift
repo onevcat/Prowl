@@ -888,16 +888,17 @@ struct WorktreeTerminalManagerTests {
     #expect(restored.isTitleLocked == false)
   }
 
-  @Test func restoreLayoutSnapshotFailClosedClearsSnapshotWhenWorktreeMissing() async {
+  @Test func restoreLayoutSnapshotFailClosedClearsSnapshotWhenSnapshotIsInvalid() async {
     let clearCount = LockIsolated(0)
+    let worktree = makeWorktree()
     let snapshot = TerminalLayoutSnapshotPayload(
       worktrees: [
         TerminalLayoutSnapshotPayload.SnapshotWorktree(
-          worktreeID: "/tmp/repo/wt-1",
-          selectedTabID: "F96839F5-1371-4841-9E41-49124D918A67",
+          worktreeID: worktree.id,
+          selectedTabID: nil,
           tabs: [
             TerminalLayoutSnapshotPayload.SnapshotTab(
-              tabID: "F96839F5-1371-4841-9E41-49124D918A67",
+              tabID: "not-a-uuid",
               title: nil,
               icon: nil,
               splitRoot: .leaf(surfaceID: "9B2F6D8C-44A4-42C5-8F9E-962108301901")
@@ -919,7 +920,7 @@ struct WorktreeTerminalManagerTests {
     )
     let stream = manager.eventStream()
 
-    await manager.restoreLayoutSnapshot(from: [])
+    await manager.restoreLayoutSnapshot(from: [worktree])
 
     let event = await nextEvent(stream) { event in
       if case .layoutRestoreFailed = event {
@@ -932,7 +933,7 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
   }
 
-  @Test func restoreLayoutSnapshotSkipsMissingWorktreesWhenAllowed() async throws {
+  @Test func restoreLayoutSnapshotSkipsMissingWorktrees() async throws {
     let clearCount = LockIsolated(0)
     let available = makeWorktree()
     let missingID = "/tmp/missing/main"
@@ -968,7 +969,7 @@ struct WorktreeTerminalManagerTests {
     )
     let stream = manager.eventStream()
 
-    await manager.restoreLayoutSnapshot(from: [available], allowsMissingWorktrees: true)
+    await manager.restoreLayoutSnapshot(from: [available])
 
     let event = await nextEvent(stream) { event in
       switch event {
