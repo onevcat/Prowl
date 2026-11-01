@@ -1,7 +1,7 @@
 name: Save macOS build caches
 description: Save the caches that setup-macos restored without an exact match. Run it at the end of the job, after the build input times are saved.
 
-# The repository has a 10 GB cache quota, and the large entries (SwiftPM, CLI and App build
+# The repository has a 10 GB cache quota, and the large entries (SwiftPM and App build
 # state) change with every source change. Only main saves them, so that pull requests do not
 # evict the entries of main, which all pull requests restore. The small Mise and GhosttyKit
 # entries change rarely, and a GhosttyKit miss is slow to rebuild, so pull requests save them.
@@ -25,18 +25,18 @@ runs:
           .ghostty_hash
           .ghostty_build_stamp
         key: ${{ env.PROWL_GHOSTTY_CACHE_KEY }}
+    # The build needs only the macOS slice of the static Sentry framework and the package
+    # checkouts. The other Sentry frameworks and the clones are 80 % of the entry, and SwiftPM
+    # fetches them again only when .package.resolved changes.
+    - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+      name: Remove unused package files
+      shell: bash
+      run: bash scripts/ci-prune-spm-cache.sh ~/Library/Caches/prowl-spm-cache/SourcePackages
     - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
         key: ${{ env.PROWL_SPM_CACHE_KEY }}
-    - if: env.PROWL_CLI_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          CLI/.build
-          Mirror/Relay/.build
-        key: ${{ env.PROWL_CLI_CACHE_KEY }}
     - if: env.PROWL_APP_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v4
       with:

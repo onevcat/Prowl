@@ -25,10 +25,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # These checks need no build. In their own job they do not take cores from the compiler.
+  # These checks and the CLI tests need no App build. In their own job they do not take cores
+  # from the App compiler or its tests.
   checks:
     runs-on: xcode-27
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     env:
@@ -38,10 +39,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-mise
+      - uses: ./.github/actions/restore-cli-cache
       # format-lint is the swift-format half of `make check`; without it a change that fails
       # `make check` locally could still pass CI (#503, #575). `-k` runs every check after one
       # fails, so a single run reports all of them.
-      - run: make -k lint format-lint check-localization test-scripts
+      - run: make -k lint format-lint check-localization test-scripts test-cli-smoke test-cli-unit test-cli-integration
+      - name: Save CLI build input times
+        run: python3 scripts/ci-source-mtimes.py save
+      # Only main saves large caches (see save-macos-caches). This job has the test products
+      # too, so the build job does not save this entry.
+      - if: env.PROWL_CLI_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            CLI/.build
+            Mirror/Relay/.build
+          key: ${{ env.PROWL_CLI_CACHE_KEY }}
 
   build:
     # The Swift 6.4 toolchain selects different package manifests than Swift 6.3 and earlier,
@@ -73,7 +86,7 @@ jobs:
         run: make embed-cli-debug embed-docs embed-skills
       - name: Generate workspace
         run: make ensure-project
-      - name: Build app and run tests in parallel
+      - name: Build app and run tests
         shell: bash
         run: |
           set -euo pipefail
@@ -121,18 +134,14 @@ jobs:
 
           run_task app-tests make test-app &
           pid_app=$!
-          # SwiftPM serializes access to .build; keep its checks in one branch.
-          run_task cli-tests make test-cli-smoke test-cli-unit test-cli-integration &
-          pid_cli=$!
 
           failed=0
           wait "$pid_app" || failed=1
-          wait "$pid_cli" || failed=1
           kill "$pid_watchdog" 2>/dev/null || true
           {
             printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
             cat build/ci-logs/*.timing
-            printf '\nTasks run in parallel; their times must not be added.\n\n'
+            printf '\n'
             if [ -d build/ci-logs/hang ]; then
               printf '**The test output stopped.** The watchdog interrupted xcodebuild. The xcresult bundle names the canceled test, and ci-logs/hang in the logs artifact has the process samples.\n\n'
             fi
@@ -148,9 +157,7 @@ jobs:
             --predicate 'category == "MirrorPairing" OR process == "mDNSResponder"' \
             > build/ci-logs/mirror-system.log 2>&1 || true
       - name: Save build input times
-        run: |
-          python3 scripts/ci-source-mtimes.py save
-          python3 scripts/ci-source-mtimes.py save --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
+        run: python3 scripts/ci-source-mtimes.py save --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
       - uses: ./.github/actions/save-macos-caches
       - name: Upload build and test logs
         if: always()

@@ -26,33 +26,7 @@ runs:
           echo "::warning::The Metal toolchain path is random, so incremental builds recompile the App."
         fi
 
-    - name: Xcode cache identity
-      shell: bash
-      run: |
-        set -euo pipefail
-        XCODE_CACHE_ID="$(xcodebuild -version | awk '/Build version/ { print $3 }')"
-        if [[ -z "$XCODE_CACHE_ID" ]]; then
-          echo "error: failed to resolve Xcode build version" >&2
-          exit 1
-        fi
-        printf '%s\n' "XCODE_CACHE_ID=$XCODE_CACHE_ID" >> "$GITHUB_ENV"
-        echo "Xcode cache identity: $XCODE_CACHE_ID"
-
-    - name: CLI SwiftPM build cache
-      id: cli_cache
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          CLI/.build
-          Mirror/Relay/.build
-        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v3-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', 'Makefile', 'App/Config/Version.xcconfig', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('CLI/Sources/**', 'CLI/Tests/**', 'Shared/Sources/**/*.swift', 'Mirror/Relay/Sources/**/*.swift', 'Mirror/Relay/Tests/**/*.swift') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v3-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', 'Makefile', 'App/Config/Version.xcconfig', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
-          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v3-${{ env.XCODE_CACHE_ID }}-
-
-    - name: Restore unchanged CLI source times
-      shell: bash
-      run: python3 scripts/ci-source-mtimes.py restore
+    - uses: ./.github/actions/restore-cli-cache
 
     - name: Ghostty cache key
       shell: bash
@@ -89,8 +63,9 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
-        key: ${{ runner.os }}-${{ runner.arch }}-spm-v1-${{ hashFiles('.package.resolved') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-spm-v2-${{ hashFiles('.package.resolved') }}
         restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-spm-v2-
           ${{ runner.os }}-${{ runner.arch }}-spm-v1-
 
     - name: App incremental cache identity
@@ -120,8 +95,6 @@ runs:
       run: |
         set -euo pipefail
         {
-          echo "PROWL_CLI_CACHE_KEY=${{ steps.cli_cache.outputs.cache-primary-key }}"
-          echo "PROWL_CLI_CACHE_HIT=${{ steps.cli_cache.outputs.cache-hit }}"
           echo "PROWL_GHOSTTY_CACHE_KEY=${{ steps.ghostty_cache.outputs.cache-primary-key }}"
           echo "PROWL_GHOSTTY_CACHE_HIT=${{ steps.ghostty_cache.outputs.cache-hit }}"
           echo "PROWL_SPM_CACHE_KEY=${{ steps.spm_cache.outputs.cache-primary-key }}"

@@ -1,0 +1,41 @@
+name: Restore CLI build cache
+description: Find the Xcode build version and restore the SwiftPM state of the CLI and the relay.
+
+runs:
+  using: composite
+  steps:
+    - name: Xcode cache identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        XCODE_CACHE_ID="$(xcodebuild -version | awk '/Build version/ { print $3 }')"
+        if [[ -z "$XCODE_CACHE_ID" ]]; then
+          echo "error: failed to resolve Xcode build version" >&2
+          exit 1
+        fi
+        printf '%s\n' "XCODE_CACHE_ID=$XCODE_CACHE_ID" >> "$GITHUB_ENV"
+        echo "Xcode cache identity: $XCODE_CACHE_ID"
+
+    - name: CLI SwiftPM build cache
+      id: cli_cache
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          CLI/.build
+          Mirror/Relay/.build
+        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v4-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', 'Makefile', 'App/Config/Version.xcconfig', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('CLI/Sources/**', 'CLI/Tests/**', 'Shared/Sources/**/*.swift', 'Mirror/Relay/Sources/**/*.swift', 'Mirror/Relay/Tests/**/*.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v4-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', 'Makefile', 'App/Config/Version.xcconfig', 'scripts/ci-source-mtimes.py') }}-
+          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v4-${{ env.XCODE_CACHE_ID }}-
+
+    - name: Restore unchanged CLI source times
+      shell: bash
+      run: python3 scripts/ci-source-mtimes.py restore
+
+    - name: CLI cache key for the save step
+      shell: bash
+      run: |
+        {
+          echo "PROWL_CLI_CACHE_KEY=${{ steps.cli_cache.outputs.cache-primary-key }}"
+          echo "PROWL_CLI_CACHE_HIT=${{ steps.cli_cache.outputs.cache-hit }}"
+        } >> "$GITHUB_ENV"
