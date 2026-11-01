@@ -42,15 +42,24 @@ The hosted runner varies a lot. Compare several samples, not two runs.
 | Case | `build` job samples |
 | --- | --- |
 | Interface change, before this work | 11:50 (one sample) |
-| Interface change, with this work | 8:49, 10:41, 9:52, 9:08 |
-| Cold App build, with this work | 17:04, 10:36 |
+| Body change, before this work | 8:44 (one sample) |
+| Body change, with main's new caches | 5:36, 6:47 |
+| Interface change, with main's new caches | 9:20, 8:41 |
+| Interface change, trial with the package and CLI caches of the pull request | 8:49, 10:41, 9:52, 9:08 |
+| Version change, with main's new caches | 8:55 (one sample) |
+| Cold App build | 10:36, 17:04, 21:40 |
+
+The 21:40 sample also had no CLI cache and restored the 1467 MB package entry.
 
 ## Open questions
 
-- A body-only change on the runner, after main saves the new entries, has no sample yet.
 - A change to the App interface recompiles all of `ProwlTests`. A split of the App into modules
-  is the remaining way to avoid this. It has not been measured.
+  is the remaining way to avoid this. In the last 30 days, most changed App files were in
+  `App/Sources/Features`, so the split helps only if each feature has its own test target. It has
+  not been measured.
+- A larger hosted runner may reduce the runner's variation. It costs money per minute and has not
+  been measured.
 
 ## Refs
 
-PR #1024 (trial, not merged).
+PR #1026; trials #1024 and #1027 (not merged).
