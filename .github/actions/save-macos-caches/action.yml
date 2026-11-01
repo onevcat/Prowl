@@ -25,9 +25,10 @@ runs:
           .ghostty_hash
           .ghostty_build_stamp
         key: ${{ env.PROWL_GHOSTTY_CACHE_KEY }}
-    # The build needs only the macOS slice of the static Sentry framework and the package
-    # checkouts. The other Sentry frameworks and the clones are 80 % of the entry, and SwiftPM
-    # fetches them again only when .package.resolved changes.
+    # The build needs only the static Sentry framework and the package checkouts. The other
+    # Sentry frameworks and the clones are most of the entry, and SwiftPM fetches them again only
+    # when .package.resolved changes. Keep each slice of the framework: Xcode verifies its
+    # signature, and removing a slice fails the build.
     - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
       name: Remove unused package files
       shell: bash
