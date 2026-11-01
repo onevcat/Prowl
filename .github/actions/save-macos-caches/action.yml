@@ -28,11 +28,11 @@ runs:
     # The build needs only the macOS slice of the static Sentry framework and the package
     # checkouts. The other Sentry frameworks and the clones are 80 % of the entry, and SwiftPM
     # fetches them again only when .package.resolved changes.
-    - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+    - if: env.PROWL_SPM_CACHE_HIT != 'true'
       name: Remove unused package files
       shell: bash
       run: bash scripts/ci-prune-spm-cache.sh ~/Library/Caches/prowl-spm-cache/SourcePackages
-    - if: env.PROWL_SPM_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+    - if: env.PROWL_SPM_CACHE_HIT != 'true'
       uses: actions/cache/save@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
