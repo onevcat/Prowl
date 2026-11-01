@@ -21,6 +21,11 @@ struct AgentDisplaySettingsView: View {
         )
         .help("Display each agent's own terminal title in the row and show the branch name on hover.")
         Toggle(
+          "Show agent names in agent rows",
+          isOn: $store.showActiveAgentNames
+        )
+        .help("Display the agent name before the repository name. When off, the name shows on hover.")
+        Toggle(
           "Show agent status in Shelf tabs",
           isOn: $store.showActiveAgentStatusInShelf
         )

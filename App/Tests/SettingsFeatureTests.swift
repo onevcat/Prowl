@@ -683,6 +683,35 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.showActiveAgentTabTitles == true)
   }
 
+  @Test(.dependencies) func showActiveAgentNamesPersistsChanges() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.showActiveAgentNames, false))) {
+      $0.showActiveAgentNames = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.showActiveAgentNames == false)
+  }
+
+  @Test func showActiveAgentNamesDefaultsToOnWhenMissingFromStoredSettings() throws {
+    let stored = try JSONEncoder().encode(GlobalSettings.default)
+    var object = try #require(JSONSerialization.jsonObject(with: stored) as? [String: Any])
+    object["showActiveAgentNames"] = nil
+
+    let decoded = try JSONDecoder().decode(
+      GlobalSettings.self,
+      from: JSONSerialization.data(withJSONObject: object)
+    )
+
+    #expect(decoded.showActiveAgentNames == true)
+  }
+
   @Test(.dependencies) func showActiveAgentStatusInShelfPersistsChanges() async {
     var initialSettings = GlobalSettings.default
     initialSettings.showActiveAgentStatusInShelf = true

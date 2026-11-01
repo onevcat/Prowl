@@ -21,12 +21,14 @@ struct AppFeatureSettingsChangedTests {
     settings.mergedWorktreeAction = .archive
     settings.moveNotifiedWorktreeToTop = false
     settings.showActiveAgentTabTitles = true
+    settings.showActiveAgentNames = false
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
 
     await store.send(.settings(.delegate(.settingsChanged(settings)))) {
       $0.repositories.showActiveAgentTabTitles = true
+      $0.repositories.showActiveAgentNames = false
     }
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled) {
       $0.repositories.githubIntegrationAvailability = .disabled
@@ -125,6 +127,15 @@ struct AppFeatureSettingsChangedTests {
     let state = AppFeature.State(settings: settings)
 
     #expect(state.repositories.showActiveAgentTabTitles == true)
+  }
+
+  @Test func appStateInitializesActiveAgentNameDisplayFromSettings() {
+    var settings = SettingsFeature.State()
+    settings.showActiveAgentNames = false
+
+    let state = AppFeature.State(settings: settings)
+
+    #expect(state.repositories.showActiveAgentNames == false)
   }
 
   @Test func appStateInitializesAgentIslandFromSettings() {

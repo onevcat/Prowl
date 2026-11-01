@@ -498,6 +498,7 @@ struct RepositoriesFeature {
     var isSidebarDragActive = false
     var pendingSidebarNotifyReorderIDs: [Worktree.ID] = []
     var showActiveAgentTabTitles = false
+    var showActiveAgentNames = true
     var nextCanvasFocusRequestID = 0
     var pendingCanvasFocusRequest: CanvasFocusRequest?
     var nextCanvasCommandRequestID = 0

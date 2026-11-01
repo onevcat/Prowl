@@ -529,6 +529,31 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
+  @Test func hiddenAgentNameMovesToHelpAndAccessibilityLabel() {
+    let entry = entry(id: UUID(0), paneTitle: "Review issue 385", state: .idle, changedAt: Date())
+
+    #expect(
+      ActiveAgentRowPresentation.helpText(
+        for: entry, branchName: "main", showTabTitles: false, showAgentName: false)
+        == "\(entry.displayName)\nReview issue 385"
+    )
+    #expect(
+      ActiveAgentRowPresentation.helpText(
+        for: entry, branchName: "main", showTabTitles: false, showAgentName: true)
+        == "Review issue 385"
+    )
+    #expect(
+      ActiveAgentRowPresentation.repositoryAccessibilityLabel(
+        for: entry, repositoryName: "Prowl", showAgentName: false)
+        == "\(entry.displayName), Prowl"
+    )
+    #expect(
+      ActiveAgentRowPresentation.repositoryAccessibilityLabel(
+        for: entry, repositoryName: "Prowl", showAgentName: true)
+        == "Prowl"
+    )
+  }
+
   @Test func sharedRowSubtitleAndHelpSwapPaneTitleAndBranchWhenEnabled() {
     let entry = entry(id: UUID(0), paneTitle: "Review issue 385", state: .idle, changedAt: Date())
 

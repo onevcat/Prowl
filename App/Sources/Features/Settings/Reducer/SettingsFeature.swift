@@ -56,6 +56,7 @@ struct SettingsFeature {
     var dimUnfocusedSplits: Bool
     var autoShowActiveAgentsPanel: Bool
     var showActiveAgentTabTitles: Bool
+    var showActiveAgentNames: Bool
     var showActiveAgentStatusInShelf: Bool
     var agentIslandOnlyShowWithAgents: Bool
     var agentIslandEnabled: Bool
@@ -140,6 +141,7 @@ struct SettingsFeature {
       dimUnfocusedSplits = settings.dimUnfocusedSplits
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       showActiveAgentTabTitles = settings.showActiveAgentTabTitles
+      showActiveAgentNames = settings.showActiveAgentNames
       showActiveAgentStatusInShelf = settings.showActiveAgentStatusInShelf
       agentIslandOnlyShowWithAgents = settings.agentIslandOnlyShowWithAgents
       agentIslandEnabled = settings.agentIslandEnabled
@@ -213,6 +215,7 @@ struct SettingsFeature {
         dimUnfocusedSplits: dimUnfocusedSplits,
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         showActiveAgentTabTitles: showActiveAgentTabTitles,
+        showActiveAgentNames: showActiveAgentNames,
         showActiveAgentStatusInShelf: showActiveAgentStatusInShelf,
         agentIslandOnlyShowWithAgents: agentIslandOnlyShowWithAgents,
         agentIslandEnabled: agentIslandEnabled,
@@ -374,6 +377,7 @@ struct SettingsFeature {
         state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.showActiveAgentTabTitles = normalizedSettings.showActiveAgentTabTitles
+        state.showActiveAgentNames = normalizedSettings.showActiveAgentNames
         state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
         state.agentIslandOnlyShowWithAgents = normalizedSettings.agentIslandOnlyShowWithAgents
         state.agentIslandEnabled = normalizedSettings.agentIslandEnabled

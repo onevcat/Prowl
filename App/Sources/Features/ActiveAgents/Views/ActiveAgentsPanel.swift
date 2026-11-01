@@ -16,6 +16,7 @@ struct ActiveAgentsPanel: View {
   let navigationShortcutHint: String?
   let isCommandKeyPressed: Bool
   let showTabTitles: Bool
+  let showAgentNames: Bool
   let height: Double
   let maximumHeight: Double
   let onHeightChanged: (Double) -> Void
@@ -81,7 +82,8 @@ struct ActiveAgentsPanel: View {
                   repositoryName: repositoryName(for: entry),
                   subtitle: subtitle(for: entry),
                   repositoryColor: repositoryColor(for: entry),
-                  isDimmed: isDimmed(entry)
+                  isDimmed: isDimmed(entry),
+                  showsAgentName: showAgentNames
                 )
               }
               .buttonStyle(.plain)
@@ -189,7 +191,8 @@ struct ActiveAgentsPanel: View {
     ActiveAgentRowPresentation.helpText(
       for: entry,
       branchName: branchName(for: entry),
-      showTabTitles: showTabTitles
+      showTabTitles: showTabTitles,
+      showAgentName: showAgentNames
     )
   }
 

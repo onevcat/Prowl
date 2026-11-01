@@ -57,6 +57,7 @@ struct SidebarActiveAgentsOverlay: View {
       navigationShortcutHint: shortcutHint,
       isCommandKeyPressed: commandKeyObserver.isPressed,
       showTabTitles: state.showActiveAgentTabTitles,
+      showAgentNames: state.showActiveAgentNames,
       height: panelHeight,
       maximumHeight: maximumPanelHeight,
       onHeightChanged: onHeightChanged,
