@@ -48,7 +48,7 @@ jobs:
         run: python3 scripts/ci-source-mtimes.py save
       # Only main saves large caches (see save-macos-caches). This job has the test products
       # too, so the build job does not save this entry.
-      - if: env.PROWL_CLI_CACHE_HIT != 'true' && github.ref == 'refs/heads/main'
+      - if: env.PROWL_CLI_CACHE_HIT != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
