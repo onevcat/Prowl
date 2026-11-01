@@ -300,14 +300,21 @@ no in-app Ghostty theme picker; change Ghostty colors via its config file.
 
 ## Layout persistence
 
-If `restoreTerminalLayoutOnLaunch` is enabled, Prowl saves the tab/split layout
-(which worktrees, tabs, split trees, titles, icons) and restores it on next
-launch. It saves when you quit and each time Prowl stops being the active app, so
-a crash loses only the changes made since you last switched away. Notification
-bodies are not persisted. If a repository fails to load at
-launch (for example, its folder is gone), Prowl still restores the layout of the
-other repositories and applies the default view mode; the worktrees of the
-failed repository are skipped.
+`restoreTerminalLayoutOnLaunch` is on by default (Settings → General → Terminal
+Layout). Prowl saves the tab/split layout (which worktrees, tabs, split trees,
+titles, icons, each pane's folder) and restores it on next launch. Restored panes
+start a new shell: running commands and agents do not start again, and a folder
+outside the worktree falls back to the worktree root. It saves when you quit and
+each time Prowl stops being the active app, so a crash loses only the changes made
+since you last switched away. Notification bodies are not persisted.
+
+If a saved worktree is gone at launch (it was removed outside Prowl, or its
+repository failed to load), Prowl skips it and restores the rest. The next save
+no longer holds the skipped worktree, so its layout does not return if the folder
+comes back later. If the saved layout names no available worktree, Prowl selects
+the last focused worktree, as a launch without restore does. A saved file that
+cannot be read is removed without a message. A saved layout that cannot be applied
+is reset, and Prowl shows a warning.
 
 ## Gotchas for agents
 

@@ -219,7 +219,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.mergedWorktreeAction == nil)
     #expect(settings.global.promptForWorktreeCreation == true)
     #expect(settings.global.defaultWorktreeBaseDirectoryPath == nil)
-    #expect(settings.global.restoreTerminalLayoutOnLaunch == false)
+    #expect(settings.global.restoreTerminalLayoutOnLaunch == true)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
     #expect(settings.global.showRunButtonInToolbar == true)
     #expect(settings.global.showDefaultEditorInToolbar == true)

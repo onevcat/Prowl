@@ -37,24 +37,6 @@ struct AdvancedSettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-
-      Section("Terminal Layout") {
-        VStack(alignment: .leading, spacing: 8) {
-          Toggle(
-            "Restore terminal layout on launch (experimental)",
-            isOn: $store.restoreTerminalLayoutOnLaunch
-          )
-          Text("When enabled, Prowl attempts to restore tabs and splits after restart.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
-          Button("Clear saved terminal layout") {
-            store.send(.clearTerminalLayoutSnapshotButtonTapped)
-          }
-          .help("Remove the saved terminal tab and split layout from disk")
-          .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
     }
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

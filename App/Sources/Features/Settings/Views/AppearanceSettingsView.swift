@@ -143,6 +143,17 @@ struct AppearanceSettingsView: View {
             .foregroundStyle(.secondary)
             .font(.callout)
         }
+        Section("Terminal Layout") {
+          Toggle(isOn: $store.restoreTerminalLayoutOnLaunch) {
+            Text("Restore terminal layout on launch")
+            Text("Reopens your tabs and splits in their folders. Commands that were running do not start again.")
+          }
+          .help("Reopen the saved terminal tabs and splits when Prowl starts")
+          Button("Clear saved terminal layout") {
+            store.send(.clearTerminalLayoutSnapshotButtonTapped)
+          }
+          .help("Remove the saved terminal tab and split layout from disk")
+        }
         Section("Default Editor") {
           Toggle(
             "Show in toolbar",

@@ -16,6 +16,7 @@
 | 2026-04-08 | Tab title and icon persisted in the snapshot (optional fields, backward-compatible decode) | PR #186 → [022-tab-title-and-icon](../022-tab-title-and-icon/000-plan.md) |
 | 2026-06-01 | Default View launch race + restoration hang fix | PR #380 — see [002-launch-restore-races.md](002-launch-restore-races.md) |
 | 2026-06-16 | scenePhase-save-clears-snapshot launch race fix | PR #459 — see [002-launch-restore-races.md](002-launch-restore-races.md) |
+| 2026-11-01 | Promoted: default on for settings files without the field, no "experimental" label, toggle moved to General. A missing worktree no longer resets the layout; a restore without a selection falls back to the last focused worktree | #573 |
 
 ## Outcome & current state (as of 2026-07-12)
 
@@ -73,8 +74,17 @@ persistence"), `docs/components/settings.md` (Advanced pane), and
   two races surfaced months later (see
   [002-launch-restore-races.md](002-launch-restore-races.md)).
 
-## Open questions
+## Promotion decision (2026-11-01, #573)
 
-- The feature has shipped enabled-by-hand since 2026-04-01 yet is still marked
-  "(experimental)" with default `false`; no recorded decision either promotes or
-  retires the experimental label.
+Live checks found two blockers for default-on, both fixed in the promotion change:
+
+- One saved worktree that was removed outside Prowl dropped the whole layout, with an
+  "invalid" warning. The snapshot itself is valid, so missing worktrees are now always skipped.
+  Only a structurally invalid snapshot fails closed.
+- `repositoriesChanged` clears the selection before restore, and `.layoutRestored(nil)` selected
+  nothing. A launch with no saved tabs opened with an empty detail view. It now uses the same
+  fallback as the default view.
+
+Existing settings files store `false`, because every field is encoded on save. They keep it:
+a stored `false` cannot be told apart from an explicit choice, so only settings files without
+the field get the new default.

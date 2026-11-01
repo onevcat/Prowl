@@ -111,9 +111,10 @@ extension AppFeature {
 
     case .layoutRestoreFailed(let message):
       appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
+      let fallbackSelection = layoutRestoreFallbackSelectionEffect(state: state)
       return .merge(
         .send(.repositories(.showToast(.warning(message)))),
-        applyDefaultViewMode(into: &state)
+        .concatenate(fallbackSelection, applyDefaultViewMode(into: &state))
       )
 
     default:
@@ -288,8 +289,22 @@ extension AppFeature {
       } else {
         effects.append(.send(.repositories(.selectWorktree(selectedWorktreeID))))
       }
+    } else {
+      effects.append(layoutRestoreFallbackSelectionEffect(state: state))
     }
     return .concatenate([.merge(effects), applyDefaultViewMode(into: &state)])
+  }
+
+  /// Restore clears the selection at launch, so a layout that names no worktree must select one
+  /// the same way a launch without restore does. The Shelf and Canvas default views select their
+  /// own anchor.
+  func layoutRestoreFallbackSelectionEffect(state: State) -> Effect<Action> {
+    @Shared(.settingsFile) var settingsFile
+    guard state.repositories.selection == nil,
+      settingsFile.global.defaultViewMode == .normal,
+      let targetID = defaultViewFallbackSelectionID(in: state.repositories)
+    else { return .none }
+    return defaultViewSelectionEffect(for: targetID, repositories: state.repositories)
   }
 
   func tabCreatedEffect(

@@ -563,11 +563,10 @@ final class WorktreeTerminalManager {
     case .saveLayoutSnapshot:
       terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")
       Task { await persistLayoutSnapshot() }
-    case .restoreLayoutSnapshot(let worktrees, let allowsMissingWorktrees):
+    case .restoreLayoutSnapshot(let worktrees):
       terminalLogger.info(
-        "[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)"
-          + " allowsMissing=\(allowsMissingWorktrees)")
-      Task { await restoreLayoutSnapshot(from: worktrees, allowsMissingWorktrees: allowsMissingWorktrees) }
+        "[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)")
+      Task { await restoreLayoutSnapshot(from: worktrees) }
     case .presentTabIconPicker(let worktree):
       state(for: worktree).presentIconPickerForFocusedTab()
     default:
@@ -1581,7 +1580,7 @@ final class WorktreeTerminalManager {
     terminalLogger.info("[LayoutRestore] persistSync: save result=\(saved)")
   }
 
-  func restoreLayoutSnapshot(from worktrees: [Worktree], allowsMissingWorktrees: Bool = false) async {
+  func restoreLayoutSnapshot(from worktrees: [Worktree]) async {
     terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
     guard let payload = await layoutPersistence.loadSnapshot() else {
       terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, skipping")
@@ -1604,8 +1603,7 @@ final class WorktreeTerminalManager {
     }
     let skippedWorktreeIDs = applyLayoutSnapshotPayload(
       payload,
-      availableWorktrees: worktrees,
-      allowsMissingWorktrees: allowsMissingWorktrees
+      availableWorktrees: worktrees
     )
     terminalLogger.info("[LayoutRestore] restore: applyResult=\(skippedWorktreeIDs != nil)")
     if let skippedWorktreeIDs {
@@ -1665,8 +1663,7 @@ final class WorktreeTerminalManager {
   /// snapshot is invalid and nothing was restored.
   private func applyLayoutSnapshotPayload(
     _ payload: TerminalLayoutSnapshotPayload,
-    availableWorktrees: [Worktree],
-    allowsMissingWorktrees: Bool
+    availableWorktrees: [Worktree]
   ) -> Set<Worktree.ID>? {
     let worktreeByID = Dictionary(
       availableWorktrees.map { ($0.id, $0) },
@@ -1689,18 +1686,14 @@ final class WorktreeTerminalManager {
         }
         continue
       }
+      // A saved worktree can be gone at launch: it was removed outside Prowl, or its repository
+      // failed to load. The rest of the layout is still valid.
       guard let worktree = worktreeByID[snapshot.worktreeID] else {
         terminalLogger.warning(
           "[LayoutRestore] apply: worktreeID \(snapshot.worktreeID) not found in available worktrees"
         )
-        if allowsMissingWorktrees {
-          skippedWorktreeIDs.insert(snapshot.worktreeID)
-          continue
-        }
-        for state in restoredStates {
-          state.closeAllSurfaces()
-        }
-        return nil
+        skippedWorktreeIDs.insert(snapshot.worktreeID)
+        continue
       }
       terminalLogger.info("[LayoutRestore] apply: restoring worktree \(worktree.id)")
       let state = state(for: worktree)

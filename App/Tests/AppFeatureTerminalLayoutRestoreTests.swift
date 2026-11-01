@@ -124,7 +124,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
     #expect(
       sentCommands.value.contains(
-        .restoreLayoutSnapshot(worktrees: [worktree], allowsMissingWorktrees: true)
+        .restoreLayoutSnapshot(worktrees: [worktree])
       )
     )
   }
@@ -134,10 +134,12 @@ struct AppFeatureTerminalLayoutRestoreTests {
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.snapshotPersistencePhase = .active
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = false
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
@@ -282,9 +284,11 @@ struct AppFeatureTerminalLayoutRestoreTests {
     repositoriesState.selection = .worktree(worktree.id)
     setDefaultViewMode(.shelf)
     defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = false
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
@@ -311,10 +315,12 @@ struct AppFeatureTerminalLayoutRestoreTests {
     repositoriesState.selection = .worktree(worktree.id)
     setDefaultViewMode(.canvas)
     defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = false
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
@@ -384,6 +390,75 @@ struct AppFeatureTerminalLayoutRestoreTests {
         .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
       )
     )
+  }
+
+  @Test(.dependencies) func layoutRestoredNilSelectsLastFocusedWorktree() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = worktree.id
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil)))
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+    }
+  }
+
+  @Test(.dependencies) func layoutRestoredNilSelectsAvailableWorktreeWhenLastFocusedIsGone() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = "/tmp/removed/worktree"
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil)))
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+    }
+  }
+
+  @Test(.dependencies) func layoutRestoreFailedSelectsLastFocusedWorktree() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = worktree.id
+    repositoriesState.selection = nil
+    setDefaultViewMode(.normal)
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestoreFailed(message: "reset")))
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+    }
   }
 
   @Test(.dependencies) func layoutRestoreFailedAppliesDefaultShelf() async {
