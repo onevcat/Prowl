@@ -107,6 +107,7 @@ struct CommandPaletteOverlayView: View {
   }
 
   private func resetSelection(rows: [CommandPaletteItem]) {
+    _ = rows.count
     store.send(.resetSelection(itemsCount: rows.count))
   }
 
