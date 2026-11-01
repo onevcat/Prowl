@@ -512,8 +512,8 @@ extension RepositoriesFeature {
         }
         return .send(.selectWorktree(targetID, focusTerminal: true))
       } else {
-        // Enter canvas if there are any open worktrees.
-        guard !state.orderedWorktreeRows().isEmpty else { return .none }
+        // Canvas has the same requirement as Shelf: a worktree or a folder.
+        guard state.canEnterShelf else { return .none }
         return .send(.selectCanvas)
       }
 
@@ -775,6 +775,16 @@ extension RepositoriesFeature {
       }
       guard let id = state.worktreeID(byOffset: -1) else { return .none }
       return .send(.selectWorktree(id, focusTerminal: true))
+
+    // A restored terminal can hold first responder while no card is primary, so launching into
+    // Canvas names the anchor. `.reveal` keeps the board the user last saw instead of zooming in.
+    case .enterCanvasAtLaunch:
+      guard state.canEnterShelf else { return .none }
+      if let anchorID = state.selectedTerminalWorktree?.id {
+        requestCanvasFocus(
+          .selectedTabInWorktree(anchorID), viewport: .reveal, openedWorktreeID: anchorID, state: &state)
+      }
+      return .send(.selectCanvas)
 
     case .consumeCanvasFocusRequest(let id):
       if state.pendingCanvasFocusRequest?.id == id {

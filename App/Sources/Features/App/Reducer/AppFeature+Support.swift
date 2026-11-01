@@ -282,7 +282,7 @@ extension AppFeature {
       {
         effects.append(defaultViewSelectionEffect(for: targetID, repositories: state.repositories))
       }
-      effects.append(.send(.repositories(.toggleCanvas)))
+      effects.append(.send(.repositories(.enterCanvasAtLaunch)))
     }
     return effects.isEmpty ? .none : .concatenate(effects)
   }

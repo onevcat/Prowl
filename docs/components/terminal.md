@@ -316,6 +316,9 @@ the last focused worktree, else the first available worktree or folder. A saved 
 cannot be read is removed without a message. A saved layout that cannot be applied
 is reset, and Prowl shows a warning.
 
+When the default view is Canvas, launch focuses the selected tab of the saved
+worktree, so keyboard input goes to the highlighted card.
+
 ## Gotchas for agents
 
 - **Tab selection ≠ pane focus.** A tab can have several panes; selecting a tab

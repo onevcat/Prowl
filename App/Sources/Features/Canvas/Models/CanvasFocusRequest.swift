@@ -5,6 +5,8 @@ struct CanvasFocusRequest: Equatable, Sendable {
   enum Target: Equatable, Sendable {
     case worktree(Worktree.ID)
     case tab(TerminalTabID)
+    /// The tab that the worktree has selected, as Normal view would show it.
+    case selectedTabInWorktree(Worktree.ID)
   }
 
   /// How the viewport follows the focused card.
@@ -57,9 +59,17 @@ enum CanvasFocusResolver {
   static func resolve(
     request: CanvasFocusRequest,
     candidates: [CanvasCardRef],
-    currentPrimaryTabID: TerminalTabID?
+    currentPrimaryTabID: TerminalTabID?,
+    selectedTabID: (Worktree.ID) -> TerminalTabID? = { _ in nil }
   ) -> TerminalTabID? {
     switch request.target {
+    case .selectedTabInWorktree(let worktreeID):
+      let matchingTabIDs = candidates.filter { $0.worktreeID == worktreeID }.map(\.tabID)
+      if let selected = selectedTabID(worktreeID), matchingTabIDs.contains(selected) {
+        return selected
+      }
+      return matchingTabIDs.first
+
     case .tab(let tabID):
       return candidates.contains { $0.tabID == tabID } ? tabID : nil
 

@@ -334,7 +334,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
       $0.hasAppliedInitialViewMode = true
     }
-    await store.receive(\.repositories.toggleCanvas)
+    await store.receive(\.repositories.enterCanvasAtLaunch)
     await store.receive(\.repositories.selectCanvas) {
       $0.repositories.preCanvasWorktreeID = worktree.id
       $0.repositories.preCanvasTerminalTargetID = worktree.id
@@ -377,7 +377,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
       $0.repositories.selection = .worktree(worktree.id)
       $0.repositories.openedWorktreeIDs = [worktree.id]
     }
-    await store.receive(\.repositories.toggleCanvas)
+    await store.receive(\.repositories.enterCanvasAtLaunch)
     await store.receive(\.repositories.selectCanvas) {
       $0.repositories.preCanvasWorktreeID = worktree.id
       $0.repositories.preCanvasTerminalTargetID = worktree.id
@@ -520,6 +520,93 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectWorktree) {
       $0.repositories.selection = .worktree(worktree.id)
     }
+  }
+
+  @Test(.dependencies) func layoutRestoredDefaultCanvasFocusesSelectedWorktree() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = nil
+    setDefaultViewMode(.canvas)
+    defer { setDefaultViewMode(.normal) }
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: worktree.id)))
+    await store.finish()
+    await store.skipReceivedActions()
+
+    #expect(store.state.repositories.selection == .canvas)
+    let request = store.state.repositories.pendingCanvasFocusRequest
+    #expect(request?.target == .selectedTabInWorktree(worktree.id))
+    #expect(request?.viewport == .reveal)
+  }
+
+  @Test(.dependencies) func repositoriesChangedDefaultCanvasFocusesAnchorWithoutRestore() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(worktree.id)
+    setDefaultViewMode(.canvas)
+    defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = false
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
+    await store.finish()
+    await store.skipReceivedActions()
+
+    #expect(store.state.repositories.pendingCanvasFocusRequest?.target == .selectedTabInWorktree(worktree.id))
+  }
+
+  @Test(.dependencies) func layoutRestoredDefaultCanvasEntersWithOnlyPlainFolder() async {
+    let plainRepository = makePlainRepository()
+    var repositoriesState = RepositoriesFeature.State(repositories: [plainRepository])
+    repositoriesState.selection = nil
+    setDefaultViewMode(.canvas)
+    defer { setDefaultViewMode(.normal) }
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil)))
+    await store.finish()
+    await store.skipReceivedActions()
+
+    #expect(store.state.repositories.selection == .canvas)
+    #expect(store.state.repositories.pendingCanvasFocusRequest?.target == .selectedTabInWorktree(plainRepository.id))
+    #expect(
+      sentCommands.value.contains { command in
+        if case .ensureInitialTab(let worktree, _, _) = command { return worktree.id == plainRepository.id }
+        return false
+      }
+    )
   }
 
   @Test(.dependencies) func layoutRestoreFailedAppliesDefaultShelf() async {

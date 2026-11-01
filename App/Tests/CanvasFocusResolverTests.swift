@@ -121,4 +121,35 @@ struct CanvasNewCardFocusTests {
 
     #expect(card == nil)
   }
+
+  @Test func selectedTabTargetUsesTheWorktreeSelectedTab() {
+    let first = TerminalTabID(rawValue: UUID())
+    let second = TerminalTabID(rawValue: UUID())
+    let other = TerminalTabID(rawValue: UUID())
+    let candidates = [
+      CanvasCardRef(worktreeID: "other", tabID: other),
+      CanvasCardRef(worktreeID: "anchor", tabID: first),
+      CanvasCardRef(worktreeID: "anchor", tabID: second),
+    ]
+    let request = CanvasFocusRequest(id: 1, target: .selectedTabInWorktree("anchor"))
+
+    let selected = CanvasFocusResolver.resolve(
+      request: request, candidates: candidates, currentPrimaryTabID: nil, selectedTabID: { _ in second })
+    #expect(selected == second)
+
+    let noSelection = CanvasFocusResolver.resolve(
+      request: request, candidates: candidates, currentPrimaryTabID: nil, selectedTabID: { _ in nil })
+    #expect(noSelection == first)
+
+    let selectedElsewhere = CanvasFocusResolver.resolve(
+      request: request, candidates: candidates, currentPrimaryTabID: nil, selectedTabID: { _ in other })
+    #expect(selectedElsewhere == first)
+  }
+
+  @Test func selectedTabTargetWaitsForTheWorktreeCard() {
+    let candidates = [CanvasCardRef(worktreeID: "other", tabID: TerminalTabID(rawValue: UUID()))]
+    let request = CanvasFocusRequest(id: 1, target: .selectedTabInWorktree("anchor"))
+
+    #expect(CanvasFocusResolver.resolve(request: request, candidates: candidates, currentPrimaryTabID: nil) == nil)
+  }
 }
