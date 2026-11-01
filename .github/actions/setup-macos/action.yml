@@ -83,9 +83,9 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.PROWL_DERIVED_DATA_PATH }}
-        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-trialcold-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-app-incremental-v3-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-
+          ${{ runner.os }}-${{ runner.arch }}-app-incremental-trialcold-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml') }}-
     - name: Restore unchanged App source times
       shell: bash
       run: python3 scripts/ci-source-mtimes.py restore --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
