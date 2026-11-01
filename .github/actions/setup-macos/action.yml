@@ -63,9 +63,9 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
-        key: ${{ runner.os }}-${{ runner.arch }}-spm-v2-${{ hashFiles('.package.resolved') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-spm-v3-${{ hashFiles('.package.resolved') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-spm-v2-
+          ${{ runner.os }}-${{ runner.arch }}-spm-v3-
           ${{ runner.os }}-${{ runner.arch }}-spm-v1-
 
     - name: App incremental cache identity
