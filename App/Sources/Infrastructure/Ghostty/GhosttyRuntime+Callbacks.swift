@@ -195,7 +195,8 @@ extension GhosttyRuntime {
   }
 
   static func wakeup(userdataBits: UInt?) {
-    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    guard let userdataBits, isLive(runtimeBits: userdataBits) else { return }
+    let userdata = UnsafeMutableRawPointer(bitPattern: userdataBits)
     guard let runtime = runtime(from: userdata) else { return }
     runtime.tick()
   }
@@ -205,7 +206,7 @@ extension GhosttyRuntime {
     target: ghostty_target_s,
     action: ghostty_action_s
   ) -> Bool {
-    guard let app = ghostty_app_t(bitPattern: appBits) else { return false }
+    guard isLive(appBits: appBits), let app = ghostty_app_t(bitPattern: appBits) else { return false }
     if target.tag == GHOSTTY_TARGET_APP, let runtime = runtime(fromApp: app),
       let handled = runtime.handleAppScopedAction(action.tag)
     {
