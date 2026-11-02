@@ -111,9 +111,10 @@ pane has focus. The Ghostty action each maps to is shown for reference.
 
 ## Terminal engine (Ghostty-managed)
 
-These are **not** Prowl app shortcuts; they are Ghostty terminal bindings, shown
-in Prowl's Terminal menu with whatever key Ghostty resolves. Customize them in
-your Ghostty config (`~/.config/ghostty/config`). Typical defaults in parentheses.
+These are **not** Prowl app shortcuts; they are Ghostty terminal bindings. Prowl's
+File, View, and Edit menus show the actions that have a menu item with whatever
+key Ghostty resolves. Customize them in your Ghostty config
+(`~/.config/ghostty/config`). Typical defaults in parentheses.
 
 | Action | Ghostty action | Typical default |
 |--------|----------------|-----------------|
@@ -122,7 +123,7 @@ your Ghostty config (`~/.config/ghostty/config`). Typical defaults in parenthese
 | Close Terminal Tab | `close_tab` | ⌘⇧W |
 | Undo Close (restore the last closed pane / tab) | `undo` | ⌘Z, ⌘⇧T |
 | Redo Close (close it again) | `redo` | ⌘⇧Z |
-| New Split (vertical / horizontal) | `new_split:right` / `new_split:down` | (Ghostty default; config-only, not in the Terminal menu) |
+| New Split (vertical / horizontal) | `new_split:right` / `new_split:down` | (Ghostty default; config-only, not in a menu) |
 | Reset Font Size | `reset_font_size` | ⌘0 |
 | Increase Font Size | `increase_font_size:1` | ⌘+ |
 | Decrease Font Size | `decrease_font_size:1` | ⌘- |

@@ -27,10 +27,10 @@ why Prowl is fully native and CJK-correct.
 
 | Operation | How |
 |-----------|-----|
-| New tab | Terminal menu → **New Terminal** (Ghostty `new_tab`, typically `⌘T`); the **+** on a Shelf spine; the [`prowl create tab`](cli.md) CLI |
+| New tab | File menu → **New Terminal** (Ghostty `new_tab`, typically `⌘T`); the **+** on a Shelf spine; the [`prowl create tab`](cli.md) CLI |
 | Select tab 1–9 | `⌘1`–`⌘9` |
 | Previous / Next tab | `⌘⇧[` / `⌘⇧]` |
-| Close focused tab | Terminal menu → **Close Terminal Tab** (Ghostty `close_tab`) |
+| Close focused tab | File menu → **Close Terminal Tab** (Ghostty `close_tab`) |
 | Close (right-click a tab) | Close Tab · Close Other Tabs · Close Tabs to the Right · Close All |
 | Undo a close | Ghostty `undo` (typically `⌘Z`) within `undo-timeout` (5 s default) restores the last closed tab or pane in place; `redo` (`⌘⇧Z`) closes it again. See [undo close](../reference/keyboard-shortcuts.md#undo-close) |
 | Rename tab | Right-click → **Rename Tab** (sets a custom title) |
@@ -51,7 +51,7 @@ Splitting is handled by Ghostty actions (bind/keys in your Ghostty config):
 | Resize split | `resize_split:<dir>:<px>` |
 | Equalize splits | `equalize_splits` |
 | Zoom / maximize a pane | `toggle_split_zoom` (app default `⌘⌥⇧F`) |
-| Close a pane | `close_surface` (Terminal menu → **Close Terminal**) |
+| Close a pane | `close_surface` (File menu → **Close Terminal**) |
 
 App-level pane navigation (works inside the terminal too): `⌘[` / `⌘]` previous /
 next pane, `⌘⌥↑/↓/←/→` for directional pane focus, `⌘⌥⇧F` to zoom / unzoom the
@@ -170,7 +170,7 @@ When a command finishes (via OSC 133), Prowl can:
 
 ## Font size
 
-- **Reset / Increase / Decrease** via the Terminal menu (Ghostty
+- **Reset / Increase / Decrease** via the View menu (Ghostty
   `reset_font_size` / `increase_font_size:1` / `decrease_font_size:1`; usually
   `⌘0` / `⌘+` / `⌘-`).
 - The chosen size is remembered (`terminalFontSize`) and applied across worktrees;
@@ -181,7 +181,7 @@ When a command finishes (via OSC 133), Prowl can:
 
 ## In-terminal search
 
-Terminal menu: **Find…** (`start_search`), **Find Next/Previous**
+Edit menu: **Find…** (`start_search`), **Find Next/Previous**
 (`search:next`/`search:previous`), **Hide Find Bar** (`end_search`), **Use
 Selection for Find** (`search_selection`). These are Ghostty-managed.
 
