@@ -230,7 +230,7 @@ final class MirrorSession: Identifiable {
   /// Connects and subscribes to a pane chosen from a Host roster, in the given mode.
   func open(_ pane: MirrorPaneDescriptor, mode: Mode) {
     self.pane = pane
-    self.mode = pane.conversation == .available || mode == .conversation ? mode : .screen
+    self.mode = mode == .conversation && pane.conversation == .available ? .conversation : .screen
     intent = pane.busy ? .takeover : .ifFree
     connect()
   }
