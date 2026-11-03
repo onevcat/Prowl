@@ -60,6 +60,20 @@ struct MirrorConversationLogTests {
     #expect(stale.gap && stale.events.map(\.sequence) == [3])
   }
 
+  @Test func keepsTheSessionAfterItsStartWasEvicted() {
+    var log = MirrorConversationLog()
+    log.maximumEvents = 3
+    log.append(.init(.sessionStarted, .session(.init(id: "s1", cwd: "/repo")), at: nil, source: .transcript))
+    log.append(.init(.sessionUpdated, .session(.init(title: "Fix the tests")), at: nil, source: .transcript))
+    log.append(contentsOf: [notice("a"), notice("b"), notice("c")])
+    let snapshot = log.snapshot(since: nil)
+    #expect(snapshot.gap && snapshot.events.map(\.kind) == [.notice, .notice, .notice])
+    #expect(
+      snapshot.session?.id == "s1" && snapshot.session?.cwd == "/repo" && snapshot.session?.title == "Fix the tests")
+    log.append(.init(.sessionChanged, .session(.init(reason: .clear)), at: nil, source: .host))
+    #expect(log.snapshot(since: nil).session == nil)
+  }
+
   @Test func anEmptySegmentStillReportsAGapForAnOlderPoint() {
     var log = MirrorConversationLog()
     log.append(contentsOf: [notice("a"), notice("b")])

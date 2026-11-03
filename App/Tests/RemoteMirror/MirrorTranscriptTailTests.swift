@@ -137,7 +137,7 @@ struct MirrorTranscriptTailTests {
     let (tail, changes) = makeTail(url, replayLimit: 10)
     tail.start()
     await waitUntil { changes.all.count >= 1 }
-    #expect(changes.labels == ["replay:89\nabcdef\n:head=01234567:mid"])
+    #expect(changes.labels == ["replay:89\nabcdef\n:head=0123456789\nabcdef\n:mid"])
     tail.stop()
   }
 
@@ -148,7 +148,7 @@ struct MirrorTranscriptTailTests {
     let (tail, changes) = makeTail(url, replayLimit: 7)
     tail.start()
     await waitUntil { changes.all.count >= 1 }
-    #expect(changes.labels == ["replay:abcdef\n:head=0123456789\n"])
+    #expect(changes.labels == ["replay:abcdef\n:head=0123456789\nabcdef\n"])
     tail.stop()
   }
 }

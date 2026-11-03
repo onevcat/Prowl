@@ -69,6 +69,21 @@ struct CodexConversationAdapterTests {
     #expect(announced.map(\.kind) == [.sessionStarted])
   }
 
+  @Test func forkHeadersKeepTheChildSession() {
+    let events = run([
+      ["type": "session_meta", "payload": ["id": "child", "cwd": "/repo", "forked_from_id": "parent"]],
+      ["type": "session_meta", "payload": ["id": "parent", "cwd": "/repo"]],
+      completed(["type": "UserMessage", "id": "u1", "content": [["type": "text", "text": "inherited"]]]),
+      event(["type": "thread_settings_applied", "thread_settings": ["model": "gpt-6-astra"]]),
+    ])
+    #expect(events.map(\.kind) == [.sessionStarted, .userMessage, .sessionUpdated])
+    guard case .session(let session) = events[0].payload else {
+      Issue.record("expected a session payload")
+      return
+    }
+    #expect(session.id == "child")
+  }
+
   @Test func oneCompactionProducesOneEvent() {
     let events = run([
       ["type": "compacted", "timestamp": "2026-11-03T04:40:00.000Z", "payload": [:]],

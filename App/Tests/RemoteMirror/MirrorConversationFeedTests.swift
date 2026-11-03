@@ -154,6 +154,39 @@ struct MirrorConversationFeedTests {
     feed.stop()
   }
 
+  @Test func replayOffsetInsideTheHeaderStillAnnouncesTheSession() async throws {
+    let padding = String(repeating: "x", count: 400)
+    let header =
+      #"{"type":"session_meta","timestamp":"2026-11-03T04:33:40.707Z","#
+      + #""payload":{"id":"thread-8","cwd":"/repo","cli_version":"0.166.0","base_instructions":"\#(padding)"}}"#
+    let lines = [header] + (1...5).map { codexMessage("message \($0)") }
+    let url = try temporaryFile(lines)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let size = try #require(
+      FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))[.size] as? Int)
+    // The window starts 50 bytes into the header record.
+    let feed = makeFeed(replayLimit: size - 50)
+    feed.follow(.init(url: url, agent: .codex))
+    await waitUntil { feed.log.events.contains { $0.kind == .assistantMessage } }
+    #expect(feed.log.events.first?.kind == .sessionStarted)
+    #expect(feed.log.snapshot(since: nil).session?.id == "thread-8")
+    #expect(feed.log.events.filter { $0.kind == .assistantMessage }.count == 5)
+    feed.stop()
+  }
+
+  @Test func aLongReplayKeepsTheSessionForFreshSubscribers() async throws {
+    let lines = [codexMeta("thread-9")] + (1...600).map { codexMessage("message \($0)") }
+    let url = try temporaryFile(lines)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let feed = makeFeed()
+    feed.follow(.init(url: url, agent: .codex))
+    await waitUntil { feed.log.latestSequence >= 601 }
+    let snapshot = feed.log.snapshot(since: nil)
+    #expect(snapshot.gap && snapshot.events.first?.kind != .sessionStarted)
+    #expect(snapshot.session?.id == "thread-9")
+    feed.stop()
+  }
+
   @Test func observesAgentStatusChanges() {
     let feed = makeFeed()
     var pane = PaneAgentState(detectedAgent: .codex, state: .working)
