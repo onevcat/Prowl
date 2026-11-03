@@ -50,8 +50,9 @@ nonisolated struct MirrorJSONLineReader: Sendable {
 /// reported as `rotated`. `stop()` is required; the tail keeps no `deinit` behaviour.
 nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
   enum Change: Sendable {
-    /// `head` holds the file's first bytes when the replay window skipped them, so an adapter
-    /// can bootstrap the session metadata that only the first records carry.
+    /// `head` holds the file's first bytes (up to `headLimitBytes`) when the replay window
+    /// skipped any, so an adapter can bootstrap the session metadata that only the first
+    /// records carry; it may overlap the window when the window starts inside those bytes.
     case replay(Data, head: Data?, startsMidRecord: Bool)
     case appended(Data)
     case rotated
@@ -126,7 +127,8 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
     let limit = UInt64(options.replayLimitBytes)
     let start = attributes.size > limit ? attributes.size - limit : 0
     let data = read(from: start, to: attributes.size, with: handle)
-    let head = start > 0 ? read(from: 0, to: min(start, UInt64(options.headLimitBytes)), with: handle) : nil
+    let head =
+      start > 0 ? read(from: 0, to: min(attributes.size, UInt64(options.headLimitBytes)), with: handle) : nil
     // A window that starts right after a newline starts on a complete record.
     let midRecord = start > 0 && read(from: start - 1, to: start, with: handle) != Data([0x0A])
     offset = attributes.size

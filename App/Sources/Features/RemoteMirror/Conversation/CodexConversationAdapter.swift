@@ -10,6 +10,9 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
 
   let agent = DetectedAgent.codex
   private var model: String?
+  /// A fork rollout copies its parent's `session_meta` after its own header; only the
+  /// file's first header names the session this file belongs to.
+  private var announced = false
   /// A 0.166 rollout records one compaction twice: a `compacted` record and a
   /// `ContextCompaction` item a few milliseconds apart.
   private var lastCompaction: Date?
@@ -25,6 +28,8 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
     let payload = Value.object(record, "payload") ?? [:]
     switch type {
     case "session_meta":
+      guard !announced else { return [] }
+      announced = true
       let session = Event.Session(
         id: Value.string(payload, "id"), cwd: Value.string(payload, "cwd"),
         version: Value.string(payload, "cli_version"))

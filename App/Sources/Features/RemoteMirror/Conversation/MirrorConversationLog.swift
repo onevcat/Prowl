@@ -9,6 +9,9 @@ nonisolated struct MirrorConversationLog: Sendable {
     /// Events between the requested point and `events.first` were dropped.
     let gap: Bool
     let latestSequence: UInt64
+    /// The session the retained events belong to, kept even after its `session.started`
+    /// was evicted, so a fresh subscriber never depends on the first event surviving.
+    let session: MirrorConversationEvent.Session?
   }
 
   var maximumEvents = 500
@@ -16,6 +19,8 @@ nonisolated struct MirrorConversationLog: Sendable {
 
   private(set) var events: [MirrorConversationEvent] = []
   private(set) var latestSequence: UInt64 = 0
+  /// Merged from `session.started` and `session.updated`; nil between sessions.
+  private(set) var currentSession: MirrorConversationEvent.Session?
   private var retainedBytes = 0
   /// The sequence the current segment started after; `clear()` moves it.
   private var segmentStart: UInt64 = 0
@@ -27,8 +32,29 @@ nonisolated struct MirrorConversationLog: Sendable {
     assigned.sequence = latestSequence
     events.append(assigned)
     retainedBytes += assigned.estimatedBytes
+    track(assigned)
     evictIfNeeded()
     return assigned
+  }
+
+  private mutating func track(_ event: MirrorConversationEvent) {
+    switch (event.kind, event.payload) {
+    case (.sessionStarted, .session(let session)):
+      currentSession = session
+    case (.sessionUpdated, .session(let update)):
+      var merged = currentSession ?? .init()
+      if let id = update.id { merged.id = id }
+      if let cwd = update.cwd { merged.cwd = cwd }
+      if let model = update.model { merged.model = model }
+      if let title = update.title { merged.title = title }
+      if let version = update.version { merged.version = version }
+      if let cost = update.costUSD { merged.costUSD = cost }
+      currentSession = merged
+    case (.sessionChanged, _), (.sessionPending, _), (.sessionEnded, _):
+      currentSession = nil
+    default:
+      break
+    }
   }
 
   @discardableResult
@@ -47,14 +73,21 @@ nonisolated struct MirrorConversationLog: Sendable {
     guard let oldest = events.first?.sequence else {
       // Nothing retained: a client whose point lies before this segment still has a gap.
       let behind = since.map { $0 < segmentStart } ?? false
-      return Snapshot(events: [], gap: behind, latestSequence: latestSequence)
+      return Snapshot(events: [], gap: behind, latestSequence: latestSequence, session: currentSession)
     }
     guard let since else {
-      return Snapshot(events: events, gap: oldest > segmentStart + 1, latestSequence: latestSequence)
+      return Snapshot(
+        events: events, gap: oldest > segmentStart + 1, latestSequence: latestSequence, session: currentSession)
     }
-    if since >= latestSequence { return Snapshot(events: [], gap: false, latestSequence: latestSequence) }
-    if since + 1 < oldest { return Snapshot(events: events, gap: true, latestSequence: latestSequence) }
-    return Snapshot(events: events.filter { $0.sequence > since }, gap: false, latestSequence: latestSequence)
+    if since >= latestSequence {
+      return Snapshot(events: [], gap: false, latestSequence: latestSequence, session: currentSession)
+    }
+    if since + 1 < oldest {
+      return Snapshot(events: events, gap: true, latestSequence: latestSequence, session: currentSession)
+    }
+    return Snapshot(
+      events: events.filter { $0.sequence > since }, gap: false, latestSequence: latestSequence, session: currentSession
+    )
   }
 
   private mutating func evictIfNeeded() {

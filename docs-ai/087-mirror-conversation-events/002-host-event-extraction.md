@@ -81,3 +81,14 @@ session reading their own transcripts) agreed on the material findings; all were
 Still unverified on real data: `interrupted` tool results, ExitPlanMode and NotebookEdit
 input shapes, Codex `DynamicToolCall` items and `declined` command status, fork sessions.
 Codex `SubAgentActivity` stays unmapped until S4.
+
+## Review round 2 (2026-11-04)
+
+- Session identity no longer depends on an evictable first event: the log merges
+  `session.started` / `session.updated` into `currentSession`, and every `Snapshot` carries
+  it, so a subscriber that arrives after a 500-event replay still learns the session. The
+  wire slice puts it on `conversationSnapshot`.
+- The replay head is the file's first 64 KiB whenever the window skips any bytes, so a
+  window that starts inside the first record still bootstraps from the complete header.
+- A Codex fork rollout copies the parent's `session_meta` after its own; only the first
+  header announces the session, inherited history replays as content.
