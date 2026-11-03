@@ -39,6 +39,9 @@ final class MirrorHostSession {
   @ObservationIgnored private var generation = UUID()
   @ObservationIgnored private var refreshTask: Task<Void, Never>?
   @ObservationIgnored private var pendingCommands: [UUID: PendingCommand] = [:]
+  @ObservationIgnored private var connectTimeout: Task<Void, Never>?
+  /// How long a connection may stay unanswered before it counts as failed.
+  static let connectTimeoutDuration: Duration = .seconds(10)
   @ObservationIgnored private let clock: any Clock<Duration>
   @ObservationIgnored private let refreshInterval: Duration
   @ObservationIgnored private let makeTransport: (MirrorSavedConnection) throws -> any MirrorTransport
@@ -87,6 +90,8 @@ final class MirrorHostSession {
       }
       channel.onReady = { [weak self] in
         guard let self, self.generation == attempt else { return }
+        self.connectTimeout?.cancel()
+        self.connectTimeout = nil
         if let verified = self.transport?.verifiedConfiguration { self.configuration = verified }
         self.onVerified?(self.configuration)
         self.send(.list)
@@ -98,6 +103,8 @@ final class MirrorHostSession {
       }
       channel.onClose = { [weak self] reason in
         guard let self, self.generation == attempt else { return }
+        self.connectTimeout?.cancel()
+        self.connectTimeout = nil
         self.transport = nil
         self.refreshTask?.cancel()
         self.refreshTask = nil
@@ -105,6 +112,15 @@ final class MirrorHostSession {
         self.status = .failed(reason ?? String(localized: "Connection lost."))
       }
       channel.start()
+      // A wrong code or a silent Host must not leave the screen on "Connecting…" forever.
+      let clock = clock
+      connectTimeout = Task { [weak self] in
+        do { try await clock.sleep(for: Self.connectTimeoutDuration) } catch { return }
+        guard let self, self.generation == attempt, self.status == .connecting else { return }
+        self.transport?.close(nil)
+        self.transport = nil
+        self.status = .failed(String(localized: "The Host did not answer. Check the address, port and code."))
+      }
     } catch {
       status = .failed(error.localizedDescription)
     }
@@ -112,6 +128,8 @@ final class MirrorHostSession {
 
   func stop() {
     generation = UUID()
+    connectTimeout?.cancel()
+    connectTimeout = nil
     refreshTask?.cancel()
     refreshTask = nil
     failPendingCommands(CommandFailure.disconnected)

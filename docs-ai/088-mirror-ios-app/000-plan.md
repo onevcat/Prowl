@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-11-04 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #1040 (Host roster fix), the iOS client PR stacked on it |
 | **Related** | [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [067-remote-mirror](../067-remote-mirror/000-plan.md), `Mirror/iOS/README.md`, `docs/remote-mirror.md`, issue #989 |
 
 ## Background
@@ -85,4 +85,4 @@ a redesign that may discard the current structure (2026-11-04).
 
 ## Amendments
 
-(none yet)
+- Updated 2026-11-04: implemented in one PR; outcome, deviations and verification in [001-action.md](001-action.md)
