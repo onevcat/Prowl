@@ -219,6 +219,21 @@ also cancels pending Profile preparation, including requests whose connection wa
 already lost. A plain disconnect alone does not cancel accepted Profile creation;
 check Host before retrying an uncertain result. Existing terminal programs continue.
 
+## Conversation view
+
+A Host advertising `conversation-v1` can serve a pane as the agent's conversation instead
+of its screen: the Host reads the agent's own transcript (Claude Code and Codex today),
+its hooks and its OSC 7501 status, and sends normalized events (turns, messages, tool
+cards with bounded output and diffs, prompts, status, session changes). The pane list
+marks each pane `available`, `pending` (agent known, transcript not yet resolved) or
+`unsupported`; Shell panes and other agents keep the text view. A client can switch a
+pane between the conversation and the text view on the same connection, and resumes by
+sequence after a reconnect while the Host still retains the feed (ten minutes). Assistant
+text arrives when a message completes; `working` comes from the agent's status. Codex
+without trusted hooks reports tools only when they finish and no approval content. See
+[wire contract](remote-mirror-wire.md#conversation-stream-conversation-v1) and
+docs-ai 087.
+
 ## Protocol and development
 
 See [wire contract](remote-mirror-wire.md). This replaces the earlier experimental

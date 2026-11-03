@@ -186,3 +186,51 @@ both mobile apps. Cameras are not required for manual enrollment.
 zero-based offsets at 5,000 rows. Missing metadata retains the existing plain-text
 fallback. No new messages are sent to text-v1 subscribers. Binary VT frames and
 mobile wire behavior are unchanged.
+
+## Conversation stream (`conversation-v1`)
+
+`conversation-v1` is a third `subscribe` representation (capability `conversation-v1`,
+docs-ai 087). It carries the agent's own transcript as normalized events instead of the
+terminal screen: turns, user and assistant messages, tool start/end pairs with bounded
+output and diffs, prompts that need a person, agent status, session changes, and notices.
+Each `panes` descriptor says whether a pane can serve it (`conversation`: `available`,
+`pending` while the Host knows the agent but not its transcript yet, or `unsupported`),
+plus the detected `agent` and its `agentState`. Subscribing to an unsupported pane fails
+with the recoverable `CONVERSATION_UNSUPPORTED` without closing the connection.
+
+```json
+{"subscribe":{"_0":{"paneID":"UUID","representation":"conversation-v1","intent":"ifFree","since":41}}}
+{"conversationSnapshot":{"_0":{"events":[…],"gap":false,"sequence":57,"subscriptionID":"UUID"}}}
+{"conversationEvents":{"_0":{"events":[…],"sequence":60,"subscriptionID":"UUID"}}}
+{"acknowledge":{"_0":{"sequence":60,"subscriptionID":"UUID"}}}
+```
+
+After `subscribed`, the Host sends one `conversationSnapshot`: every event it retains after
+`since` (or the whole retained segment without `since`), oldest first. `gap` is true when
+events between `since` and the first one were dropped. Further events arrive in
+`conversationEvents` batches on the same ordered connection. One batch is outstanding at
+a time: the client acknowledges a non-empty snapshot or batch with its `sequence`, and a
+wrong acknowledgement closes the connection. A batch whose events start after a gap
+arrives as a `conversationSnapshot` with `gap: true` instead.
+
+An event is `{"seq","ts","kind","source","data"}`. `seq` is monotonic per pane for the life
+of the Host run, including across session changes; `ts` is an ISO 8601 timestamp with
+milliseconds; `source` names the Host input (`transcript`, `hook`, `osc`, `native`,
+`screen`, `host`); `data` is the payload family that `kind` selects. Clients ignore kinds
+they do not know. Kinds: `session.started` / `session.updated` / `session.changed` /
+`session.pending` / `session.ended`, `turn.started` / `turn.completed`, `user.message` /
+`user.queued` / `user.unqueued`, `assistant.message` / `assistant.reasoning`,
+`tool.started` / `tool.completed`, `agent.status`, `prompt.opened` / `prompt.resolved`,
+`context.compacted`, `subagent.started` / `subagent.completed`, `notice`. Long text is
+bounded (`{"text","truncated","totalBytes"}`); reasoning content is never sent. The Swift
+model is `Mirror/Shared/MirrorConversationEvent.swift`, compiled by the Mac app and the iOS
+client; both pin the same JSON vectors.
+
+A `session.changed` or `session.pending` event starts a new segment: the Host restates
+the current `agent.status` and the following `session.started` describes the new
+transcript. A client that cannot tell which session it shows should fall back to the
+Screen view (`text-v1`). The Host keeps a pane's conversation feed for ten minutes after
+its last subscription ends, so a reconnect with `since` resumes without a gap; the same
+connection may subscribe its own pane again with another representation to switch views.
+`input` and `scroll` are not accepted on a conversation subscription; `agents.input`
+commands are.
