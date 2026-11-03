@@ -42,6 +42,8 @@ extension MirrorConversationEvent {
     var status: TurnStatus?
     var durationMs: Int?
     var lastMessage: MirrorBoundedText?
+    /// Why an aborted turn ended (`interrupted`, …), as the agent reports it.
+    var reason: String?
   }
 
   nonisolated enum MessagePhase: String, Codable, Sendable {
@@ -102,6 +104,8 @@ extension MirrorConversationEvent {
     var status: ToolStatus
     var exitCode: Int?
     var output: MirrorBoundedText?
+    /// A unified diff or added content for edits, bounded like output.
+    var diff: MirrorBoundedText?
     var durationMs: Int?
     var isImage: Bool?
   }

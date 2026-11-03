@@ -10,6 +10,14 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
 
   let agent = DetectedAgent.codex
   private var model: String?
+  /// A 0.166 rollout records one compaction twice: a `compacted` record and a
+  /// `ContextCompaction` item a few milliseconds apart.
+  private var lastCompaction: Date?
+
+  mutating func bootstrap(_ record: MirrorConversationRecord) -> [MirrorConversationEvent] {
+    guard Value.string(record, "type") == "session_meta" else { return [] }
+    return events(for: record)
+  }
 
   mutating func events(for record: MirrorConversationRecord) -> [MirrorConversationEvent] {
     guard let type = Value.string(record, "type") else { return [] }
@@ -24,12 +32,18 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
     case "turn_context":
       return modelUpdate(Value.string(payload, "model"), at: timestamp)
     case "compacted":
-      return [Event(.contextCompacted, .none, at: timestamp, source: .transcript)]
+      return compaction(at: timestamp)
     case "event_msg":
       return eventMessage(payload, at: timestamp)
     default:
       return []
     }
+  }
+
+  private mutating func compaction(at timestamp: Date?) -> [Event] {
+    if let timestamp, let last = lastCompaction, abs(timestamp.timeIntervalSince(last)) < 5 { return [] }
+    lastCompaction = timestamp
+    return [Event(.contextCompacted, .none, at: timestamp, source: .transcript)]
   }
 
   private mutating func modelUpdate(_ model: String?, at timestamp: Date?) -> [Event] {
@@ -50,7 +64,9 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
         lastMessage: Value.string(payload, "last_agent_message").map { .init($0, limit: 512) })
       return [Event(.turnCompleted, .turn(turn), at: timestamp, source: .transcript)]
     case "turn_aborted":
-      let turn = Event.Turn(id: Value.string(payload, "turn_id"), status: .aborted)
+      let turn = Event.Turn(
+        id: Value.string(payload, "turn_id"), status: .aborted, durationMs: Value.int(payload, "duration_ms"),
+        reason: Value.string(payload, "reason"))
       return [Event(.turnCompleted, .turn(turn), at: timestamp, source: .transcript)]
     case "thread_settings_applied":
       return modelUpdate(Value.object(payload, "thread_settings").flatMap { Value.string($0, "model") }, at: timestamp)
@@ -61,18 +77,16 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
     }
   }
 
-  private func itemEvents(_ payload: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
+  private mutating func itemEvents(_ payload: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
     guard let item = Value.object(payload, "item"), let type = Value.string(item, "type") else { return [] }
     let started = Value.epochMilliseconds(payload, "started_at_ms")
     let completed = Value.epochMilliseconds(payload, "completed_at_ms") ?? timestamp
     switch type {
     case "UserMessage":
-      guard let text = Value.blockText(item["content"]) else { return [] }
-      return [
-        Event(
-          .userMessage, .message(.init(text: .init(text), origin: .human)), at: started ?? completed,
-          source: .transcript)
-      ]
+      let images = Value.imageCount(item["content"])
+      guard let text = Value.blockText(item["content"]) ?? (images > 0 ? "" : nil) else { return [] }
+      let message = Event.Message(text: .init(text), origin: .human, images: images > 0 ? images : nil)
+      return [Event(.userMessage, .message(message), at: started ?? completed, source: .transcript)]
     case "AgentMessage":
       guard let text = Value.blockText(item["content"]), !text.isEmpty else { return [] }
       let phase: Event.MessagePhase = Value.string(item, "phase") == "final_answer" ? .final : .commentary
@@ -84,7 +98,7 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
       let reasoning = Event.Reasoning(summary: summary.flatMap { $0.isEmpty ? nil : .init($0, limit: 512) })
       return [Event(.assistantReasoning, .reasoning(reasoning), at: completed, source: .transcript)]
     case "ContextCompaction":
-      return [Event(.contextCompacted, .none, at: completed, source: .transcript)]
+      return compaction(at: completed)
     case "CommandExecution", "FileChange", "McpToolCall", "Extension", "ImageView", "DynamicToolCall":
       return toolEvents(item, type: type, started: started, completed: completed)
     default:
@@ -102,7 +116,10 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
     let end = Event.ToolEnd(
       id: id, name: shape.name, status: Self.status(Value.string(item, "status")),
       exitCode: Value.int(item, "exit_code"),
-      output: Self.output(item, type: type).map { .init($0) }, durationMs: duration)
+      output: Self.output(item, type: type).map { .init($0) },
+      diff: type == "FileChange"
+        ? Self.fileChangeDiff(item).map { .init($0, limit: MirrorBoundedText.diffLimit) } : nil,
+      durationMs: duration)
     return [
       Event(.toolStarted, .toolStart(start), at: started ?? completed, source: .transcript),
       Event(.toolCompleted, .toolEnd(end), at: completed, source: .transcript),
@@ -153,12 +170,27 @@ nonisolated struct CodexConversationAdapter: MirrorConversationAdapter {
     switch type {
     case "CommandExecution": Value.string(item, "aggregated_output")
     case "FileChange":
-      [Value.string(item, "stdout"), Value.string(item, "stderr")].compactMap { $0 }.joined(separator: "\n")
+      [Value.string(item, "stdout"), Value.string(item, "stderr")].compactMap { $0 }.filter { !$0.isEmpty }
+        .joined(separator: "\n")
     case "McpToolCall":
       Value.string(item, "error") ?? Value.object(item, "result").flatMap { Value.blockText($0["content"]) }
     case "DynamicToolCall": Value.blockText(item["contentItems"])
     default: nil
     }
+  }
+
+  /// One block per changed path: the rollout's unified diff, or the added content as `+` lines.
+  private static func fileChangeDiff(_ item: MirrorConversationRecord) -> String? {
+    guard let changes = Value.object(item, "changes") else { return nil }
+    let blocks = changes.keys.sorted().compactMap { path -> String? in
+      guard let change = changes[path] as? MirrorConversationRecord else { return nil }
+      var body = Value.string(change, "unified_diff") ?? ""
+      if body.isEmpty, let content = Value.string(change, "content") {
+        body = content.split(separator: "\n", omittingEmptySubsequences: false).map { "+" + $0 }.joined(separator: "\n")
+      }
+      return "=== \(self.path(fromFileURL: path)) (\(Value.string(change, "type") ?? "update"))\n" + body
+    }
+    return blocks.isEmpty ? nil : blocks.joined(separator: "\n")
   }
 
   private static func path(fromFileURL value: String) -> String {

@@ -82,6 +82,8 @@ nonisolated struct MirrorConversationEvent: Codable, Equatable, Sendable {
     case transcript
     case hook
     case osc
+    /// The agent's own state file, such as Claude's pid registry.
+    case native
     case screen
     case host
   }

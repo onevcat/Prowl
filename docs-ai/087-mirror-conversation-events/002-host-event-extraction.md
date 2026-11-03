@@ -49,3 +49,35 @@ Tests: `App/Tests/RemoteMirror/MirrorConversationEventTests.swift`,
 `ClaudeConversationAdapterTests.swift`, `CodexConversationAdapterTests.swift`,
 `MirrorConversationLogTests.swift`, `MirrorTranscriptTailTests.swift`,
 `MirrorConversationFeedTests.swift`. PR: (fill in).
+
+## Review round 1 (2026-11-04)
+
+Three reviews of `58810c6e` (the review-loop reviewer plus a Claude Code and a Codex
+session reading their own transcripts) agreed on the material findings; all were fixed:
+
+- Transcript tail: a same-inode truncate-and-rewrite is detected by re-reading the last
+  256 bytes before the offset (`rotated`, then a full replay); a replay window that starts
+  right after a newline is not mid-record; a bounded replay also delivers the file's first
+  64 KiB as `head`, which the adapters use to announce the session (`bootstrap`).
+- Feed: rotation and a lost file start a new log segment like a transcript switch; every
+  segment restates the current `agent.status`; an unsupported transcript asked for twice
+  does not repeat `session.pending`; unreadable records produce one `notice` per batch.
+- Log: an empty segment still reports `gap` for a point before it; retention counts
+  changed paths, choices and diffs.
+- Claude adapter: compaction summaries, slash-command echoes and `<local-command-stdout>`
+  are not human turns (a command echo is a `notice`); `dequeue` records carry no text, so
+  the adapter keeps the queue and releases the oldest; AskUserQuestion / ExitPlanMode
+  resolve as `answered` / `dismissed` from their tool result, and `permissionDecision`
+  resolves a permission prompt only for `user*` sources; `turnOrigin` values `scheduled`,
+  `sdk` and `task_notification` map to `automation` / `system`; edits carry a diff from
+  `structuredPatch` or the written content; tool titles prefer descriptions and patterns;
+  pending tools are dropped when the turn closes.
+- Codex adapter: one compaction is one event (a `compacted` record and its
+  `ContextCompaction` item arrive milliseconds apart); `turn_aborted` keeps its duration
+  and reason; user messages count `local_image` blocks; FileChange carries the unified
+  diff or added content; empty stdout/stderr are not joined.
+- Status mapper: a `.native` decision reports source `native`, not `hook`.
+
+Still unverified on real data: `interrupted` tool results, ExitPlanMode and NotebookEdit
+input shapes, Codex `DynamicToolCall` items and `declined` command status, fork sessions.
+Codex `SubAgentActivity` stays unmapped until S4.

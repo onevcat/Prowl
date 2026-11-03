@@ -9,6 +9,14 @@ typealias MirrorConversationRecord = [String: Any]
 nonisolated protocol MirrorConversationAdapter {
   var agent: DetectedAgent { get }
   mutating func events(for record: MirrorConversationRecord) -> [MirrorConversationEvent]
+  /// Session metadata from one of the file's first records, for a replay window that
+  /// started later. Returns nothing for records that do not identify the session.
+  mutating func bootstrap(_ record: MirrorConversationRecord) -> [MirrorConversationEvent]
+}
+
+extension MirrorBoundedText {
+  /// Diffs and added content get twice the output budget.
+  nonisolated static let diffLimit = 8 * 1024
 }
 
 nonisolated enum MirrorConversationAdapters {
@@ -65,17 +73,19 @@ nonisolated enum MirrorConversationRecordValue {
     return Date(timeIntervalSince1970: value / 1000)
   }
 
-  /// Joins the `text` of block arrays such as `[{"type":"text","text":"…"}]`.
-  static func blockText(_ value: Any?, keys: [String] = ["text", "input_text"]) -> String? {
+  /// Joins the `text` of block arrays such as `[{"type":"text","text":"…"}]`; image and other
+  /// non-text blocks are skipped.
+  static func blockText(_ value: Any?) -> String? {
     if let text = value as? String { return text }
     guard let blocks = value as? [MirrorConversationRecord] else { return nil }
-    let parts = blocks.compactMap { block -> String? in
-      for key in keys {
-        if let text = block[key] as? String { return text }
-      }
-      return nil
-    }
+    let parts = blocks.compactMap { $0["text"] as? String }
     return parts.isEmpty ? nil : parts.joined(separator: "\n")
+  }
+
+  /// Image blocks in a block array (`image`, `local_image`).
+  static func imageCount(_ value: Any?) -> Int {
+    guard let blocks = value as? [MirrorConversationRecord] else { return 0 }
+    return blocks.filter { ($0["type"] as? String).map { $0 == "image" || $0 == "local_image" } ?? false }.count
   }
 
   /// A short single-line label for a tool card.

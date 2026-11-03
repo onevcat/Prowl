@@ -59,4 +59,13 @@ struct MirrorConversationLogTests {
     let stale = log.snapshot(since: 1)
     #expect(stale.gap && stale.events.map(\.sequence) == [3])
   }
+
+  @Test func anEmptySegmentStillReportsAGapForAnOlderPoint() {
+    var log = MirrorConversationLog()
+    log.append(contentsOf: [notice("a"), notice("b")])
+    log.clear()
+    #expect(log.snapshot(since: 1).gap)
+    #expect(log.snapshot(since: 2).gap == false)
+    #expect(log.snapshot(since: nil).gap == false)
+  }
 }
