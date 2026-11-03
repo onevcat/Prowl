@@ -67,6 +67,7 @@ final class MirrorConversationFeed {
   private var tail: MirrorTranscriptTail?
   private var statusMapper = MirrorConversationStatusMapper()
   private var generation = 0
+  private var hasFollowed = false
 
   init(
     queue: DispatchQueue = DispatchQueue(label: "com.onevcat.prowl.mirror-conversation"),
@@ -79,7 +80,8 @@ final class MirrorConversationFeed {
   /// Follows `transcript`, or none while the Host cannot name one. Switching from one
   /// transcript to another sends `session.changed` with `reason`; the first follow does not.
   func follow(_ transcript: Transcript?, reason: MirrorConversationEvent.SessionReason? = nil) {
-    guard transcript != self.transcript else { return }
+    guard transcript != self.transcript || !hasFollowed else { return }
+    hasFollowed = true
     let previous = self.transcript
     stopTail()
     self.transcript = transcript

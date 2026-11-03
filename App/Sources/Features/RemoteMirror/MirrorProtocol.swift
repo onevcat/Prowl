@@ -1,6 +1,14 @@
 import Foundation
 
 nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Sendable {
+  /// Whether the pane can serve `conversation-v1` (docs-ai 087): a supported agent with a
+  /// resolved transcript, a supported agent whose transcript is not known yet, or neither.
+  enum ConversationSupport: String, Codable, Sendable {
+    case available
+    case pending
+    case unsupported
+  }
+
   let id: UUID
   let title: String
   let directory: String
@@ -8,6 +16,10 @@ nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Senda
   var projectName: String?
   var subtitle: String?
   var role: String?
+  /// The detected agent's raw identifier, for clients that show a badge.
+  var agent: String?
+  var agentState: MirrorConversationEvent.AgentState?
+  var conversation: ConversationSupport?
 }
 
 nonisolated struct MirrorFrame: Codable, Equatable, Sendable {
@@ -38,6 +50,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   enum Representation: String, Codable, Sendable {
     case terminal = "vt-v1"
     case text = "text-v1"
+    case conversation = "conversation-v1"
   }
   enum Intent: String, Codable, Sendable {
     case takeover, ifFree
@@ -69,7 +82,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   enum Kind: String, Codable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, viewport, acknowledge, input, history, historyPage, failure, ping, pong, ended,
-      refresh, scroll, scrollResult, scrollState, command, commandResult, commandReceipt
+      refresh, scroll, scrollResult, scrollState, command, commandResult, commandReceipt,
+      conversationSnapshot, conversationEvents
   }
   case list
   case panes(PanesPayload)
@@ -86,6 +100,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var includeViewportText: Bool?
     var includeScrollState: Bool?
     var includeStyledScrollback: Bool?
+    /// `conversation-v1`: the last sequence this client holds; the snapshot resumes after it.
+    var since: UInt64?
   }
   case subscribed(SubscribedPayload)
   struct SubscribedPayload: Codable, Sendable {
@@ -113,6 +129,23 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   struct ViewportPayload: Codable, Sendable {
     var styledScrollback: MirrorStyledScrollback?
     var text: String?
+    var sequence: UInt64
+    var subscriptionID: UUID
+  }
+  case conversationSnapshot(ConversationSnapshotPayload)
+  /// The bounded start of a `conversation-v1` subscription: everything the Host retains after
+  /// `since`, oldest first. `gap` says events between `since` and the first one were dropped.
+  /// A non-empty snapshot is acknowledged with its `sequence`, like a frame.
+  struct ConversationSnapshotPayload: Codable, Sendable {
+    var events: [MirrorConversationEvent]
+    var gap: Bool
+    var sequence: UInt64
+    var subscriptionID: UUID
+  }
+  case conversationEvents(ConversationEventsPayload)
+  /// Events appended since the last acknowledged batch; one batch is outstanding at a time.
+  struct ConversationEventsPayload: Codable, Sendable {
+    var events: [MirrorConversationEvent]
     var sequence: UInt64
     var subscriptionID: UUID
   }
@@ -220,6 +253,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .command: .command
     case .commandResult: .commandResult
     case .commandReceipt: .commandReceipt
+    case .conversationSnapshot: .conversationSnapshot
+    case .conversationEvents: .conversationEvents
     }
   }
   var panes: [MirrorPaneDescriptor]? {
@@ -277,6 +312,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .refresh(let payload): payload.subscriptionID
     case .command(let payload): payload.subscriptionID
     case .commandReceipt(let payload): payload.subscriptionID
+    case .conversationSnapshot(let payload): payload.subscriptionID
+    case .conversationEvents(let payload): payload.subscriptionID
     default: nil
     }
   }
@@ -294,6 +331,27 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .acknowledge(let payload): payload.sequence
     case .scrollResult(let payload): payload.sequence
     case .scrollState(let payload): payload.sequence
+    case .conversationSnapshot(let payload): payload.sequence
+    case .conversationEvents(let payload): payload.sequence
+    default: nil
+    }
+  }
+  var conversationEvents: [MirrorConversationEvent]? {
+    switch self {
+    case .conversationSnapshot(let payload): payload.events
+    case .conversationEvents(let payload): payload.events
+    default: nil
+    }
+  }
+  var gap: Bool? {
+    switch self {
+    case .conversationSnapshot(let payload): payload.gap
+    default: nil
+    }
+  }
+  var since: UInt64? {
+    switch self {
+    case .subscribe(let payload): payload.since
     default: nil
     }
   }

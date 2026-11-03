@@ -116,7 +116,8 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
         return leaves.enumerated().compactMap { paneIndex, view -> MirrorPaneDescriptor? in
           guard view.surface != nil else { return nil }
           let name = tab.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-          let agent = state.surfaceAgentStates[view.id]?.detectedAgent?.rawValue.capitalized
+          let agentState = state.surfaceAgentStates[view.id]
+          let agent = agentState?.detectedAgent?.rawValue.capitalized
           let terminal = name.isEmpty || name == "Terminal" ? (agent ?? "Shell") : name
           var location = [terminal, state.worktree.name]
           var title = [project, terminal, state.worktree.name]
@@ -129,10 +130,24 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
             id: view.id, title: title.joined(separator: " · "),
             directory: Self.directoryPath(of: state.worktree), busy: false,
             projectName: project,
-            subtitle: location.joined(separator: " · "))
+            subtitle: location.joined(separator: " · "),
+            agent: agentState?.detectedAgent?.rawValue,
+            agentState: agentState.map { MirrorConversationEvent.AgentState(rawValue: $0.state.rawValue) ?? .unknown },
+            conversation: Self.conversationSupport(agentState))
         }
       }
     }.sorted { $0.title < $1.title }
+  }
+
+  static func conversationSupport(_ pane: PaneAgentState?) -> MirrorPaneDescriptor.ConversationSupport {
+    guard let pane, let agent = pane.detectedAgent, MirrorConversationAdapters.supports(agent) else {
+      return .unsupported
+    }
+    return pane.session?.transcriptPath != nil ? .available : .pending
+  }
+
+  func agentState(_ id: UUID) -> PaneAgentState? {
+    manager.activeWorktreeStates.lazy.compactMap { $0.surfaceAgentStates[id] }.first
   }
 
   var supportsViewportText: Bool { true }

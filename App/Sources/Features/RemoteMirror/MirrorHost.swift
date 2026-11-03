@@ -33,6 +33,11 @@ final class MirrorHost {
   private(set) var pendingHandshakeCount = 0
   static let maximumPendingHandshakes = 8
   @ObservationIgnored private var subscriptions: [UUID: Subscription] = [:]
+  /// `conversation-v1` feeds by pane. A feed outlives its subscription for a while so a
+  /// reconnecting client can resume by sequence (docs-ai 087).
+  @ObservationIgnored private var conversationFeeds: [UUID: MirrorConversationFeed] = [:]
+  @ObservationIgnored private var conversationReleases: [UUID: Task<Void, Never>] = [:]
+  static let conversationFeedRetention: Duration = .seconds(600)
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   private(set) var hostRunID: UUID?
   @ObservationIgnored private var connectionAttempts = MirrorConnectionAttempts()
@@ -70,7 +75,7 @@ final class MirrorHost {
     guard let (peerID, _) = subscriptions.first(where: { $0.value.id == subscriptionID }),
       let peer = peers[peerID]
     else { return }
-    subscriptions.removeValue(forKey: peerID)
+    removeSubscription(peerID)
     subscriberCount = subscriptions.count
     if subscriptions.isEmpty {
       pollTask?.cancel()
@@ -187,6 +192,11 @@ final class MirrorHost {
     var textGate = MirrorTextFrameGate()
     var history: MirrorHistory?
     var scroll: ScrollRequest?
+    /// `conversation-v1` only: the pane's event feed, the last sequence sent, and the batch
+    /// awaiting acknowledgement (docs-ai 087).
+    var feed: MirrorConversationFeed?
+    var conversationCursor: UInt64 = 0
+    var conversationOutstanding: UInt64?
   }
 
   private struct ScrollRequest {
@@ -357,6 +367,10 @@ final class MirrorHost {
     commandPeers.removeAll()
     commandDevices.removeAll()
     subscriptions.removeAll()
+    for task in conversationReleases.values { task.cancel() }
+    conversationReleases.removeAll()
+    for feed in conversationFeeds.values { feed.stop() }
+    conversationFeeds.removeAll()
     hostRunID = nil
     subscriberCount = 0
     isRunning = false
@@ -432,7 +446,7 @@ final class MirrorHost {
       self.peers.removeValue(forKey: peer.id)
       // Accepted create requests can outlive a lost connection. Keep their device
       // ownership until completion so explicit revoke or stop can still cancel them.
-      self.subscriptions.removeValue(forKey: peer.id)
+      self.removeSubscription(peer.id)
       self.subscriberCount = self.subscriptions.count
       if self.subscriptions.isEmpty {
         self.pollTask?.cancel()
@@ -532,7 +546,7 @@ final class MirrorHost {
           .panes(
             .init(
               panes: panes,
-              capabilities: ["vt-v1", "text-v1", "takeover", "refresh"]
+              capabilities: ["vt-v1", "text-v1", "conversation-v1", "takeover", "refresh"]
                 + (commandService != nil
                   ? ["launch-profile", "launch-shell", "agents-dispatch", "agent-input"] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
@@ -592,7 +606,7 @@ final class MirrorHost {
             requestID: request.requestID)))
       return
     }
-    guard source.supportsRemoteScroll else {
+    guard source.supportsRemoteScroll, subscription.feed == nil else {
       peer.send(
         .failure(
           .init(
@@ -708,7 +722,10 @@ final class MirrorHost {
     else {
       throw MirrorProtocolError.invalidMessage
     }
-    if subscription.representation == .text {
+    if subscription.feed != nil {
+      guard subscription.conversationOutstanding == sequence else { throw MirrorProtocolError.invalidMessage }
+      subscription.conversationOutstanding = nil
+    } else if subscription.representation == .text {
       try subscription.textGate.acknowledge(sequence)
     } else {
       try subscription.gate.acknowledge(sequence)
@@ -717,11 +734,13 @@ final class MirrorHost {
   }
 
   private func subscribe(_ message: MirrorMessage, peer: MirrorConnection) throws {
-    guard let hostRunID, subscriptions[peer.id] == nil, let paneID = message.paneID,
-      let representation = message.representation,
+    guard let hostRunID, let paneID = message.paneID, let representation = message.representation,
       source.panes().contains(where: { $0.id == paneID })
     else { throw MirrorProtocolError.invalidMessage }
-    let previous = subscriptions.first { $0.value.paneID == paneID }
+    // A peer may subscribe its own pane again to switch representation; another pane is invalid.
+    let own = subscriptions[peer.id]
+    guard own == nil || own?.paneID == paneID else { throw MirrorProtocolError.invalidMessage }
+    let previous = subscriptions.first { $0.value.paneID == paneID && $0.key != peer.id }
     guard previous == nil || message.intent == .takeover else {
       peer.send(
         .failure(
@@ -735,17 +754,30 @@ final class MirrorHost {
       includeStyledScrollback: representation == .terminal && message.includeViewportText == true
         && message.includeStyledScrollback == true && source.supportsStyledScrollback,
       includeScrollState: message.includeScrollState == true && source.supportsScrollState)
+    if representation == .conversation {
+      guard let feed = conversationFeed(for: paneID) else {
+        peer.send(
+          .failure(
+            .init(
+              error: "CONVERSATION_UNSUPPORTED: This pane has no supported agent; use text-v1.",
+              subscriptionID: nil)))
+        return
+      }
+      next.feed = feed
+    }
     // Prepare and encode before revoking the old lease. Capture failure leaves it intact.
-    let first = try capture(&next)
+    let first = next.feed == nil ? try capture(&next) : nil
     if let first { _ = try MirrorWire.encode(first) }
     if let previous {
-      subscriptions.removeValue(forKey: previous.key)
+      removeSubscription(previous.key)
       if let oldPeer = peers[previous.key] { end(oldPeer, reason: .takenOver) }
     }
+    conversationReleases.removeValue(forKey: paneID)?.cancel()
     subscriptions[peer.id] = next
     subscriberCount = subscriptions.count
     peer.send(.subscribed(.init(paneID: paneID, subscriptionID: next.id, hostRunID: hostRunID)))
     if let first { send(first, subscription: next, to: peer) }
+    if next.feed != nil { sendConversationSnapshot(since: message.since, peerID: peer.id) }
 
     if pollTask == nil {
       let clock = clock
@@ -862,9 +894,14 @@ final class MirrorHost {
     for (id, var subscription) in subscriptions {
       guard let peer = peers[id] else { continue }
       guard source.panes().contains(where: { $0.id == subscription.paneID }) else {
-        subscriptions.removeValue(forKey: id)
+        removeSubscription(id)
         subscriberCount = subscriptions.count
         end(peer, reason: .paneClosed)
+        continue
+      }
+      if subscription.feed != nil {
+        pollConversation(&subscription, peer: peer)
+        subscriptions[id] = subscription
         continue
       }
       do {
@@ -884,6 +921,86 @@ final class MirrorHost {
       } catch {
         peer.close("Host pane is unavailable: \(error.localizedDescription)")
       }
+    }
+  }
+
+  // MARK: - conversation-v1 (docs-ai 087)
+
+  @discardableResult
+  private func removeSubscription(_ peerID: UUID) -> Subscription? {
+    guard let removed = subscriptions.removeValue(forKey: peerID) else { return nil }
+    if removed.feed != nil { scheduleConversationRelease(paneID: removed.paneID) }
+    return removed
+  }
+
+  private func conversationFeed(for paneID: UUID) -> MirrorConversationFeed? {
+    if let feed = conversationFeeds[paneID] { return feed }
+    guard let pane = source.agentState(paneID), let agent = pane.detectedAgent,
+      MirrorConversationAdapters.supports(agent)
+    else { return nil }
+    let feed = MirrorConversationFeed()
+    conversationFeeds[paneID] = feed
+    syncConversation(feed, pane: pane)
+    return feed
+  }
+
+  /// Keeps a feed tailing after its subscription ends, then releases it unless another
+  /// subscription took it over.
+  private func scheduleConversationRelease(paneID: UUID) {
+    conversationReleases[paneID]?.cancel()
+    let clock = clock
+    conversationReleases[paneID] = Task { @MainActor [weak self] in
+      do { try await clock.sleep(for: Self.conversationFeedRetention) } catch { return }
+      guard let self, !self.subscriptions.values.contains(where: { $0.paneID == paneID }) else { return }
+      self.conversationReleases.removeValue(forKey: paneID)
+      self.conversationFeeds.removeValue(forKey: paneID)?.stop()
+    }
+  }
+
+  /// Points the feed at the pane's current transcript and agent state. A changed transcript
+  /// (`/clear`, `/new`, resume) restarts the tail with `session.changed`.
+  private func syncConversation(_ feed: MirrorConversationFeed, pane: PaneAgentState?) {
+    let transcript = pane.flatMap { pane -> MirrorConversationFeed.Transcript? in
+      guard let agent = pane.detectedAgent, let url = pane.session?.transcriptPath else { return nil }
+      return .init(url: url, agent: agent)
+    }
+    feed.follow(transcript, reason: .switched)
+    if let pane { feed.observe(pane) }
+  }
+
+  private func sendConversationSnapshot(since: UInt64?, peerID: UUID) {
+    guard var subscription = subscriptions[peerID], let feed = subscription.feed, let peer = peers[peerID] else {
+      return
+    }
+    let snapshot = feed.log.snapshot(since: since)
+    subscription.conversationCursor = snapshot.latestSequence
+    subscription.conversationOutstanding = snapshot.events.isEmpty ? nil : snapshot.latestSequence
+    subscriptions[peerID] = subscription
+    peer.send(
+      .conversationSnapshot(
+        .init(
+          events: snapshot.events, gap: snapshot.gap, sequence: snapshot.latestSequence,
+          subscriptionID: subscription.id)))
+  }
+
+  /// Sends the events appended since the cursor once the previous batch is acknowledged. A gap
+  /// (the client fell behind the log's retention) is sent as a fresh snapshot.
+  private func pollConversation(_ subscription: inout Subscription, peer: MirrorConnection) {
+    guard let feed = subscription.feed else { return }
+    syncConversation(feed, pane: source.agentState(subscription.paneID))
+    guard subscription.conversationOutstanding == nil else { return }
+    let batch = feed.log.snapshot(since: subscription.conversationCursor)
+    guard !batch.events.isEmpty else { return }
+    subscription.conversationCursor = batch.latestSequence
+    subscription.conversationOutstanding = batch.latestSequence
+    if batch.gap {
+      peer.send(
+        .conversationSnapshot(
+          .init(events: batch.events, gap: true, sequence: batch.latestSequence, subscriptionID: subscription.id)))
+    } else {
+      peer.send(
+        .conversationEvents(
+          .init(events: batch.events, sequence: batch.latestSequence, subscriptionID: subscription.id)))
     }
   }
 }

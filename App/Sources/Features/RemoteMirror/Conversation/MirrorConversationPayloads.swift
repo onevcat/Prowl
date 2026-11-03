@@ -9,6 +9,8 @@ extension MirrorConversationEvent {
     case fork
     /// The transcript file was replaced or truncated under the tail.
     case rotated
+    /// The pane now drives another transcript; the Host does not know why.
+    case switched
     /// The Host cannot tell which transcript the pane drives right now.
     case uncertain
   }
