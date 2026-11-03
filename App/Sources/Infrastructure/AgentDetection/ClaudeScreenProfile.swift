@@ -52,6 +52,18 @@ enum ClaudeScreenProfile {
     composerRows(in: snapshot.lines).map { composerText(rows: $0, in: snapshot.lines) }
   }
 
+  /// `composerContents(in:)` with the styled snapshot read only when the plain text has the shape
+  /// of the empty-composer hint. A draft stays on the plain screen, which joins soft-wrapped rows
+  /// the way the paste confirmation compares tokens; the styled snapshot keeps every physical row
+  /// apart and is needed only to tell the dim hint from the same words typed by the user.
+  nonisolated static func composerContents(
+    in snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?
+  ) -> String? {
+    guard let contents = composerContents(in: snapshot) else { return nil }
+    guard isEmptyComposerHint(contents) else { return contents }
+    return styledSnapshot().flatMap(composerContents(styledSnapshot:))
+  }
+
   /// `composerContents(in:)` read from a VT snapshot, where the hint an empty composer shows
   /// before the first message (`Try "…"`, Claude Code 2.1.29x and later) reads as empty. Only
   /// the dim rendering tells the hint from the same words typed by the user, and an attachment

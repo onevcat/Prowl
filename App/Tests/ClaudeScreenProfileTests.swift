@@ -39,6 +39,33 @@ struct ClaudeScreenProfileTests {
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "❯ old transcript") == nil)
   }
 
+  @Test func styledSnapshotIsReadOnlyForTheHint() {
+    func screen(_ composer: String) -> String { "────────\n" + composer + "\n────────\n  status" }
+    let dimHint = screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m")
+    var styledReads = 0
+    func read(plain: String, styled: String?) -> String? {
+      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: screen(plain))) {
+        styledReads += 1
+        return styled
+      }
+    }
+    // A draft and an empty box come from the plain screen, which joins soft-wrapped rows the way
+    // the paste confirmation expects; the styled snapshot keeps every physical row apart.
+    #expect(read(plain: "❯ [Pasted text #1 +9 lines]", styled: dimHint) == "[Pasted text #1 +9 lines]")
+    #expect(read(plain: "❯ ", styled: dimHint) == "")
+    #expect(read(plain: "❯ Try", styled: dimHint) == "Try")
+    #expect(styledReads == 0)
+    // Only the hint shape consults the styles, and an unreadable styled snapshot is unverifiable.
+    #expect(read(plain: "❯ Try \"fix lint errors\"", styled: dimHint) == "")
+    #expect(
+      read(plain: "❯ Try \"fix lint errors\"", styled: screen("❯ Try \"fix lint errors\"")) == "Try \"fix lint errors\""
+    )
+    #expect(read(plain: "❯ Try \"fix lint errors\"", styled: nil) == nil)
+    #expect(styledReads == 3)
+    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) { dimHint } == nil)
+    #expect(styledReads == 3)
+  }
+
   @Test func scrolledTranscriptRetainsTheLastLiveState() {
     let composer = "────────────────────\n❯ \n────────────────────\nstatus"
     let history = "⏺ Old response\n  10       Jump to bottom (click) ↓ \n\n" + composer

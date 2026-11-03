@@ -51,8 +51,12 @@ extension WorktreeTerminalState {
   private func composerContents(of surface: GhosttySurfaceView, profile: AgentComposerProfile) -> String? {
     switch profile {
     case .claude:
-      // Claude renders the hint of an empty composer dim, so its box is read with styles.
-      surface.readStyledSnapshotForCLI().flatMap(ClaudeScreenProfile.composerContents(styledSnapshot:))
+      // Claude renders the hint of an empty composer dim; only that hint is read with styles.
+      surface.readActiveContentsForCLI().flatMap {
+        ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: $0)) {
+          surface.readStyledSnapshotForCLI()
+        }
+      }
     case .devin:
       surface.readActiveContentsForCLI().flatMap {
         DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: $0))
