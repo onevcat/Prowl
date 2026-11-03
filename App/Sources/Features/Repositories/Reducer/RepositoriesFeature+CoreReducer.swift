@@ -208,6 +208,9 @@ extension RepositoriesFeature {
       return .send(.reloadRepositories(animated: false))
 
     case .reloadRepositories(let animated):
+      // Opening already reloads the persisted list; an activation refresh must not
+      // cancel it through the shared load cancellation ID.
+      guard !state.isOpeningRepositories else { return .none }
       let roots = state.repositoryRoots
       guard !roots.isEmpty else {
         state.isRefreshingWorktrees = false
@@ -217,6 +220,8 @@ extension RepositoriesFeature {
         fallbackRoots: roots, animated: animated, knownRemoteRepositories: state.retainedRemoteRepositories)
 
     case .repositoriesLoaded(let loadedRepositories, let failures, let roots, let animated, let reusedIDs):
+      // A repository removal can replace an in-flight open with its own load.
+      state.isOpeningRepositories = false
       let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring

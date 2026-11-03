@@ -54,6 +54,12 @@ struct EmptyStateView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
+    .dropDestination(for: URL.self) { urls, _ in
+      let fileURLs = urls.filter(\.isFileURL)
+      guard !fileURLs.isEmpty else { return false }
+      store.send(.repositoryManagement(.openRepositories(fileURLs)))
+      return true
+    }
   }
 
   private func promptText(shortcutDisplay: String?) -> String {

@@ -446,6 +446,11 @@ struct RepositoriesFeature {
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
+    /// A refresh must not cancel an add/open before it has persisted the folders.
+    var isOpeningRepositories = false
+    var canOpenSystemFolders: Bool {
+      snapshotPersistencePhase.hasLoadedLiveRepositories && !isOpeningRepositories
+    }
     var statusToast: StatusToast?
     var snapshotPersistencePhase: SnapshotPersistencePhase = .idle
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown

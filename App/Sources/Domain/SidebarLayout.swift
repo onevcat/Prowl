@@ -57,7 +57,7 @@ nonisolated enum SidebarLayoutItem: Equatable, Hashable, Sendable {
   }
 }
 
-extension SidebarLayoutItem: Codable {
+nonisolated extension SidebarLayoutItem: Codable {
   private enum CodingKeys: String, CodingKey {
     case type
     case id

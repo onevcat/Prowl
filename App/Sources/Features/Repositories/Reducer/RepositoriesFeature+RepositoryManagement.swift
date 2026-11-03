@@ -22,6 +22,7 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
     case .openRepositories(let urls):
+      state.isOpeningRepositories = true
       analyticsClient.capture("repository_added", ["count": urls.count])
       state.alert = nil
       let knownRemoteRepositories = state.retainedRemoteRepositories
@@ -85,6 +86,7 @@ extension RepositoriesFeature {
       let roots,
       let reusedIDs
     ):
+      state.isOpeningRepositories = false
       let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
