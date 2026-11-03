@@ -298,6 +298,9 @@ struct RepositoriesFeature {
   @CasePathable
   enum RepositoryManagementAction: Equatable {
     case openRepositories([URL])
+    /// Folders that Finder or the Dock asked to open. They open through `openRepositories` once
+    /// the saved list has restored and no other add/open is in flight.
+    case openSystemFolders([URL])
     /// Adds a remote folder that the Add Remote Folder sheet checked (docs-ai 084 C1).
     case openRemoteRepository(RepositoryLocation, kind: Repository.Kind)
     case openRepositoriesFinished(
@@ -448,6 +451,10 @@ struct RepositoriesFeature {
     var isRefreshingWorktrees = false
     /// A refresh must not cancel an add/open before it has persisted the folders.
     var isOpeningRepositories = false
+    /// A refresh that arrived during an add/open runs after it instead of cancelling it.
+    var needsReloadAfterOpen = false
+    /// Folders from Finder or the Dock that wait for the saved list to restore or an add/open to finish.
+    var pendingSystemFolderURLs: [URL] = []
     var canOpenSystemFolders: Bool {
       snapshotPersistencePhase.hasLoadedLiveRepositories && !isOpeningRepositories
     }

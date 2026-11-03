@@ -38,25 +38,19 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
   var appStore: StoreOf<AppFeature>? {
     didSet {
       guard let appStore else { return }
-      openPendingFolders()
       setSystemNotificationTapHandler { [weak appStore] worktreeID, surfaceID in
         appStore?.send(.systemNotificationTapped(worktreeID: worktreeID, surfaceID: surfaceID))
       }
     }
   }
-  private var folderOpenRequests = FolderOpenRequestQueue()
 
+  /// Finder "Open With" and Dock drops. The reducer holds the folders until startup has
+  /// restored the saved project list, so a cold launch does not need the delegate to wait.
   func application(_ application: NSApplication, open urls: [URL]) {
-    folderOpenRequests.append(urls)
+    let folders = FolderOpenRequest.folderURLs(in: urls)
+    guard !folders.isEmpty else { return }
     application.surfaceMainWindow()
-    openPendingFolders()
-  }
-
-  func openPendingFolders() {
-    guard let appStore else { return }
-    let urls = folderOpenRequests.takePending(isReady: appStore.state.repositories.canOpenSystemFolders)
-    guard !urls.isEmpty else { return }
-    appStore.send(.repositories(.repositoryManagement(.openRepositories(urls))))
+    appStore?.send(.repositories(.repositoryManagement(.openSystemFolders(folders))))
   }
 
   var terminalManager: WorktreeTerminalManager?
@@ -1799,9 +1793,6 @@ struct ProwlApp: App {
       }
       .onDisappear {
         WindowLifecycleDiagnostics.logWithWindows("mainWindow content onDisappear")
-      }
-      .onChange(of: store.repositories.canOpenSystemFolders, initial: true) { _, _ in
-        appDelegate.openPendingFolders()
       }
       .onChange(of: store.resolvedKeybindings) { _, newValue in
         syncGhosttyManagedShortcuts(with: newValue)
