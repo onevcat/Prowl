@@ -141,4 +141,4 @@ Envelope: `seq` (monotonic per subscription), `ts`, `kind`, `source`
 
 ## Amendments
 
-(none yet)
+- Updated 2026-11-04: Host event model, Claude/Codex adapters, bounded log and transcript tail (S1 without the wire); adds `session.updated` — see [002-host-event-extraction.md](002-host-event-extraction.md)
