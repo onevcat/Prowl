@@ -422,7 +422,11 @@ Preconditions are checked before anything is typed: the pane must host a detecte
 seconds after a turn) or a detector-only idle view that still needs its two seconds of
 stability is given up to five seconds to settle; a working or blocked agent without such
 evidence (including a runtime `needs-input` the screen does not show) is refused with
-`DISPATCH_TARGET_BUSY` rather than having text merged into its running turn. One pending
+`DISPATCH_TARGET_BUSY` rather than having text merged into its running turn. The pane's input
+must be clear as well: a draft or attachment in the agent's input box, text being composed
+with an input method, or a local edit within the last two seconds is refused with the same
+code before anything is typed. The dim `Try "…"` hint Claude Code shows in a fresh, empty
+composer is not a draft. One pending
 dispatch per pane: while a record is pending, a second `dispatch` fails with
 `DISPATCH_PENDING` and never overwrites it; complete, abandon, or lose the previous record
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
@@ -1050,7 +1054,7 @@ Follow the returned self-initiated delivery instruction to submit the briefing.
 | `DISPATCH_NOT_FOUND` | No dispatch record matches `--dispatch`, or `dispatch-complete` ran in a pane that never held one; records are memory-only and reset on app restart. |
 | `DISPATCH_CONTEXT_REQUIRED` | `dispatch-complete` ran from a process outside any Prowl pane (tmux/detached wrapper, another terminal), so no pane could own the receipt. |
 | `DISPATCH_PENDING` | `agents dispatch` refused: the pane already holds a pending dispatch (`.error.details.record`). Wait for it, or `dispatch-abandon` it, before dispatching again. |
-| `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`). Wait for `--until idle`, then retry. |
+| `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`), or its input is not clear (a draft or attachment, input-method composition, a local edit in the last two seconds). Wait for `--until idle` or clear the input on Host, then retry. |
 | `DISPATCH_ALREADY_TERMINAL` | `dispatch-abandon` targeted a record that already completed, was abandoned, or is gone. |
 | `DISPATCH_FAILED` / `DISPATCH_ABANDONED` / `DISPATCH_NEEDS_INPUT` / `DISPATCH_INCOMPLETE` | `agents wait --dispatch` structured outcomes; `.error.details` retains the record, target, and evidence (see **Dispatch completion and waiting**). |
 | `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow deliver` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |

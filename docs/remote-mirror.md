@@ -199,11 +199,12 @@ control the shell on Host. Local CLI `send` and Mac mirror keyboard input retain
 existing direct-input behavior.
 
 Shared Agent input delivery rejects IME composition and recent Host editing. Claude must
-have a recognized empty composer. It inserts text, waits up to two seconds for the
-paste echo, and only then sends Enter, provided the surface/Agent/edit revision is
-unchanged. Codex has an explicit idle-composer rule; the delivery boundary also
-checks formatter dim styling so a hint is not confused with an identically worded
-draft. Unknown layouts, wrapped drafts and attachments refuse delivery.
+have a recognized empty composer; the dim `Try "…"` hint of a fresh session counts as
+empty. It inserts text, waits up to two seconds for the paste echo, and only then sends
+Enter, provided the surface/Agent/edit revision is unchanged. Codex has an explicit
+idle-composer rule. For both, the delivery boundary checks formatter dim styling so a
+hint is not confused with an identically worded draft. Unknown layouts, wrapped drafts
+and attachments refuse delivery.
 
 A successful input receipt confirms delivery, not Agent completion. Replies are
 correlated by UUID. Unknown delivery preserves the draft and is not automatically

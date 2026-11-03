@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-03T08:22:43Z",
+  "cli_version": "2.1.317",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 66,
+    "rows": 79
+  },
+  "redactions": [
+    "account plan name replaced with XXX in the banner",
+    "workspace path replaced with ~/claude-main",
+    "status line plan label replaced with XXX]",
+    "status line context percentage replaced with XX%",
+    "status line project name replaced with XXXXX",
+    "status line branch replaced with git:(main)"
+  ],
+  "issue": null
+}

@@ -92,73 +92,12 @@ enum CodexScreenProfile {
   /// The formatter's dim SGR attribute distinguishes hints from identically worded drafts.
   /// This is read only at the public delivery boundary, not a second readiness state machine.
   nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
-    guard styledSnapshot.utf8.count <= 4 * 1024 * 1024 else { return false }
-    let scalars = Array(styledSnapshot.unicodeScalars)
-    var index = 0
-    var dim = false
-    var lines: [(String, [Bool])] = [("", [])]
-    while index < scalars.count {
-      let scalar = scalars[index]
-      if scalar.value == 27 {
-        index += 1
-        guard index < scalars.count else { return false }
-        if scalars[index] == "]" {
-          // Formatter snapshots prepend OSC palette/default colors; they contain no cells.
-          index += 1
-          while index < scalars.count, scalars[index].value != 7,
-            !(scalars[index].value == 27 && index + 1 < scalars.count && scalars[index + 1] == "\\")
-          {
-            index += 1
-          }
-          guard index < scalars.count else { return false }
-          index += scalars[index].value == 7 ? 1 : 2
-          continue
-        }
-        guard scalars[index] == "[" else { return false }
-        index += 1
-        var parameters = ""
-        while index < scalars.count, !(64...126).contains(scalars[index].value) {
-          parameters.unicodeScalars.append(scalars[index])
-          index += 1
-        }
-        guard index < scalars.count else { return false }
-        if scalars[index] == "m" {
-          updateDimAttribute(parameters: parameters, dim: &dim)
-        }
-      } else if scalar.value == 10 {
-        lines.append(("", []))
-      } else if scalar.value != 13 {
-        lines[lines.count - 1].0.unicodeScalars.append(scalar)
-        lines[lines.count - 1].1.append(dim)
-      }
-      index += 1
-    }
-    let plain = lines.map { $0.0 }.joined(separator: "\n")
-    guard composerIsEmpty(in: .init(text: plain)),
-      let line = lines.last(where: { isCodexPromptLine($0.0) }),
-      let prompt = line.0.unicodeScalars.firstIndex(of: "›")
+    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot), composerIsEmpty(in: styled.plain),
+      let row = styled.rows.last(where: { isCodexPromptLine($0.text) }),
+      let prompt = row.text.unicodeScalars.firstIndex(of: "›")
     else { return false }
-    let offset =
-      line.0.unicodeScalars.distance(from: line.0.unicodeScalars.startIndex, to: prompt) + 1
-    return zip(line.0.unicodeScalars, line.1).dropFirst(offset).allSatisfy {
-      CharacterSet.whitespaces.contains($0.0) || $0.1
-    }
-  }
-
-  nonisolated private static func updateDimAttribute(parameters: String, dim: inout Bool) {
-    let codes =
-      parameters.isEmpty ? [0] : parameters.split(separator: ";").compactMap { Int($0) }
-    var codeIndex = 0
-    while codeIndex < codes.count {
-      let code = codes[codeIndex]
-      if code == 0 || code == 22 { dim = false }
-      if code == 2 { dim = true }
-      // Color components can equal 0/2/22 but are not standalone SGR attributes.
-      if [38, 48, 58].contains(code), codeIndex + 1 < codes.count {
-        codeIndex += codes[codeIndex + 1] == 2 ? 4 : 2
-      }
-      codeIndex += 1
-    }
+    let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: prompt) + 1
+    return row.showsOnlyDimText(from: offset)
   }
 
   /// Raw current interaction text for an actionable blocked screen. This deliberately

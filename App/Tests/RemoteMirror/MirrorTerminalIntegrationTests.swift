@@ -513,6 +513,23 @@ struct MirrorTerminalIntegrationTests {
     #expect(!CodexScreenProfile.composerHasNoDraft(styledSnapshot: draft))
   }
 
+  @Test(.timeLimit(.minutes(1))) func claudeHintStylingSurvivesRealGhosttyCapture() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    try fixture.send("claude-hint")
+    try await fixture.wait("Dim hint rendered") {
+      fixture.hostText.contains("HINT") && fixture.hostText.contains("status")
+    }
+    let hint = try #require(fixture.hostView.readStyledSnapshotForCLI())
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: hint) == "")
+    try fixture.send("claude-draft")
+    try await fixture.wait("Draft rendered") { fixture.hostText.contains("DRAFT") }
+    let draft = try #require(fixture.hostView.readStyledSnapshotForCLI())
+    // Claude positions each word of a paste marker; the gaps are never-written cells.
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: draft) == "[Pasted text #1 +9 lines]")
+  }
+
   @Test(.timeLimit(.minutes(2))) func boundedCapturePreservesRealSurface() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
@@ -1034,6 +1051,10 @@ struct MirrorTerminalIntegrationTests {
         case "$action" in
           hint) printf '\033[2J\033[HHINT\r\n› \033[2mAsk Codex to do anything\033[0m\r\n  gpt-5.6 · ~/work';;
           draft) printf '\033[2J\033[HDRAFT\r\n› Ask Codex to do anything\r\n  gpt-5.6 · ~/work';;
+          claude-hint) printf '\033[2J\033[HHINT\r\n────\r\n❯ \033[2mTry "fix lint"\033[22m\r\n────\r\n  status';;
+          claude-draft)
+            printf '\033[2J\033[HDRAFT\r\n────\r\n❯ [Pasted\033[1Ctext\033[1C#1\033[1C+9\033[1Clines]'
+            printf '\r\n────\r\n  status';;
           think) printf '\033[2J\033[H\033[31mTHINKING:思考中\033[0m\033[4;7H';;
           finish) printf '\033[2J\033[H\033[32mFINAL:结论\033[0m\033[2;3H';;
           history|focus-history)

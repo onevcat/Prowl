@@ -49,13 +49,57 @@ enum ClaudeScreenProfile {
   /// A recognized composer, including wrapped draft rows. Nil means its boundaries
   /// cannot be established and must not be interpreted as an empty input.
   nonisolated static func composerContents(in snapshot: AgentScreenSnapshot) -> String? {
-    let lines = snapshot.lines
+    composerRows(in: snapshot.lines).map { composerText(rows: $0, in: snapshot.lines) }
+  }
+
+  /// `composerContents(in:)` with the styled snapshot read only when the plain text has the shape
+  /// of the empty-composer hint. A draft stays on the plain screen, which joins soft-wrapped rows
+  /// the way the paste confirmation compares tokens; the styled snapshot keeps every physical row
+  /// apart and is needed only to tell the dim hint from the same words typed by the user.
+  nonisolated static func composerContents(
+    in snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?
+  ) -> String? {
+    guard let contents = composerContents(in: snapshot) else { return nil }
+    guard isEmptyComposerHint(contents) else { return contents }
+    return styledSnapshot().flatMap(composerContents(styledSnapshot:))
+  }
+
+  /// `composerContents(in:)` read from a VT snapshot, where the hint an empty composer shows
+  /// before the first message (`Try "…"`, Claude Code 2.1.29x and later) reads as empty. Only
+  /// the dim rendering tells the hint from the same words typed by the user, and an attachment
+  /// marker is never the hint, so both conditions are required.
+  nonisolated static func composerContents(styledSnapshot: String) -> String? {
+    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return nil }
+    let lines = styled.rows.map(\.text)
+    guard let rows = composerRows(in: lines) else { return nil }
+    let contents = composerText(rows: rows, in: lines)
+    guard isEmptyComposerHint(contents) else { return contents }
+    let prompt = styled.rows[rows.lowerBound]
+    let scalars = prompt.text.unicodeScalars
+    let afterPrompt = scalars.firstIndex(of: "❯").map { scalars.distance(from: scalars.startIndex, to: $0) + 1 } ?? 0
+    let onlyHint =
+      prompt.showsOnlyDimText(from: afterPrompt)
+      && styled.rows[rows.dropFirst()].allSatisfy { $0.showsOnlyDimText() }
+    return onlyHint ? "" : contents
+  }
+
+  nonisolated private static func isEmptyComposerHint(_ contents: String) -> Bool {
+    let collapsed = contents.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return collapsed.wholeMatch(of: /Try ".+"/) != nil
+  }
+
+  /// The prompt row through the last row before the closing border.
+  nonisolated private static func composerRows(in lines: [String]) -> Range<Int>? {
     guard let prompt = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("❯") }),
       prompt > 0, isBoxBorderLine(lines[prompt - 1]),
       let end = lines.indices.dropFirst(prompt + 1).first(where: { isBoxBorderLine(lines[$0]) })
     else { return nil }
-    let first = lines[prompt].trimmingCharacters(in: .whitespaces).dropFirst()
-    return ([String(first)] + Array(lines[(prompt + 1)..<end]))
+    return prompt..<end
+  }
+
+  nonisolated private static func composerText(rows: Range<Int>, in lines: [String]) -> String {
+    let first = lines[rows.lowerBound].trimmingCharacters(in: .whitespaces).dropFirst()
+    return ([String(first)] + Array(lines[rows.dropFirst()]))
       .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
