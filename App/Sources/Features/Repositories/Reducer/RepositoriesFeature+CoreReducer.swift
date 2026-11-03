@@ -208,6 +208,12 @@ extension RepositoriesFeature {
       return .send(.reloadRepositories(animated: false))
 
     case .reloadRepositories(let animated):
+      // A reload would cancel an in-flight add/open through the shared load cancellation ID
+      // before it has persisted the folders, so it runs after the open instead.
+      if state.isOpeningRepositories {
+        state.needsReloadAfterOpen = true
+        return .none
+      }
       let roots = state.repositoryRoots
       guard !roots.isEmpty else {
         state.isRefreshingWorktrees = false
@@ -217,6 +223,10 @@ extension RepositoriesFeature {
         fallbackRoots: roots, animated: animated, knownRemoteRepositories: state.retainedRemoteRepositories)
 
     case .repositoriesLoaded(let loadedRepositories, let failures, let roots, let animated, let reusedIDs):
+      // A repository removal can replace an in-flight open with its own load, which also
+      // covers a reload that the open deferred.
+      state.isOpeningRepositories = false
+      state.needsReloadAfterOpen = false
       let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
@@ -305,6 +315,7 @@ extension RepositoriesFeature {
       }
       allEffects.append(refreshWorkspaceChildrenEffect(state: state))
       allEffects.append(syncRemoteRefreshSchedules(state: &state))
+      allEffects.append(effectAfterLoad(state: &state))
       return .merge(allEffects)
 
     case .remoteRepositoryRefreshDue(let repositoryID):

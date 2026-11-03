@@ -1673,8 +1673,11 @@ struct RepositoriesFeatureTests {
           URL(fileURLWithPath: repoSelection),
           URL(fileURLWithPath: plainRoot),
         ]))
-    )
+    ) {
+      $0.isOpeningRepositories = true
+    }
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
+      $0.isOpeningRepositories = false
       $0.repositories = [gitRepository, plainRepository]
       $0.repositoryRoots = [repoRoot, plainRoot].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true
@@ -1965,8 +1968,11 @@ struct RepositoriesFeatureTests {
           URL(fileURLWithPath: repoSelection),
           URL(fileURLWithPath: blockedRoot),
         ]))
-    )
+    ) {
+      $0.isOpeningRepositories = true
+    }
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
+      $0.isOpeningRepositories = false
       $0.repositories = [repository]
       $0.repositoryRoots = [repoRoot].map { .local(URL(fileURLWithPath: $0)) }
       $0.isInitialLoadComplete = true

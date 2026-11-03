@@ -67,6 +67,11 @@ terminals stay open. Background refreshes do not repeatedly open error dialogs.
   **Collapse All**, **Show Active Agents** or **Hide Active Agents**,
   **Refresh Worktrees**, and **Archived Worktrees**.
 - **Command Palette:** "Open Repository".
+- **Drag and drop:** drop one or more folders onto the sidebar, the empty main
+  area (when no worktree is selected), or Prowl's Dock icon to add/open them.
+  Dock drops also work when Prowl is not running or its main window is closed;
+  a package (an app or a workflow bundle) is not a folder and is ignored there.
+  Dropping onto a terminal still inserts paths as text; it does not add projects.
 
 Pick one or more directories. Prowl detects git vs plain, de-duplicates, and
 persists the list. Paths that don't exist or can't be read are reported in an

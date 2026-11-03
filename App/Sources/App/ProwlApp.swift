@@ -43,6 +43,16 @@ final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
       }
     }
   }
+
+  /// Finder "Open With" and Dock drops. The reducer holds the folders until startup has
+  /// restored the saved project list, so a cold launch does not need the delegate to wait.
+  func application(_ application: NSApplication, open urls: [URL]) {
+    let folders = FolderOpenRequest.folderURLs(in: urls)
+    guard !folders.isEmpty else { return }
+    application.surfaceMainWindow()
+    appStore?.send(.repositories(.repositoryManagement(.openSystemFolders(folders))))
+  }
+
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
   var remoteMirror: RemoteMirrorStore?

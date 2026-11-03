@@ -9,6 +9,7 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     switch action {
     case .openRemoteRepository(let location, let kind):
+      state.isOpeningRepositories = true
       analyticsClient.capture("remote_folder_added", [String: Any]?.none)
       state.alert = nil
       let knownRemoteRepositories = state.retainedRemoteRepositories
@@ -22,6 +23,7 @@ extension RepositoriesFeature {
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
     case .openRepositories(let urls):
+      state.isOpeningRepositories = true
       analyticsClient.capture("repository_added", ["count": urls.count])
       state.alert = nil
       let knownRemoteRepositories = state.retainedRemoteRepositories
@@ -77,6 +79,10 @@ extension RepositoriesFeature {
       }
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
+    case .openSystemFolders(let urls):
+      state.pendingSystemFolderURLs.append(contentsOf: urls)
+      return effectAfterLoad(state: &state)
+
     case .openRepositoriesFinished(
       let loadedRepositories,
       let failures,
@@ -85,6 +91,7 @@ extension RepositoriesFeature {
       let roots,
       let reusedIDs
     ):
+      state.isOpeningRepositories = false
       let repositories = state.reconcilingReusedRemoteRepositories(loadedRepositories, reusedIDs: reusedIDs)
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
@@ -180,6 +187,7 @@ extension RepositoriesFeature {
         allEffects.append(contentsOf: iconDetectionEffects(for: Array(newRepos)))
       }
       allEffects.append(syncRemoteRefreshSchedules(state: &state))
+      allEffects.append(effectAfterLoad(state: &state))
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):
@@ -533,5 +541,23 @@ extension RepositoriesFeature {
         reusedRemoteRepositoryIDs: Self.reusedIDs(knownRemoteRepositories, in: repositories)
       )
     )
+  }
+}
+
+extension RepositoriesFeature {
+  /// Runs what waited for a load to settle: the folders Finder or the Dock asked to open, or else
+  /// the reload that an add/open deferred. An open reloads the whole list, so it covers the reload.
+  func effectAfterLoad(state: inout State) -> Effect<Action> {
+    if state.canOpenSystemFolders, !state.pendingSystemFolderURLs.isEmpty {
+      let urls = state.pendingSystemFolderURLs
+      state.pendingSystemFolderURLs = []
+      state.needsReloadAfterOpen = false
+      return .send(.repositoryManagement(.openRepositories(urls)))
+    }
+    if state.needsReloadAfterOpen {
+      state.needsReloadAfterOpen = false
+      return .send(.reloadRepositories(animated: false))
+    }
+    return .none
   }
 }
