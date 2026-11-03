@@ -2,6 +2,43 @@ import UIKit
 import XCTest
 
 final class ProwlMirror_iOSUITests: XCTestCase {
+  // MARK: - Helpers
+
+  /// Opens the pane actions menu and taps one of its items.
+  @MainActor
+  private func tapPaneAction(_ app: XCUIApplication, _ label: String) {
+    app.descendants(matching: .any).matching(identifier: "pane-actions").firstMatch.tap()
+    let item = app.buttons[label]
+    XCTAssertTrue(item.waitForExistence(timeout: 5), "menu item \(label)")
+    item.tap()
+  }
+
+  /// One segment of the Chat | Screen picker.
+  @MainActor
+  private func segment(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+    let picker = app.descendants(matching: .any).matching(identifier: "pane-mode").firstMatch
+    let scoped = picker.buttons[label].firstMatch
+    return scoped.exists ? scoped : app.buttons[label].firstMatch
+  }
+
+  @MainActor
+  private func attach(_ name: String) {
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  @MainActor
+  private func waitForOrientation(_ app: XCUIApplication, wide: Bool) {
+    expectation(
+      for: NSPredicate { _, _ in wide ? app.frame.width > app.frame.height : app.frame.height > app.frame.width },
+      evaluatedWith: nil)
+    waitForExpectations(timeout: 10)
+  }
+
+  // MARK: - Screen (text-v1)
+
   @MainActor
   func testHostBoundariesDisableOnlyTheReachedDirection() {
     let app = XCUIApplication()
@@ -24,10 +61,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(-2).waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.isEnabled)
     XCTAssertTrue(scrollDown.isEnabled)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Top controls at Host scroll boundary"
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    attach("Top controls at Host scroll boundary")
     scrollDown.tap()
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
@@ -35,10 +69,10 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(0).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled)
     XCTAssertFalse(scrollDown.isEnabled)
-    app.buttons["History"].tap()
+    tapPaneAction(app, "History")
     XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.exists)
-    app.buttons["Live Output"].tap()
+    tapPaneAction(app, "Live Output")
     XCTAssertTrue(scrollUp.waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled)
     XCTAssertFalse(scrollDown.isEnabled)
@@ -79,10 +113,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
       app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch.exists)
     XCTAssertFalse(
       app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page -1\n")).firstMatch.exists)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Text selection leaves Host scroll unchanged"
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    attach("Text selection leaves Host scroll unchanged")
   }
 
   @MainActor
@@ -133,24 +164,21 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(progress.waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.isEnabled)
     XCTAssertFalse(scrollDown.isEnabled)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Remote scroll loading"
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    attach("Remote scroll loading")
     releaseHeldScrolls()
     let olderPage = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page -1\n")).firstMatch
     XCTAssertTrue(olderPage.waitForExistence(timeout: 8))
     XCTAssertFalse(progress.exists)
     scrollDown.tap()
     XCTAssertTrue(progress.waitForExistence(timeout: 5))
-    app.buttons["History"].tap()
+    tapPaneAction(app, "History")
     XCTAssertTrue(app.staticTexts["Loaded lines 202–401"].waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.exists)
     // Host confirms the downward scroll while History is open.
     releaseHeldScrolls()
     app.buttons["Load Earlier 200 Lines"].tap()
     XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
-    app.buttons["Live Output"].tap()
+    tapPaneAction(app, "Live Output")
     let latestPage = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
     XCTAssertTrue(latestPage.waitForExistence(timeout: 8))
     XCTAssertTrue(scrollUp.isEnabled)
@@ -180,121 +208,13 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(0).exists)
     reading.swipeUp()
     XCTAssertTrue(page(0).exists)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Remote scroll controls"
-    attachment.lifetime = .keepAlways
-    add(attachment)
-    app.buttons["History"].tap()
+    attach("Remote scroll controls")
+    tapPaneAction(app, "History")
     XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.exists)
     XCTAssertFalse(down.exists)
     app.buttons["Load Earlier 200 Lines"].tap()
     XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
-  }
-
-  @MainActor
-  func testClearingBothPairingHalvesAllowsCredentialReconnect() {
-    let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-fixture"]
-    app.launch()
-    XCTAssertTrue(app.buttons["Edit Connection"].waitForExistence(timeout: 10))
-    app.buttons["Edit Connection"].tap()
-    let first = app.textFields["pairing-code-first"]
-    let second = app.textFields["pairing-code-second"]
-    XCTAssertTrue(first.waitForExistence(timeout: 5))
-    first.tap()
-    first.typeText("ABCD")
-    second.typeText("2345")
-    second.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
-    first.tap()
-    first.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
-    app.buttons["Reconnect"].tap()
-    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Reconnect"].exists)
-  }
-
-  @MainActor
-  func testLaunchNavigationKeepsTheConnectionUntilSheetDismissal() {
-    let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-connection-fixture"]
-    app.launch()
-    let add = app.buttons["Add Remote Pane"].firstMatch
-    XCTAssertTrue(add.waitForExistence(timeout: 10))
-    add.tap()
-    let launch = app.buttons["new-agent-pane"]
-    XCTAssertTrue(launch.waitForExistence(timeout: 5))
-    launch.tap()
-    let create = app.buttons["create-and-mirror"]
-    XCTAssertTrue(create.waitForExistence(timeout: 15))
-    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: create)
-    waitForExpectations(timeout: 15)
-    app.navigationBars["New Agent Pane"].buttons.element(boundBy: 0).tap()
-    XCTAssertTrue(launch.waitForExistence(timeout: 5))
-    app.buttons["Cancel"].tap()
-    XCTAssertFalse(launch.exists)
-    XCTAssertTrue(add.waitForExistence(timeout: 5))
-  }
-
-  @MainActor
-  func testStructuredAgentLaunchForm() {
-    let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-launch-fixture"]
-    app.launch()
-    XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
-    let create = app.buttons["create-and-mirror"]
-    XCTAssertTrue(create.waitForExistence(timeout: 10))
-    XCTAssertTrue(create.isEnabled)
-    XCTAssertTrue(app.staticTexts["Uses the Host Profile’s model, permissions and launch settings."].exists)
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Structured Agent launch"
-    attachment.lifetime = .keepAlways
-    add(attachment)
-    create.tap()
-    XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
-  }
-
-  @MainActor
-  func testSidebarClosesMirrorsWithOneClick() {
-    let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
-    app.launch()
-    XCUIDevice.shared.orientation = .landscapeLeft
-    let closeFirst = app.buttons["close-mirror-UI Fixture"]
-    XCTAssertTrue(closeFirst.waitForExistence(timeout: 10))
-    closeFirst.tap()
-    XCTAssertFalse(closeFirst.exists)
-    XCTAssertTrue(app.navigationBars["Second Fixture · Codex"].waitForExistence(timeout: 5))
-    app.buttons["close-mirror-Second Fixture"].tap()
-    XCTAssertTrue(app.staticTexts["Connect to Prowl"].waitForExistence(timeout: 5))
-  }
-
-  @MainActor
-  func testPairingCodeUsesTwoEditableHalves() {
-    let app = XCUIApplication()
-    app.launchArguments += ["--mirror-ui-fixture"]
-    app.launch()
-    XCUIDevice.shared.orientation = .landscapeLeft
-    XCTAssertTrue(app.buttons["Edit Connection"].waitForExistence(timeout: 10))
-    app.buttons["Edit Connection"].tap()
-    let first = app.textFields["pairing-code-first"]
-    let second = app.textFields["pairing-code-second"]
-    XCTAssertTrue(first.waitForExistence(timeout: 5))
-    first.tap()
-    first.typeText("k7mp")
-    second.typeText("3x9r")
-    XCTAssertEqual(first.value as? String, "K7MP")
-    XCTAssertEqual((second.value as? String)?.uppercased(), "3X9R")
-    first.tap()
-    first.typeText(XCUIKeyboardKey.delete.rawValue + "n")
-    XCTAssertEqual((first.value as? String)?.uppercased(), "K7MN")
-    first.typeText(XCUIKeyboardKey.delete.rawValue + "q")
-    XCTAssertEqual((first.value as? String)?.uppercased(), "K7MQ")
-    XCTAssertEqual((second.value as? String)?.uppercased(), "3X9R")
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Two-part pairing code"
-    attachment.lifetime = .keepAlways
-    add(attachment)
-    app.buttons["Cancel"].tap()
   }
 
   @MainActor
@@ -319,85 +239,34 @@ final class ProwlMirror_iOSUITests: XCTestCase {
         return index > 10 && row.frame.minY > detail.frame.minY
           && row.frame.maxY < detail.frame.maxY && row.isHittable
       })
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = "Large frozen table after scrolling"
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    attach("Large frozen table after scrolling")
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["mirror-scroll-up"].waitForExistence(timeout: 5))
   }
 
   @MainActor
-  func testPaneSwitchRestoresLiveReadingPosition() {
+  func testReadingHistoryDetails() {
     let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
+    app.launchArguments = ["--mirror-ui-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .landscapeLeft
-    expectation(for: NSPredicate { _, _ in app.frame.width > app.frame.height }, evaluatedWith: nil)
-    waitForExpectations(timeout: 10)
-    let reading = app.scrollViews["mirror-live-scroll"]
-    XCTAssertTrue(reading.waitForExistence(timeout: 10))
-    reading.swipeDown()
-    let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Live marker "))
-    guard
-      let anchor = rows.allElementsBoundByIndex.first(where: {
-        $0.frame.minY > reading.frame.minY + 20
-          && $0.frame.maxY < reading.frame.maxY && $0.isHittable
-      })
-    else {
-      XCTFail("No visible live anchor")
-      return
-    }
-    let label = anchor.label
-    let y = anchor.frame.minY
-    app.staticTexts["Second Fixture"].tap()
-    XCTAssertTrue(app.navigationBars["Second Fixture · Codex"].waitForExistence(timeout: 5))
-    app.staticTexts["UI Fixture"].tap()
-    let restored = app.staticTexts[label]
-    expectation(
-      for: NSPredicate { _, _ in
-        restored.exists && restored.isHittable && abs(restored.frame.minY - y) < 12
-      }, evaluatedWith: nil)
-    waitForExpectations(timeout: 5)
-  }
-
-  @MainActor
-  func testPaneSwitchRestoresHistoryReadingPosition() {
-    let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
-    app.launch()
-    XCUIDevice.shared.orientation = .landscapeLeft
-    expectation(for: NSPredicate { _, _ in app.frame.width > app.frame.height }, evaluatedWith: nil)
-    waitForExpectations(timeout: 10)
-    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 10))
-    app.buttons["History"].tap()
+    waitForOrientation(app, wide: true)
+    XCTAssertTrue(app.buttons["Expand"].firstMatch.waitForExistence(timeout: 10))
+    attach("Fixture live reading")
+    app.buttons["Expand"].firstMatch.tap()
+    XCTAssertTrue(app.buttons["Copy"].waitForExistence(timeout: 5))
+    attach("Fixture frozen code detail")
+    app.buttons["Done"].tap()
+    tapPaneAction(app, "History")
     XCTAssertTrue(app.staticTexts["Loaded lines 202–401"].waitForExistence(timeout: 5))
-    let history = app.scrollViews["mirror-history-scroll"]
-    history.swipeUp()
-    let rows = app.staticTexts.matching(
-      NSPredicate(format: "label BEGINSWITH %@", "Retained line "))
-    guard
-      let anchor = rows.allElementsBoundByIndex.first(where: {
-        $0.frame.minY > history.frame.minY + 20
-          && $0.frame.maxY < history.frame.maxY && $0.isHittable
-      })
-    else {
-      XCTFail("No visible history anchor")
-      return
-    }
-    let label = anchor.label
-    let y = anchor.frame.minY
-    app.staticTexts["Second Fixture"].tap()
-    XCTAssertTrue(app.navigationBars["Second Fixture · Codex"].waitForExistence(timeout: 5))
-    app.staticTexts["UI Fixture"].tap()
-    XCTAssertTrue(app.buttons["Live Output"].waitForExistence(timeout: 5))
-    let restored = app.staticTexts[label]
-    expectation(
-      for: NSPredicate { _, _ in
-        restored.exists && restored.isHittable && abs(restored.frame.minY - y) < 12
-      }, evaluatedWith: nil)
-    waitForExpectations(timeout: 5)
+    app.buttons["Load Earlier 200 Lines"].tap()
+    XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
+    attach("Fixture history paging")
+    tapPaneAction(app, "Live Output")
+    XCTAssertTrue(app.buttons["Expand"].firstMatch.waitForExistence(timeout: 5))
   }
+
+  // MARK: - Composer
 
   @MainActor
   func testComposerExpandsOnFocusAndCollapsesWithoutLosingDraft() {
@@ -419,7 +288,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     input.tap()
     XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(app.staticTexts["Host checks Agent readiness when you send."].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
   }
 
   @MainActor
@@ -428,9 +298,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.launchArguments = ["--mirror-ui-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .landscapeLeft
-    let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
-    expectation(for: wide, evaluatedWith: nil)
-    waitForExpectations(timeout: 10)
+    waitForOrientation(app, wide: true)
     let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input")
       .firstMatch
     XCTAssertTrue(input.waitForExistence(timeout: 10))
@@ -438,92 +306,199 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(app.buttons["mirror-dismiss-keyboard"].waitForExistence(timeout: 5))
     input.typeText("First line\nSecond line")
     XCTAssertTrue(app.buttons["Send"].isEnabled)
-    XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(app.staticTexts["Host checks Agent readiness when you send."].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["Send"].isEnabled)
   }
 
+  // MARK: - Conversation (conversation-v1)
+
   @MainActor
-  func testReadingHistoryDetailsAndConnectionEditing() {
+  func testConversationFixtureRendersTheChatAndSwitchesToTheScreen() {
     let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-fixture"]
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude"]
     app.launch()
-    XCUIDevice.shared.orientation = .landscapeLeft
-    let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
-    expectation(for: wide, evaluatedWith: nil)
-    waitForExpectations(timeout: 10)
-    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 10))
-    let live = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    live.name = "Fixture live reading"
-    live.lifetime = .keepAlways
-    add(live)
-    app.buttons["Expand"].firstMatch.tap()
-    XCTAssertTrue(app.buttons["Copy"].waitForExistence(timeout: 5))
-    let detail = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    detail.name = "Fixture frozen code detail"
-    detail.lifetime = .keepAlways
-    add(detail)
-    app.buttons["Done"].tap()
-    app.buttons["History"].tap()
-    XCTAssertTrue(app.staticTexts["Loaded lines 202–401"].waitForExistence(timeout: 5))
-    app.buttons["Load Earlier 200 Lines"].tap()
-    XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
-    let history = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    history.name = "Fixture history paging"
-    history.lifetime = .keepAlways
-    add(history)
-    app.buttons["Live Output"].tap()
-    XCTAssertTrue(app.buttons["Expand"].firstMatch.waitForExistence(timeout: 5))
-    app.buttons["Edit Connection"].tap()
-    let key = app.textFields["pairing-code-first"]
-    XCTAssertTrue(key.waitForExistence(timeout: 5))
-    key.tap()
-    key.typeText("x")
-    app.buttons["Reconnect"].tap()
-    XCTAssertTrue(
-      app.staticTexts[
-        "Enter the current 8-character pairing code shown on Host."
-      ].waitForExistence(
-        timeout: 5))
-    app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 5))
+    XCUIDevice.shared.orientation = .portrait
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
+    XCTAssertTrue(tool.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    attach("Claude conversation, latest")
+    segment(app, "Screen").tap()
+    XCTAssertTrue(app.buttons["mirror-scroll-up"].waitForExistence(timeout: 5))
+    XCTAssertFalse(assistant.exists)
+    attach("Same pane as the terminal screen")
+    segment(app, "Chat").tap()
+    XCTAssertTrue(assistant.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["mirror-scroll-up"].exists)
   }
 
   @MainActor
-  func testConnectionFormRemainsUsableAcrossRotation() {
+  func testCodexConversationFixtureRendersTools() {
     let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "codex"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    attach("Codex conversation, latest")
+    app.descendants(matching: .any).matching(identifier: "conversation-scroll").firstMatch.swipeDown()
+    let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
+    XCTAssertTrue(tool.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testModeSwitchRestoresTheScreenReadingPosition() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-multiple-fixtures"]
     app.launch()
     XCUIDevice.shared.orientation = .landscapeLeft
-    let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
-    expectation(for: wide, evaluatedWith: nil)
+    waitForOrientation(app, wide: true)
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    segment(app, "Screen").tap()
+    let reading = app.scrollViews["mirror-live-scroll"]
+    XCTAssertTrue(reading.waitForExistence(timeout: 10))
+    reading.swipeDown()
+    let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Live marker "))
+    guard
+      let anchor = rows.allElementsBoundByIndex.first(where: {
+        $0.frame.minY > reading.frame.minY + 20
+          && $0.frame.maxY < reading.frame.maxY && $0.isHittable
+      })
+    else {
+      XCTFail("No visible live anchor")
+      return
+    }
+    let label = anchor.label
+    let y = anchor.frame.minY
+    segment(app, "Chat").tap()
+    XCTAssertTrue(assistant.waitForExistence(timeout: 5))
+    segment(app, "Screen").tap()
+    let restored = app.staticTexts[label]
+    expectation(
+      for: NSPredicate { _, _ in
+        restored.exists && restored.isHittable && abs(restored.frame.minY - y) < 12
+      }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+  }
+
+  // MARK: - Hosts and panes
+
+  @MainActor
+  func testHostsFlowOpensAPaneFromTheRoster() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-conversation-fixture", "claude"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let host = app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
+    XCTAssertTrue(host.waitForExistence(timeout: 10))
+    attach("Hosts")
+    host.tap()
+    let pane = app.descendants(matching: .any).matching(identifier: "pane-0F1C2D3E-4A5B-6C7D-8E9F-A0B1C2D3E4F5")
+      .firstMatch
+    XCTAssertTrue(pane.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Claude Code"].exists)
+    attach("Panes of one Host")
+    pane.tap()
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "pane-mode").firstMatch.exists)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(pane.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testLaunchSheetKeepsTheRosterUntilDismissal() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    let host = app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
+    XCTAssertTrue(host.waitForExistence(timeout: 10))
+    host.tap()
+    let launch = app.buttons["new-agent-pane"]
+    XCTAssertTrue(launch.waitForExistence(timeout: 10))
+    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: launch)
     waitForExpectations(timeout: 10)
-    let addButton = app.buttons["Add Remote Pane"].firstMatch
-    XCTAssertTrue(addButton.waitForExistence(timeout: 10))
-    XCTAssertTrue(addButton.isHittable)
-    addButton.tap()
+    launch.tap()
+    let create = app.buttons["create-and-mirror"]
+    XCTAssertTrue(create.waitForExistence(timeout: 15))
+    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: create)
+    waitForExpectations(timeout: 15)
+    app.buttons["Cancel"].tap()
+    XCTAssertFalse(create.waitForExistence(timeout: 2))
+    XCTAssertTrue(launch.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testStructuredAgentLaunchForm() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-launch-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let create = app.buttons["create-and-mirror"]
+    XCTAssertTrue(create.waitForExistence(timeout: 15))
+    XCTAssertTrue(app.staticTexts["Uses the Host Profile’s model, permissions and launch settings."].exists)
+    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: create)
+    waitForExpectations(timeout: 15)
+    attach("Structured launch form")
+    create.tap()
+    XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testPairingCodeUsesTwoEditableHalves() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
+    let add = app.buttons["add-host"]
+    XCTAssertTrue(add.waitForExistence(timeout: 10))
+    add.tap()
+    let first = app.textFields["pairing-code-first"]
+    let second = app.textFields["pairing-code-second"]
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    first.tap()
+    first.typeText("k7mp")
+    second.typeText("3x9r")
+    XCTAssertEqual(first.value as? String, "K7MP")
+    XCTAssertEqual((second.value as? String)?.uppercased(), "3X9R")
+    first.tap()
+    first.typeText(XCUIKeyboardKey.delete.rawValue + "n")
+    XCTAssertEqual((first.value as? String)?.uppercased(), "K7MN")
+    first.typeText(XCUIKeyboardKey.delete.rawValue + "q")
+    XCTAssertEqual((first.value as? String)?.uppercased(), "K7MQ")
+    XCTAssertEqual((second.value as? String)?.uppercased(), "3X9R")
+    attach("Two-part pairing code")
+    app.buttons["Cancel"].tap()
+    XCTAssertTrue(add.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testAddHostFormRemainsUsableAcrossRotation() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let add = app.buttons["add-host"]
+    XCTAssertTrue(add.waitForExistence(timeout: 10))
+    XCTAssertTrue(add.isHittable)
+    add.tap()
     let address = app.textFields["host-address"]
     XCTAssertTrue(address.waitForExistence(timeout: 5))
     XCTAssertTrue(address.isHittable)
-    XCTAssertFalse(
-      app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Unable to access saved"))
-        .firstMatch.exists)
-    let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    landscape.name = "Landscape connection form"
-    landscape.lifetime = .keepAlways
-    add(landscape)
+    attach("Landscape Add Host form")
     XCUIDevice.shared.orientation = .portrait
-    let tall = NSPredicate { _, _ in app.frame.height > app.frame.width }
-    expectation(for: tall, evaluatedWith: nil)
-    waitForExpectations(timeout: 10)
+    waitForOrientation(app, wide: false)
     XCTAssertTrue(address.waitForExistence(timeout: 5))
     XCTAssertTrue(address.isHittable)
-    let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    portrait.name = "Portrait connection form"
-    portrait.lifetime = .keepAlways
-    add(portrait)
+    attach("Portrait Add Host form")
     app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["Add Remote Pane"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(add.waitForExistence(timeout: 5))
   }
 
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.

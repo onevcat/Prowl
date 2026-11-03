@@ -24,10 +24,21 @@ final class MirrorSession: Identifiable {
     }
   }
 
+  /// How the pane is shown: the agent's conversation or the terminal screen (docs-ai 088).
+  enum Mode: String, Equatable, Sendable {
+    case conversation
+    case screen
+  }
+
   let id = UUID()
   private(set) var configuration: MirrorSavedConnection
   private(set) var panes: [MirrorPaneDescriptor] = []
   private(set) var pane: MirrorPaneDescriptor?
+  private(set) var mode: Mode = .screen
+  private(set) var conversation = MirrorConversationStore()
+  private(set) var supportsConversation = false
+  /// A representation switch that keeps the connection: the next `subscribed` is not a reconnect.
+  @ObservationIgnored private var resumesConversation = false
   private(set) var status: Status = .disconnected
   private(set) var text = ""
   private(set) var revision: UInt64 = 0
@@ -214,6 +225,27 @@ final class MirrorSession: Identifiable {
     self.pane = pane
     intent = pane.busy ? .takeover : .ifFree
     subscribe()
+  }
+
+  /// Connects and subscribes to a pane chosen from a Host roster, in the given mode.
+  func open(_ pane: MirrorPaneDescriptor, mode: Mode) {
+    self.pane = pane
+    self.mode = pane.conversation == .available || mode == .conversation ? mode : .screen
+    intent = pane.busy ? .takeover : .ifFree
+    connect()
+  }
+
+  /// Switches the representation on the same connection; the Host replaces the subscription.
+  func switchMode(_ newMode: Mode) {
+    guard newMode != mode, status == .live || status == .subscribing else { return }
+    guard newMode == .screen || supportsConversation else { return }
+    mode = newMode
+    resumesConversation = newMode == .conversation && conversation.latestSequence > 0
+    subscribe()
+  }
+
+  var agentState: MirrorConversationEvent.AgentState? {
+    conversation.status?.state ?? pane?.agentState
   }
 
   func refreshPanes() {
@@ -522,6 +554,12 @@ final class MirrorSession: Identifiable {
     subscriptionID = nil
     clearScroll()
     clearScrollState()
+    if mode == .conversation {
+      let since = conversation.latestSequence > 0 ? conversation.latestSequence : nil
+      resumesConversation = since != nil
+      send(.subscribe(.init(paneID: pane.id, representation: .conversation, intent: intent, since: since)))
+      return
+    }
     send(
       .subscribe(
         .init(
@@ -547,15 +585,18 @@ final class MirrorSession: Identifiable {
       supportsHistory = message.capabilities?.contains("history") == true
       supportsRemoteScroll = message.capabilities?.contains("remote-scroll") == true
       supportsScrollState = message.capabilities?.contains("scroll-state-v1") == true
+      supportsConversation = message.capabilities?.contains("conversation-v1") == true
       if supportsSubmission { querySubmission() }
       panes = message.panes ?? []
       onVerifiedConnection?(configuration)
       if let pane {
-        guard panes.contains(where: { $0.id == pane.id }) else {
+        guard let current = panes.first(where: { $0.id == pane.id }) else {
           status = .paneClosed
           transport?.close(nil)
           return
         }
+        self.pane = current
+        if mode == .conversation, !supportsConversation { mode = .screen }
         subscribe()
       } else {
         status = .choosingPane
@@ -588,6 +629,25 @@ final class MirrorSession: Identifiable {
       isLoadingHistory = false
       showsHistory = false
       querySubmission()
+    case .conversationSnapshot, .conversationEvents:
+      guard mode == .conversation, let lease = subscriptionID, message.subscriptionID == lease,
+        let sequence = message.sequence, let events = message.conversationEvents,
+        events.count <= MirrorConversationStore.maximumEvents
+      else {
+        invalidMessage()
+        return
+      }
+      if case .conversationSnapshot(let payload) = message {
+        conversation.apply(
+          snapshot: events, gap: payload.gap, sequence: sequence, session: payload.session,
+          resumed: resumesConversation)
+        resumesConversation = false
+      } else {
+        conversation.apply(events: events, sequence: sequence)
+      }
+      updatedAt = Date()
+      status = .live
+      if !events.isEmpty { send(.acknowledge(.init(sequence: sequence, subscriptionID: lease))) }
     case .textFrame:
       guard let lease = subscriptionID, message.subscriptionID == lease,
         let sequence = message.sequence, sequence > revision, let replacement = message.text,
@@ -648,6 +708,12 @@ final class MirrorSession: Identifiable {
       {
         isLoadingHistory = false
         error = message.error
+        return
+      }
+      if message.error?.hasPrefix("CONVERSATION_UNSUPPORTED") == true, mode == .conversation {
+        // The pane has no supported agent right now; the screen still works.
+        mode = .screen
+        subscribe()
         return
       }
       if message.error?.hasPrefix("PANE_BUSY") == true { status = .takenOver }

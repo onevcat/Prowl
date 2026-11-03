@@ -35,6 +35,79 @@
       CommandLine.arguments.contains("--mirror-ui-scroll-hold-fixture")
     }
 
+    /// Every fixture pane has this ID so the roster, the pane screen and UI tests agree on it.
+    static let paneID = UUID(uuidString: "0F1C2D3E-4A5B-6C7D-8E9F-A0B1C2D3E4F5")!
+
+    /// The agent whose bundled conversation `--mirror-ui-conversation-fixture [agent]` replays.
+    static var conversationFixtureAgent: String? {
+      let arguments = CommandLine.arguments
+      guard let index = arguments.firstIndex(of: "--mirror-ui-conversation-fixture") else { return nil }
+      let next = index + 1 < arguments.count ? arguments[index + 1] : ""
+      return next.isEmpty || next.hasPrefix("--") ? "claude" : next
+    }
+
+    struct Hosts {
+      let store: MirrorHostStore
+      let sessions: MirrorHostSessions
+    }
+
+    /// `--mirror-ui-connection-fixture`: one paired Host whose roster and panes come from fake
+    /// transports, so the Hosts → panes → pane flow runs without a network.
+    static func hostsFixture() -> Hosts? {
+      guard CommandLine.arguments.contains("--mirror-ui-connection-fixture") else { return nil }
+      let suite = "ui-fixture-hosts"
+      let defaults = UserDefaults(suiteName: suite) ?? .standard
+      defaults.removePersistentDomain(forName: suite)
+      let store = MirrorHostStore(defaults: defaults)
+      _ = store.upsert(address: "127.0.0.1", port: 7880, hostID: nil)
+      let sessions = MirrorHostSessions(
+        makeSession: { MirrorHostSession(configuration: $0.configuration, makeTransport: { _ in channel() }) },
+        makePaneSession: { MirrorSession(configuration: $0.configuration, makeTransport: { _ in channel() }) })
+      return Hosts(store: store, sessions: sessions)
+    }
+
+    /// The pane screen the fixture arguments open directly, or nil to run the real app.
+    static func paneFixture() -> (session: MirrorSession, pane: MirrorPaneDescriptor)? {
+      let arguments = CommandLine.arguments
+      guard arguments.contains("--mirror-ui-fixture") || conversationFixtureAgent != nil else { return nil }
+      let channel = channel()
+      let session = MirrorSession(
+        configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), makeTransport: { _ in channel })
+      session.open(channel.pane, mode: channel.conversation.isEmpty ? .screen : .conversation)
+      return (session, channel.pane)
+    }
+
+    /// Replays a bundled `conversation-v1` event file through a fake Host.
+    static func conversationSession(fixture: String, agent: String) -> MirrorSession {
+      let channel = Channel(name: "Review PR #1038", longOutput: false)
+      channel.conversation = Self.fixtureEvents(named: fixture)
+      channel.agent = agent
+      let session = MirrorSession(
+        configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), makeTransport: { _ in channel })
+      session.open(channel.pane, mode: .conversation)
+      return session
+    }
+
+    /// A fake Host for the current fixture arguments: the conversation fixture when one is named,
+    /// otherwise the terminal fixture (long output with `--mirror-ui-multiple-fixtures`).
+    private static func channel() -> Channel {
+      let longOutput = CommandLine.arguments.contains("--mirror-ui-multiple-fixtures")
+      guard let agent = conversationFixtureAgent else { return Channel(name: "UI Fixture", longOutput: longOutput) }
+      let channel = Channel(name: "Review PR #1038", longOutput: longOutput)
+      channel.conversation = fixtureEvents(named: "\(agent)-review-1038")
+      channel.agent = agent
+      return channel
+    }
+
+    static func fixtureEvents(named name: String) -> [MirrorConversationEvent] {
+      guard let url = Bundle.main.url(forResource: name, withExtension: "events.jsonl"),
+        let text = try? String(contentsOf: url, encoding: .utf8)
+      else { return [] }
+      return text.split(separator: "\n").compactMap { line in
+        try? JSONDecoder().decode(MirrorConversationEvent.self, from: Data(line.utf8))
+      }
+    }
+
     static func session(name: String = "UI Fixture", longOutput: Bool = false) -> MirrorSession {
       let channel = Channel(name: name, longOutput: longOutput)
       let session = MirrorSession(
@@ -51,13 +124,30 @@
       var onReady: (() -> Void)?
       var onMessage: ((MirrorMessage) -> Void)?
       var onClose: ((String?) -> Void)?
-      let pane: MirrorPaneDescriptor
+      private(set) var pane: MirrorPaneDescriptor
       let longOutput: Bool
+      /// Events for a `conversation-v1` subscription; the pane advertises the conversation when set.
+      var conversation: [MirrorConversationEvent] = [] {
+        didSet {
+          pane.conversation = conversation.isEmpty ? .unsupported : .available
+          pane.agentState = .idle
+        }
+      }
+      var agent = "codex" {
+        didSet {
+          pane.agent = agent
+          let label = agent == "claude" ? "Claude Code" : agent.capitalized
+          pane = MirrorPaneDescriptor(
+            id: pane.id, title: "\(pane.projectName ?? "") · \(label)", directory: pane.directory, busy: false,
+            projectName: pane.projectName, subtitle: "\(label) · main", agent: agent, agentState: pane.agentState,
+            conversation: pane.conversation)
+        }
+      }
       init(name: String, longOutput: Bool) {
         self.longOutput = longOutput
         pane = MirrorPaneDescriptor(
-          id: UUID(), title: "\(name) · Codex", directory: "/fixture", busy: false,
-          projectName: name, subtitle: "Codex · main")
+          id: MirrorUIFixture.paneID, title: "\(name) · Codex", directory: "/fixture", busy: false,
+          projectName: name, subtitle: "Codex · main", agent: "codex")
         if MirrorUIFixture.holdsScroll {
           CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(),
@@ -98,13 +188,29 @@
                 capabilities: [
                   "text-v1", "history", "refresh", "launch-profile", "agents-dispatch", "agent-input",
                   "shell-send",
-                ] + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
+                ] + (conversation.isEmpty ? [] : ["conversation-v1"])
+                  + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
                   + (CommandLine.arguments.contains("--mirror-ui-scroll-boundary-fixture") ? ["scroll-state-v1"] : []),
                 hostRunID: UUID())))
         case .subscribe:
           if case .subscribe(let payload) = message { includesScrollState = payload.includeScrollState == true }
           onMessage?(
             .subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))
+          if message.representation == .conversation {
+            let since = message.since ?? 0
+            let events = conversation.filter { $0.sequence > since }
+            let session = conversation.last { $0.kind == .sessionStarted }.flatMap {
+              event -> MirrorConversationEvent.Session? in
+              if case .session(let value) = event.payload { return value }
+              return nil
+            }
+            onMessage?(
+              .conversationSnapshot(
+                .init(
+                  events: events, gap: false, sequence: conversation.last?.sequence ?? 0, subscriptionID: lease,
+                  session: session)))
+            return
+          }
           frame()
         case .command:
           guard let request = message.commandRequest else { return }

@@ -41,6 +41,8 @@ let project = Project(
       bundleId: "com.awhisper.ProwlMirror-iOS",
       infoPlist: nil,
       sources: ["../Shared/*.swift"],
+      // Conversation fixtures feed the DEBUG fixture mode and UI tests without a Host.
+      resources: ["../Fixtures/conversation/*.events.jsonl"],
       buildableFolders: ["ProwlMirror-iOS"],
       settings: settings("App", productName: "ProwlMirror-iOS")
     ),
