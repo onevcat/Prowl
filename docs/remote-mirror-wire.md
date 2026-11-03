@@ -200,14 +200,16 @@ with the recoverable `CONVERSATION_UNSUPPORTED` without closing the connection.
 
 ```json
 {"subscribe":{"_0":{"paneID":"UUID","representation":"conversation-v1","intent":"ifFree","since":41}}}
-{"conversationSnapshot":{"_0":{"events":[…],"gap":false,"sequence":57,"subscriptionID":"UUID"}}}
+{"conversationSnapshot":{"_0":{"events":[…],"gap":false,"sequence":57,"subscriptionID":"UUID","session":{"id":"…"}}}}
 {"conversationEvents":{"_0":{"events":[…],"sequence":60,"subscriptionID":"UUID"}}}
 {"acknowledge":{"_0":{"sequence":60,"subscriptionID":"UUID"}}}
 ```
 
 After `subscribed`, the Host sends one `conversationSnapshot`: every event it retains after
 `since` (or the whole retained segment without `since`), oldest first. `gap` is true when
-events between `since` and the first one were dropped. Further events arrive in
+events between `since` and the first one were dropped. `session` names the session the
+retained events belong to (id, cwd, model, title, cost), kept by the Host even after the
+`session.started` event itself was evicted; nil between sessions. Further events arrive in
 `conversationEvents` batches on the same ordered connection. One batch is outstanding at
 a time: the client acknowledges a non-empty snapshot or batch with its `sequence`, and a
 wrong acknowledgement closes the connection. A batch whose events start after a gap

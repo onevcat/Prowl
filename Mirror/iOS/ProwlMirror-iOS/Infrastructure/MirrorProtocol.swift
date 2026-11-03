@@ -113,6 +113,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var gap: Bool
     var sequence: UInt64
     var subscriptionID: UUID
+    /// The session the retained events belong to, even when its `session.started` was evicted.
+    var session: MirrorConversationEvent.Session?
   }
   case conversationEvents(ConversationEventsPayload)
   /// Events appended since the last acknowledged batch; one batch is outstanding at a time.

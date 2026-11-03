@@ -86,6 +86,8 @@ struct MirrorHostConversationTests {
     let snapshot = try #require(await fixture.next())
     #expect(snapshot.kind == .conversationSnapshot && snapshot.gap == false)
     #expect((snapshot.conversationEvents ?? []).allSatisfy { $0.sequence > latest })
+    guard case .conversationSnapshot(let payload) = snapshot else { return }
+    #expect(payload.session?.id == "s1")
   }
 
   @Test(.timeLimit(.minutes(1))) func reconnectResumesBySequenceFromTheRetainedFeed() async throws {

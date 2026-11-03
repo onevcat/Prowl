@@ -980,7 +980,7 @@ final class MirrorHost {
       .conversationSnapshot(
         .init(
           events: snapshot.events, gap: snapshot.gap, sequence: snapshot.latestSequence,
-          subscriptionID: subscription.id)))
+          subscriptionID: subscription.id, session: snapshot.session)))
   }
 
   /// Sends the events appended since the cursor once the previous batch is acknowledged. A gap
@@ -996,7 +996,9 @@ final class MirrorHost {
     if batch.gap {
       peer.send(
         .conversationSnapshot(
-          .init(events: batch.events, gap: true, sequence: batch.latestSequence, subscriptionID: subscription.id)))
+          .init(
+            events: batch.events, gap: true, sequence: batch.latestSequence, subscriptionID: subscription.id,
+            session: batch.session)))
     } else {
       peer.send(
         .conversationEvents(
