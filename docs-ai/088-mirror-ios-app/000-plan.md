@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-11-04 |
-| **Primary PRs** | #1040 (Host roster fix), the iOS client PR stacked on it |
+| **Primary PRs** | #1041 (client), #1040 (Host roster fix) |
 | **Related** | [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [067-remote-mirror](../067-remote-mirror/000-plan.md), `Mirror/iOS/README.md`, `docs/remote-mirror.md`, issue #989 |
 
 ## Background
