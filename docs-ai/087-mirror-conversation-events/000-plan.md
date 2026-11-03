@@ -142,3 +142,4 @@ Envelope: `seq` (monotonic per subscription), `ts`, `kind`, `source`
 ## Amendments
 
 - Updated 2026-11-04: Host event model, Claude/Codex adapters, bounded log and transcript tail (S1 without the wire); adds `session.updated` — see [002-host-event-extraction.md](002-host-event-extraction.md)
+- Updated 2026-11-04: `conversation-v1` subscriptions on the Host wire with snapshot, acknowledged batches, resume by sequence and view switching; event model moved to `Mirror/Shared` — see [003-conversation-wire.md](003-conversation-wire.md)
