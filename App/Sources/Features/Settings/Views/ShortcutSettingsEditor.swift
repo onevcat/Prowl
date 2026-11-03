@@ -17,7 +17,7 @@ struct ShortcutSettingsEditor: View {
   @Bindable var store: StoreOf<SettingsFeature>
   let effectiveKeybindings: ResolvedKeybindingMap
   let customCommands: [EffectiveCustomCommand]
-  let islandHotKeyRegistrationFailure: Keybinding?
+  let islandHotKeyRegistrationFailures: [String: Keybinding]
   var commandID: String?
 
   @State private var searchText = ""
@@ -37,6 +37,24 @@ struct ShortcutSettingsEditor: View {
       While the island is enabled and has agents, this takes precedence over the same shortcut in other apps.
       """
   )
+
+  static let visibilityGlobalShortcutHelp = String(
+    localized: """
+      System-wide shortcut: shows or hides Agent Island while another app is active. \
+      Once the island has been shown since Prowl launched, this takes precedence over the same shortcut in other apps.
+      """
+  )
+
+  static func globalShortcutHelp(for commandID: String) -> String? {
+    switch commandID {
+    case AppShortcuts.CommandID.toggleAgentIsland:
+      globalShortcutHelp
+    case AppShortcuts.CommandID.toggleAgentIslandVisibility:
+      visibilityGlobalShortcutHelp
+    default:
+      nil
+    }
+  }
 
   private var schema: KeybindingSchemaDocument {
     .appDefaultsV1
@@ -209,10 +227,10 @@ struct ShortcutSettingsEditor: View {
           Text(command.title)
             .lineLimit(1)
             .truncationMode(.tail)
-          if command.id == AppShortcuts.CommandID.toggleAgentIsland {
+          if let globalShortcutHelp = Self.globalShortcutHelp(for: command.id) {
             Image(systemName: "globe")
               .foregroundStyle(.secondary)
-              .help(Self.globalShortcutHelp)
+              .help(globalShortcutHelp)
               .accessibilityLabel("System-wide shortcut")
           }
         }
@@ -656,9 +674,7 @@ struct ShortcutSettingsEditor: View {
           """
       )
     }
-    if commandID == AppShortcuts.CommandID.toggleAgentIsland,
-      islandHotKeyRegistrationFailure == resolvedBinding
-    {
+    if islandHotKeyRegistrationFailures[commandID] == resolvedBinding {
       return String(localized: "macOS could not register this shortcut globally. Choose another shortcut.")
     }
     return nil

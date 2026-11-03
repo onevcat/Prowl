@@ -81,16 +81,20 @@ enum AgentIslandKeyboardCommand: Equatable {
   }
 }
 
-enum AgentIslandGlobalHotKeyCommand: Equatable {
+enum AgentIslandGlobalHotKeyCommand: Equatable, CaseIterable {
   case toggleRoster
+  case toggleVisibility
 
   fileprivate var identifier: UInt32 {
-    1
+    switch self {
+    case .toggleRoster: 1
+    case .toggleVisibility: 2
+    }
   }
 
   fileprivate init?(identifier: UInt32) {
-    guard identifier == Self.toggleRoster.identifier else { return nil }
-    self = .toggleRoster
+    guard let command = Self.allCases.first(where: { $0.identifier == identifier }) else { return nil }
+    self = command
   }
 }
 
@@ -105,6 +109,27 @@ struct AgentIslandGlobalHotKeyConfiguration: Equatable {
   ) {
     configuredBinding = toggleBinding
     binding = isIslandVisible && !isAppActive ? toggleBinding : nil
+  }
+
+  func requiresRefresh(from previous: Self?, force: Bool = false) -> Bool {
+    force || previous != self
+  }
+}
+
+/// The show/hide shortcut outlives the island panel, so it can bring a hidden island back. It
+/// is only grabbed system-wide once the island has been enabled since launch; users who never
+/// turn the island on keep the chord for other apps.
+struct AgentIslandVisibilityHotKeyConfiguration: Equatable {
+  let configuredBinding: Keybinding?
+  let binding: Keybinding?
+
+  init(
+    visibilityBinding: Keybinding?,
+    wasIslandEnabledThisSession: Bool,
+    isAppActive: Bool
+  ) {
+    configuredBinding = visibilityBinding
+    binding = wasIslandEnabledThisSession && !isAppActive ? visibilityBinding : nil
   }
 
   func requiresRefresh(from previous: Self?, force: Bool = false) -> Bool {
@@ -238,11 +263,7 @@ final class AgentIslandGlobalHotKeys {
     stop()
   }
 
-  func register(binding: Keybinding?) -> IslandHotKeyRegistrationResult {
-    register(command: .toggleRoster, binding: binding)
-  }
-
-  private func register(
+  func register(
     command: AgentIslandGlobalHotKeyCommand,
     binding: Keybinding?
   ) -> IslandHotKeyRegistrationResult {

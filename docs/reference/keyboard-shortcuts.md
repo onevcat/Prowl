@@ -42,6 +42,7 @@ Symbols: **⌘** Command · **⇧** Shift · **⌥** Option · **⌃** Control �
 | Toggle Left Sidebar | ⌘⌃S | `toggle_left_sidebar` | yes |
 | Toggle Active Agents Panel | ⌘⌥P | `toggle_active_agents_panel` | yes |
 | Toggle Agent Island hot window | Unassigned | `toggle_agent_island` | yes |
+| Show/Hide Agent Island | ⌘⌥⇧P | `toggle_agent_island_visibility` | yes |
 | Select Next Agent (in panel) | ⌥⌃↓ | `select_next_active_agent` | yes |
 | Select Previous Agent (in panel) | ⌥⌃↑ | `select_previous_active_agent` | yes |
 | Jump to Latest Unread | ⌘⌥U | `jump_to_latest_unread` | yes |
@@ -59,6 +60,15 @@ frontmost application's matching shortcut until the island becomes inactive or P
 the foreground. If macOS cannot register the shortcut globally, the
 shortcut row in either settings page reports the failure until the binding changes or a
 later registration succeeds. Reset returns the command to Unassigned.
+
+**Show/Hide Agent Island** (⌘⌥⇧P by default) flips the **Show Agent Island** setting, so it also
+uncovers the menu bar behind the island on a notched display and brings the island back later.
+It is listed under **Toggle Agent Island** in Settings → Shortcuts and Settings → Agents → Display,
+and appears in the View menu as **Show Agent Island** / **Hide Agent Island**. While Prowl is
+active the menu key equivalent handles it. Prowl registers it globally while Prowl is in the
+background, but only after Agent Island has been enabled since launch; hiding the island keeps the
+registration so the same chord can show it again. Users who never turn the island on keep the
+chord for other apps. Registration failures are reported the same way as for Toggle Agent Island.
 
 In the open roster, Arrow Up or `k` and Arrow Down or `j` select; Arrow Left or `h` and Arrow Right
 or `l` page; Return opens (Space is an alias); `1`…`9` directly opens a current-page row even when

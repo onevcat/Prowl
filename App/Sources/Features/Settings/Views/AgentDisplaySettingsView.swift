@@ -5,7 +5,7 @@ struct AgentDisplaySettingsView: View {
   @Bindable var store: StoreOf<SettingsFeature>
   let effectiveKeybindings: ResolvedKeybindingMap
   let customCommands: [EffectiveCustomCommand]
-  let islandHotKeyRegistrationFailure: Keybinding?
+  let islandHotKeyRegistrationFailures: [String: Keybinding]
 
   var body: some View {
     Form {
@@ -50,7 +50,7 @@ struct AgentDisplaySettingsView: View {
         store: store,
         effectiveKeybindings: effectiveKeybindings,
         customCommands: customCommands,
-        globalHotKeyRegistrationFailure: islandHotKeyRegistrationFailure
+        globalHotKeyRegistrationFailures: islandHotKeyRegistrationFailures
       )
     }
     .formStyle(.grouped)

@@ -42,7 +42,7 @@ struct AgentIslandSettingsSection: View {
   @Bindable var store: StoreOf<SettingsFeature>
   let effectiveKeybindings: ResolvedKeybindingMap
   let customCommands: [EffectiveCustomCommand]
-  let globalHotKeyRegistrationFailure: Keybinding?
+  let globalHotKeyRegistrationFailures: [String: Keybinding]
   @State private var silentOpacityDraft: Double?
   @State private var displayCatalog = AgentIslandDisplayCatalog.shared
 
@@ -78,10 +78,20 @@ struct AgentIslandSettingsSection: View {
         store: store,
         effectiveKeybindings: effectiveKeybindings,
         customCommands: customCommands,
-        islandHotKeyRegistrationFailure: globalHotKeyRegistrationFailure,
+        islandHotKeyRegistrationFailures: globalHotKeyRegistrationFailures,
         commandID: AppShortcuts.CommandID.toggleAgentIsland
       )
       Text(ShortcutSettingsEditor.globalShortcutHelp)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      ShortcutSettingsEditor(
+        store: store,
+        effectiveKeybindings: effectiveKeybindings,
+        customCommands: customCommands,
+        islandHotKeyRegistrationFailures: globalHotKeyRegistrationFailures,
+        commandID: AppShortcuts.CommandID.toggleAgentIslandVisibility
+      )
+      Text(ShortcutSettingsEditor.visibilityGlobalShortcutHelp)
         .font(.callout)
         .foregroundStyle(.secondary)
 
