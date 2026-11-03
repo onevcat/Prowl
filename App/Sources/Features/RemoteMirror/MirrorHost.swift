@@ -540,7 +540,8 @@ final class MirrorHost {
         let panes = source.panes().map {
           MirrorPaneDescriptor(
             id: $0.id, title: $0.title, directory: $0.directory, busy: busy.contains($0.id),
-            projectName: $0.projectName, subtitle: $0.subtitle, role: $0.role)
+            projectName: $0.projectName, subtitle: $0.subtitle, role: $0.role,
+            agent: $0.agent, agentState: $0.agentState, conversation: $0.conversation)
         }
         peer.send(
           .panes(

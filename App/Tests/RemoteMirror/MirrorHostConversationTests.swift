@@ -156,6 +156,20 @@ struct MirrorHostConversationTests {
     #expect(status.state == .blocked && status.kind == "permission")
   }
 
+  /// The roster reply keeps the source's agent fields; it only decides `busy`.
+  @Test(.timeLimit(.minutes(1))) func listPassesAgentAndConversationSupportThrough() async throws {
+    let fixture = try await Fixture(transcript: [])
+    defer { fixture.tearDown() }
+    fixture.peer.connection.send(.list)
+    let list = try #require(await fixture.next())
+    #expect(list.kind == .panes)
+    let pane = try #require(list.panes?.first)
+    #expect(pane.agent == "claude")
+    #expect(pane.agentState != nil)
+    #expect(pane.conversation == .available)
+    #expect(pane.busy == false)
+  }
+
   @Test func paneDescriptorsCarryAgentAndConversationSupport() {
     let claude = PaneAgentState(
       detectedAgent: .claude,
@@ -187,7 +201,12 @@ struct MirrorHostConversationTests {
     let id = UUID()
     private(set) var state: PaneAgentState?
     func panes() -> [MirrorPaneDescriptor] {
-      [MirrorPaneDescriptor(id: id, title: "Fixture", directory: "/", busy: false)]
+      [
+        MirrorPaneDescriptor(
+          id: id, title: "Fixture", directory: "/", busy: false, agent: state?.detectedAgent?.rawValue,
+          agentState: state.map { MirrorConversationEvent.AgentState(rawValue: $0.state.rawValue) ?? .unknown },
+          conversation: GhosttyMirrorPaneSource.conversationSupport(state))
+      ]
     }
     func snapshot(_ id: UUID) throws -> MirrorFrame { MirrorFrame(columns: 80, rows: 24, bytes: Data("x".utf8)) }
     func write(_ bytes: Data, to id: UUID) throws {}
