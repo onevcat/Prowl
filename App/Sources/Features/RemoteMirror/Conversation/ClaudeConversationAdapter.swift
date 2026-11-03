@@ -3,15 +3,24 @@ import Foundation
 /// Claude Code's `~/.claude/projects/<cwd>/<session>.jsonl` (docs-ai 087). Records land as
 /// they happen: a `tool_use` block when the tool starts, its `tool_result` when it ends, a
 /// `system` `turn_duration` when the turn closes, `queue-operation` for messages typed
-/// while the agent works.
+/// while the agent works. Generated `user` records (compaction summaries, slash-command
+/// echoes, meta prompts) are not human turns.
 nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
   private typealias Event = MirrorConversationEvent
   private typealias Value = MirrorConversationRecordValue
 
+  private struct PendingTool {
+    let start: Event.ToolStart
+    let startedAt: Date?
+    let prompt: Event.PromptKind?
+  }
+
   let agent = DetectedAgent.claude
   private var announcedSessionID: String?
   private var lastTitle: String?
-  private var pendingTools: [String: (start: Event.ToolStart, at: Date?)] = [:]
+  private var pendingTools: [String: PendingTool] = [:]
+  /// Messages typed while the agent worked, oldest first; `dequeue` records carry no text.
+  private var queued: [String] = []
 
   private static let toolKinds: [String: Event.ToolKind] = [
     "Bash": .shell, "Read": .read, "Write": .edit, "Edit": .edit, "MultiEdit": .edit, "NotebookEdit": .edit,
@@ -19,22 +28,18 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     "AskUserQuestion": .question, "ExitPlanMode": .plan, "EnterPlanMode": .plan, "Skill": .skill,
   ]
 
+  mutating func bootstrap(_ record: MirrorConversationRecord) -> [MirrorConversationEvent] {
+    announce(record, at: Value.timestamp(record))
+  }
+
   mutating func events(for record: MirrorConversationRecord) -> [MirrorConversationEvent] {
-    let type = Value.string(record, "type")
     let timestamp = Value.timestamp(record)
-    var events: [Event] = []
-    if let type, ["user", "assistant", "system"].contains(type), let id = Value.string(record, "sessionId"),
-      id != announcedSessionID
-    {
-      announcedSessionID = id
-      let session = Event.Session(id: id, cwd: Value.string(record, "cwd"), version: Value.string(record, "version"))
-      events.append(Event(.sessionStarted, .session(session), at: timestamp, source: .transcript))
-    }
-    switch type {
+    var events = announce(record, at: timestamp)
+    switch Value.string(record, "type") {
     case "user": events += userEvents(record, at: timestamp)
     case "assistant": events += assistantEvents(record, at: timestamp)
-    case "system": events += Self.systemEvents(record, at: timestamp)
-    case "queue-operation": events += Self.queueEvents(record, at: timestamp)
+    case "system": events += systemEvents(record, at: timestamp)
+    case "queue-operation": events += queueEvents(record, at: timestamp)
     case "ai-title": events += titleEvents(record)
     case "cost-state":
       if let cost = Value.double(record, "totalCostUSD") {
@@ -45,73 +50,111 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     return events
   }
 
+  private mutating func announce(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
+    guard let type = Value.string(record, "type"), ["user", "assistant", "system"].contains(type),
+      let id = Value.string(record, "sessionId"), id != announcedSessionID
+    else { return [] }
+    announcedSessionID = id
+    let session = Event.Session(id: id, cwd: Value.string(record, "cwd"), version: Value.string(record, "version"))
+    return [Event(.sessionStarted, .session(session), at: timestamp, source: .transcript)]
+  }
+
   // MARK: - User records
 
   private mutating func userEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
-    guard Value.bool(record, "isMeta") != true, let message = Value.object(record, "message") else { return [] }
+    guard Value.bool(record, "isMeta") != true, Value.bool(record, "isCompactSummary") != true,
+      Value.bool(record, "isVisibleInTranscriptOnly") != true, let message = Value.object(record, "message")
+    else { return [] }
     let origin = Self.origin(of: record)
-    var events: [Event] = []
     if let text = message["content"] as? String {
-      events.append(Self.turnStart(record, origin: origin, at: timestamp))
-      events.append(
-        Event(.userMessage, .message(.init(text: .init(text), origin: origin)), at: timestamp, source: .transcript))
-    } else if let blocks = Value.objects(message, "content") {
-      events += blockEvents(blocks, record: record, origin: origin, at: timestamp)
+      return Self.humanMessage(text, record: record, origin: origin, at: timestamp)
     }
-    if let decision = Value.object(record, "permissionDecision"), let decidedBy = Value.string(decision, "source"),
-      decidedBy != "config", let toolID = Self.firstToolResultID(message)
-    {
-      let prompt = Event.Prompt(
-        id: toolID, kind: .permission, freeform: false, outcome: Self.outcome(of: decision), decidedBy: decidedBy)
-      events.append(Event(.promptResolved, .prompt(prompt), at: timestamp, source: .transcript))
-    }
-    return events
-  }
-
-  private mutating func blockEvents(
-    _ blocks: [MirrorConversationRecord], record: MirrorConversationRecord, origin: Event.MessageOrigin,
-    at timestamp: Date?
-  ) -> [Event] {
+    guard let blocks = Value.objects(message, "content") else { return [] }
     var events: [Event] = []
     var texts: [String] = []
-    var images = 0
     var sawToolResult = false
     for block in blocks {
       switch Value.string(block, "type") {
       case "text":
         if let text = Value.string(block, "text") { texts.append(text) }
-      case "image":
-        images += 1
       case "tool_result":
         sawToolResult = true
-        events.append(toolEnd(block, record: record, at: timestamp))
+        events += toolEnd(block, record: record, at: timestamp)
       default:
         break
       }
     }
+    let images = Value.imageCount(blocks)
     guard !sawToolResult, !texts.isEmpty || images > 0 else { return events }
-    let message = Event.Message(
-      text: .init(texts.joined(separator: "\n")), origin: origin, images: images > 0 ? images : nil)
+    return Self.humanMessage(
+      texts.joined(separator: "\n"), record: record, origin: origin, images: images, at: timestamp)
+  }
+
+  /// Slash commands echo as user records wrapped in `<command-name>` / `<local-command-stdout>`.
+  private static func humanMessage(
+    _ text: String, record: MirrorConversationRecord, origin: Event.MessageOrigin, images: Int = 0, at timestamp: Date?
+  ) -> [Event] {
+    if text.hasPrefix("<local-command-stdout>") { return [] }
+    if text.hasPrefix("<command-name>") {
+      guard let command = tag("command-name", in: text), !command.isEmpty else { return [] }
+      let notice = Event.Notice(level: .info, text: Value.title(command, limit: 200), subtype: "command")
+      return [Event(.notice, .notice(notice), at: timestamp, source: .transcript)]
+    }
+    let message = Event.Message(text: .init(text), origin: origin, images: images > 0 ? images : nil)
+    let turn = Event.Turn(id: Value.string(record, "promptId"), origin: origin)
     return [
-      Self.turnStart(record, origin: origin, at: timestamp),
+      Event(.turnStarted, .turn(turn), at: timestamp, source: .transcript),
       Event(.userMessage, .message(message), at: timestamp, source: .transcript),
     ]
   }
 
   private mutating func toolEnd(
     _ block: MirrorConversationRecord, record: MirrorConversationRecord, at timestamp: Date?
-  ) -> Event {
+  ) -> [Event] {
     let id = Value.string(block, "tool_use_id") ?? ""
     let pending = pendingTools.removeValue(forKey: id)
     let result = Value.object(record, "toolUseResult")
     let interrupted = result.flatMap { Value.bool($0, "interrupted") } ?? false
     let status: Event.ToolStatus =
       Value.bool(block, "is_error") == true ? .error : (interrupted ? .interrupted : .succeeded)
-    let duration = pending?.at.flatMap { start in timestamp.map { Int($0.timeIntervalSince(start) * 1000) } }
+    let duration = pending?.startedAt.flatMap { start in
+      timestamp.map { Int(($0.timeIntervalSince(start) * 1000).rounded()) }
+    }
     let end = Event.ToolEnd(
       id: id, name: pending?.start.name, status: status, output: Value.blockText(block["content"]).map { .init($0) },
+      diff: pending?.start.kind == .edit
+        ? Self.editDiff(result).map { .init($0, limit: MirrorBoundedText.diffLimit) } : nil,
       durationMs: duration, isImage: result.flatMap { Value.bool($0, "isImage") })
-    return Event(.toolCompleted, .toolEnd(end), at: timestamp, source: .transcript)
+    var events = [Event(.toolCompleted, .toolEnd(end), at: timestamp, source: .transcript)]
+    if let kind = pending?.prompt {
+      // The prompt the adapter opened is answered by the tool's completion, whatever the
+      // permission bookkeeping says about running the tool.
+      let prompt = Event.Prompt(
+        id: id, kind: kind, freeform: true, outcome: status == .succeeded ? .answered : .dismissed)
+      events.append(Event(.promptResolved, .prompt(prompt), at: timestamp, source: .transcript))
+    } else if let decision = Value.object(record, "permissionDecision"),
+      let source = Value.string(decision, "source"), source.hasPrefix("user")
+    {
+      let prompt = Event.Prompt(
+        id: id, kind: .permission, freeform: false, outcome: Self.outcome(of: decision), decidedBy: source)
+      events.append(Event(.promptResolved, .prompt(prompt), at: timestamp, source: .transcript))
+    }
+    return events
+  }
+
+  /// `structuredPatch` hunks for edits; the written content as added lines for a new file.
+  private static func editDiff(_ result: MirrorConversationRecord?) -> String? {
+    guard let result else { return nil }
+    if let hunks = Value.objects(result, "structuredPatch"), !hunks.isEmpty {
+      return hunks.map { hunk -> String in
+        let header =
+          "@@ -\(Value.int(hunk, "oldStart") ?? 0),\(Value.int(hunk, "oldLines") ?? 0) "
+          + "+\(Value.int(hunk, "newStart") ?? 0),\(Value.int(hunk, "newLines") ?? 0) @@"
+        return ([header] + ((hunk["lines"] as? [String]) ?? [])).joined(separator: "\n")
+      }.joined(separator: "\n")
+    }
+    guard Value.string(result, "type") == "create", let content = Value.string(result, "content") else { return nil }
+    return content.split(separator: "\n", omittingEmptySubsequences: false).map { "+" + $0 }.joined(separator: "\n")
   }
 
   // MARK: - Assistant records
@@ -150,11 +193,10 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
       id: id, name: name, kind: kind, title: Self.toolTitle(name, input: input),
       command: Value.string(input, "command"),
       path: Value.string(input, "file_path"), background: Value.bool(input, "run_in_background"))
-    pendingTools[id] = (start, timestamp)
+    let prompt = Self.prompt(for: name, id: id, input: input)
+    pendingTools[id] = PendingTool(start: start, startedAt: timestamp, prompt: prompt?.kind)
     var events = [Event(.toolStarted, .toolStart(start), at: timestamp, source: .transcript)]
-    if let prompt = Self.prompt(for: name, id: id, input: input) {
-      events.append(Event(.promptOpened, .prompt(prompt), at: timestamp, source: .transcript))
-    }
+    if let prompt { events.append(Event(.promptOpened, .prompt(prompt), at: timestamp, source: .transcript)) }
     return events
   }
 
@@ -162,7 +204,7 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     let keys =
       name == "Bash"
       ? ["description", "command"]
-      : ["file_path", "path", "pattern", "url", "query", "prompt", "description", "skill", "name"]
+      : ["description", "file_path", "pattern", "path", "url", "query", "skill", "name", "prompt"]
     for key in keys {
       if let value = Value.string(input, key), !value.isEmpty { return Value.title(value) }
     }
@@ -198,9 +240,11 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
 
   // MARK: - System, queue, title
 
-  private static func systemEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
+  private mutating func systemEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
     switch Value.string(record, "subtype") {
     case "turn_duration":
+      // Every tool of the turn has reported by now; a tool without a result never will.
+      pendingTools.removeAll()
       let turn = Event.Turn(status: .completed, durationMs: Value.int(record, "durationMs"))
       return [Event(.turnCompleted, .turn(turn), at: timestamp, source: .transcript)]
     case "compact_boundary":
@@ -209,7 +253,7 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
       guard let errors = record["hookErrors"] as? [Any], !errors.isEmpty else { return [] }
       let notice = Event.Notice(level: .warning, text: "\(errors.count) hook error(s)", subtype: "stop_hook_summary")
       return [Event(.notice, .notice(notice), at: timestamp, source: .transcript)]
-    case "informational", "local_command", "away_summary":
+    case "informational", "away_summary":
       guard let content = Value.string(record, "content"), !content.isEmpty else { return [] }
       let level: Event.NoticeLevel = Value.string(record, "level") == "notice" ? .warning : .info
       let notice = Event.Notice(
@@ -220,14 +264,35 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     }
   }
 
-  private static func queueEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
-    guard let operation = Value.string(record, "operation"), let content = Value.string(record, "content") else {
+  /// `enqueue` carries the text; `dequeue` names nothing and releases the oldest queued
+  /// message; `remove` and `popAll` carry the text they take back.
+  private mutating func queueEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
+    let content = Value.string(record, "content")
+    let reason = Value.string(record, "reason")
+    func unqueued(_ text: String) -> Event {
+      let message = Event.Message(text: .init(text, limit: 512), origin: .queued, reason: reason)
+      return Event(.userUnqueued, .message(message), at: timestamp, source: .transcript)
+    }
+    switch Value.string(record, "operation") {
+    case "enqueue":
+      guard let content else { return [] }
+      queued.append(content)
+      let message = Event.Message(text: .init(content, limit: 512), origin: .queued)
+      return [Event(.userQueued, .message(message), at: timestamp, source: .transcript)]
+    case "dequeue":
+      guard !queued.isEmpty else { return [] }
+      return [unqueued(queued.removeFirst())]
+    case "remove":
+      guard let content else { return [] }
+      if let index = queued.firstIndex(of: content) { queued.remove(at: index) }
+      return [unqueued(content)]
+    case "popAll":
+      let texts = queued.isEmpty ? [content].compactMap { $0 } : queued
+      queued.removeAll()
+      return texts.map(unqueued)
+    default:
       return []
     }
-    let kind: Event.Kind = operation == "enqueue" ? .userQueued : .userUnqueued
-    let message = Event.Message(
-      text: .init(content, limit: 512), origin: .queued, reason: Value.string(record, "reason"))
-    return [Event(kind, .message(message), at: timestamp, source: .transcript)]
   }
 
   private mutating func titleEvents(_ record: MirrorConversationRecord) -> [Event] {
@@ -238,29 +303,24 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
 
   // MARK: - Helpers
 
-  private static func turnStart(
-    _ record: MirrorConversationRecord, origin: Event.MessageOrigin, at timestamp: Date?
-  ) -> Event {
-    Event(
-      .turnStarted, .turn(.init(id: Value.string(record, "promptId"), origin: origin)), at: timestamp,
-      source: .transcript)
-  }
-
+  /// Observed values: `origin.kind` human / task-notification; `turnOrigin` human / scheduled /
+  /// sdk / task_notification.
   private static func origin(of record: MirrorConversationRecord) -> Event.MessageOrigin {
     let raw = Value.object(record, "origin").flatMap { Value.string($0, "kind") } ?? Value.string(record, "turnOrigin")
     switch raw {
     case "human": return .human
     case "queued": return .queued
-    case "automation", "dispatch": return .automation
-    case "system": return .system
+    case "scheduled", "sdk", "automation", "dispatch": return .automation
+    case "task_notification", "task-notification", "system": return .system
     default: return .other
     }
   }
 
-  private static func firstToolResultID(_ message: MirrorConversationRecord) -> String? {
-    Value.objects(message, "content")?
-      .first { Value.string($0, "type") == "tool_result" }
-      .flatMap { Value.string($0, "tool_use_id") }
+  private static func tag(_ name: String, in text: String) -> String? {
+    guard let open = text.range(of: "<\(name)>"),
+      let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
+    else { return nil }
+    return String(text[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private static func outcome(of decision: MirrorConversationRecord) -> Event.PromptOutcome {

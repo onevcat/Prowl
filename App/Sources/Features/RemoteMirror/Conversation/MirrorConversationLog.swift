@@ -45,7 +45,9 @@ nonisolated struct MirrorConversationLog: Sendable {
 
   func snapshot(since: UInt64?) -> Snapshot {
     guard let oldest = events.first?.sequence else {
-      return Snapshot(events: [], gap: false, latestSequence: latestSequence)
+      // Nothing retained: a client whose point lies before this segment still has a gap.
+      let behind = since.map { $0 < segmentStart } ?? false
+      return Snapshot(events: [], gap: behind, latestSequence: latestSequence)
     }
     guard let since else {
       return Snapshot(events: events, gap: oldest > segmentStart + 1, latestSequence: latestSequence)
@@ -71,11 +73,14 @@ extension MirrorConversationEvent {
     case .turn(let value): texts = [value.lastMessage?.text]
     case .message(let value): texts = [value.text.text]
     case .reasoning(let value): texts = [value.summary?.text]
-    case .toolStart(let value): texts = [value.title, value.command, value.path]
-    case .toolEnd(let value): texts = [value.output?.text]
+    case .toolStart(let value): texts = [value.title, value.command, value.path] + (value.changedPaths ?? [])
+    case .toolEnd(let value): texts = [value.output?.text, value.diff?.text]
     case .status, .none: texts = []
     case .prompt(let value):
-      texts = [value.detail?.text, value.title] + (value.questions ?? []).map(\.question)
+      let questions = value.questions ?? []
+      texts =
+        [value.detail?.text, value.title] + questions.map(\.question) + questions.flatMap(\.options).map(\.label)
+        + (value.choices ?? []).map(\.label)
     case .subagent(let value): texts = [value.summary?.text]
     case .notice(let value): texts = [value.text]
     }

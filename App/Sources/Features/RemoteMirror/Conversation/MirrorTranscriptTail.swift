@@ -46,11 +46,13 @@ nonisolated struct MirrorJSONLineReader: Sendable {
 
 /// Follows one transcript file on a serial queue: replays what exists (bounded), then
 /// delivers appended bytes as the writer adds them. A vnode source wakes the read; a slow
-/// timer is the backstop. Replacement or truncation of the file is reported as `rotated`.
-/// `stop()` is required; the tail keeps no `deinit` behaviour.
+/// timer is the backstop. Replacement, truncation, or a rewrite of the bytes already read is
+/// reported as `rotated`. `stop()` is required; the tail keeps no `deinit` behaviour.
 nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
   enum Change: Sendable {
-    case replay(Data, startsMidRecord: Bool)
+    /// `head` holds the file's first bytes when the replay window skipped them, so an adapter
+    /// can bootstrap the session metadata that only the first records carry.
+    case replay(Data, head: Data?, startsMidRecord: Bool)
     case appended(Data)
     case rotated
     case missing
@@ -58,8 +60,12 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
 
   struct Options: Sendable {
     var replayLimitBytes = 32 * 1024 * 1024
+    var headLimitBytes = 64 * 1024
     var pollInterval: Duration = .seconds(1)
   }
+
+  /// Bytes before the read offset that must still match on the next read.
+  static let fingerprintBytes = 256
 
   private let url: URL
   private let queue: DispatchQueue
@@ -68,6 +74,7 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
   private var handle: FileHandle?
   private var inode: UInt64?
   private var offset: UInt64 = 0
+  private var fingerprint = Data()
   private var vnode: DispatchSourceFileSystemObject?
   private var timer: DispatchSourceTimer?
   private var reportedMissing = false
@@ -102,11 +109,6 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
     }
   }
 
-  /// Runs `body` after everything queued so far; tests use it to observe a settled state.
-  func sync(_ body: @escaping @Sendable () -> Void) {
-    queue.async(execute: body)
-  }
-
   // MARK: - Queue-confined
 
   private func open() {
@@ -124,8 +126,12 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
     let limit = UInt64(options.replayLimitBytes)
     let start = attributes.size > limit ? attributes.size - limit : 0
     let data = read(from: start, to: attributes.size, with: handle)
+    let head = start > 0 ? read(from: 0, to: min(start, UInt64(options.headLimitBytes)), with: handle) : nil
+    // A window that starts right after a newline starts on a complete record.
+    let midRecord = start > 0 && read(from: start - 1, to: start, with: handle) != Data([0x0A])
     offset = attributes.size
-    onChange(.replay(data, startsMidRecord: start > 0))
+    fingerprint = Data(data.suffix(Self.fingerprintBytes))
+    onChange(.replay(data, head: head, startsMidRecord: midRecord))
     let vnode = DispatchSource.makeFileSystemObjectSource(
       fileDescriptor: handle.fileDescriptor, eventMask: [.extend, .write, .delete, .rename], queue: queue)
     vnode.setEventHandler { [weak self] in self?.readMore() }
@@ -141,7 +147,9 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
       open()
       return
     }
-    guard let attributes = Self.attributes(of: url), attributes.inode == inode, attributes.size >= offset else {
+    guard let attributes = Self.attributes(of: url), attributes.inode == inode, attributes.size >= offset,
+      tailUnchanged(handle)
+    else {
       closeFile()
       onChange(.rotated)
       open()
@@ -150,7 +158,16 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
     guard attributes.size > offset else { return }
     let data = read(from: offset, to: attributes.size, with: handle)
     offset = attributes.size
+    fingerprint = Data((fingerprint + data).suffix(Self.fingerprintBytes))
     if !data.isEmpty { onChange(.appended(data)) }
+  }
+
+  /// A truncate-and-rewrite of the same inode can regrow past the old offset before the next
+  /// read, so a size that never shrank does not prove append-only writes; the bytes read last
+  /// must still be there.
+  private func tailUnchanged(_ handle: FileHandle) -> Bool {
+    guard !fingerprint.isEmpty, offset >= UInt64(fingerprint.count) else { return true }
+    return read(from: offset - UInt64(fingerprint.count), to: offset, with: handle) == fingerprint
   }
 
   private func read(from start: UInt64, to end: UInt64, with handle: FileHandle) -> Data {
@@ -168,6 +185,7 @@ nonisolated final class MirrorTranscriptTail: @unchecked Sendable {
     handle = nil
     inode = nil
     offset = 0
+    fingerprint = Data()
   }
 
   private static func attributes(of url: URL) -> (size: UInt64, inode: UInt64)? {

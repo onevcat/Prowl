@@ -37,7 +37,7 @@ nonisolated struct MirrorConversationStatusMapper: Sendable {
     switch reason {
     case .programStatus: .osc
     case .screen, .fallback: .screen
-    case .native: .hook
+    case .native: .native
     case .logOpenWork, .logTurnEnded, nil: .host
     }
   }
