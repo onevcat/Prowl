@@ -97,6 +97,7 @@ struct AppShortcutsTests {
         "toggleLeftSidebar=\(AppShortcuts.toggleLeftSidebar.display)",
         "toggleActiveAgentsPanel=\(AppShortcuts.toggleActiveAgentsPanel.display)",
         "toggleAgentIsland=\(agentIslandShortcut)",
+        "toggleAgentIslandVisibility=\(AppShortcuts.toggleAgentIslandVisibility.display)",
         "runScript=\(AppShortcuts.runScript.display)",
         "stopRunScript=\(AppShortcuts.stopRunScript.display)",
         "checkForUpdates=\(AppShortcuts.checkForUpdates.display)",
@@ -126,6 +127,7 @@ struct AppShortcutsTests {
         "toggleLeftSidebar=⌘⌃S",
         "toggleActiveAgentsPanel=⌘⌥P",
         "toggleAgentIsland=Unassigned",
+        "toggleAgentIslandVisibility=⌘⇧⌥P",
         "runScript=⌘R",
         "stopRunScript=⌘.",
         "checkForUpdates=⌘⇧U",
@@ -223,6 +225,19 @@ struct AppShortcutsTests {
     )
 
     #expect(resolved.keybinding(for: commandID) == binding)
+  }
+
+  @Test func agentIslandVisibilityShortcutDefaultsToCommandOptionShiftPAfterTheIslandToggle() {
+    let commandID = AppShortcuts.CommandID.toggleAgentIslandVisibility
+    #expect(
+      ResolvedKeybindingMap.appDefaults.keybinding(for: commandID)
+        == Keybinding(key: "p", modifiers: .init(command: true, shift: true, option: true))
+    )
+    #expect(AppShortcuts.binding(for: commandID)?.scope == .configurableAppAction)
+
+    let ids = AppShortcuts.bindings.map(\.id)
+    let islandIndex = ids.firstIndex(of: AppShortcuts.CommandID.toggleAgentIsland)
+    #expect(islandIndex.map { ids[$0 + 1] } == commandID)
   }
 
   @Test func canvasLayoutShortcutsUseCommandOptionFamily() {

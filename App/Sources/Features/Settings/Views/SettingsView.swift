@@ -84,8 +84,8 @@ struct SettingsView: View {
             store: settingsStore,
             effectiveKeybindings: store.resolvedKeybindings,
             customCommands: store.selectedCustomCommands,
-            islandHotKeyRegistrationFailure: store.repositories.activeAgents
-              .islandHotKeyRegistrationFailure
+            islandHotKeyRegistrationFailures: store.repositories.activeAgents
+              .islandHotKeyRegistrationFailures
           )
           .navigationTitle("Shortcuts")
         }
@@ -128,7 +128,7 @@ struct SettingsView: View {
             store: settingsStore,
             effectiveKeybindings: store.resolvedKeybindings,
             customCommands: store.selectedCustomCommands,
-            islandHotKeyRegistrationFailure: store.repositories.activeAgents.islandHotKeyRegistrationFailure
+            islandHotKeyRegistrationFailures: store.repositories.activeAgents.islandHotKeyRegistrationFailures
           )
           .navigationTitle("Display")
         }

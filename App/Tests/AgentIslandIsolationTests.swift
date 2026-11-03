@@ -45,6 +45,7 @@ struct AgentIslandIsolationTests {
 
     controller.activate()
     #expect(!controller.isRunning)
+    #expect(!controller.wasIslandEnabledThisSession)
 
     // Each change must be observed without any manual refresh, including after the
     // observation has fired once and re-registered.
@@ -56,6 +57,8 @@ struct AgentIslandIsolationTests {
     store.send(.settings(.binding(.set(\.agentIslandEnabled, false))))
     await settle { !controller.isRunning }
     #expect(!controller.isRunning)
+    // Hiding keeps the show/hide shortcut armed so it can bring the island back.
+    #expect(controller.wasIslandEnabledThisSession)
     let stoppedGeneration = controller.observationGeneration
     #expect(stoppedGeneration != firstRunningGeneration)
 
@@ -105,6 +108,43 @@ struct AgentIslandIsolationTests {
         isRosterExpanded: false,
         isIslandVisible: false
       ) == nil)
+  }
+
+  @Test func visibilityHotKeyRegistersInBackgroundOnlyAfterTheIslandWasEnabled() {
+    let binding = Keybinding(
+      key: "p",
+      modifiers: KeybindingModifiers(command: true, shift: true, option: true)
+    )
+    let neverEnabled = AgentIslandVisibilityHotKeyConfiguration(
+      visibilityBinding: binding,
+      wasIslandEnabledThisSession: false,
+      isAppActive: false
+    )
+    let armed = AgentIslandVisibilityHotKeyConfiguration(
+      visibilityBinding: binding,
+      wasIslandEnabledThisSession: true,
+      isAppActive: false
+    )
+    let appActive = AgentIslandVisibilityHotKeyConfiguration(
+      visibilityBinding: binding,
+      wasIslandEnabledThisSession: true,
+      isAppActive: true
+    )
+    let unassigned = AgentIslandVisibilityHotKeyConfiguration(
+      visibilityBinding: nil,
+      wasIslandEnabledThisSession: true,
+      isAppActive: false
+    )
+
+    #expect(neverEnabled.binding == nil)
+    #expect(neverEnabled.configuredBinding == binding)
+    #expect(armed.binding == binding)
+    #expect(appActive.binding == nil)
+    #expect(appActive.configuredBinding == binding)
+    #expect(unassigned.binding == nil)
+    #expect(armed.requiresRefresh(from: neverEnabled))
+    #expect(!armed.requiresRefresh(from: armed))
+    #expect(armed.requiresRefresh(from: armed, force: true))
   }
 
   @Test func globalHotKeyConfigurationRegistersOnlyForBackgroundEntries() {

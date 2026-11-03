@@ -18466,6 +18466,17 @@
         }
       }
     },
+    "Show/Hide Agent Island" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示/隐藏 Agent 灵动岛"
+          }
+        }
+      }
+    },
     "Shown in the Command Palette, the Agents menu, and Workflow History" : {
       "localizations" : {
         "zh-Hans" : {

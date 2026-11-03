@@ -39,6 +39,21 @@ struct SidebarCommands: Commands {
           onlyShowWithAgents: store.settings.agentIslandOnlyShowWithAgents,
           hasEntries: !store.repositories.activeAgents.entries.isEmpty
         ))
+      Button {
+        store.send(.repositories(.activeAgents(.islandToggleEnabledTapped)))
+      } label: {
+        if store.settings.agentIslandEnabled {
+          Text("Hide Agent Island")
+        } else {
+          Text("Show Agent Island")
+        }
+      }
+      .modifier(
+        KeyboardShortcutModifier(
+          shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleAgentIslandVisibility)
+        )
+      )
+      .help(helpText(title: "Show/Hide Agent Island", commandID: AppShortcuts.CommandID.toggleAgentIslandVisibility))
       Button("Select Next Agent") {
         store.send(.repositories(.activeAgents(.selectNextEntry)))
       }

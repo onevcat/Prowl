@@ -38,6 +38,10 @@ final class AgentIslandWindowController {
   private var keyboardLayoutObserver: NSObjectProtocol?
   private var globalHotKeys: AgentIslandGlobalHotKeys?
   private var registeredGlobalHotKeyConfiguration: AgentIslandGlobalHotKeyConfiguration?
+  private var registeredVisibilityHotKeyConfiguration: AgentIslandVisibilityHotKeyConfiguration?
+  /// Arms the system-wide show/hide shortcut; see `AgentIslandVisibilityHotKeyConfiguration`.
+  private(set) var wasIslandEnabledThisSession = false
+  private var visibilityObservers: [NSObjectProtocol] = []
   private(set) var observationGeneration = 0
   private var isVisible = false
   private var isRosterExpanded = false
@@ -67,10 +71,12 @@ final class AgentIslandWindowController {
   /// The synchronous half of `activate()`, shared by the observer and by tests.
   func refreshLifecycle() {
     if appStore.settings.agentIslandEnabled {
+      armVisibilityHotKey()
       start()
     } else {
       stop()
     }
+    refreshVisibilityHotKey()
   }
 
   private func observeEnabledSetting() {
@@ -131,9 +137,6 @@ final class AgentIslandWindowController {
       }
     )
     self.panel = panel
-    globalHotKeys = AgentIslandGlobalHotKeys { [weak self] command in
-      self?.handleGlobalHotKey(command)
-    }
     installObservers()
     refreshGlobalHotKeys()
     observeGlobalHotKeyState(generation: generation)
@@ -145,10 +148,10 @@ final class AgentIslandWindowController {
     observationGeneration &+= 1
     removeObservers()
     removeEventMonitors()
-    globalHotKeys?.stop()
-    globalHotKeys = nil
+    // The registrar stays alive for the show/hide shortcut; only the roster shortcut goes away.
+    _ = globalHotKeys?.register(command: .toggleRoster, binding: nil)
     registeredGlobalHotKeyConfiguration = nil
-    setGlobalHotKeyRegistrationFailure(nil)
+    setGlobalHotKeyRegistrationFailure(nil, for: AppShortcuts.CommandID.toggleAgentIsland)
     floatingDragPointerOffsetX = nil
     restoreKeyWindowAfterCollapse()
     panel?.orderOut(nil)
@@ -381,6 +384,17 @@ final class AgentIslandWindowController {
           handleToggleHotKey()
           return nil
         }
+        if AgentIslandShortcutEventMatcher.matches(
+          keyCode: event.keyCode,
+          charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+          modifiers: event.modifierFlags,
+          binding: appStore.resolvedKeybindings.keybinding(
+            for: AppShortcuts.CommandID.toggleAgentIslandVisibility
+          )
+        ) {
+          handleVisibilityHotKey()
+          return nil
+        }
         if let command = AgentIslandKeyboardCommand.resolve(
           keyCode: event.keyCode,
           characters: event.charactersIgnoringModifiers,
@@ -438,7 +452,13 @@ final class AgentIslandWindowController {
     switch command {
     case .toggleRoster:
       handleToggleHotKey()
+    case .toggleVisibility:
+      handleVisibilityHotKey()
     }
+  }
+
+  private func handleVisibilityHotKey() {
+    appStore.send(.repositories(.activeAgents(.islandToggleEnabledTapped)))
   }
 
   private func handleToggleHotKey() {
@@ -483,29 +503,112 @@ final class AgentIslandWindowController {
       )
     else { return }
     if registeredGlobalHotKeyConfiguration?.configuredBinding != configuration.configuredBinding {
-      setGlobalHotKeyRegistrationFailure(nil)
+      setGlobalHotKeyRegistrationFailure(nil, for: AppShortcuts.CommandID.toggleAgentIsland)
     }
-    let result = globalHotKeys?.register(binding: configuration.binding)
-    if let binding = configuration.binding {
-      switch result {
-      case .registered:
-        setGlobalHotKeyRegistrationFailure(nil)
-      case .failed, nil:
-        setGlobalHotKeyRegistrationFailure(binding)
-      case .inactive:
-        break
-      }
-    }
+    register(
+      .toggleRoster,
+      binding: configuration.binding,
+      commandID: AppShortcuts.CommandID.toggleAgentIsland
+    )
     registeredGlobalHotKeyConfiguration = configuration
   }
 
-  private func setGlobalHotKeyRegistrationFailure(_ binding: Keybinding?) {
+  private func armVisibilityHotKey() {
+    guard !wasIslandEnabledThisSession else { return }
+    wasIslandEnabledThisSession = true
+    for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+      let observer = NotificationCenter.default.addObserver(
+        forName: name,
+        object: NSApp,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.refreshVisibilityHotKey()
+        }
+      }
+      visibilityObservers.append(observer)
+    }
+    let layoutObserver = DistributedNotificationCenter.default().addObserver(
+      forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.refreshVisibilityHotKey(force: true)
+      }
+    }
+    visibilityObservers.append(layoutObserver)
+    observeVisibilityHotKeyBinding()
+  }
+
+  private func refreshVisibilityHotKey(force: Bool = false) {
+    let configuration = AgentIslandVisibilityHotKeyConfiguration(
+      visibilityBinding: appStore.resolvedKeybindings.keybinding(
+        for: AppShortcuts.CommandID.toggleAgentIslandVisibility
+      ),
+      wasIslandEnabledThisSession: wasIslandEnabledThisSession,
+      isAppActive: NSApp.isActive
+    )
     guard
-      appStore.repositories.activeAgents.islandHotKeyRegistrationFailure != binding
+      configuration.requiresRefresh(
+        from: registeredVisibilityHotKeyConfiguration,
+        force: force
+      )
+    else { return }
+    if registeredVisibilityHotKeyConfiguration?.configuredBinding != configuration.configuredBinding {
+      setGlobalHotKeyRegistrationFailure(nil, for: AppShortcuts.CommandID.toggleAgentIslandVisibility)
+    }
+    register(
+      .toggleVisibility,
+      binding: configuration.binding,
+      commandID: AppShortcuts.CommandID.toggleAgentIslandVisibility
+    )
+    registeredVisibilityHotKeyConfiguration = configuration
+  }
+
+  private func observeVisibilityHotKeyBinding() {
+    withObservationTracking {
+      _ = appStore.resolvedKeybindings.keybinding(
+        for: AppShortcuts.CommandID.toggleAgentIslandVisibility
+      )
+    } onChange: { [weak self] in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        self.refreshVisibilityHotKey()
+        self.observeVisibilityHotKeyBinding()
+      }
+    }
+  }
+
+  private func register(
+    _ command: AgentIslandGlobalHotKeyCommand,
+    binding: Keybinding?,
+    commandID: String
+  ) {
+    if binding != nil, globalHotKeys == nil {
+      globalHotKeys = AgentIslandGlobalHotKeys { [weak self] command in
+        self?.handleGlobalHotKey(command)
+      }
+    }
+    let result = globalHotKeys?.register(command: command, binding: binding)
+    guard let binding else { return }
+    switch result {
+    case .registered:
+      setGlobalHotKeyRegistrationFailure(nil, for: commandID)
+    case .failed, nil:
+      setGlobalHotKeyRegistrationFailure(binding, for: commandID)
+    case .inactive:
+      break
+    }
+  }
+
+  private func setGlobalHotKeyRegistrationFailure(_ binding: Keybinding?, for commandID: String) {
+    guard
+      appStore.repositories.activeAgents.islandHotKeyRegistrationFailures[commandID] != binding
     else { return }
     appStore.send(
       .repositories(
-        .activeAgents(.setIslandHotKeyRegistrationFailure(binding))
+        .activeAgents(.setIslandHotKeyRegistrationFailure(commandID: commandID, binding: binding))
       )
     )
   }

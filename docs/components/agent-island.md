@@ -144,6 +144,9 @@ Settings → Agents → Display → **Agent Island**:
 - **Toggle Agent Island** records the same binding as Shortcuts, with shared conflict, clear,
   and reset behavior. The globe indicates system-wide scope; its tooltip explains the global grab.
   Failed registration appears in the shortcut row.
+- **Show/Hide Agent Island** (default ⌘⌥⇧P) toggles **Show Agent Island** from the keyboard,
+  including from other apps once the island has been enabled since launch, so a hidden island can
+  be brought back with the same chord. See [Keyboard Shortcuts](../reference/keyboard-shortcuts.md).
 - **Silent Opacity** (`agentIslandSilentOpacity`, default 35%, range 20–100%) controls the quiet
   floating bar. It does not affect notched monitors. Slider changes persist when editing ends.
 
@@ -164,4 +167,5 @@ Active Agents already reports.
 On a notched display the bar sits on top of the menu bar, so while the roster is non-empty the
 wing on each side of the cutout (about 120pt) covers that part of the menu bar band. A menu title
 or status item that lands under a wing is not clickable until the island disappears; apps with
-very long menu bars are the ones affected.
+very long menu bars are the ones affected. Press **Show/Hide Agent Island** (default ⌘⌥⇧P) to hide
+the island while you reach those items, then press it again to bring the island back.
