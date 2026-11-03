@@ -47,14 +47,6 @@ nonisolated enum AgentComposerProfile: Equatable, Sendable {
     }
   }
 
-  /// The input box text on a plain screen: empty when there is no draft, nil when no input box is recognized.
-  func contents(in snapshot: AgentScreenSnapshot) -> String? {
-    switch self {
-    case .claude: ClaudeScreenProfile.composerContents(in: snapshot)
-    case .devin: DevinScreenProfile.composerContents(in: snapshot)
-    }
-  }
-
   /// Devin loses an Enter that arrives before it accepts the pasted draft.
   var dropsEarlyEnter: Bool { self == .devin }
 

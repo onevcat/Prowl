@@ -47,8 +47,17 @@ extension WorktreeTerminalState {
     return submitLine(in: surfaceID) ? .submitted : .notSubmitted
   }
 
+  /// The input box text: empty when there is no draft, nil when no input box is recognized.
   private func composerContents(of surface: GhosttySurfaceView, profile: AgentComposerProfile) -> String? {
-    surface.readActiveContentsForCLI().flatMap { profile.contents(in: AgentScreenSnapshot(text: $0)) }
+    switch profile {
+    case .claude:
+      // Claude renders the hint of an empty composer dim, so its box is read with styles.
+      surface.readStyledSnapshotForCLI().flatMap(ClaudeScreenProfile.composerContents(styledSnapshot:))
+    case .devin:
+      surface.readActiveContentsForCLI().flatMap {
+        DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: $0))
+      }
+    }
   }
 
   func dispatchInputProtection(surfaceID: UUID) -> String? {

@@ -12,6 +12,33 @@ struct ClaudeScreenProfileTests {
     #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
   }
 
+  @Test func dimStartupHintReadsAsAnEmptyComposer() {
+    func screen(_ composer: String) -> String { "────────\r\n" + composer + "\r\n────────\r\n  status" }
+    let hint = "❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m"
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(hint)) == "")
+    let wrappedHint = "❯\u{A0}\u{1B}[2mTry \"write a test for\r\n  Example.swift\"\u{1B}[22m"
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(wrappedHint)) == "")
+    // The same words typed by the user are not dim; dim text that is not the hint, and typed
+    // text next to a hint, stay drafts.
+    #expect(
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ Try \"fix lint errors\""))
+        == "Try \"fix lint errors\"")
+    #expect(
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2m[Image #1]\u{1B}[22m")) == "[Image #1]")
+    #expect(
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2mTry \"a\"\u{1B}[22m b\""))
+        == "Try \"a\" b\"")
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ ")) == "")
+    // Claude positions the words of a paste marker, so the formatter encodes the gaps as CUF.
+    #expect(
+      ClaudeScreenProfile.composerContents(
+        styledSnapshot: screen("❯\u{A0}[Pasted\u{1B}[1Ctext\u{1B}[1C#1\u{1B}[1C+9\u{1B}[1Clines]"))
+        == "[Pasted text #1 +9 lines]")
+    // An unreadable snapshot or an unrecognized box is not an empty composer.
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "\u{1B}]unterminated" + screen(hint)) == nil)
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "❯ old transcript") == nil)
+  }
+
   @Test func scrolledTranscriptRetainsTheLastLiveState() {
     let composer = "────────────────────\n❯ \n────────────────────\nstatus"
     let history = "⏺ Old response\n  10       Jump to bottom (click) ↓ \n\n" + composer
@@ -107,6 +134,7 @@ struct ClaudeScreenProfileTests {
       "claude/2.1.266/working/titled-border-spinner.txt": .matched(
         ClaudeScreenProfile.RuleID.spinner
       ),
+      "claude/2.1.317/idle/startup-hint-composer.txt": .matched(ClaudeScreenProfile.RuleID.idleComposer),
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .claude }
 
