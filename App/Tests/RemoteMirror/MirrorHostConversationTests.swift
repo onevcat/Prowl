@@ -219,53 +219,10 @@ struct MirrorHostConversationTests {
       .init(id: UUID(), name: "Test device", key: Data(repeating: 9, count: 32), pairedAt: Date())
     ])
 
-  /// Messages a connection received, handed out one at a time. A plain queue under a lock
-  /// keeps the non-Sendable stream iterator out of the main-actor fixture.
-  nonisolated final class Inbox: Sendable {
-    private struct State {
-      var queue: [MirrorMessage] = []
-      var waiters: [CheckedContinuation<MirrorMessage?, Never>] = []
-      var finished = false
-    }
-    private let state = Mutex(State())
-
-    func push(_ message: MirrorMessage) {
-      let waiter = state.withLock { state -> CheckedContinuation<MirrorMessage?, Never>? in
-        if state.waiters.isEmpty {
-          state.queue.append(message)
-          return nil
-        }
-        return state.waiters.removeFirst()
-      }
-      waiter?.resume(returning: message)
-    }
-
-    func finish() {
-      let waiters = state.withLock { state in
-        state.finished = true
-        defer { state.waiters.removeAll() }
-        return state.waiters
-      }
-      for waiter in waiters { waiter.resume(returning: nil) }
-    }
-
-    func next() async -> MirrorMessage? {
-      await withCheckedContinuation { continuation in
-        let ready = state.withLock { state -> MirrorMessage?? in
-          if !state.queue.isEmpty { return .some(state.queue.removeFirst()) }
-          if state.finished { return .some(nil) }
-          state.waiters.append(continuation)
-          return nil
-        }
-        if let ready { continuation.resume(returning: ready) }
-      }
-    }
-  }
-
   /// An authenticated client whose messages are read through `next()`.
   @MainActor final class Peer {
     let connection: MirrorConnection
-    private let inbox = Inbox()
+    private let inbox = MirrorTestInbox()
 
     init(port: UInt16, key: String) async throws {
       let ready = AsyncStream.makeStream(of: Bool.self)
@@ -372,6 +329,49 @@ struct MirrorHostConversationTests {
         acknowledge(message, lease: lease)
       }
       return received
+    }
+  }
+}
+
+/// Messages a connection received, handed out one at a time. A plain queue under a lock
+/// keeps the non-Sendable stream iterator out of the main-actor fixture.
+private nonisolated final class MirrorTestInbox: Sendable {
+  private struct State {
+    var queue: [MirrorMessage] = []
+    var waiters: [CheckedContinuation<MirrorMessage?, Never>] = []
+    var finished = false
+  }
+  private let state = Mutex(State())
+
+  func push(_ message: MirrorMessage) {
+    let waiter = state.withLock { state -> CheckedContinuation<MirrorMessage?, Never>? in
+      if state.waiters.isEmpty {
+        state.queue.append(message)
+        return nil
+      }
+      return state.waiters.removeFirst()
+    }
+    waiter?.resume(returning: message)
+  }
+
+  func finish() {
+    let waiters = state.withLock { state in
+      state.finished = true
+      defer { state.waiters.removeAll() }
+      return state.waiters
+    }
+    for waiter in waiters { waiter.resume(returning: nil) }
+  }
+
+  func next() async -> MirrorMessage? {
+    await withCheckedContinuation { continuation in
+      let ready = state.withLock { state -> MirrorMessage?? in
+        if !state.queue.isEmpty { return .some(state.queue.removeFirst()) }
+        if state.finished { return .some(nil) }
+        state.waiters.append(continuation)
+        return nil
+      }
+      if let ready { continuation.resume(returning: ready) }
     }
   }
 }
