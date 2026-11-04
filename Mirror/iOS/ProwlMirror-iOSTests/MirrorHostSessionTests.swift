@@ -36,15 +36,18 @@ struct MirrorHostSessionTests {
     let session = makeSession(channel)
     defer { session.stop() }
     session.start()
-    async let first = session.command(.list(.init()))
-    async let second = session.command(.profiles(.init()))
+    async let list = session.command(.list(.init()))
+    async let profiles = session.command(.profiles(.init()))
     await waitUntil { channel.commandRequests.count == 2 }
-    let ids = channel.commandRequests.map(\.requestID)
-    channel.onMessage?(
-      .commandResult(.init(commandResponse: .init(requestID: ids[1], response: .object(["n": .number(2)])))))
-    channel.onMessage?(
-      .commandResult(.init(commandResponse: .init(requestID: ids[0], response: .object(["n": .number(1)])))))
-    let (a, b) = try await (first, second)
+    // The two child tasks reach the Host in either order, so each reply names the command it
+    // answers, and the replies arrive in the reverse order of the requests.
+    for request in channel.commandRequests.reversed() {
+      let answer: Double = request.request.command == .list(.init()) ? 1 : 2
+      channel.onMessage?(
+        .commandResult(
+          .init(commandResponse: .init(requestID: request.requestID, response: .object(["n": .number(answer)])))))
+    }
+    let (a, b) = try await (list, profiles)
     #expect(a == MirrorJSON.object(["n": .number(1)]))
     #expect(b == MirrorJSON.object(["n": .number(2)]))
   }
@@ -80,34 +83,35 @@ struct MirrorHostSessionTests {
       if finished { break }
     }
   }
+}
 
-  @MainActor private final class Channel: MirrorTransport {
-    var onEnrolled: ((MirrorSavedConnection) -> Void)?
-    var onReady: (() -> Void)?
-    var onMessage: ((MirrorMessage) -> Void)?
-    var onClose: ((String?) -> Void)?
-    var verifiedConfiguration: MirrorSavedConnection? { nil }
-    var answersReady = true
-    private(set) var closed = false
-    private(set) var sent: [MirrorMessage] = []
-    var commandRequests: [MirrorCommandRequest] { sent.compactMap(\.commandRequest) }
+/// Observable so that `waitUntil` wakes up when a message is sent.
+@Observable @MainActor private final class Channel: MirrorTransport {
+  var onEnrolled: ((MirrorSavedConnection) -> Void)?
+  var onReady: (() -> Void)?
+  var onMessage: ((MirrorMessage) -> Void)?
+  var onClose: ((String?) -> Void)?
+  var verifiedConfiguration: MirrorSavedConnection? { nil }
+  var answersReady = true
+  private(set) var closed = false
+  private(set) var sent: [MirrorMessage] = []
+  var commandRequests: [MirrorCommandRequest] { sent.compactMap(\.commandRequest) }
 
-    func start() {
-      if answersReady { onReady?() }
-    }
-
-    func send(_ message: MirrorMessage, closeAfterSending: Bool) {
-      sent.append(message)
-      guard message.kind == .list else { return }
-      let pane = MirrorPaneDescriptor(
-        id: UUID(), title: "Claude Code · main", directory: "/repo", busy: false, projectName: "Prowl",
-        agent: "claude", agentState: .idle, conversation: .pending)
-      onMessage?(
-        .panes(.init(panes: [pane], capabilities: ["text-v1", "conversation-v1", "launch-profile"], hostRunID: UUID())))
-    }
-
-    func close(_ reason: String?) { closed = true }
+  func start() {
+    if answersReady { onReady?() }
   }
+
+  func send(_ message: MirrorMessage, closeAfterSending: Bool) {
+    sent.append(message)
+    guard message.kind == .list else { return }
+    let pane = MirrorPaneDescriptor(
+      id: UUID(), title: "Claude Code · main", directory: "/repo", busy: false, projectName: "Prowl",
+      agent: "claude", agentState: .idle, conversation: .pending)
+    onMessage?(
+      .panes(.init(panes: [pane], capabilities: ["text-v1", "conversation-v1", "launch-profile"], hostRunID: UUID())))
+  }
+
+  func close(_ reason: String?) { closed = true }
 }
 
 private nonisolated struct HostTestClock: Clock {
