@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import Prowl
@@ -29,6 +30,62 @@ struct AppFeatureAppActivityTests {
     await store.finish()
 
     #expect(watcherCommands.value == [.refreshLineChanges])
+  }
+
+  /// `prowl <path>` adds the folder and then activates a background Prowl. The activation
+  /// refresh must not cancel the add while it still resolves the folder (#1032).
+  @Test(.dependencies) func becomingActiveDuringAnAddKeepsTheAdd() async {
+    let existingFolder = URL(fileURLWithPath: "/tmp/prowl-activation-race/existing")
+    let newFolder = URL(fileURLWithPath: "/tmp/prowl-activation-race/new")
+    let fixture = OpenRaceFixture(savedFolders: [existingFolder], heldFolder: newFolder)
+    var repositories = RepositoriesFeature.State()
+    repositories.repositories = [
+      Repository(
+        id: RepositoriesOpenReloadRaceTests.path(existingFolder),
+        rootURL: existingFolder,
+        name: existingFolder.lastPathComponent,
+        kind: .plain,
+        worktrees: []
+      )
+    ]
+    repositories.repositoryRoots = [.local(existingFolder)]
+    repositories.isInitialLoadComplete = true
+    repositories.snapshotPersistencePhase = .active
+    let store = TestStore(initialState: AppFeature.State(repositories: repositories)) {
+      AppFeature()
+    } withDependencies: {
+      fixture.apply(to: &$0)
+      $0.date.now = Date(timeIntervalSince1970: 1_700_000_000)
+      $0[WorkflowHistoryStorageKey.self] = WorkflowHistoryStorage(
+        baseURL: FileManager.default.temporaryDirectory.appending(path: "workflow-history-\(UUID().uuidString)"))
+      $0.repositoryPersistence.saveLastFocusedWorktreeID = { _ in }
+      $0.terminalClient.send = { _ in }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    store.timeout = .realWorkTestStoreTimeout
+
+    await store.send(.repositories(.repositoryManagement(.openRepositories([newFolder])))) {
+      $0.repositories.isOpeningRepositories = true
+    }
+    await fixture.heldLookup.waitUntilEntered()
+    await store.send(.appActivityChanged(isActive: true))
+    await store.receive(\.repositories.reloadRepositories) {
+      $0.repositories.needsReloadAfterOpen = true
+    }
+    fixture.heldLookup.release()
+
+    await store.receive(\.repositories.repositoryManagement.openRepositoriesFinished) {
+      $0.repositories.isOpeningRepositories = false
+      $0.repositories.needsReloadAfterOpen = false
+      $0.repositories.repositoryRoots = [.local(existingFolder), .local(newFolder)]
+    }
+    await store.receive(\.repositories.reloadRepositories)
+    await store.receive(\.repositories.repositoriesLoaded)
+    await store.finish()
+
+    #expect(fixture.savedPaths == [existingFolder, newFolder].map(RepositoriesOpenReloadRaceTests.path))
+    #expect(store.state.repositories.repositories.ids.contains(RepositoriesOpenReloadRaceTests.path(newFolder)))
   }
 
   @Test(.dependencies) func becomingActiveBeforeTheInitialLoadSkipsTheReload() async {
