@@ -6,6 +6,9 @@ import SwiftUI
 struct ComposerBar: View {
   @Bindable var session: MirrorSession
   @Binding var isEditing: Bool
+  /// The measured width of the trailing buttons; the Hide Keyboard symbol grows with Dynamic
+  /// Type, so a constant reservation overlaps the text at accessibility sizes.
+  @State private var controlsWidth: CGFloat = 34
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -26,7 +29,7 @@ struct ComposerBar: View {
         .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, 6)
         // Room for Send, and for Hide Keyboard next to it while editing, so neither covers text.
-        .padding(.trailing, isEditing ? 84 : 44)
+        .padding(.trailing, controlsWidth + 6)
         .overlay(alignment: .topLeading) {
           if session.draft.isEmpty {
             Text(placeholder).foregroundStyle(.tertiary)
@@ -48,6 +51,8 @@ struct ComposerBar: View {
             } label: {
               Image(systemName: "arrow.up")
                 .font(.body.weight(.bold))
+                // The circle is a fixed 32 points; a larger glyph spills out of it.
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(session.canSubmit ? Color.accentColor : Color(.systemGray3), in: Circle())
@@ -58,6 +63,7 @@ struct ComposerBar: View {
             .help("Send the message to the agent on the Host")
           }
           .padding(.trailing, 2)
+          .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { controlsWidth = $0 }
         }
         .padding(6)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))

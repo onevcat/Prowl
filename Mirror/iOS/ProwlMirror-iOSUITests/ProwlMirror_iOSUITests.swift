@@ -303,6 +303,25 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
   }
 
+  /// The editing buttons grow with Dynamic Type; the text must end before them (089 S2-R3).
+  @MainActor
+  func testComposerTextStaysClearOfItsButtonsAtAccessibilitySizes() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+    ]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    let dismiss = app.buttons["mirror-dismiss-keyboard"]
+    XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+    input.typeText("git log --oneline --graph --decorate --all")
+    attach("Composer at accessibility size")
+    XCTAssertLessThanOrEqual(input.frame.maxX, dismiss.frame.minX + 0.5)
+  }
+
   @MainActor
   func testMultilineDraftRequiresExplicitSend() {
     let app = XCUIApplication()
