@@ -34,6 +34,7 @@ final class MirrorSession: Identifiable {
   private(set) var configuration: MirrorSavedConnection
   private(set) var panes: [MirrorPaneDescriptor] = []
   private(set) var pane: MirrorPaneDescriptor?
+  @ObservationIgnored private var expectedLaunch: (descriptor: MirrorPaneDescriptor, until: Date)?
   private(set) var mode: Mode = .screen
   private(set) var conversation = MirrorConversationStore()
   private(set) var supportsConversation = false
@@ -225,6 +226,35 @@ final class MirrorSession: Identifiable {
     self.pane = pane
     intent = pane.busy ? .takeover : .ifFree
     subscribe()
+  }
+
+  /// Takes the newer descriptor of the open pane from the Host roster: its title, agent and
+  /// state change after the pane opens (a new Profile pane gets its agent detected later).
+  func refreshDescriptor(_ descriptor: MirrorPaneDescriptor) {
+    guard pane?.id == descriptor.id else { return }
+    let merged = merging(descriptor)
+    if pane != merged { pane = merged }
+  }
+
+  /// A pane this device just launched from a Profile: until the Host detects the agent, the
+  /// roster reports a Shell. Keep the launched agent and title for a short while so the
+  /// composer and title do not flip to "Shell" (docs-ai 089 D1).
+  func expectAgent(of launched: MirrorPaneDescriptor, for duration: TimeInterval = 30) {
+    guard launched.agent != nil else { return }
+    expectedLaunch = (descriptor: launched, until: Date().addingTimeInterval(duration))
+  }
+
+  private func merging(_ descriptor: MirrorPaneDescriptor) -> MirrorPaneDescriptor {
+    guard let expected = expectedLaunch, expected.descriptor.id == descriptor.id else { return descriptor }
+    guard descriptor.agent == nil, Date() < expected.until else {
+      expectedLaunch = nil
+      return descriptor
+    }
+    var merged = descriptor
+    merged.agent = expected.descriptor.agent
+    merged.subtitle = expected.descriptor.subtitle
+    merged.conversation = descriptor.conversation == .unsupported ? nil : descriptor.conversation
+    return merged
   }
 
   /// Connects and subscribes to a pane chosen from a Host roster, in the given mode.
@@ -595,7 +625,7 @@ final class MirrorSession: Identifiable {
           transport?.close(nil)
           return
         }
-        self.pane = current
+        self.pane = merging(current)
         if mode == .conversation, !supportsConversation { mode = .screen }
         subscribe()
       } else {

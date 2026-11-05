@@ -165,3 +165,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 `docs/remote-mirror.md` when user-facing behavior changes.
 
 ## Amendments
+- Updated 2026-11-06: P0 fixed D1–D5 on the client — see [002-p0-defect-fixes.md](002-p0-defect-fixes.md)

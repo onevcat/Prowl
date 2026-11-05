@@ -3,6 +3,8 @@ import SwiftUI
 nonisolated struct MirrorPaneRoute: Hashable {
   let host: MirrorHostRecord
   let pane: MirrorPaneDescriptor
+  /// The pane was just launched from this device; its agent is not detected yet.
+  var launched = false
 }
 
 extension MirrorPaneDescriptor: Hashable {

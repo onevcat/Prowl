@@ -65,13 +65,31 @@ struct MirrorConversationStoreTests {
       .init(.promptResolved, .prompt(.init(id: "p", kind: .question, freeform: true, outcome: .answered)), at: nil, source: .transcript, sequence: 3),
       .init(.agentStatus, .status(.init(state: .working)), at: nil, source: .osc, sequence: 4),
     ], sequence: 4)
-    #expect(store.items.count == 2)
+    // The attention row goes away once the agent is no longer blocked (docs-ai 089 D3).
+    #expect(store.items.count == 1)
     guard case .prompt(_, _, let resolved, _) = store.items[0] else {
       Issue.record("expected a prompt item")
       return
     }
     #expect(resolved?.outcome == .answered)
     #expect(store.agentState == .working)
+  }
+}
+
+extension MirrorConversationStoreTests {
+  @Test func attentionShowsOnlyWhileTheAgentIsBlocked() {
+    func status(_ state: MirrorConversationEvent.AgentState, _ sequence: UInt64) -> MirrorConversationEvent {
+      .init(.agentStatus, .status(.init(state: state, kind: state == .blocked ? "permission" : nil)),
+        at: nil, source: .osc, sequence: sequence)
+    }
+    var store = MirrorConversationStore()
+    store.apply(events: [status(.blocked, 1)], sequence: 1)
+    #expect(store.items.count == 1)
+    store.apply(events: [status(.working, 2), status(.blocked, 3)], sequence: 3)
+    let attentions = store.items.filter { if case .attention = $0 { true } else { false } }
+    #expect(attentions.map(\.id) == [3])
+    store.apply(events: [status(.idle, 4)], sequence: 4)
+    #expect(store.items.isEmpty)
   }
 }
 
@@ -83,5 +101,38 @@ struct MirrorConversationFixtureSessionTests {
     #expect(session.status == .live)
     #expect(session.supportsConversation)
     #expect(!session.conversation.items.isEmpty)
+  }
+
+  @Test func rosterDescriptorReplacesTheOpenedOne() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    var current = try #require(session.pane)
+    current.agent = "claude"
+    current.subtitle = "Renamed · main"
+    session.refreshDescriptor(current)
+    #expect(session.pane?.agent == "claude")
+    #expect(session.pane?.subtitle == "Renamed · main")
+    let other = MirrorPaneDescriptor(id: UUID(), title: "Other", directory: "/", busy: false, agent: "pi")
+    session.refreshDescriptor(other)
+    #expect(session.pane?.agent == "claude")
+  }
+
+  @Test func launchedAgentSurvivesARosterThatHasNotDetectedItYet() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched)
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    undetected.conversation = .unsupported
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    #expect(session.pane?.subtitle == launched.subtitle)
+    var detected = launched
+    detected.agent = "claude"
+    detected.subtitle = "Claude · main"
+    session.refreshDescriptor(detected)
+    #expect(session.pane?.agent == "claude")
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == nil)
   }
 }

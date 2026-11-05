@@ -68,7 +68,7 @@ struct PanesView: View {
       NavigationStack {
         MirrorLaunchView(execute: { try await session.command($0) }) { pane in
           showsLaunch = false
-          path.append(MirrorPaneRoute(host: host, pane: pane))
+          path.append(MirrorPaneRoute(host: host, pane: pane, launched: true))
         }
         .toolbar { Button("Cancel") { showsLaunch = false } }
       }

@@ -107,6 +107,24 @@ struct MirrorLaunchModelTests {
     #expect(!model.canCreate)
   }
 
+  @Test func createdProfilePaneCarriesTheAgentAndANonEmptyTitle() async throws {
+    let untitled = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":""}}}}"#
+    let model = MirrorLaunchModel { command in
+      switch command {
+      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .list: return try json(Self.listing)
+      case .profiles: return try json(Self.profiles)
+      case .create: return try json(untitled)
+      }
+    }
+    await model.load()
+    let pane = try #require(await model.create())
+    #expect(pane.agent == "codex")
+    #expect(pane.conversation == nil)
+    #expect(pane.title == "Codex")
+    #expect(pane.subtitle == "Codex · main")
+  }
+
   private static let listing = #"{"ok":true,"data":{"items":[{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}},{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}}]}}"#
   private static let profiles = #"{"ok":true,"data":{"profiles":[{"id":"disabled-profile","name":"Disabled","enabled":false,"runtime":"claude","availability":{"status":"available"}},{"id":"available-profile","name":"Codex","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#
   private static let created = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":"Codex"}}}}"#

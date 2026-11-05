@@ -169,6 +169,15 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
         break
       }
     }
-    items = result
+    // An attention row says "the agent waits for you now": keep only the latest one, and only
+    // while the agent is still blocked (docs-ai 089 D3).
+    let latestAttention = status?.state == .blocked ? result.last { $0.isAttention }?.id : nil
+    items = result.filter { !$0.isAttention || $0.id == latestAttention }
+  }
+}
+
+extension MirrorConversationItem {
+  nonisolated var isAttention: Bool {
+    if case .attention = self { true } else { false }
   }
 }

@@ -89,6 +89,7 @@ final class MirrorLaunchModel {
 
   func create() async -> MirrorPaneDescriptor? {
     guard canCreate, let worktreeID else { return nil }
+    let launchedProfile = kind == .shell ? nil : profiles.first { $0.id == profileID }
     isCreating = true
     error = nil
     defer { isCreating = false }
@@ -107,10 +108,16 @@ final class MirrorLaunchModel {
         throw LaunchError.invalidResponse
       }
       let worktree = created.target.worktree
+      // The Host names the tab after the agent only once it starts; until the roster says
+      // more, the pane carries the Profile's name and agent (docs-ai 089 D1).
+      let profile = launchedProfile
+      let hostTitle = created.target.pane.title.trimmingCharacters(in: .whitespacesAndNewlines)
+      let title = hostTitle.isEmpty ? profile?.name ?? String(localized: "Shell") : hostTitle
       return MirrorPaneDescriptor(
-        id: id, title: created.target.pane.title, directory: worktree.path, busy: false,
+        id: id, title: title, directory: worktree.path, busy: false,
         projectName: URL(fileURLWithPath: worktree.rootPath).lastPathComponent,
-        subtitle: "\(created.target.pane.title) · \(worktree.name)")
+        subtitle: "\(title) · \(worktree.name)",
+        agent: profile?.runtime)
     } catch {
       // A transport failure may follow a successful creation. Never automatically create again.
       creationUncertain =

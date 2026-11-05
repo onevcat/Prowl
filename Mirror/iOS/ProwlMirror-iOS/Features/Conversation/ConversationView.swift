@@ -98,13 +98,13 @@ struct ConversationItemView: View {
     case .queued(_, let text):
       HStack(spacing: 6) {
         Image(systemName: "clock")
-        Text(text).lineLimit(2)
+        Text(MirrorInjectedText.split(text).message).lineLimit(2)
       }
       .font(.callout).foregroundStyle(.secondary)
       .padding(.horizontal, 12).padding(.vertical, 8)
       .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
       .frame(maxWidth: .infinity, alignment: .trailing)
-      .accessibilityLabel("Queued: \(text)")
+      .accessibilityLabel("Queued: \(MirrorInjectedText.split(text).message)")
     case .assistant(_, let text, _, let at):
       AssistantBubble(text: text, at: at)
     case .reasoning(_, let durationMs, let summary):
@@ -161,15 +161,32 @@ private struct UserBubble: View {
   let origin: MirrorConversationEvent.MessageOrigin?
   let images: Int?
   let at: Date?
+  @State private var showsInjected = false
 
   var body: some View {
+    let parts = MirrorInjectedText.split(text.text)
     VStack(alignment: .trailing, spacing: 4) {
       VStack(alignment: .leading, spacing: 6) {
         if let images, images > 0 {
           Label("\(images) image(s)", systemImage: "photo").font(.caption).opacity(0.8)
         }
-        Text(text.text).textSelection(.enabled)
-        if text.truncated { Text("…").opacity(0.7) }
+        Text(parts.message).textSelection(.enabled)
+        if text.truncated, parts.injected == nil { Text("…").opacity(0.7) }
+        if let injected = parts.injected {
+          Button {
+            withAnimation(.snappy) { showsInjected.toggle() }
+          } label: {
+            Label("Prowl instructions", systemImage: showsInjected ? "chevron.down" : "chevron.right")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .opacity(0.8)
+          .accessibilityIdentifier("conversation-injected-toggle")
+          .help("Show the instructions Prowl added to this message")
+          if showsInjected {
+            Text(text.truncated ? injected + "…" : injected).font(.caption).opacity(0.8).textSelection(.enabled)
+          }
+        }
       }
       .padding(.horizontal, 14).padding(.vertical, 10)
       .foregroundStyle(.white)
@@ -203,7 +220,7 @@ private struct AssistantBubble: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      MirrorDocumentView(text: text.text)
+      MirrorMarkdownView(text: text.text)
       if text.truncated {
         Text("Message truncated by the Host.").font(.caption2).foregroundStyle(.secondary)
       }

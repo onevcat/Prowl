@@ -3,6 +3,7 @@ import SwiftUI
 struct MirrorLaunchView: View {
   @State private var model: MirrorLaunchModel
   @State private var creationTask: Task<Void, Never>?
+  @FocusState private var promptFocused: Bool
   let onCreated: (MirrorPaneDescriptor) -> Void
 
   init(session: MirrorSession, onCreated: @escaping (MirrorPaneDescriptor) -> Void) {
@@ -51,6 +52,7 @@ struct MirrorLaunchView: View {
       Section("Initial message (optional)") {
         TextField("What should the Agent work on?", text: $model.prompt, axis: .vertical)
           .lineLimit(3...8)
+          .focused($promptFocused)
           .accessibilityIdentifier("launch-prompt")
         if model.prompt.utf8.count > MirrorWire.maximumInput {
           Text("The message is too long.").foregroundStyle(.red)
@@ -76,12 +78,21 @@ struct MirrorLaunchView: View {
       }
     }
     .disabled(model.isCreating)
+    .scrollDismissesKeyboard(.interactively)
     .navigationTitle("New Agent Pane")
     .onDisappear { creationTask?.cancel() }
     .toolbar {
-      Button("Refresh", systemImage: "arrow.clockwise") { Task { await model.load() } }
-        .disabled(model.isLoading || model.isCreating)
-        .help("Reload workspaces and Agent Profiles from Host")
+      ToolbarItemGroup(placement: .keyboard) {
+        Spacer()
+        Button("Done") { promptFocused = false }
+          .accessibilityIdentifier("launch-prompt-done")
+          .help("Hide the keyboard")
+      }
+      ToolbarItem {
+        Button("Refresh", systemImage: "arrow.clockwise") { Task { await model.load() } }
+          .disabled(model.isLoading || model.isCreating)
+          .help("Reload workspaces and Agent Profiles from Host")
+      }
     }
     .overlay { if model.isLoading { ProgressView("Loading Host configuration…") } }
     .task { await model.load() }

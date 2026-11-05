@@ -248,9 +248,12 @@ without trusted hooks reports tools only when they finish and no approval conten
 docs-ai 087.
 
 The iOS client renders the stream as a chat: your messages on the right, the agent's
-Markdown on the left, tool cards that expand to their command, output and diff, prompt
-cards that show the question and its choices and ask you to answer on the Mac, session
-dividers, compaction marks and notices. **Latest** returns to the newest message after
+Markdown on the left (headings, lists, quotes, code blocks and tables), tool cards that
+expand to their command, output and diff, prompt cards that show the question and its
+choices and ask you to answer on the Mac, session dividers, compaction marks and notices.
+Instructions that Prowl adds to a launch prompt, such as the dispatch completion protocol,
+fold under **Prowl instructions** in your message. "Waiting for you on the Mac" shows only
+while the agent is blocked. **Latest** returns to the newest message after
 scrolling up. The composer under both views sends through `agents.input`; its hint
 says what the Host will do with the message (deliver now, queue while the agent works,
 or wait because the agent needs an answer on the Mac).
