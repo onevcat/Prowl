@@ -11,15 +11,15 @@ struct MirrorLaunchView: View {
   }
 
   init(execute: @escaping (MirrorCommandRequest.Command) async throws -> MirrorJSON,
-    directories: [String] = [],
+    paneIDs: [String] = [],
     onCreated: @escaping (MirrorPaneDescriptor) -> Void) {
     _model = State(initialValue: MirrorLaunchModel(execute: execute))
-    self.directories = directories
+    self.paneIDs = paneIDs
     self.onCreated = onCreated
   }
 
-  /// The worktree directories of the project the person started from (docs-ai 089 S1).
-  private let directories: [String]
+  /// The panes of the project the person started from (docs-ai 089 S1).
+  private let paneIDs: [String]
 
   var body: some View {
     Form {
@@ -101,8 +101,8 @@ struct MirrorLaunchView: View {
     }
     .overlay { if model.isLoading { ProgressView("Loading Host configuration…") } }
     .task {
+      if !paneIDs.isEmpty { model.focusProject(paneIDs: paneIDs) }
       await model.load()
-      if !directories.isEmpty { model.selectWorktree(in: directories) }
     }
   }
 }

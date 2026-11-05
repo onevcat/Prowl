@@ -126,21 +126,27 @@ struct MirrorLaunchModelTests {
   }
 
   @Test func projectLaunchSelectsAWorktreeOfThatProjectOrNone() async {
-    let twoProjects = #"{"ok":true,"data":{"items":[{"worktree":{"id":"a","name":"main","path":"/A/","root_path":"/A/"}},{"worktree":{"id":"b-feature","name":"feature","path":"/wt/b-feature","root_path":"/B/"}},{"worktree":{"id":"b","name":"main","path":"/B/","root_path":"/B/"}}]}}"#
+    // Two SSH repositories at the same path on different hosts, and a local one first.
+    let listing = #"{"ok":true,"data":{"items":[{"pane":{"id":"aaaaaaaa-0000-0000-0000-000000000001"},"worktree":{"id":"/A/","name":"main","path":"/A/","root_path":"/A/"}},{"pane":{"id":"BBBBBBBB-0000-0000-0000-000000000001"},"worktree":{"id":"ssh:1111:/srv/app","name":"main","path":"/srv/app","root_path":"/srv/app"}},{"pane":{"id":"CCCCCCCC-0000-0000-0000-000000000001"},"worktree":{"id":"ssh:2222:/srv/app","name":"main","path":"/srv/app","root_path":"/srv/app"}},{"pane":{"id":"CCCCCCCC-0000-0000-0000-000000000002"},"worktree":{"id":"ssh:2222:/wt/feature","name":"feature","path":"/wt/feature","root_path":"/srv/app"}}]}}"#
     let model = MirrorLaunchModel { command in
       if case .profiles = command { return try json(Self.profiles) }
-      return try json(twoProjects)
+      return try json(listing)
     }
     await model.load()
-    #expect(model.worktreeID == "a")
-    // Project B shown under a custom sidebar name: matching is by directory, never by name.
-    model.selectWorktree(in: ["/wt/b-feature", "/B"])
-    #expect(model.worktreeID == "b")
-    model.selectWorktree(in: ["/wt/b-feature/"])
-    #expect(model.worktreeID == "b-feature")
-    model.selectWorktree(in: ["/elsewhere"])
+    #expect(model.worktreeID == "/A/")
+    model.focusProject(paneIDs: ["cccccccc-0000-0000-0000-000000000002", "CCCCCCCC-0000-0000-0000-000000000001"])
+    #expect(model.worktreeID == "ssh:2222:/srv/app")
+    model.focusProject(paneIDs: ["CCCCCCCC-0000-0000-0000-000000000002"])
+    #expect(model.worktreeID == "ssh:2222:/wt/feature")
+    model.focusProject(paneIDs: ["DDDDDDDD-0000-0000-0000-000000000001"])
     #expect(model.worktreeID == nil)
     #expect(!model.canCreate)
+    // A reload keeps the project restriction instead of falling back to the first worktree.
+    await model.load()
+    #expect(model.worktreeID == nil)
+    model.focusProject(paneIDs: ["BBBBBBBB-0000-0000-0000-000000000001"])
+    await model.load()
+    #expect(model.worktreeID == "ssh:1111:/srv/app")
   }
 
   private static let listing = #"{"ok":true,"data":{"items":[{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}},{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}}]}}"#

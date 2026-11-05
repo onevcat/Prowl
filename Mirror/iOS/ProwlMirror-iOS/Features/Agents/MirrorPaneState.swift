@@ -86,17 +86,12 @@ extension MirrorPaneState {
 struct MirrorStateLabel: View {
   let state: MirrorPaneState
   var showsQuiet = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     HStack(spacing: 5) {
       switch state {
       case .working:
-        if reduceMotion {
-          Circle().fill(state.color).frame(width: 7, height: 7)
-        } else {
-          MirrorBaguaIndicator().foregroundStyle(state.color)
-        }
+        MirrorBaguaIndicator().foregroundStyle(state.color)
         Text(state.label)
       case .blocked, .done:
         Circle().fill(state.color).frame(width: 7, height: 7)
@@ -121,14 +116,24 @@ struct MirrorBaguaIndicator: View {
   nonisolated static let frames = ["☰", "☱", "☲", "☳", "☴", "☵", "☶", "☷"]
   nonisolated static let frameDuration = 0.12
   @ScaledMetric(relativeTo: .footnote) private var size = 14
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
-      Text(Self.frames[Self.frameIndex(at: context.date)])
-        .font(.system(size: size, weight: .bold, design: .monospaced))
-        .lineLimit(1)
-        .accessibilityHidden(true)
+    // With Reduce Motion the trigram holds still; every caller gets that for free.
+    if reduceMotion {
+      glyph(Self.frames[0])
+    } else {
+      TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
+        glyph(Self.frames[Self.frameIndex(at: context.date)])
+      }
     }
+  }
+
+  private func glyph(_ frame: String) -> some View {
+    Text(frame)
+      .font(.system(size: size, weight: .bold, design: .monospaced))
+      .lineLimit(1)
+      .accessibilityHidden(true)
   }
 
   nonisolated static func frameIndex(at date: Date) -> Int {

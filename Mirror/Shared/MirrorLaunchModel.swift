@@ -76,7 +76,14 @@ final class MirrorLaunchModel {
       worktrees = (listing.worktrees ?? listing.items.map(\.worktree)).filter {
         seen.insert($0.id).inserted
       }
-      if !worktrees.contains(where: { $0.id == worktreeID }) { worktreeID = worktrees.first?.id }
+      worktreeIDsByPane = Dictionary(
+        listing.items.compactMap { item in item.pane.map { ($0.id.uppercased(), item.worktree.id) } },
+        uniquingKeysWith: { first, _ in first })
+      if projectPaneIDs != nil {
+        applyProjectSelection()
+      } else if !worktrees.contains(where: { $0.id == worktreeID }) {
+        worktreeID = worktrees.first?.id
+      }
       if supportsProfiles {
         let catalog: Catalog = try await response(.profiles(.init()))
         profiles = catalog.profiles
@@ -87,17 +94,29 @@ final class MirrorLaunchModel {
     } catch { self.error = error.localizedDescription }
   }
 
-  /// Selects a worktree of the project whose panes run in `directories`: its main worktree
-  /// when that is one of them, otherwise the first match. With no match the selection is
-  /// cleared, so a project-specific launch never runs in another repository (docs-ai 089).
-  func selectWorktree(in directories: [String]) {
+  /// The panes of the project the person started from (docs-ai 089). While set, the
+  /// selection only takes a worktree that holds one of them, also after a reload.
+  private(set) var projectPaneIDs: [String]?
+  /// Worktree IDs (which carry the origin, such as an SSH host) by the pane IDs `list` reports.
+  private var worktreeIDsByPane: [String: String] = [:]
+
+  /// Restricts the selection to the worktrees of these panes: the project's main worktree when
+  /// one of them is it, otherwise the first. With no match nothing is selected, so a
+  /// project-specific launch never runs in another repository or on another host.
+  func focusProject(paneIDs: [String]) {
+    projectPaneIDs = paneIDs.map { $0.uppercased() }
+    applyProjectSelection()
+  }
+
+  private func applyProjectSelection() {
+    guard let projectPaneIDs else { return }
     func normalized(_ path: String) -> String {
       var path = path
       while path.count > 1, path.hasSuffix("/") { path.removeLast() }
       return path
     }
-    let wanted = Set(directories.map(normalized))
-    let matches = worktrees.filter { wanted.contains(normalized($0.path)) }
+    let wanted = Set(projectPaneIDs.compactMap { worktreeIDsByPane[$0] })
+    let matches = worktrees.filter { wanted.contains($0.id) }
     worktreeID = (matches.first { normalized($0.path) == normalized($0.rootPath) } ?? matches.first)?.id
   }
 
@@ -168,7 +187,11 @@ final class MirrorLaunchModel {
     var errorDescription: String? { "Host returned an invalid launch result." }
   }
   private struct Listing: Decodable {
-    struct Item: Decodable { let worktree: MirrorLaunchWorktree }
+    struct Item: Decodable {
+      struct Pane: Decodable { let id: String }
+      let worktree: MirrorLaunchWorktree
+      let pane: Pane?
+    }
     let items: [Item]
     let worktrees: [MirrorLaunchWorktree]?
   }
