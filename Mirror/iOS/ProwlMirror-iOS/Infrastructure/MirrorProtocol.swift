@@ -20,6 +20,22 @@ nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Senda
   var agent: String?
   var agentState: MirrorConversationEvent.AgentState?
   var conversation: ConversationSupport?
+  /// docs-ai 089: the state as Prowl for Mac shows it (adds `done`: idle and not looked at
+  /// yet) and when it last changed (ISO 8601 with milliseconds).
+  var displayState: DisplayState?
+  var stateChangedAt: String?
+  /// The Mac tab title and the worktree name, so clients need not parse `subtitle`.
+  var tabTitle: String?
+  var worktreeName: String?
+  /// How the Mac sidebar shows the pane's project: its color (a preset name such as `mint`,
+  /// or `#RRGGBB`), its position, and the name of the group that holds it.
+  var repositoryColor: String?
+  var projectOrder: Int?
+  var groupName: String?
+
+  enum DisplayState: String, Codable, Sendable {
+    case working, blocked, done, idle
+  }
 }
 
 nonisolated struct MirrorFrame: Codable, Equatable, Sendable {
@@ -73,6 +89,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var panes: [MirrorPaneDescriptor]
     var capabilities: [String]
     var hostRunID: UUID
+    /// The Mac's computer name, for the client's Host title (docs-ai 089).
+    var hostName: String?
   }
   case subscribe(SubscribePayload)
   struct SubscribePayload: Codable, Sendable {
@@ -233,6 +251,12 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   var panes: [MirrorPaneDescriptor]? {
     switch self {
     case .panes(let payload): payload.panes
+    default: nil
+    }
+  }
+  var hostName: String? {
+    switch self {
+    case .panes(let payload): payload.hostName
     default: nil
     }
   }

@@ -28,8 +28,9 @@ replaces the code; **Cancel** invalidates an unused code without stopping Host o
 revoking a device that already paired. When a device completes pairing, the sheet
 shows **Paired with** its name and closes by itself. On the other Mac, open
 **Remote Mirror → Client → Connect to a New Host** and enter the address (an IP or a
-host name such as `mini.local`), port, and code. On iOS, **Add Host** on the Hosts
-screen takes the same address, port and code, or scans the QR code.
+host name such as `mini.local`), port, and code. On iOS, **Pair with a Mac** on the
+first launch, or **Add Host…** in the Mac menu, takes the same address, port and code, or
+scans the QR code.
 Successful enrollment consumes the code. The client saves its device credential in
 Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved
@@ -113,15 +114,21 @@ the manual scroll position within the available bounds. Large Host grids can mak
 Fit to Window text small. iOS
 renders replacement text with local reflow. Cleared output is not an archive.
 
-On iOS, the **Hosts** screen lists paired Macs; opening one lists its panes grouped by
-project, each with its agent name, its state (working, idle, needs you) and whether the
-Host serves its conversation. A pane opens in **Chat** when the conversation is
-available and in **Screen** otherwise; the Chat | Screen control switches between them
-on the same connection, and a Screen pane whose agent starts moves to Chat by itself
-unless you chose Screen. The pane's **…** menu holds **History** and **Live Output** for
-the screen, **Reconnect** or **Take Over** when the connection is lost, and
-**Disconnect**. The pane list keeps refreshing behind the pane, so a new agent or a
-closed pane is noticed within a few seconds.
+On iOS, the first launch asks you to pair with a Mac. After that the app opens on the
+agents of the last Mac you chose, titled with the Mac's name; the Mac menu at the top left
+switches the Host, adds one, or opens **Manage Hosts** (rename, forget). Three counts on
+top show how many agents are **Blocked**, **Working** and **Done** (finished and not looked
+at yet); tap one to show only those agents, tap it again to show all. The panes follow the
+Mac sidebar: projects in sidebar order with their repository color and group, agents
+sorted blocked, working, done, idle, each with its agent mark, tab title, worktree and how
+long ago its state changed. Working shows the Bagua spinner, as on the Mac. Terminals
+without an agent fold into one row per project. A pane opens in **Chat** when the
+conversation is available and in **Screen** otherwise; the Chat | Screen control switches
+between them on the same connection, and a Screen pane whose agent starts moves to Chat by
+itself unless you chose Screen. The pane's **…** menu holds **History** and **Live
+Output** for the screen, **Reconnect** or **Take Over** when the connection is lost, and
+**Disconnect**. The list keeps refreshing behind the pane, so a new agent or a closed pane
+is noticed within a few seconds.
 
 On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
 the live Host terminal by its current pane height minus three rows (at least one

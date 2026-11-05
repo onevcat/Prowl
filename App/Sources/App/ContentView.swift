@@ -58,6 +58,9 @@ struct ContentView: View {
       }
     }
     .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
+    .background {
+      if featureFlags.remoteMirror { MirrorRosterDecorationsSync(store: repositoriesStore) }
+    }
     .onChange(of: mirrors.selectedID) { _, selectedID in
       if selectedID != nil {
         repositoriesStore.send(.selectWorktree(nil))

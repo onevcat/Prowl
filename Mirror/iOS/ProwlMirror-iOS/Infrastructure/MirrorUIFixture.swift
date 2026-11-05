@@ -58,8 +58,10 @@
       let suite = "ui-fixture-hosts"
       let defaults = UserDefaults(suiteName: suite) ?? .standard
       defaults.removePersistentDomain(forName: suite)
-      let store = MirrorHostStore(defaults: defaults)
-      _ = store.upsert(address: "127.0.0.1", port: 7880, hostID: nil)
+      let store = MirrorHostStore(defaults: defaults, adoptsLegacyConnection: false)
+      if !CommandLine.arguments.contains("--mirror-ui-onboarding-fixture") {
+        _ = store.upsert(address: "127.0.0.1", port: 7880, hostID: nil)
+      }
       let sessions = MirrorHostSessions(
         makeSession: { MirrorHostSession(configuration: $0.configuration, makeTransport: { _ in channel() }) },
         makePaneSession: { MirrorSession(configuration: $0.configuration, makeTransport: { _ in channel() }) })
@@ -97,6 +99,46 @@
       channel.conversation = fixtureEvents(named: "\(agent)-review-1038")
       channel.agent = agent
       return channel
+    }
+
+    /// `--mirror-ui-roster-fixture`: more panes in two projects and every state, so the Agents
+    /// screen has something to show (docs-ai 089). They open the main fixture conversation.
+    static var rosterPanes: [MirrorPaneDescriptor] {
+      guard CommandLine.arguments.contains("--mirror-ui-roster-fixture") else { return [] }
+      let now = Date()
+      func pane(
+        _ id: String, _ tab: String, project: String, color: String, order: Int, agent: String?,
+        state: MirrorPaneDescriptor.DisplayState?, minutes: Double, worktree: String = "main"
+      ) -> MirrorPaneDescriptor {
+        var pane = MirrorPaneDescriptor(
+          id: UUID(uuidString: id)!, title: "\(project) · \(tab) · \(worktree)", directory: "/demo/\(project)",
+          busy: false, projectName: project, subtitle: "\(tab) · \(worktree)", agent: agent,
+          agentState: state.map { $0 == .done ? .idle : MirrorConversationEvent.AgentState(rawValue: $0.rawValue)! },
+          conversation: agent == nil ? .unsupported : .available)
+        pane.displayState = state
+        pane.stateChangedAt = MirrorConversationEvent.formatTimestamp(now.addingTimeInterval(-minutes * 60))
+        pane.tabTitle = tab
+        pane.worktreeName = worktree
+        pane.repositoryColor = color
+        pane.projectOrder = order
+        return pane
+      }
+      return [
+        pane("A1000000-0000-0000-0000-000000000001", "Fix flaky prefetch test", project: "Kingfisher",
+          color: "blue", order: 1, agent: "claude", state: .blocked, minutes: 2),
+        pane("A1000000-0000-0000-0000-000000000002", "Draft 8.4 release notes", project: "Kingfisher",
+          color: "blue", order: 1, agent: "codex", state: .done, minutes: 6, worktree: "release/8.4"),
+        pane("A1000000-0000-0000-0000-000000000003", "Mirror iOS redesign", project: "Prowl", color: "mint",
+          order: 0, agent: "claude", state: .working, minutes: 1, worktree: "feat/mirror-ios"),
+        pane("A1000000-0000-0000-0000-000000000004", "Review sidebar groups", project: "Prowl", color: "mint",
+          order: 0, agent: "pi", state: .idle, minutes: 40),
+        pane("A1000000-0000-0000-0000-000000000005", "zsh", project: "Prowl", color: "mint",
+          order: 0, agent: nil, state: nil, minutes: 90),
+        pane("A1000000-0000-0000-0000-000000000006", "swift test", project: "Kingfisher", color: "blue",
+          order: 1, agent: nil, state: nil, minutes: 30),
+        pane("A1000000-0000-0000-0000-000000000007", "Scan unused images", project: "FengNiao", color: "purple",
+          order: 2, agent: "codex", state: .working, minutes: 3),
+      ]
     }
 
     static func fixtureEvents(named name: String) -> [MirrorConversationEvent] {
@@ -184,18 +226,18 @@
           onMessage?(
             .panes(
               .init(
-                panes: [pane],
+                panes: [pane] + MirrorUIFixture.rosterPanes,
                 capabilities: [
                   "text-v1", "history", "refresh", "launch-profile", "agents-dispatch", "agent-input",
                   "shell-send",
                 ] + (conversation.isEmpty ? [] : ["conversation-v1"])
                   + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
                   + (CommandLine.arguments.contains("--mirror-ui-scroll-boundary-fixture") ? ["scroll-state-v1"] : []),
-                hostRunID: UUID())))
+                hostRunID: UUID(), hostName: "onevcat’s MacBook Pro")))
         case .subscribe:
           if case .subscribe(let payload) = message { includesScrollState = payload.includeScrollState == true }
           onMessage?(
-            .subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))
+            .subscribed(.init(paneID: message.paneID ?? pane.id, subscriptionID: lease, hostRunID: run)))
           if message.representation == .conversation {
             let since = message.since ?? 0
             let events = conversation.filter { $0.sequence > since }

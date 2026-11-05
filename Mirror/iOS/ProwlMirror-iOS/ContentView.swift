@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Hosts → panes → one pane (docs-ai 088). DEBUG fixture arguments replace the network with
+/// Agents of the chosen Host → one pane (docs-ai 089). DEBUG fixture arguments replace the network with
 /// fake Hosts so UI tests and screenshots need none.
 struct ContentView: View {
   @Environment(\.scenePhase) private var scenePhase
@@ -15,7 +15,7 @@ struct ContentView: View {
       if CommandLine.arguments.contains("--mirror-ui-launch-fixture") {
         NavigationStack { LaunchFixtureView() }
       } else if let hostsFixture {
-        HostsView(store: hostsFixture.store).environment(hostsFixture.sessions)
+        MirrorRootView(store: hostsFixture.store).environment(hostsFixture.sessions)
       } else if let fixture = MirrorUIFixture.paneFixture() {
         NavigationStack { PaneView(session: fixture.session, pane: fixture.pane, host: nil) }
           .environment(sessions)
@@ -28,7 +28,7 @@ struct ContentView: View {
   }
 
   private var content: some View {
-    HostsView(store: hosts)
+    MirrorRootView(store: hosts)
       .environment(sessions)
       .onChange(of: scenePhase) { _, phase in
         switch phase {

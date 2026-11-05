@@ -108,9 +108,13 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     URL(filePath: worktree.repositoryLocation.path, directoryHint: .isDirectory).lastPathComponent
   }
 
+  /// The sidebar's names, colors and order, pushed from the repositories state (docs-ai 089).
+  var decorations = MirrorRosterDecorations()
+
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
-      let project = Self.projectName(of: state.worktree)
+      let decoration = decorations.project(for: state.worktree.repositoryLocation.id)
+      let project = decoration?.title ?? Self.projectName(of: state.worktree)
       return state.tabManager.tabs.flatMap { tab in
         let leaves = state.trees[tab.id]?.leaves() ?? []
         return leaves.enumerated().compactMap { paneIndex, view -> MirrorPaneDescriptor? in
@@ -126,7 +130,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
             location.append(label)
             title.append(label)
           }
-          return MirrorPaneDescriptor(
+          var descriptor = MirrorPaneDescriptor(
             id: view.id, title: title.joined(separator: " · "),
             directory: Self.directoryPath(of: state.worktree), busy: false,
             projectName: project,
@@ -134,9 +138,28 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
             agent: agentState?.detectedAgent?.rawValue,
             agentState: agentState.map { MirrorConversationEvent.AgentState(rawValue: $0.state.rawValue) ?? .unknown },
             conversation: Self.conversationSupport(agentState))
+          if let agentState, agentState.detectedAgent != nil {
+            descriptor.displayState = Self.displayState(agentState.displayState)
+            descriptor.stateChangedAt = MirrorConversationEvent.formatTimestamp(agentState.lastChangedAt)
+          }
+          descriptor.tabTitle = terminal
+          descriptor.worktreeName = state.worktree.name
+          descriptor.repositoryColor = decoration?.color
+          descriptor.projectOrder = decoration?.order
+          descriptor.groupName = decoration?.group
+          return descriptor
         }
       }
     }.sorted { $0.title < $1.title }
+  }
+
+  static func displayState(_ state: AgentDisplayState) -> MirrorPaneDescriptor.DisplayState {
+    switch state {
+    case .working: .working
+    case .blocked: .blocked
+    case .done: .done
+    case .idle: .idle
+    }
   }
 
   static func conversationSupport(_ pane: PaneAgentState?) -> MirrorPaneDescriptor.ConversationSupport {

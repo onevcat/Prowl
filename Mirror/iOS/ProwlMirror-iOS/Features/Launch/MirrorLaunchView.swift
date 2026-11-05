@@ -11,10 +11,15 @@ struct MirrorLaunchView: View {
   }
 
   init(execute: @escaping (MirrorCommandRequest.Command) async throws -> MirrorJSON,
+    project: String? = nil,
     onCreated: @escaping (MirrorPaneDescriptor) -> Void) {
     _model = State(initialValue: MirrorLaunchModel(execute: execute))
+    self.project = project
     self.onCreated = onCreated
   }
+
+  /// The project the person started from; its main worktree is chosen after loading.
+  private let project: String?
 
   var body: some View {
     Form {
@@ -95,6 +100,11 @@ struct MirrorLaunchView: View {
       }
     }
     .overlay { if model.isLoading { ProgressView("Loading Host configuration…") } }
-    .task { await model.load() }
+    .task {
+      await model.load()
+      if let project, let match = model.worktrees.first(where: { URL(fileURLWithPath: $0.rootPath).lastPathComponent == project }) {
+        model.worktreeID = match.id
+      }
+    }
   }
 }

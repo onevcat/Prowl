@@ -187,6 +187,21 @@ zero-based offsets at 5,000 rows. Missing metadata retains the existing plain-te
 fallback. No new messages are sent to text-v1 subscribers. Binary VT frames and
 mobile wire behavior are unchanged.
 
+## Pane roster fields
+
+The `panes` reply also carries what a client needs to show the roster the way the Mac
+sidebar does (docs-ai 089). All fields are optional; older clients ignore them and older
+Hosts leave them out.
+
+| Field | Content |
+| --- | --- |
+| `hostName` (on `panes`) | The Mac's computer name |
+| `displayState` | `working`, `blocked`, `done` (idle and not looked at yet) or `idle`, as Prowl for Mac shows the agent |
+| `stateChangedAt` | When the agent state last changed, ISO 8601 with milliseconds |
+| `tabTitle`, `worktreeName` | The Mac tab title and the worktree name |
+| `repositoryColor` | The repository color: a preset name (`red`, `orange`, `yellow`, `green`, `mint`, `cyan`, `blue`, `purple`, `pink`, `gray`) or `#RRGGBB` |
+| `projectOrder`, `groupName` | The project's position in the sidebar and the name of the group that holds it; `projectName` is the sidebar name |
+
 ## Conversation stream (`conversation-v1`)
 
 `conversation-v1` is a third `subscribe` representation (capability `conversation-v1`,

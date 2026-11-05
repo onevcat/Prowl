@@ -86,6 +86,12 @@ nonisolated enum MirrorHostAddresses {
     }
   }
 
+  /// The name the user gave this Mac in System Settings, for a client's Host title.
+  static let computerName: String? = {
+    guard let name = SCDynamicStoreCopyComputerName(nil, nil) as String?, !name.isEmpty else { return nil }
+    return name
+  }()
+
   /// The Bonjour name other Macs on the same network can resolve, without a DNS lookup.
   static func localHostName() -> String? {
     guard let name = SCDynamicStoreCopyLocalHostName(nil) as String?, !name.isEmpty else { return nil }

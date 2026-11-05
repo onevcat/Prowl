@@ -168,6 +168,31 @@ struct MirrorHostConversationTests {
     #expect(pane.agentState != nil)
     #expect(pane.conversation == .available)
     #expect(pane.busy == false)
+    #expect(pane.displayState == .done && pane.stateChangedAt == "2026-11-05T12:00:00.000Z")
+    #expect(pane.tabTitle == "Fixture tab" && pane.worktreeName == "main")
+    #expect(pane.repositoryColor == "mint" && pane.projectOrder == 2 && pane.groupName == "Apps")
+    #expect(list.hostName == MirrorHostAddresses.computerName)
+  }
+
+  @Test func rosterDecorationsFollowTheSidebarLayout() {
+    var layout = SidebarLayout()
+    layout.items = [
+      .repository("/b/"),
+      .group(.init(id: UUID(), title: "Apps", repositoryIDs: ["/a/", "/c/"])),
+    ]
+    let decorations = MirrorRosterDecorations(
+      layout: layout,
+      appearances: ["/a/": .init(color: .mint), "/c/": .init(color: .custom(.init(red: 1, green: 0.5, blue: 0)))],
+      customTitles: ["/b/": " Bee ", "/c/": "  "])
+    #expect(decorations.project(for: "/b/") == .init(title: "Bee", color: nil, order: 0, group: nil))
+    #expect(decorations.project(for: "/a/") == .init(title: nil, color: "mint", order: 1, group: "Apps"))
+    #expect(decorations.project(for: "/c/") == .init(title: nil, color: "#FF8000", order: 2, group: "Apps"))
+    #expect(decorations.project(for: "/missing/") == nil)
+  }
+
+  @Test func displayStateMapsTheMacStates() {
+    #expect(GhosttyMirrorPaneSource.displayState(.done) == .done)
+    #expect(GhosttyMirrorPaneSource.displayState(.blocked) == .blocked)
   }
 
   @Test func paneDescriptorsCarryAgentAndConversationSupport() {
@@ -205,7 +230,9 @@ struct MirrorHostConversationTests {
         MirrorPaneDescriptor(
           id: id, title: "Fixture", directory: "/", busy: false, agent: state?.detectedAgent?.rawValue,
           agentState: state.map { MirrorConversationEvent.AgentState(rawValue: $0.state.rawValue) ?? .unknown },
-          conversation: GhosttyMirrorPaneSource.conversationSupport(state))
+          conversation: GhosttyMirrorPaneSource.conversationSupport(state),
+          displayState: .done, stateChangedAt: "2026-11-05T12:00:00.000Z", tabTitle: "Fixture tab",
+          worktreeName: "main", repositoryColor: "mint", projectOrder: 2, groupName: "Apps")
       ]
     }
     func snapshot(_ id: UUID) throws -> MirrorFrame { MirrorFrame(columns: 80, rows: 24, bytes: Data("x".utf8)) }

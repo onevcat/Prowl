@@ -32,7 +32,7 @@ The app has three levels (docs-ai 088):
    **…** menu holds History / Live Output (screen), Reconnect or Take Over, and
    Disconnect. Leaving the pane closes its connection; the Host session keeps listing.
 
-iPhone and iPad use the same stack navigation (iOS 18+).
+iPhone and iPad use the same stack navigation (iOS 26+).
 
 ## Chat
 
