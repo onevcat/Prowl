@@ -696,19 +696,27 @@ final class MirrorHost {
     }
   }
 
-  /// Answers a screen prompt for the pane this connection mirrors (docs-ai 089 S4). The lease is
-  /// checked again before any key, and a refusal never retries.
+  /// Answers a screen prompt for the pane this connection mirrors (docs-ai 089 S4). Only the
+  /// prompt the feed has open can be answered, and the source asks before every key whether this
+  /// connection still owns the pane and that prompt is still open; a refusal never retries.
   private func answerPrompt(
     _ answer: MirrorCommandRequest.PromptRespond, paneID: UUID, request: MirrorCommandRequest,
     peer: MirrorConnection, lease: UUID?
   ) {
     commandPeers[peer.id] = request
     let peerID = peer.id
+    let isLive: @MainActor () -> Bool = { [weak self, weak peer] in
+      guard let self, let peer, self.peers[peerID] === peer else { return false }
+      guard lease == nil || self.subscriptions[peerID]?.id == lease else { return false }
+      return self.conversationFeeds[paneID]?.openScreenPromptID == answer.prompt
+    }
     Task { @MainActor [weak self, weak peer] in
       guard let self else { return }
       let result: MirrorPromptAnswer
-      if let choice = Int(answer.choice), lease == nil || self.subscriptions[peerID]?.id == lease {
-        result = await self.source.answerPrompt(answer.prompt, choice: choice, in: paneID)
+      if let choice = Int(answer.choice), isLive(), let contentID = self.conversationFeeds[paneID]?.screenPrompt?.id {
+        result = await self.source.answerPrompt(contentID, choice: choice, in: paneID, isLive: isLive)
+      } else if Int(answer.choice) != nil, lease == nil || self.subscriptions[peerID]?.id == lease {
+        result = .refused(code: "PROMPT_CLOSED", message: String(localized: "The prompt is no longer open on the Mac."))
       } else {
         result = .refused(code: "PROMPT_CLOSED", message: String(localized: "The mirror no longer owns this pane."))
       }

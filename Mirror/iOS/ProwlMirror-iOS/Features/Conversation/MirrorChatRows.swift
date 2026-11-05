@@ -46,12 +46,18 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
 
   static func rows(_ items: some Sequence<MirrorConversationItem>) -> [MirrorChatRow] {
     var rows: [MirrorChatRow] = []
-    // The screen and the transcript can both report one question once it is answered; one
-    // line for it is enough.
-    var resolvedTitles: Set<String> = []
+    // The screen and the transcript can both report one answered question. Each screen answer
+    // absorbs one transcript copy with the same question, in order; the screen line stays, where
+    // the answer happened. Separate decisions with the same question all keep their rows.
+    let items = Array(items)
+    var screenAnswers: [String: Int] = [:]
     for item in items {
-      if case .prompt(_, let prompt, _?, _) = item, let title = prompt.title ?? prompt.questions?.first?.question {
-        guard resolvedTitles.insert(title).inserted else { continue }
+      if let title = item.resolvedPromptTitle(screen: true) { screenAnswers[title, default: 0] += 1 }
+    }
+    for item in items {
+      if let title = item.resolvedPromptTitle(screen: false), let count = screenAnswers[title], count > 0 {
+        screenAnswers[title] = count - 1
+        continue
       }
       switch item {
       case .attention, .prompt(_, _, nil, _):
@@ -98,5 +104,11 @@ extension MirrorConversationStore {
 extension MirrorConversationItem {
   nonisolated var isTool: Bool {
     if case .tool = self { true } else { false }
+  }
+
+  /// The question of a resolved prompt from the screen (`screen: true`) or from the transcript.
+  nonisolated fileprivate func resolvedPromptTitle(screen: Bool) -> String? {
+    guard case .prompt(_, let prompt, _?, _) = self, prompt.id.hasPrefix("screen:") == screen else { return nil }
+    return prompt.title ?? prompt.questions?.first?.question
   }
 }

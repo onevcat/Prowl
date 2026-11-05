@@ -207,21 +207,88 @@ struct MirrorHostConversationTests {
 
   @Test func feedResolvesAPhoneAnswerWithItsOutcome() throws {
     let feed = MirrorConversationFeed()
-    let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-      .appending(path: "Fixtures/MirrorScreenPrompt/claude-2.1.318-command-permission.txt")
-    let prompt = try #require(MirrorScreenPrompt.parse(try String(contentsOf: fixtures, encoding: .utf8)))
-    feed.observeScreen(prompt)
-    feed.observeScreen(prompt)
-    feed.noteScreenAnswer(promptID: prompt.id, option: prompt.options[3], permission: true)
-    feed.observeScreen(nil)
+    let prompt = try Self.permissionPrompt()
+    let now = Date()
+    feed.observeScreen(prompt, now: now)
+    feed.observeScreen(prompt, now: now)
+    let id = try #require(feed.openScreenPromptID)
+    feed.noteScreenAnswer(promptID: id, option: prompt.options[3], permission: true, now: now)
+    // The answered menu can stay on screen for a moment; it does not open again.
+    feed.observeScreen(prompt, now: now.addingTimeInterval(0.5))
+    feed.observeScreen(nil, now: now.addingTimeInterval(1))
     let events = feed.log.snapshot(since: nil).events
     #expect(events.map(\.kind) == [.promptOpened, .promptResolved])
     guard case .prompt(let resolution) = events[1].payload else {
       Issue.record("expected a prompt resolution")
       return
     }
-    #expect(resolution.outcome == .denied && resolution.decidedBy == "mirror")
+    #expect(resolution.id == id && resolution.outcome == .denied && resolution.decidedBy == "mirror")
     #expect(events[0].source == .screen)
+    #expect(feed.openScreenPromptID == nil)
+  }
+
+  /// The same menu shown twice is two prompts, so an answer to the first cannot answer the
+  /// second (089 review S4-R1).
+  @Test func feedGivesEveryOpeningItsOwnID() throws {
+    let feed = MirrorConversationFeed()
+    let prompt = try Self.permissionPrompt()
+    let now = Date()
+    feed.observeScreen(prompt, now: now)
+    let first = try #require(feed.openScreenPromptID)
+    feed.observeScreen(nil, now: now)
+    feed.observeScreen(prompt, now: now)
+    let second = try #require(feed.openScreenPromptID)
+    #expect(first != second && first.hasPrefix("screen:") && second.hasPrefix("screen:"))
+    // A menu still on screen long after an answer is a prompt again.
+    feed.noteScreenAnswer(promptID: second, option: prompt.options[0], permission: true, now: now)
+    feed.observeScreen(prompt, now: now.addingTimeInterval(10))
+    let third = try #require(feed.openScreenPromptID)
+    #expect(third != second)
+  }
+
+  /// Losing the pane stops an answer that is waiting between keys (089 review S4-R2).
+  @Test(.timeLimit(.minutes(1))) func takeoverStopsAnAnswerBetweenKeys() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    fixture.host.commandService = MirrorCommandService(router: CLICommandRouter())
+    let lease = try await fixture.subscribeConversation()
+    _ = try await fixture.collect(until: .userMessage, lease: lease)
+    fixture.source.screen = try String(
+      contentsOf: Self.fixture("claude-2.1.318-ask-user-question.txt"), encoding: .utf8)
+    fixture.source.setState(.blocked, reason: .native(.blocked))
+    let opened = try await fixture.collect(until: .promptOpened, lease: lease)
+    guard case .prompt(let prompt) = try #require(opened.last(where: { $0.kind == .promptOpened })).payload else {
+      Issue.record("expected a prompt payload")
+      return
+    }
+    let gate = AsyncStream.makeStream(of: Void.self)
+    let entered = AsyncStream.makeStream(of: Void.self)
+    fixture.source.answerGate = (gate.stream, entered.continuation)
+    let request = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(command: .promptRespond(.init(pane: fixture.source.id.uuidString, prompt: prompt.id, choice: "2")))
+    )
+    fixture.peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
+    var enteredIterator = entered.stream.makeAsyncIterator()
+    _ = await enteredIterator.next()
+    let next = try await Peer(port: fixture.port, key: fixture.host.pairingKey)
+    defer { next.connection.close() }
+    next.connection.send(.subscribe(.init(paneID: fixture.source.id, representation: .text, intent: .takeover)))
+    #expect(await next.next()?.kind == .subscribed)
+    gate.continuation.yield(())
+    _ = await enteredIterator.next()
+    #expect(fixture.source.answerLiveness == [true, false])
+  }
+
+  static func fixture(_ name: String) -> URL {
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Fixtures/MirrorScreenPrompt/\(name)")
+  }
+
+  static func permissionPrompt() throws -> MirrorScreenPrompt {
+    try #require(
+      MirrorScreenPrompt.parse(
+        try String(contentsOf: fixture("claude-2.1.318-command-permission.txt"), encoding: .utf8)))
   }
 
   @Test func rosterDecorationsFollowTheSidebarLayout() {
@@ -309,6 +376,22 @@ struct MirrorHostConversationTests {
     func write(_ bytes: Data, to id: UUID) throws {}
     var screen = "shell"
     func activeText(_ id: UUID) throws -> String { screen }
+    /// Holds `answerPrompt` until the stream yields; tells the continuation when it starts and
+    /// when it has checked liveness again.
+    var answerGate: (AsyncStream<Void>, AsyncStream<Void>.Continuation)?
+    private(set) var answerLiveness: [Bool] = []
+    func answerPrompt(
+      _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+    ) async -> MirrorPromptAnswer {
+      answerLiveness.append(isLive())
+      if let (gate, entered) = answerGate {
+        entered.yield(())
+        for await _ in gate { break }
+      }
+      answerLiveness.append(isLive())
+      answerGate?.1.yield(())
+      return .refused(code: "PROMPT_CLOSED", message: "Test")
+    }
     func agentState(_ id: UUID) -> PaneAgentState? { state }
 
     func setAgent(_ agent: DetectedAgent?, transcript: URL?) {
