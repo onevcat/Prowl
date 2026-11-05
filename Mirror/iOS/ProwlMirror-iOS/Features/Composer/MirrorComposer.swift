@@ -9,7 +9,7 @@ struct MirrorComposer: UIViewRepresentable {
     let view = ComposerTextView()
     view.font = .preferredFont(forTextStyle: .body)
     view.adjustsFontForContentSizeCategory = true
-    view.backgroundColor = .secondarySystemBackground
+    view.backgroundColor = .clear
     view.accessibilityIdentifier = "mirror-message-input"
     view.accessibilityLabel = "Write a message"
     view.delegate = context.coordinator

@@ -123,11 +123,13 @@ Mac sidebar: projects in sidebar order with their repository color and group, ag
 sorted blocked, working, done, idle, each with its agent mark, tab title, worktree and how
 long ago its state changed. Working shows the Bagua spinner, as on the Mac. Terminals
 without an agent fold into one row per project. A pane opens in **Chat** when the
-conversation is available and in **Screen** otherwise; the Chat | Screen control switches
-between them on the same connection, and a Screen pane whose agent starts moves to Chat by
-itself unless you chose Screen. The pane's **…** menu holds **History** and **Live
-Output** for the screen, **Reconnect** or **Take Over** when the connection is lost, and
-**Disconnect**. The list keeps refreshing behind the pane, so a new agent or a closed pane
+conversation is available and in **Terminal** otherwise. Its title shows the pane's name
+and, under it, its state and project / worktree. The toolbar button next to **…** switches
+Chat and Terminal on the same connection, and a Terminal pane whose agent starts moves to
+Chat by itself unless you chose Terminal. A lost connection shows its reason with
+**Reconnect** (or **Take Over** when another device mirrors the pane), and a blocked agent
+shows what it waits for above the composer. The **…** menu holds **History** and **Live
+Output** for the terminal, **Reconnect** or **Take Over**, and **Disconnect**. The list keeps refreshing behind the pane, so a new agent or a closed pane
 is noticed within a few seconds.
 
 On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
@@ -254,16 +256,17 @@ without trusted hooks reports tools only when they finish and no approval conten
 [wire contract](remote-mirror-wire.md#conversation-stream-conversation-v1) and
 docs-ai 087.
 
-The iOS client renders the stream as a chat: your messages on the right, the agent's
-Markdown on the left (headings, lists, quotes, code blocks and tables), tool cards that
-expand to their command, output and diff, prompt cards that show the question and its
-choices and ask you to answer on the Mac, session dividers, compaction marks and notices.
-Instructions that Prowl adds to a launch prompt, such as the dispatch completion protocol,
-fold under **Prowl instructions** in your message. "Waiting for you on the Mac" shows only
-while the agent is blocked. **Latest** returns to the newest message after
-scrolling up. The composer under both views sends through `agents.input`; its hint
-says what the Host will do with the message (deliver now, queue while the agent works,
-or wait because the agent needs an answer on the Mac).
+The iOS client renders the stream as a chat: your messages in bubbles on the right (long
+ones fold after twelve lines), the agent's Markdown as text (headings, lists, quotes, code
+blocks and tables), and each run of tool calls between two messages as one quiet row
+("6 tool calls", with failures counted in red and the running call shown while the agent
+works). A row opens to one line per call, and a line opens its command, changes and output
+in a sheet. Prompt cards show the question and its choices and ask you to answer on the
+Mac; answered prompts leave one line. Instructions that Prowl adds to a launch prompt, such
+as the dispatch completion protocol, fold under **Prowl instructions** in your message.
+The arrow button returns to the newest message after scrolling up. The floating composer
+under both views sends through `agents.input`; a note appears only when the Host will not
+deliver at once (the agent is working and the message waits) or a receipt needs a look.
 
 ## Protocol and development
 

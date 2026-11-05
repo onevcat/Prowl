@@ -85,8 +85,9 @@ a centered "Host ⌄" title). The shipped screen uses Prowl's own structure and 
 
 ### Pane (replaces `PaneHeader` and the segmented picker)
 
-- Navigation title is a menu with `chevron.down` to jump to another pane of the same project;
-  subtitle "<state> · <project> / <worktree>".
+- Navigation title: the pane name, with the subtitle "<state> · <project> / <worktree>"
+  (corrected in S2: no pane-switching title menu, see
+  [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)).
 - Trailing glass group: one Chat ⇄ Terminal toggle (`apple.terminal` /
   `bubble.left.and.text.bubble.right`) and `…` (History, Take Over, Disconnect).
 - **Chat**
@@ -173,3 +174,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 ## Amendments
 - Updated 2026-11-06: P0 fixed D1–D5 on the client — see [002-p0-defect-fixes.md](002-p0-defect-fixes.md)
 - Updated 2026-11-06: S1 shipped the Agents screen; the Agents design section is corrected in place (no card rail or chips, Mac wording) — see [003-s1-agents-home.md](003-s1-agents-home.md)
+- Updated 2026-11-06: S2 restyled the pane chrome, folded tool calls into steps rows and moved attention above the composer — see [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)

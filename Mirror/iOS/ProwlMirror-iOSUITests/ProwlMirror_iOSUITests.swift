@@ -13,12 +13,21 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     item.tap()
   }
 
-  /// One segment of the Chat | Screen picker.
+  /// The toolbar button that switches Chat and Terminal (docs-ai 089 S2); `label` is the
+  /// view it opens.
   @MainActor
   private func segment(_ app: XCUIApplication, _ label: String) -> XCUIElement {
-    let picker = app.descendants(matching: .any).matching(identifier: "pane-mode").firstMatch
-    let scoped = picker.buttons[label].firstMatch
-    return scoped.exists ? scoped : app.buttons[label].firstMatch
+    app.buttons.matching(identifier: "pane-mode").matching(
+      NSPredicate(format: "label == %@", label == "Screen" ? "Terminal" : label)
+    ).firstMatch
+  }
+
+  @MainActor
+  private func paneTitle(_ app: XCUIApplication, contains text: String) -> Bool {
+    let title = app.descendants(matching: .any).matching(identifier: "pane-title").firstMatch
+    expectation(for: NSPredicate(format: "label CONTAINS %@", text), evaluatedWith: title)
+    waitForExpectations(timeout: 5)
+    return title.label.contains(text)
   }
 
   @MainActor
@@ -288,8 +297,10 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     input.tap()
     XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(
-      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
+    // A delivered message clears the draft; the composer shows no note for a plain success (089 S2).
+    expectation(for: NSPredicate(format: "enabled == false"), evaluatedWith: app.buttons["Send"])
+    waitForExpectations(timeout: 5)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
   }
 
   @MainActor
@@ -307,9 +318,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     input.typeText("First line\nSecond line")
     XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(
-      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Send"].isEnabled)
+    expectation(for: NSPredicate(format: "enabled == false"), evaluatedWith: app.buttons["Send"])
+    waitForExpectations(timeout: 5)
   }
 
   // MARK: - Conversation (conversation-v1)
@@ -322,9 +332,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
-    let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
-    XCTAssertTrue(tool.waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    let steps = app.descendants(matching: .any).matching(identifier: "conversation-steps").firstMatch
+    XCTAssertTrue(steps.waitForExistence(timeout: 5))
+    XCTAssertTrue(paneTitle(app, contains: "Idle"))
     attach("Claude conversation, latest")
     segment(app, "Screen").tap()
     XCTAssertTrue(app.buttons["mirror-scroll-up"].waitForExistence(timeout: 5))
@@ -343,11 +353,19 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    XCTAssertTrue(paneTitle(app, contains: "Idle"))
     attach("Codex conversation, latest")
     app.descendants(matching: .any).matching(identifier: "conversation-scroll").firstMatch.swipeDown()
+    // Tool calls fold into steps rows; a row opens to one line per call, a line to its details.
+    let steps = app.descendants(matching: .any).matching(identifier: "conversation-steps").firstMatch
+    XCTAssertTrue(steps.waitForExistence(timeout: 5))
+    steps.tap()
     let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
     XCTAssertTrue(tool.waitForExistence(timeout: 5))
+    attach("Codex tool calls unfolded")
+    tool.tap()
+    XCTAssertTrue(app.staticTexts["Command"].waitForExistence(timeout: 5))
+    attach("Codex tool call details")
   }
 
   @MainActor

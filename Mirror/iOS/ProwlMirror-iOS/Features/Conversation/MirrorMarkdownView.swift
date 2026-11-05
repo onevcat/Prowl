@@ -139,9 +139,6 @@ struct MirrorInlineText: View {
       (try? AttributedString(
         markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
       ?? AttributedString(text)
-    for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
-      attributed[run.range].backgroundColor = Color(.secondarySystemFill)
-    }
     inlineCache.setObject(Box(attributed), forKey: text as NSString)
     return attributed
   }
