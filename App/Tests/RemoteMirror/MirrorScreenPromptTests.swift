@@ -43,6 +43,21 @@ struct MirrorScreenPromptTests {
     #expect(prompt.isPermission)
   }
 
+  /// A Codex command over several lines stays the detail, under its real question (089 review
+  /// S4-R5).
+  @Test func codexMultilineCommandIsTheDetail() throws {
+    let text = try Self.screen("AgentScreenDetection/codex/0.146.1/blocked/command-permission.txt")
+    let loop = text.replacingOccurrences(
+      of: "  $ touch permission-probe.txt",
+      with: "  $ for f in a b; do\n      touch \"$f\"\n    done")
+    let prompt = try #require(MirrorScreenPrompt.parse(loop))
+    #expect(prompt.title.contains("Do you want to allow"))
+    #expect(prompt.isPermission)
+    #expect(prompt.detail == "for f in a b; do\ntouch \"$f\"\ndone")
+    let other = try #require(MirrorScreenPrompt.parse(loop.replacingOccurrences(of: "touch \"$f\"", with: "rm \"$f\"")))
+    #expect(other.id != prompt.id)
+  }
+
   @Test func theIdentityIgnoresTheSelectionButNotTheOptions() throws {
     let text = try Self.screen("MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")
     let moved = text.replacingOccurrences(of: "❯ 1. PNG", with: "  1. PNG")

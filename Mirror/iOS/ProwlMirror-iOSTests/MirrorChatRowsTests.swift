@@ -95,6 +95,27 @@ struct MirrorChatRowsTests {
     #expect(rows.map(\.id) == [1, 2, 4])
   }
 
+  /// A screen answer absorbs only its own transcript copy, not an older answer to the same
+  /// question across messages (089 review S4-R4, round 2).
+  @Test func aScreenAnswerAbsorbsOnlyTheCopyNextToIt() {
+    func transcript(_ id: String) -> Event.Prompt {
+      var prompt = Event.Prompt(
+        id: id, kind: .question, title: nil,
+        questions: [.init(id: "0", question: "Which format?", multiSelect: false, options: [])], freeform: true)
+      prompt.outcome = .answered
+      return prompt
+    }
+    var screen = Event.Prompt(id: "screen:current.2", kind: .question, title: "Which format?", freeform: false)
+    screen.outcome = .answered
+    let rows = MirrorChatRow.rows([
+      .prompt(id: 1, prompt: transcript("toolu_past"), resolved: transcript("toolu_past"), at: nil),
+      Self.assistant(2),
+      .prompt(id: 3, prompt: screen, resolved: screen, at: nil),
+      .prompt(id: 4, prompt: transcript("toolu_current"), resolved: transcript("toolu_current"), at: nil),
+    ])
+    #expect(rows.map(\.id) == [1, 2, 3])
+  }
+
   @MainActor @Test func theOpenScreenPromptIsTheNewestUnresolvedOne() {
     var store = MirrorConversationStore()
     let first = Event.Prompt(id: "screen:a", kind: .permission, title: "Proceed?", freeform: false)
