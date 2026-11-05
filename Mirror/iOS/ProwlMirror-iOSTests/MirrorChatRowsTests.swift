@@ -55,6 +55,34 @@ struct MirrorChatRowsTests {
     #expect(rows.map(\.id) == [3])
   }
 
+  @Test func pagingKeepsAToolRunWholeAcrossThePageBoundary() {
+    var items: [MirrorConversationItem] = (1...121).map { Self.tool(UInt64($0), end: $0 == 1 ? .error : .succeeded) }
+    var page = MirrorChatRow.page(items, limit: 120)
+    guard case .steps(let steps) = page.rows.first else {
+      Issue.record("expected a steps row")
+      return
+    }
+    #expect(steps.id == 1 && steps.toolCount == 121 && steps.failedCount == 1)
+    #expect(page.hidden == 0)
+    items.append(Self.assistant(122))
+    page = MirrorChatRow.page(items, limit: 120)
+    #expect(page.rows.first?.id == 1)
+  }
+
+  @MainActor @Test func aToolDetailReadsTheCallsCurrentState() {
+    var store = MirrorConversationStore()
+    store.apply(events: [
+      .init(.toolStarted, .toolStart(.init(id: "t", name: "Bash", kind: .shell, title: "make")), at: nil,
+        source: .transcript, sequence: 1)
+    ], sequence: 1)
+    #expect(store.tool(id: 1)?.end == nil)
+    store.apply(events: [
+      .init(.toolCompleted, .toolEnd(.init(id: "t", status: .succeeded, output: .init("BUILD SUCCEEDED"))), at: nil,
+        source: .transcript, sequence: 2)
+    ], sequence: 2)
+    #expect(store.tool(id: 1)?.end?.output?.text == "BUILD SUCCEEDED")
+  }
+
   @Test func toolTitlesDropTheShellWrapper() {
     let wrapped = Event.ToolStart(id: "t", name: "exec", kind: .shell, title: "/bin/zsh -lc rg -n foo")
     #expect(MirrorToolKindStyle.title(wrapped) == "rg -n foo")

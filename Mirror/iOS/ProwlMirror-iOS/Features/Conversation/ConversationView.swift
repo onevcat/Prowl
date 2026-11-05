@@ -7,16 +7,15 @@ struct ConversationView: View {
   @State private var follows = true
   @State private var expandedSteps: Set<UInt64> = []
   @State private var detail: ToolDetail?
-  /// Items are laid out eagerly so the bottom anchor never lands on an unsized lazy row;
-  /// older items load in pages on request instead.
+  /// Rows are laid out eagerly so the bottom anchor never lands on an unsized lazy row;
+  /// older rows load in pages on request instead.
   @State private var visibleLimit = ConversationView.page
 
   private static let page = 120
   private var store: MirrorConversationStore { session.conversation }
-  private var hiddenCount: Int { max(0, store.items.count - visibleLimit) }
 
   var body: some View {
-    let rows = MirrorChatRow.rows(store.items.suffix(visibleLimit))
+    let (rows, hiddenCount) = MirrorChatRow.page(store.items, limit: visibleLimit)
     ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
@@ -89,7 +88,7 @@ struct ConversationView: View {
       .animation(.snappy, value: follows)
     }
     .sheet(item: $detail) { detail in
-      ToolDetailView(detail: detail)
+      ToolDetailView(detail: detail, session: session)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -108,11 +107,10 @@ struct ConversationView: View {
   }
 }
 
-/// A tool call opened from a steps row.
+/// A tool call opened from a steps row: its identity only, so the sheet reads the call's
+/// current state and shows the output once it arrives.
 struct ToolDetail: Identifiable {
   let id: UInt64
-  let start: MirrorConversationEvent.ToolStart
-  let end: MirrorConversationEvent.ToolEnd?
 }
 
 private struct ChatRowView: View {
@@ -301,7 +299,7 @@ private struct StepsRow: View {
         VStack(alignment: .leading, spacing: 0) {
           ForEach(steps.tools, id: \.id) { item in
             if case .tool(let id, let start, let end, _, _) = item {
-              StepLine(start: start, end: end) { showDetail(.init(id: id, start: start, end: end)) }
+              StepLine(start: start, end: end) { showDetail(.init(id: id)) }
             }
           }
         }
@@ -376,30 +374,42 @@ private struct StepLine: View {
 /// One tool call in full: its command or path, its changes and its output.
 private struct ToolDetailView: View {
   let detail: ToolDetail
+  /// Read here, not passed in as a value, so the sheet observes the call finishing.
+  @Bindable var session: MirrorSession
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
+    if let tool = session.conversation.tool(id: detail.id) {
+      content(start: tool.start, end: tool.end)
+    } else {
+      ContentUnavailableView("This tool call is no longer here", systemImage: "wrench.and.screwdriver")
+    }
+  }
+
+  private func content(start: MirrorConversationEvent.ToolStart, end: MirrorConversationEvent.ToolEnd?)
+    -> some View
+  {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-          if let command = detail.start.command, !command.isEmpty {
+          if let command = start.command, !command.isEmpty {
             block(String(localized: "Command"), command)
-          } else if let path = detail.start.path {
+          } else if let path = start.path {
             block(String(localized: "File"), path)
           }
-          if let diff = detail.end?.diff, !diff.text.isEmpty {
+          if let diff = end?.diff, !diff.text.isEmpty {
             block(String(localized: "Changes"), diff.text, truncated: diff.truncated)
           }
-          if let output = detail.end?.output, !output.text.isEmpty {
+          if let output = end?.output, !output.text.isEmpty {
             block(String(localized: "Output"), output.text, truncated: output.truncated)
           }
-          if detail.end == nil {
+          if end == nil {
             Label("Running", systemImage: "hourglass").foregroundStyle(.secondary)
           }
         }
         .padding()
       }
-      .navigationTitle(MirrorToolKindStyle.title(detail.start))
+      .navigationTitle(MirrorToolKindStyle.title(start))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {

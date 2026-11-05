@@ -69,6 +69,25 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
   }
 }
 
+extension MirrorChatRow {
+  /// The newest `limit` rows and how many rows are hidden before them. Grouping runs over every
+  /// item first, so a run of tool calls keeps its identity and its counts across pages.
+  nonisolated static func page(_ items: [MirrorConversationItem], limit: Int) -> (rows: ArraySlice<MirrorChatRow>, hidden: Int) {
+    let all = rows(items)
+    return (all.suffix(limit), max(0, all.count - limit))
+  }
+}
+
+extension MirrorConversationStore {
+  /// The current start and end of a tool call, for a details sheet that stays open while it runs.
+  nonisolated func tool(id: UInt64) -> (start: MirrorConversationEvent.ToolStart, end: MirrorConversationEvent.ToolEnd?)? {
+    for item in items.reversed() {
+      if case .tool(let itemID, let start, let end, _, _) = item, itemID == id { return (start, end) }
+    }
+    return nil
+  }
+}
+
 extension MirrorConversationItem {
   nonisolated var isTool: Bool {
     if case .tool = self { true } else { false }
