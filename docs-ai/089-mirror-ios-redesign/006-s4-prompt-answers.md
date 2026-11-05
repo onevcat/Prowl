@@ -35,6 +35,8 @@ Round 2 fixes:
 
 Their tests are `aScreenAnswerAbsorbsOnlyTheCopyNextToIt` and `codexMultilineCommandIsTheDetail`.
 
+Round 3 fix (S4-R5): blank lines may be part of the command block, and the parser looks at most 40 lines above the options. A Codex command approval whose command it cannot read in full does not parse. A menu is a Codex command approval when its options have Codex key hints such as `(y)` or `(esc)`, or when Codex's question is above it. The `$ ` block is searched only for those menus, so a shell line in Claude's scrollback is never taken for a command. Tests: `codexApprovalWithoutTheWholeCommandFailsClosed` and `claudePermissionIgnoresShellLinesAbove`.
+
 The round 1 tests are `theIdentityCoversTheCommandAndTheDescriptions`, `theKeyGuardAllowsItsOwnKeysButNotLocalEditing`, `feedGivesEveryOpeningItsOwnID`, `takeoverStopsAnAnswerBetweenKeys` and `sameTitledDecisionsAllStayAndOnlyTheirCopiesFold`.
 
 ## Decisions

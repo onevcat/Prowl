@@ -58,6 +58,35 @@ struct MirrorScreenPromptTests {
     #expect(other.id != prompt.id)
   }
 
+  /// A Codex approval whose command cannot be read in full offers no answers (089 review S4-R5,
+  /// round 3): a blank line inside the script is kept, a script too long to read fails closed.
+  @Test func codexApprovalWithoutTheWholeCommandFailsClosed() throws {
+    let text = try Self.screen("AgentScreenDetection/codex/0.146.1/blocked/command-permission.txt")
+    let blank = try #require(
+      MirrorScreenPrompt.parse(
+        text.replacingOccurrences(
+          of: "  $ touch permission-probe.txt",
+          with: "  $ for f in a b; do\n\n      touch \"$f\"\n    done")))
+    #expect(blank.detail == "for f in a b; do\n\ntouch \"$f\"\ndone")
+    #expect(blank.isPermission && blank.title.contains("Do you want to allow"))
+    let body = Array(repeating: "      echo step", count: 60).joined(separator: "\n")
+    let long = text.replacingOccurrences(
+      of: "  $ touch permission-probe.txt", with: "  $ for f in a b; do\n\(body)\n    done")
+    #expect(MirrorScreenPrompt.parse(long) == nil)
+  }
+
+  /// A `$ ` line in Claude's scrollback is not a Codex command block.
+  @Test func claudePermissionIgnoresShellLinesAbove() throws {
+    let text = try Self.screen("MirrorScreenPrompt/claude-2.1.318-command-permission.txt")
+    let original = try #require(MirrorScreenPrompt.parse(text))
+    let lines = text.components(separatedBy: "\n")
+    let index = try #require(lines.firstIndex { $0.contains("Do you want to proceed?") })
+    var shifted = lines
+    shifted.insert("  $ make test", at: max(0, index - 6))
+    let prompt = try #require(MirrorScreenPrompt.parse(shifted.joined(separator: "\n")))
+    #expect(prompt.title == original.title && prompt.detail == original.detail)
+  }
+
   @Test func theIdentityIgnoresTheSelectionButNotTheOptions() throws {
     let text = try Self.screen("MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")
     let moved = text.replacingOccurrences(of: "❯ 1. PNG", with: "  1. PNG")
