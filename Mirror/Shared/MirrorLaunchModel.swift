@@ -87,6 +87,20 @@ final class MirrorLaunchModel {
     } catch { self.error = error.localizedDescription }
   }
 
+  /// Selects a worktree of the project whose panes run in `directories`: its main worktree
+  /// when that is one of them, otherwise the first match. With no match the selection is
+  /// cleared, so a project-specific launch never runs in another repository (docs-ai 089).
+  func selectWorktree(in directories: [String]) {
+    func normalized(_ path: String) -> String {
+      var path = path
+      while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+      return path
+    }
+    let wanted = Set(directories.map(normalized))
+    let matches = worktrees.filter { wanted.contains(normalized($0.path)) }
+    worktreeID = (matches.first { normalized($0.path) == normalized($0.rootPath) } ?? matches.first)?.id
+  }
+
   func create() async -> MirrorPaneDescriptor? {
     guard canCreate, let worktreeID else { return nil }
     let launchedProfile = kind == .shell ? nil : profiles.first { $0.id == profileID }

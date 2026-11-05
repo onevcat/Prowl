@@ -144,6 +144,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
             descriptor.stateChangedAt = MirrorConversationEvent.formatTimestamp(agentState.lastChangedAt)
           }
           descriptor.tabTitle = Self.rosterTitle(
+            customTitle: tab.customTitle,
             paneTitle: state.paneTitle(surfaceID: view.id, fallbackTabTitle: name),
             profileName: launchProfile?.name, agent: agentState?.detectedAgent)
           descriptor.worktreeName = state.worktree.name
@@ -156,10 +157,17 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     }.sorted { $0.title < $1.title }
   }
 
-  /// The name the phone shows for a pane (docs-ai 089). A Profile launch titles its pane with
+  /// The name the phone shows for a pane (docs-ai 089). A tab renamed on the Mac keeps its
+  /// name. Otherwise a Profile launch titles its pane with
   /// the launch command (`env -u PROWL_LAUNCH_DISPATCH …`) until the agent sets a title;
   /// that, an empty title or the default "Terminal" falls back to the Profile, then the agent.
-  static func rosterTitle(paneTitle: String, profileName: String?, agent: DetectedAgent?) -> String {
+  static func rosterTitle(
+    customTitle: String? = nil, paneTitle: String, profileName: String?, agent: DetectedAgent?
+  ) -> String {
+    // A name the person gave the tab on the Mac wins over anything the terminal reports.
+    if let custom = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+      return custom
+    }
     // Agents animate a Braille spinner in front of their title (`⠦ Run tests`); the phone has
     // its own working indicator, and a title that changes every frame would churn the roster.
     let title = String(

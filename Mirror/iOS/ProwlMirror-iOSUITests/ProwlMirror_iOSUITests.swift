@@ -508,6 +508,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(blocked.waitForExistence(timeout: 10))
     let summary = app.buttons["state-summary-blocked"]
     XCTAssertTrue(summary.exists)
+    // VoiceOver reads which agent runs in a row, as the mark shows it.
+    XCTAssertTrue(blocked.label.contains("Claude Code"), blocked.label)
     let shell = app.descendants(matching: .any).matching(identifier: "pane-A1000000-0000-0000-0000-000000000005")
       .firstMatch
     XCTAssertFalse(shell.exists)

@@ -125,6 +125,24 @@ struct MirrorLaunchModelTests {
     #expect(pane.subtitle == "Codex · main")
   }
 
+  @Test func projectLaunchSelectsAWorktreeOfThatProjectOrNone() async {
+    let twoProjects = #"{"ok":true,"data":{"items":[{"worktree":{"id":"a","name":"main","path":"/A/","root_path":"/A/"}},{"worktree":{"id":"b-feature","name":"feature","path":"/wt/b-feature","root_path":"/B/"}},{"worktree":{"id":"b","name":"main","path":"/B/","root_path":"/B/"}}]}}"#
+    let model = MirrorLaunchModel { command in
+      if case .profiles = command { return try json(Self.profiles) }
+      return try json(twoProjects)
+    }
+    await model.load()
+    #expect(model.worktreeID == "a")
+    // Project B shown under a custom sidebar name: matching is by directory, never by name.
+    model.selectWorktree(in: ["/wt/b-feature", "/B"])
+    #expect(model.worktreeID == "b")
+    model.selectWorktree(in: ["/wt/b-feature/"])
+    #expect(model.worktreeID == "b-feature")
+    model.selectWorktree(in: ["/elsewhere"])
+    #expect(model.worktreeID == nil)
+    #expect(!model.canCreate)
+  }
+
   private static let listing = #"{"ok":true,"data":{"items":[{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}},{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}}]}}"#
   private static let profiles = #"{"ok":true,"data":{"profiles":[{"id":"disabled-profile","name":"Disabled","enabled":false,"runtime":"claude","availability":{"status":"available"}},{"id":"available-profile","name":"Codex","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#
   private static let created = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":"Codex"}}}}"#

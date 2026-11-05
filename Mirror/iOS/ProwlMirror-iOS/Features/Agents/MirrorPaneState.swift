@@ -168,7 +168,8 @@ struct MirrorAgentIcon: View {
       }
     }
     .frame(width: size, height: size)
-    .accessibilityHidden(true)
+    // Rows combine their children; the mark adds which agent runs there.
+    .accessibilityLabel(Self.displayName(for: agent))
   }
 
   /// `agent` is the Host's `DetectedAgent` raw value; the names match `CommandIconMap` on Mac.
