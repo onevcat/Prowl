@@ -123,6 +123,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
           let agentState = state.surfaceAgentStates[view.id]
           let agent = agentState?.detectedAgent?.rawValue.capitalized
           let terminal = name.isEmpty || name == "Terminal" ? (agent ?? "Shell") : name
+          let launchProfile = state.launchProfilesBySurface[view.id]
           var location = [terminal, state.worktree.name]
           var title = [project, terminal, state.worktree.name]
           if leaves.count > 1 {
@@ -142,7 +143,9 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
             descriptor.displayState = Self.displayState(agentState.displayState)
             descriptor.stateChangedAt = MirrorConversationEvent.formatTimestamp(agentState.lastChangedAt)
           }
-          descriptor.tabTitle = terminal
+          descriptor.tabTitle = Self.rosterTitle(
+            paneTitle: state.paneTitle(surfaceID: view.id, fallbackTabTitle: name),
+            profileName: launchProfile?.name, agent: agentState?.detectedAgent)
           descriptor.worktreeName = state.worktree.name
           descriptor.repositoryColor = decoration?.color
           descriptor.projectOrder = decoration?.order
@@ -151,6 +154,22 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
         }
       }
     }.sorted { $0.title < $1.title }
+  }
+
+  /// The name the phone shows for a pane (docs-ai 089). A Profile launch titles its pane with
+  /// the launch command (`env -u PROWL_LAUNCH_DISPATCH …`) until the agent sets a title;
+  /// that, an empty title or the default "Terminal" falls back to the Profile, then the agent.
+  static func rosterTitle(paneTitle: String, profileName: String?, agent: DetectedAgent?) -> String {
+    // Agents animate a Braille spinner in front of their title (`⠦ Run tests`); the phone has
+    // its own working indicator, and a title that changes every frame would churn the roster.
+    let title = String(
+      paneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        .drop { $0.unicodeScalars.allSatisfy { (0x2800...0x28FF).contains($0.value) } || $0 == " " })
+    let isPlaceholder =
+      title.isEmpty || title == "Terminal"
+      || (title.hasPrefix("env ") && title.contains(AgentProfileLaunchPlanner.dispatchCarrierName))
+    guard isPlaceholder else { return title }
+    return profileName ?? agent?.displayName ?? String(localized: "Shell")
   }
 
   static func displayState(_ state: AgentDisplayState) -> MirrorPaneDescriptor.DisplayState {

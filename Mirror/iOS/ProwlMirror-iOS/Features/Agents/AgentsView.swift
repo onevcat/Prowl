@@ -92,9 +92,23 @@ struct AgentsView: View {
       if session.status != .ready { session.start() }
     }
     .onChange(of: session.hostName) { _, name in store.updateHostName(host.id, name: name) }
+    .task(id: reconnectKey) {
+      // A Host that went away (restart, sleep, network change) is tried again while the list is
+      // on screen, so the person does not have to find Retry.
+      guard case .failed = session.status else { return }
+      try? await Task.sleep(for: .seconds(5))
+      guard !Task.isCancelled, case .failed = session.status else { return }
+      session.retry()
+    }
     .onChange(of: all.counts) { _, counts in
       if let stateFilter, counts[stateFilter, default: 0] == 0 { self.stateFilter = nil }
     }
+  }
+
+  /// Changes on each failure so the reconnect task restarts.
+  private var reconnectKey: String {
+    if case .failed(let reason) = session.status { return "failed:\(reason)" }
+    return "ok"
   }
 
   private func row(_ pane: MirrorPaneDescriptor) -> some View {

@@ -21,6 +21,7 @@ struct HostMenu: View {
             } else {
               Text(host.displayName)
             }
+            Text(host.endpoint)
           }
         }
       }
@@ -87,10 +88,11 @@ struct MirrorStateSummary: View {
               Spacer(minLength: 0)
               Text(count, format: .number)
                 .font(.title2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(count == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+                // Explicit colors: a borderless button tints `.primary` with the accent.
+                .foregroundStyle(count == 0 ? Color(.tertiaryLabel) : Color.primary)
                 .contentTransition(.numericText())
             }
-            Text(state.label).font(.footnote.weight(.medium)).foregroundStyle(.secondary)
+            Text(state.label).font(.footnote.weight(.medium)).foregroundStyle(Color.secondary)
           }
           .padding(12)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +220,7 @@ struct MirrorPaneRow: View {
             Text("Mirrored elsewhere").foregroundStyle(.orange)
           } else if let date = pane.stateChangedDate, state != .terminal {
             Text("·")
-            Text(date, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+            MirrorRelativeTime(date: date)
           }
         }
         .font(.footnote).foregroundStyle(.secondary)
@@ -259,3 +261,14 @@ nonisolated enum MirrorRepositoryColor {
   }
 }
 
+/// "2m ago" that keeps itself current while the list stays on screen.
+struct MirrorRelativeTime: View {
+  let date: Date
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 20)) { context in
+      Text(date, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+        .id(context.date)
+    }
+  }
+}

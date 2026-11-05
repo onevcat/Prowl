@@ -190,6 +190,20 @@ struct MirrorHostConversationTests {
     #expect(decorations.project(for: "/missing/") == nil)
   }
 
+  @Test func rosterTitleReplacesTheLaunchCommand() {
+    let command = "env -u PROWL_LAUNCH_DISPATCH -u PROWL_LAUNCH_HOOK_ARG_0 claude"
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: "Opus", agent: .claude) == "Opus")
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: nil, agent: .claude) == "claude")
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: " ", profileName: nil, agent: nil) == "Shell")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "Fix tests", profileName: "Opus", agent: .claude) == "Fix tests")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "env | grep X", profileName: "Opus", agent: nil) == "env | grep X")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "⠦ Run tests | Kingfisher", profileName: nil, agent: .codex)
+        == "Run tests | Kingfisher")
+  }
+
   @Test func displayStateMapsTheMacStates() {
     #expect(GhosttyMirrorPaneSource.displayState(.done) == .done)
     #expect(GhosttyMirrorPaneSource.displayState(.blocked) == .blocked)
