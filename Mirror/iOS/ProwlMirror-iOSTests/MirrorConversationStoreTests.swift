@@ -152,4 +152,21 @@ struct MirrorConversationFixtureSessionTests {
     #expect(session.pane?.agent == nil)
     #expect(session.pane?.subtitle == "Shell · main")
   }
+
+  @Test func disconnectEndsTheLaunchExpectation() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched)
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    session.disconnect()
+    #expect(session.pane?.agent == nil)
+    session.retry()
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == nil)
+    #expect(session.pane?.subtitle == "Shell · main")
+  }
 }
