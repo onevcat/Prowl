@@ -49,7 +49,10 @@ final class MirrorSession: Identifiable {
   private(set) var keyRefusal: String?
   @ObservationIgnored private var sendingKeys = false
 
-  var canSendKeys: Bool { status == .live && supportsAgentKeys && pane?.agent != nil }
+  /// The Host and the pane take keys: the key bar shows.
+  var keysAvailable: Bool { status == .live && supportsAgentKeys && pane?.agent != nil }
+  /// A key can go now; not while a message is being delivered.
+  var canSendKeys: Bool { keysAvailable && !isDeliveringMessage }
 
   /// Presses `keys` in the pane on the Mac: the Terminal key bar and Stop. One press at a time;
   /// a press while another is in flight is dropped rather than queued.
@@ -77,6 +80,12 @@ final class MirrorSession: Identifiable {
       self.keyRefusal = refusal
     }
   }
+
+  /// A message the Host is still delivering. It holds the connection's only Host command, so
+  /// a prompt answer or a key must wait: a second command would close the connection (089
+  /// review S5-R4).
+  var isDeliveringMessage: Bool { submission?.outcome.status == .pending }
+
   /// The answer this device sent to an open prompt, until the prompt resolves or the Host
   /// refuses it.
   private(set) var promptAnswer: PromptAnswer?
@@ -102,6 +111,12 @@ final class MirrorSession: Identifiable {
     if let promptAnswer, promptAnswer.promptID == promptID, promptAnswer.state == .sending
       || promptAnswer.state == .delivered
     {
+      return
+    }
+    guard !isDeliveringMessage else {
+      promptAnswer = .init(
+        promptID: promptID, choice: choice,
+        state: .refused(String(localized: "Wait until your message reaches the Mac, then answer.")))
       return
     }
     promptAnswer = .init(promptID: promptID, choice: choice, state: .sending)
@@ -453,7 +468,9 @@ final class MirrorSession: Identifiable {
   func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
     let liveListing: Bool = {
       switch command {
-      case .list, .promptRespond, .agentKeys: return status == .live
+      // The Host runs one command per connection; a message it is still delivering holds it.
+      case .promptRespond, .agentKeys: return status == .live && !isDeliveringMessage
+      case .list: return status == .live
       default: return false
       }
     }()

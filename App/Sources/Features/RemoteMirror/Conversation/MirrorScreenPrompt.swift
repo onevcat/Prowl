@@ -99,8 +99,10 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     guard title.wholeMatch(of: optionPattern) == nil else { return nil }
     var detail = quotedDetail(lines, above: titleIndex)
     // Codex shows the command between its question and the options: a block that starts with
-    // `$ ` and may continue over more lines.
-    if let start = commandStart(lines, endingAt: titleIndex) {
+    // `$ ` and may continue over more lines, blank ones included. A command approval whose
+    // command cannot be read in full never offers its answers.
+    if isCommandApproval(lines, above: top, options: options) {
+      guard let start = commandStart(lines, endingAt: titleIndex) else { return nil }
       detail = String(
         lines[start...titleIndex].map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n").dropFirst(2))
       var questionIndex = start - 1
@@ -134,14 +136,31 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     return (options, selected)
   }
 
-  /// The first line of a `$ command` block that ends at `end`, if the block has one.
+  /// How far above the options a command block may start.
+  private static let maximumCommandLines = 40
+
+  /// The first line of a `$ command` block that ends at `end`, if the block has one within
+  /// `maximumCommandLines`. Blank lines may be part of the script; Codex's `Reason:` line and
+  /// question are above the block, so they end the search.
   private static func commandStart(_ lines: [String], endingAt end: Int) -> Int? {
     var index = end
-    while index >= 0, end - index < 12, !isFiller(lines[index]) {
-      if lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("$ ") { return index }
+    while index >= 0, end - index < maximumCommandLines {
+      let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+      if trimmed.hasPrefix("$ ") { return index }
+      if trimmed.hasPrefix("Reason:") || trimmed.lowercased().hasPrefix("would you like to run") { return nil }
       index -= 1
     }
     return nil
+  }
+
+  /// Codex's command approval: its question above the menu, or its options' key hints such as
+  /// `(y)` and `(esc)`.
+  private static func isCommandApproval(_ lines: [String], above top: Int, options: [Option]) -> Bool {
+    let hints = options.contains { $0.label.wholeMatch(of: #/.*\((y|p|a|n|esc)\)/#) != nil }
+    let question = lines[max(0, top - maximumCommandLines - 8)..<top].contains {
+      $0.lowercased().contains("would you like to run the following command")
+    }
+    return hints || question
   }
 
   private static func isFiller(_ line: String) -> Bool {

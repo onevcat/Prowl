@@ -21,12 +21,14 @@ Review round 1 fixes:
 
 Round 2 fix (S5-R3): `ctrl-c` must be the last key in a command, and `pressKeys` stops when the pane's agent is gone or has changed. So the rest of a batch never reaches the shell underneath.
 
+Round 3 fix (S5-R4): while a message is being delivered, keys and Stop wait (`MirrorSession.canSendKeys`). The key bar stays visible but is disabled, because a second command would make the Host close the connection.
+
 Tests:
 
 - `agentKeysAllowOnlyNavigationAndControlKeys` (Mac).
 - `testTerminalKeyBarPressesKeysOnTheHost` and `testRefusedKeysExplainWhyInTheComposer` (iOS UI, fixture Host).
 - `takeoverStopsKeysBetweenPresses` (Mac).
-- `terminalModeFollowsTheRosterState` (iOS).
+- `terminalModeFollowsTheRosterState` and `keysWaitWhileAMessageIsBeingDelivered` (iOS).
 - E2E: Stop interrupted a real Claude turn, and Up from the key bar reached the pane.
 
 ## Decisions

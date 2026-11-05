@@ -45,6 +45,8 @@ struct MirrorKeyBar: View {
               .frame(minWidth: 30, minHeight: 22)
             }
             .buttonStyle(.glass)
+            // Disabled while a message is being delivered; the Host takes one command at a time.
+            .disabled(!session.canSendKeys)
             .accessibilityIdentifier("key-\(key.token)")
             .help(key.help)
           }
