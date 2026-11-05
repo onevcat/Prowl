@@ -107,6 +107,8 @@ struct MirrorChatRowsTests {
       return
     }
     #expect(end?.status == .succeeded)
+  }
+
   @Test func pagingKeepsAToolRunWholeAcrossThePageBoundary() {
     var items: [MirrorConversationItem] = (1...121).map { Self.tool(UInt64($0), end: $0 == 1 ? .error : .succeeded) }
     var page = MirrorChatRow.page(items, limit: 120)
