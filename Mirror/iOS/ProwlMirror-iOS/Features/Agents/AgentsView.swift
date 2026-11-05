@@ -16,9 +16,9 @@ struct AgentsView: View {
   private var session: MirrorHostSession { sessions.session(for: host) }
 
   struct LaunchRequest: Identifiable {
-    /// The worktree directories of the project the person started from, or empty for any.
-    let directories: [String]
-    var id: String { directories.joined(separator: "\n") }
+    /// The panes of the project the person started from, or empty for any project.
+    let paneIDs: [String]
+    var id: String { paneIDs.joined(separator: "\n") }
   }
 
   var body: some View {
@@ -53,7 +53,7 @@ struct AgentsView: View {
         } header: {
           ProjectHeader(
             project: project, canLaunch: session.supportsLaunch && session.status == .ready
-          ) { launchRequest = .init(directories: (project.agents + project.terminals).map(\.directory)) }
+          ) { launchRequest = .init(paneIDs: (project.agents + project.terminals).map(\.id.uuidString)) }
         }
       }
     }
@@ -70,7 +70,7 @@ struct AgentsView: View {
           select: { store.select($0.id) }, onAddHost: onAddHost, onManageHosts: onManageHosts)
       }
       ToolbarItem(placement: .topBarTrailing) {
-        Button("New Session", systemImage: "plus") { launchRequest = .init(directories: []) }
+        Button("New Session", systemImage: "plus") { launchRequest = .init(paneIDs: []) }
           .disabled(!session.supportsLaunch || session.status != .ready)
           .accessibilityIdentifier("new-agent-pane")
           .help("Start an Agent Profile in a Host project and open it")
@@ -78,7 +78,7 @@ struct AgentsView: View {
     }
     .sheet(item: $launchRequest) { request in
       NavigationStack {
-        MirrorLaunchView(execute: { try await session.command($0) }, directories: request.directories) { pane in
+        MirrorLaunchView(execute: { try await session.command($0) }, paneIDs: request.paneIDs) { pane in
           launchRequest = nil
           path.append(MirrorPaneRoute(host: host, pane: pane, launched: true))
         }
@@ -132,7 +132,7 @@ struct AgentsView: View {
         Text("Open a terminal on the Mac, or start an agent from here.")
       } actions: {
         if session.supportsLaunch {
-          Button("New Session", systemImage: "plus") { launchRequest = .init(directories: []) }
+          Button("New Session", systemImage: "plus") { launchRequest = .init(paneIDs: []) }
             .buttonStyle(.glassProminent)
         }
       }
