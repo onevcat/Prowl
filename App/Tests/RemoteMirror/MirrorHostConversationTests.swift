@@ -202,6 +202,12 @@ struct MirrorHostConversationTests {
     #expect(
       GhosttyMirrorPaneSource.rosterTitle(paneTitle: "⠦ Run tests | Kingfisher", profileName: nil, agent: .codex)
         == "Run tests | Kingfisher")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(
+        customTitle: "Release audit", paneTitle: "Fix tests", profileName: "Opus", agent: .claude) == "Release audit")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(customTitle: "  ", paneTitle: "Fix tests", profileName: nil, agent: nil)
+        == "Fix tests")
   }
 
   @Test func displayStateMapsTheMacStates() {
