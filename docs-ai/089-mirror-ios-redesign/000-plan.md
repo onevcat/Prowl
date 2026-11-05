@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-05 |
-| **Primary PRs** | (fill in as slices merge) |
+| **Primary PRs** | #1045 (P0) |
 | **Related** | [088-mirror-ios-app](../088-mirror-ios-app/000-plan.md), [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [086-sidebar-repository-groups](../086-sidebar-repository-groups/000-plan.md), `docs/remote-mirror.md`, issue #1043 |
 
 ## Background
