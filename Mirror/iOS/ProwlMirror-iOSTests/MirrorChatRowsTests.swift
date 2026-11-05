@@ -55,6 +55,60 @@ struct MirrorChatRowsTests {
     #expect(rows.map(\.id) == [3])
   }
 
+  @Test func openPromptsLeaveTheChatAndAnsweredOnesShowOnce() {
+    let open = Event.Prompt(id: "screen:1", kind: .question, title: "Which format?", freeform: false)
+    var answered = open
+    answered.outcome = .answered
+    var transcript = Event.Prompt(
+      id: "toolu_1", kind: .question, title: nil,
+      questions: [.init(id: "0", question: "Which format?", multiSelect: false, options: [])], freeform: true)
+    transcript.outcome = .answered
+    let rows = MirrorChatRow.rows([
+      .prompt(id: 1, prompt: open, resolved: nil, at: nil),
+      .prompt(id: 2, prompt: open, resolved: answered, at: nil),
+      .prompt(id: 3, prompt: transcript, resolved: transcript, at: nil),
+      Self.assistant(4),
+    ])
+    #expect(rows.map(\.id) == [2, 4])
+  }
+
+  @MainActor @Test func theOpenScreenPromptIsTheNewestUnresolvedOne() {
+    var store = MirrorConversationStore()
+    let first = Event.Prompt(id: "screen:a", kind: .permission, title: "Proceed?", freeform: false)
+    let second = Event.Prompt(id: "screen:b", kind: .question, title: "Which?", freeform: true)
+    let transcript = Event.Prompt(id: "toolu_x", kind: .question, title: "Which?", freeform: true)
+    var resolved = first
+    resolved.outcome = .allowed
+    store.apply(events: [
+      .init(.promptOpened, .prompt(first), at: nil, source: .screen, sequence: 1),
+      .init(.promptResolved, .prompt(resolved), at: nil, source: .screen, sequence: 2),
+      .init(.promptOpened, .prompt(second), at: nil, source: .screen, sequence: 3),
+      .init(.promptOpened, .prompt(transcript), at: nil, source: .transcript, sequence: 4),
+    ], sequence: 4)
+    #expect(store.openScreenPrompt?.id == "screen:b")
+  }
+
+  @Test func aScreenPromptAnswerReadsWhereItHappened() {
+    let prompt = Event.Prompt(id: "screen:q", kind: .question, title: "Which?", freeform: false)
+    var answered = prompt
+    answered.outcome = .answered
+    var store = MirrorConversationStore()
+    store.apply(events: [
+      .init(.promptOpened, .prompt(prompt), at: nil, source: .screen, sequence: 1),
+      .init(.userMessage, .message(.init(text: .init("hi"))), at: nil, source: .transcript, sequence: 2),
+      .init(.toolStarted, .toolStart(.init(id: "t", name: "Bash", kind: .shell, title: "ls")), at: nil,
+        source: .transcript, sequence: 3),
+      .init(.promptResolved, .prompt(answered), at: nil, source: .screen, sequence: 4),
+      .init(.toolCompleted, .toolEnd(.init(id: "t", status: .succeeded)), at: nil, source: .transcript, sequence: 5),
+    ], sequence: 5)
+    #expect(store.items.map(\.id) == [2, 3, 4])
+    guard case .tool(_, _, let end, _, _) = store.items[1] else {
+      Issue.record("expected the tool to stay merged")
+      return
+    }
+    #expect(end?.status == .succeeded)
+  }
+
   @Test func toolTitlesDropTheShellWrapper() {
     let wrapped = Event.ToolStart(id: "t", name: "exec", kind: .shell, title: "/bin/zsh -lc rg -n foo")
     #expect(MirrorToolKindStyle.title(wrapped) == "rg -n foo")

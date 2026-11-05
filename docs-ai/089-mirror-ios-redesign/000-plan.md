@@ -142,7 +142,7 @@ The brand color is the deep green of the app icon. It is the iOS `AccentColor`
 | --- | --- |
 | Agents screen | roster: Host display name, `displayState` (adds done), repository color, sidebar group and order, tab ID, last agent message, last activity time |
 | New Session | `profiles`: icon, model, effort; worktree list in sidebar order with groups |
-| Prompt panel | `promptRespond` (087 S3); Claude pending prompts from the `PermissionRequest` hook, not only the transcript (D6) |
+| Prompt panel | `promptRespond` (087 S3); pending prompts read from the screen menu (D6; corrected in S4 from the `PermissionRequest` hook, see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)) |
 | Terminal, Stop | key input for agent panes (`agents.input` keys or a new command), limited to a key allow list |
 | D2 | mark the injected launch text so clients can fold it |
 
@@ -178,3 +178,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 - Updated 2026-11-06: S1 shipped the Agents screen; the Agents design section is corrected in place (no card rail or chips, Mac wording) — see [003-s1-agents-home.md](003-s1-agents-home.md)
 - Updated 2026-11-06: S2 restyled the pane chrome, folded tool calls into steps rows and moved attention above the composer — see [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)
 - Updated 2026-11-06: S3 replaced the launch form with a composer-shaped New Session sheet and added Profile model, effort and icon to `profiles` — see [005-s3-new-session.md](005-s3-new-session.md)
+- Updated 2026-11-06: S4 answers screen prompts from the phone (`promptRespond`, D6 via the screen instead of hooks) — see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)

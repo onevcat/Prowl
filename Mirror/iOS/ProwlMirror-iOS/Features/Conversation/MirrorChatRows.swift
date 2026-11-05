@@ -46,9 +46,16 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
 
   static func rows(_ items: some Sequence<MirrorConversationItem>) -> [MirrorChatRow] {
     var rows: [MirrorChatRow] = []
+    // The screen and the transcript can both report one question once it is answered; one
+    // line for it is enough.
+    var resolvedTitles: Set<String> = []
     for item in items {
+      if case .prompt(_, let prompt, _?, _) = item, let title = prompt.title ?? prompt.questions?.first?.question {
+        guard resolvedTitles.insert(title).inserted else { continue }
+      }
       switch item {
-      case .attention:
+      case .attention, .prompt(_, _, nil, _):
+        // Shown once above the composer: the blocked strip, or the prompt panel (docs-ai 089 S4).
         continue
       case .tool, .reasoning:
         if case .steps(var steps) = rows.last {

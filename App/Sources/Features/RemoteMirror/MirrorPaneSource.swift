@@ -17,6 +17,9 @@ protocol MirrorPaneSource {
   func boundedRetainedText(_ id: UUID) throws -> MirrorRetainedText
   /// The pane's agent state, for `conversation-v1` (docs-ai 087); nil when unknown.
   func agentState(_ id: UUID) -> PaneAgentState?
+  /// Picks `choice` in the choice menu on the pane's screen, if it still is the prompt `id`
+  /// (docs-ai 089 S4).
+  func answerPrompt(_ id: String, choice: Int, in pane: UUID) async -> MirrorPromptAnswer
 }
 
 struct MirrorTextSnapshot {
@@ -43,9 +46,18 @@ extension MirrorPaneSource {
   }
   func activeText(_ id: UUID) throws -> String { throw MirrorProtocolError.invalidMessage }
   func agentState(_ id: UUID) -> PaneAgentState? { nil }
+  func answerPrompt(_ id: String, choice: Int, in pane: UUID) -> MirrorPromptAnswer {
+    .refused(code: "PROMPT_UNSUPPORTED", message: String(localized: "This Host cannot answer prompts."))
+  }
 }
 
 // A resize or a viewport move raced a read-only capture. Retry on the next poll.
 enum MirrorPaneSourceError: Error {
   case captureChanged
+}
+
+/// The result of answering a screen prompt from a mirror (docs-ai 089 S4).
+nonisolated enum MirrorPromptAnswer: Equatable, Sendable {
+  case delivered(MirrorScreenPrompt.Option, permission: Bool)
+  case refused(code: String, message: String)
 }

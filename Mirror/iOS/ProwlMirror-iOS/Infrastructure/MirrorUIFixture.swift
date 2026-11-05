@@ -14,7 +14,7 @@
     static func launchCommand(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
       let payload: String
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
       case .list where CommandLine.arguments.contains("--mirror-ui-roster-fixture"):
         // The roster fixture's projects, with the pane IDs of `rosterPanes`.
         payload =

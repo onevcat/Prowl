@@ -156,6 +156,51 @@ final class MirrorConversationFeed {
     if let event = statusMapper.event(for: pane, at: Date()) { append([event]) }
   }
 
+  /// The choice menu on the pane's screen while the agent is blocked, nil otherwise (docs-ai
+  /// 089 S4). A new menu opens a prompt; a menu that goes away or changes resolves the open one.
+  private(set) var screenPrompt: MirrorScreenPrompt?
+  /// The answer a phone gave to the open screen prompt, for its resolution.
+  private var screenAnswer: (promptID: String, outcome: MirrorConversationEvent.PromptOutcome)?
+
+  func observeScreen(_ prompt: MirrorScreenPrompt?) {
+    guard prompt?.id != screenPrompt?.id else {
+      screenPrompt = prompt
+      return
+    }
+    var events: [MirrorConversationEvent] = []
+    if let open = screenPrompt { events.append(Self.resolution(of: open, answer: screenAnswer)) }
+    screenPrompt = prompt
+    screenAnswer = nil
+    if let prompt {
+      events.append(.init(.promptOpened, .prompt(Self.payload(prompt)), at: Date(), source: .screen))
+    }
+    append(events)
+  }
+
+  /// Records what the phone chose, so the prompt's resolution can say so.
+  func noteScreenAnswer(promptID: String, option: MirrorScreenPrompt.Option, permission: Bool) {
+    let declined = option.label.lowercased().hasPrefix("no")
+    screenAnswer = (promptID, permission ? (declined ? .denied : .allowed) : .answered)
+  }
+
+  static func payload(_ prompt: MirrorScreenPrompt) -> MirrorConversationEvent.Prompt {
+    .init(
+      id: prompt.id, kind: prompt.isPermission ? .permission : .question, title: prompt.title,
+      detail: prompt.detail.map { MirrorBoundedText($0) },
+      choices: prompt.answers.map { .init(id: String($0.number), label: $0.label, description: $0.detail) },
+      questions: nil, freeform: prompt.options.contains(where: \.isFreeform), outcome: nil, decidedBy: nil)
+  }
+
+  private static func resolution(
+    of prompt: MirrorScreenPrompt, answer: (promptID: String, outcome: MirrorConversationEvent.PromptOutcome)?
+  ) -> MirrorConversationEvent {
+    var resolved = payload(prompt)
+    let fromPhone = answer?.promptID == prompt.id
+    resolved.outcome = fromPhone ? answer?.outcome : .unknown
+    resolved.decidedBy = fromPhone ? "mirror" : nil
+    return .init(.promptResolved, .prompt(resolved), at: Date(), source: .screen)
+  }
+
   func stop() {
     stopTail()
     transcript = nil
@@ -174,8 +219,13 @@ final class MirrorConversationFeed {
 
   /// The status the pane last reported, restated at the start of a segment.
   private func currentStatus() -> [MirrorConversationEvent] {
-    guard let lastPane, let event = statusMapper.event(for: lastPane, at: Date()) else { return [] }
-    return [event]
+    var events: [MirrorConversationEvent] = []
+    if let lastPane, let event = statusMapper.event(for: lastPane, at: Date()) { events.append(event) }
+    // A new segment restates an open screen prompt too, so a client can still answer it.
+    if let screenPrompt {
+      events.append(.init(.promptOpened, .prompt(Self.payload(screenPrompt)), at: Date(), source: .screen))
+    }
+    return events
   }
 
   private func stopTail() {

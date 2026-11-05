@@ -20,14 +20,25 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     case agentsInput(Dispatch)
     case agentsDispatch(Dispatch)
     case send(MirrorShellInput)
+    /// Answers the choice menu on the pane's screen (docs-ai 089 S4, capability `prompt-respond`).
+    case promptRespond(PromptRespond)
 
     var targetPaneID: UUID? {
       switch self {
       case .agentsInput(let input), .agentsDispatch(let input): UUID(uuidString: input.pane)
       case .send(let input): UUID(uuidString: input.selector.value)
+      case .promptRespond(let answer): UUID(uuidString: answer.pane)
       default: nil
       }
     }
+  }
+
+  struct PromptRespond: Codable, Equatable, Sendable {
+    let pane: String
+    /// The `prompt.opened` id the client saw; the Host refuses when the screen shows another.
+    let prompt: String
+    /// The choice id, the option's number on screen.
+    let choice: String
   }
 
   struct Dispatch: Codable, Equatable, Sendable {

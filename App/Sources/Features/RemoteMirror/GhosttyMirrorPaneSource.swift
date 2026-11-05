@@ -196,6 +196,62 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     return pane.session?.transcriptPath != nil ? .available : .pending
   }
 
+  /// Answers the screen prompt `id` with option `choice` (docs-ai 089 S4). Every key follows a
+  /// fresh read of the screen: the menu must still be this prompt, and a move key must have
+  /// moved the highlight one row before the next key goes. Enter goes only on the chosen row.
+  func answerPrompt(_ id: String, choice: Int, in pane: UUID) async -> MirrorPromptAnswer {
+    let closed = MirrorPromptAnswer.refused(
+      code: "PROMPT_CLOSED", message: String(localized: "The prompt is no longer open on the Mac."))
+    guard let surface = view(pane),
+      let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil })
+    else { return closed }
+    guard agentState(pane)?.state == .blocked else { return closed }
+    if let refusal = AgentDispatchInputProtection.refusal(
+      hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
+      now: ProcessInfo.processInfo.systemUptime)
+    {
+      return .refused(code: "HOST_EDITING", message: refusal)
+    }
+    var prompt = (try? activeText(pane)).flatMap(MirrorScreenPrompt.parse)
+    for _ in 0..<Self.maximumPromptKeys {
+      guard let current = prompt else { return closed }
+      guard current.id == id else {
+        return .refused(
+          code: "PROMPT_CHANGED", message: String(localized: "The prompt changed on the Mac. Check it again."))
+      }
+      guard let option = current.answers.first(where: { $0.number == choice }) else {
+        return .refused(
+          code: "PROMPT_CHOICE_INVALID", message: String(localized: "That answer is not offered on the Mac."))
+      }
+      let key = MirrorScreenPrompt.nextKey(selected: current.selected, target: choice)
+      guard state.sendKeyToken(key, in: pane) else { return closed }
+      if key == "enter" { return .delivered(option, permission: current.isPermission) }
+      let expected = current.selected + (key == "down" ? 1 : -1)
+      prompt = await waitForSelection(expected, of: id, in: pane)
+      guard prompt?.selected == expected else {
+        return .refused(
+          code: "DELIVERY_UNCERTAIN",
+          message: String(localized: "The Mac did not move the selection as expected. Check the prompt there."))
+      }
+    }
+    return .refused(
+      code: "DELIVERY_UNCERTAIN", message: String(localized: "The answer needed too many steps. Answer on the Mac."))
+  }
+
+  private static let maximumPromptKeys = 16
+
+  /// Re-reads the screen until the highlight sits on `expected`, the prompt changes, or about a
+  /// second passes.
+  private func waitForSelection(_ expected: Int, of id: String, in pane: UUID) async -> MirrorScreenPrompt? {
+    var latest: MirrorScreenPrompt?
+    for _ in 0..<10 {
+      try? await Task.sleep(for: .milliseconds(100))
+      latest = (try? activeText(pane)).flatMap(MirrorScreenPrompt.parse)
+      if latest?.id != id || latest?.selected == expected { return latest }
+    }
+    return latest
+  }
+
   func agentState(_ id: UUID) -> PaneAgentState? {
     manager.activeWorktreeStates.lazy.compactMap { $0.surfaceAgentStates[id] }.first
   }

@@ -69,11 +69,19 @@ struct PaneView: View {
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       VStack(spacing: 8) {
-        if state == .blocked, session.status == .live {
+        if session.status == .live, session.supportsPromptRespond,
+          let prompt = session.conversation.openScreenPrompt, !(prompt.choices ?? []).isEmpty
+        {
+          MirrorPromptPanel(prompt: prompt, answer: session.promptAnswer) { choice in
+            session.answerPrompt(prompt.id, choice: choice)
+          }
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if state == .blocked, session.status == .live {
           MirrorBlockedStrip(kind: session.conversation.status?.kind)
         }
         ComposerBar(session: session, isEditing: $isComposing)
       }
+      .animation(.snappy, value: session.conversation.openScreenPrompt?.id)
       .padding(.horizontal, 12)
       .padding(.bottom, 6)
     }

@@ -202,6 +202,29 @@ Hosts leave them out.
 | `repositoryColor` | The repository color: a preset name (`red`, `orange`, `yellow`, `green`, `mint`, `cyan`, `blue`, `purple`, `pink`, `gray`) or `#RRGGBB` |
 | `projectOrder`, `groupName` | The project's position in the sidebar and the name of the group that holds it; `projectName` is the sidebar name |
 
+## Answering prompts (`prompt-respond`)
+
+While an agent is blocked on a choice menu (Claude Code's permission and AskUserQuestion
+dialogs, Codex's approval), the Host reads the menu from the pane's screen and sends it on
+`conversation-v1` as `prompt.opened` with `source: "screen"` (docs-ai 089 S4). The prompt id is
+`screen:<hash>` of the question and the option labels; `choices[].id` is the option's number on
+screen; `freeform` says the menu also has "Type something." / "Chat about this" rows, which
+are not offered. The prompt resolves when the menu leaves the screen, with the outcome the
+phone chose (`allowed`, `denied`, `answered`, `decidedBy: "mirror"`) or `unknown`.
+
+A client with the `prompt-respond` capability answers with a command on the subscription that
+mirrors the pane:
+
+```json
+{"command":{"_0":{"subscriptionID":"UUID","commandRequest":{"requestID":"UUID","request":{"output":"json","command":{"promptRespond":{"_0":{"pane":"UUID","prompt":"screen:…","choice":"2"}}}}}}}}
+```
+
+The Host checks the lease, that the agent is still blocked, that no IME text or local edit
+(2 s) is pending, and that the screen still shows the same prompt. It then moves the
+highlight one row at a time, re-reading the screen after every key, and presses Enter on the
+chosen row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSED`,
+`PROMPT_CHANGED`, `PROMPT_CHOICE_INVALID`, `HOST_EDITING` or `DELIVERY_UNCERTAIN`.
+
 ## Conversation stream (`conversation-v1`)
 
 `conversation-v1` is a third `subscribe` representation (capability `conversation-v1`,

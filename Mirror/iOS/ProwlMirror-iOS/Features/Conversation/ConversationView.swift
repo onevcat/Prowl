@@ -152,8 +152,11 @@ struct ConversationItemView: View {
     case .reasoning, .tool, .attention:
       // Folded into steps rows or shown above the composer.
       EmptyView()
-    case .prompt(_, let prompt, let resolved, _):
+    case .prompt(_, let prompt, let resolved?, _):
       PromptCard(prompt: prompt, resolved: resolved)
+    case .prompt(_, _, nil, _):
+      // An open prompt shows once, above the composer (docs-ai 089 S4).
+      EmptyView()
     case .session(_, let kind, let session, _):
       SessionDivider(kind: kind, session: session)
     case .compaction:
@@ -454,39 +457,17 @@ enum MirrorToolKindStyle {
 
 private struct PromptCard: View {
   let prompt: MirrorConversationEvent.Prompt
-  let resolved: MirrorConversationEvent.Prompt?
+  let resolved: MirrorConversationEvent.Prompt
 
   var body: some View {
-    if let resolved {
-      Label {
-        Text("\(title) · \(outcomeLabel(resolved.outcome))")
-      } icon: {
-        Image(systemName: "checkmark.circle")
-      }
-      .font(.footnote).foregroundStyle(.secondary)
-      .accessibilityIdentifier("conversation-prompt")
-    } else {
-      VStack(alignment: .leading, spacing: 8) {
-        Label(title, systemImage: icon).font(.subheadline.weight(.semibold)).foregroundStyle(.red)
-        if let detail = prompt.detail { Text(detail.text).font(.callout) }
-        ForEach(prompt.questions ?? []) { question in
-          VStack(alignment: .leading, spacing: 4) {
-            Text(question.question).font(.callout)
-            ForEach(question.options) { option in
-              Label(option.label, systemImage: "circle").font(.callout).foregroundStyle(.secondary)
-            }
-          }
-        }
-        ForEach(prompt.choices ?? []) { choice in
-          Label(choice.label, systemImage: "circle").font(.callout).foregroundStyle(.secondary)
-        }
-      }
-      .padding(12)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-      .accessibilityElement(children: .contain)
-      .accessibilityIdentifier("conversation-prompt")
+    Label {
+      Text("\(prompt.title ?? prompt.questions?.first?.question ?? title) · \(outcomeLabel(resolved.outcome))")
+        .lineLimit(2)
+    } icon: {
+      Image(systemName: "checkmark.circle")
     }
+    .font(.footnote).foregroundStyle(.secondary)
+    .accessibilityIdentifier("conversation-prompt")
   }
 
   private var title: String {
@@ -497,15 +478,6 @@ private struct PromptCard: View {
     case .auth: String(localized: "Sign-in needed")
     case .trust: String(localized: "Trust requested")
     case .elicitation: String(localized: "Input requested")
-    }
-  }
-
-  private var icon: String {
-    switch prompt.kind {
-    case .permission, .trust: "lock.shield"
-    case .question, .elicitation: "questionmark.bubble"
-    case .planApproval: "list.clipboard"
-    case .auth: "person.badge.key"
     }
   }
 

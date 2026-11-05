@@ -40,6 +40,56 @@ final class MirrorSession: Identifiable {
   private(set) var mode: Mode = .screen
   private(set) var conversation = MirrorConversationStore()
   private(set) var supportsConversation = false
+  /// The Host answers screen prompts from here (docs-ai 089 S4).
+  private(set) var supportsPromptRespond = false
+  /// The answer this device sent to an open prompt, until the prompt resolves or the Host
+  /// refuses it.
+  private(set) var promptAnswer: PromptAnswer?
+
+  struct PromptAnswer: Equatable {
+    enum State: Equatable {
+      case sending
+      /// The Host pressed the keys; the prompt resolves when the agent moves on.
+      case delivered
+      case refused(String)
+    }
+
+    let promptID: String
+    let choice: String
+    var state: State
+  }
+
+  /// Sends `choice` for the open screen prompt. The Host checks that the screen still shows
+  /// this prompt before it presses any key, and never retries.
+  func answerPrompt(_ promptID: String, choice: String) {
+    guard status == .live, supportsPromptRespond, let pane else { return }
+    // One answer per prompt: a refused one may be tried again, a sent one may not.
+    if let promptAnswer, promptAnswer.promptID == promptID, promptAnswer.state == .sending
+      || promptAnswer.state == .delivered
+    {
+      return
+    }
+    promptAnswer = .init(promptID: promptID, choice: choice, state: .sending)
+    Task { [weak self] in
+      let state: PromptAnswer.State
+      do {
+        guard let self else { return }
+        let response = try await self.command(
+          .promptRespond(.init(pane: pane.id.uuidString, prompt: promptID, choice: choice)))
+        struct Result: Decodable {
+          struct Failure: Decodable { let message: String }
+          let ok: Bool
+          let error: Failure?
+        }
+        let result = try response.decode(Result.self)
+        state = result.ok ? .delivered : .refused(result.error?.message ?? String(localized: "The Host refused the answer."))
+      } catch {
+        state = .refused(error.localizedDescription)
+      }
+      guard let self, self.promptAnswer?.promptID == promptID, self.promptAnswer?.choice == choice else { return }
+      self.promptAnswer?.state = state
+    }
+  }
   /// A representation switch that keeps the connection: the next `subscribed` is not a reconnect.
   @ObservationIgnored private var resumesConversation = false
   private(set) var status: Status = .disconnected
@@ -362,8 +412,10 @@ final class MirrorSession: Identifiable {
 
   func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
     let liveListing: Bool = {
-      if case .list = command { return status == .live }
-      return false
+      switch command {
+      case .list, .promptRespond: return status == .live
+      default: return false
+      }
     }()
     guard status == .choosingPane || liveListing, supportsLaunch, transport != nil,
       pendingCommand == nil
@@ -637,6 +689,7 @@ final class MirrorSession: Identifiable {
       supportsRemoteScroll = message.capabilities?.contains("remote-scroll") == true
       supportsScrollState = message.capabilities?.contains("scroll-state-v1") == true
       supportsConversation = message.capabilities?.contains("conversation-v1") == true
+      supportsPromptRespond = message.capabilities?.contains("prompt-respond") == true
       if supportsSubmission { querySubmission() }
       panes = message.panes ?? []
       onVerifiedConnection?(configuration)

@@ -265,8 +265,11 @@ ones fold after twelve lines), the agent's Markdown as text (headings, lists, qu
 blocks and tables), and each run of tool calls between two messages as one quiet row
 ("6 tool calls", with failures counted in red and the running call shown while the agent
 works). A row opens to one line per call, and a line opens its command, changes and output
-in a sheet. Prompt cards show the question and its choices and ask you to answer on the
-Mac; answered prompts leave one line. Instructions that Prowl adds to a launch prompt, such
+in a sheet. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
+above the composer shows the question, what it is about (such as the command to approve) and
+the choices; tap one to answer. The Host checks that the Mac still shows the same question
+before it presses any key, so a stale tap is refused with a reason, and typed answers stay on
+the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 The arrow button returns to the newest message after scrolling up. The floating composer
 under both views sends through `agents.input`; a note appears only when the Host will not

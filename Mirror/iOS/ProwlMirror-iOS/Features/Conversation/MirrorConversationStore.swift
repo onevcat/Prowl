@@ -149,7 +149,17 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
         result.append(.prompt(id: event.sequence, prompt: prompt, resolved: nil, at: event.timestamp))
       case (.promptResolved, .prompt(let resolution)):
         if let index = promptIndex[resolution.id], case .prompt(let id, let prompt, _, let at) = result[index] {
-          result[index] = .prompt(id: id, prompt: prompt, resolved: resolution, at: at)
+          if resolution.id.hasPrefix("screen:") {
+            // A screen prompt opens before the transcript records anything, so its answer
+            // reads where it happened, after the steps that led to it (docs-ai 089 S4).
+            result.remove(at: index)
+            promptIndex.removeValue(forKey: resolution.id)
+            for (key, value) in promptIndex where value > index { promptIndex[key] = value - 1 }
+            for (key, value) in toolIndex where value > index { toolIndex[key] = value - 1 }
+            result.append(.prompt(id: event.sequence, prompt: prompt, resolved: resolution, at: at))
+          } else {
+            result[index] = .prompt(id: id, prompt: prompt, resolved: resolution, at: at)
+          }
         }
       case (.agentStatus, .status(let status)):
         if status.state == .blocked {

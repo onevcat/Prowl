@@ -1,0 +1,35 @@
+  Prowl dispatch completion protocol v1:                                                           
+  Before ending this task, choose exactly one terminal outcome and make this command your final    
+  tool action:                                                                                     
+  prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"           
+  Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be 
+  completed.                                                                                       
+  Keep the required summary to a single line with no control characters, and explain the result    
+  clearly.                                                                                         
+  Do not omit the command; Prowl supplies its dispatch context                                     
+  automatically.                                                                                   
+
+⏺ User answered Claude's questions:
+  ⎿  · Which image format do you prefer for icons? → WebP
+
+⏺ Listing files in current directory
+  ⎿  $ prowl agents dispatch-complete --outcome succeeded --summary "Asked icon format preference 
+     (user chose WebP), ran ls: README.md and Scan.swift"
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ Report dispatch completion to Prowl
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ prowl agents dispatch-complete --outcome succeeded --summary "Asked icon format preference
+ │ (user chose WebP), ran ls: README.md and Scan.swift"
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+
+ Do you want to proceed?         
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: prowl agents *
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend

@@ -174,6 +174,56 @@ struct MirrorHostConversationTests {
     #expect(list.hostName == MirrorHostAddresses.computerName)
   }
 
+  /// docs-ai 089 S4: a blocked pane's screen menu is the open prompt; it resolves when it closes.
+  @Test(.timeLimit(.minutes(1))) func blockedScreenMenuOpensAndResolvesAPrompt() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    let lease = try await fixture.subscribeConversation()
+    _ = try await fixture.collect(until: .userMessage, lease: lease)
+    let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Fixtures/MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")
+    fixture.source.screen = try String(contentsOf: fixtures, encoding: .utf8)
+    fixture.source.setState(.blocked, reason: .native(.blocked))
+    let opened = try await fixture.collect(until: .promptOpened, lease: lease)
+    guard case .prompt(let prompt) = try #require(opened.last(where: { $0.kind == .promptOpened })).payload else {
+      Issue.record("expected a prompt payload")
+      return
+    }
+    #expect(prompt.id.hasPrefix("screen:"))
+    #expect(prompt.kind == .question && prompt.freeform)
+    #expect(prompt.title == "Which image format do you prefer for icons?")
+    #expect(prompt.choices?.map(\.id) == ["1", "2", "3"])
+    #expect(prompt.choices?.map(\.label) == ["PNG", "WebP", "SVG"])
+    fixture.source.screen = "shell"
+    fixture.source.setState(.working, reason: .native(.working))
+    let resolved = try await fixture.collect(until: .promptResolved, lease: lease)
+    guard case .prompt(let resolution) = try #require(resolved.last(where: { $0.kind == .promptResolved })).payload
+    else {
+      Issue.record("expected a prompt resolution")
+      return
+    }
+    #expect(resolution.id == prompt.id && resolution.outcome == .unknown)
+  }
+
+  @Test func feedResolvesAPhoneAnswerWithItsOutcome() throws {
+    let feed = MirrorConversationFeed()
+    let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Fixtures/MirrorScreenPrompt/claude-2.1.318-command-permission.txt")
+    let prompt = try #require(MirrorScreenPrompt.parse(try String(contentsOf: fixtures, encoding: .utf8)))
+    feed.observeScreen(prompt)
+    feed.observeScreen(prompt)
+    feed.noteScreenAnswer(promptID: prompt.id, option: prompt.options[3], permission: true)
+    feed.observeScreen(nil)
+    let events = feed.log.snapshot(since: nil).events
+    #expect(events.map(\.kind) == [.promptOpened, .promptResolved])
+    guard case .prompt(let resolution) = events[1].payload else {
+      Issue.record("expected a prompt resolution")
+      return
+    }
+    #expect(resolution.outcome == .denied && resolution.decidedBy == "mirror")
+    #expect(events[0].source == .screen)
+  }
+
   @Test func rosterDecorationsFollowTheSidebarLayout() {
     var layout = SidebarLayout()
     layout.items = [
@@ -257,7 +307,8 @@ struct MirrorHostConversationTests {
     }
     func snapshot(_ id: UUID) throws -> MirrorFrame { MirrorFrame(columns: 80, rows: 24, bytes: Data("x".utf8)) }
     func write(_ bytes: Data, to id: UUID) throws {}
-    func activeText(_ id: UUID) throws -> String { "shell" }
+    var screen = "shell"
+    func activeText(_ id: UUID) throws -> String { screen }
     func agentState(_ id: UUID) -> PaneAgentState? { state }
 
     func setAgent(_ agent: DetectedAgent?, transcript: URL?) {
