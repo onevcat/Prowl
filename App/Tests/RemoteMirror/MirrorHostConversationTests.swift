@@ -224,6 +224,16 @@ struct MirrorHostConversationTests {
     #expect(events[0].source == .screen)
   }
 
+  /// docs-ai 089 S5: only navigation and control keys, at most eight, pass.
+  @Test func agentKeysAllowOnlyNavigationAndControlKeys() {
+    #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["esc"]).isAllowed)
+    #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["shift-tab", "ctrl-c", "enter"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: []).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: ["a"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: ["cmd-q"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: Array(repeating: "up", count: 9)).isAllowed)
+  }
+
   @Test func rosterDecorationsFollowTheSidebarLayout() {
     var layout = SidebarLayout()
     layout.items = [

@@ -42,6 +42,40 @@ final class MirrorSession: Identifiable {
   private(set) var supportsConversation = false
   /// The Host answers screen prompts from here (docs-ai 089 S4).
   private(set) var supportsPromptRespond = false
+  /// The Host presses navigation and control keys in agent panes (docs-ai 089 S5).
+  private(set) var supportsAgentKeys = false
+  /// Why the last key press was refused, until the next one.
+  private(set) var keyRefusal: String?
+  @ObservationIgnored private var sendingKeys = false
+
+  var canSendKeys: Bool { status == .live && supportsAgentKeys && pane?.agent != nil }
+
+  /// Presses `keys` in the pane on the Mac: the Terminal key bar and Stop. One press at a time;
+  /// a press while another is in flight is dropped rather than queued.
+  func sendKeys(_ keys: [String]) {
+    guard canSendKeys, let pane, !sendingKeys else { return }
+    sendingKeys = true
+    keyRefusal = nil
+    Task { [weak self] in
+      var refusal: String?
+      do {
+        guard let self else { return }
+        let response = try await self.command(.agentKeys(.init(pane: pane.id.uuidString, keys: keys)))
+        struct Result: Decodable {
+          struct Failure: Decodable { let message: String }
+          let ok: Bool
+          let error: Failure?
+        }
+        let result = try response.decode(Result.self)
+        if !result.ok { refusal = result.error?.message ?? String(localized: "The Host refused the keys.") }
+      } catch {
+        refusal = error.localizedDescription
+      }
+      guard let self else { return }
+      self.sendingKeys = false
+      self.keyRefusal = refusal
+    }
+  }
   /// The answer this device sent to an open prompt, until the prompt resolves or the Host
   /// refuses it.
   private(set) var promptAnswer: PromptAnswer?
@@ -413,7 +447,7 @@ final class MirrorSession: Identifiable {
   func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
     let liveListing: Bool = {
       switch command {
-      case .list, .promptRespond: return status == .live
+      case .list, .promptRespond, .agentKeys: return status == .live
       default: return false
       }
     }()
@@ -690,6 +724,7 @@ final class MirrorSession: Identifiable {
       supportsScrollState = message.capabilities?.contains("scroll-state-v1") == true
       supportsConversation = message.capabilities?.contains("conversation-v1") == true
       supportsPromptRespond = message.capabilities?.contains("prompt-respond") == true
+      supportsAgentKeys = message.capabilities?.contains("agent-keys") == true
       if supportsSubmission { querySubmission() }
       panes = message.panes ?? []
       onVerifiedConnection?(configuration)

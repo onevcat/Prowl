@@ -168,7 +168,7 @@ The brand color is the deep green of the app icon. It is the iOS `AccentColor`
 | S2 | Pane chrome, Chat restyle (Markdown, tool step groups, folded injected text), composer |
 | S3 | New Session sheet; `profiles` and worktree wire fields |
 | S4 | `promptRespond` on Host and client, Claude hook prompts (D6), prompt panel |
-| S5 | Terminal: `vt-v1` rendering, key bar, key input on Host, Stop |
+| S5 | Terminal: key bar, key input on Host, Stop (`vt-v1` rendering deferred, see 007) |
 
 Each slice ships simulator screenshots (light and dark) against a live Host and updates
 `docs/remote-mirror.md` when user-facing behavior changes.
@@ -179,3 +179,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 - Updated 2026-11-06: S2 restyled the pane chrome, folded tool calls into steps rows and moved attention above the composer — see [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)
 - Updated 2026-11-06: S3 replaced the launch form with a composer-shaped New Session sheet and added Profile model, effort and icon to `profiles` — see [005-s3-new-session.md](005-s3-new-session.md)
 - Updated 2026-11-06: S4 answers screen prompts from the phone (`promptRespond`, D6 via the screen instead of hooks) — see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)
+- Updated 2026-11-06: S5 added the Terminal key bar and Stop (`agentKeys`); the `vt-v1` terminal view is deferred — see [007-s5-terminal-keys.md](007-s5-terminal-keys.md)

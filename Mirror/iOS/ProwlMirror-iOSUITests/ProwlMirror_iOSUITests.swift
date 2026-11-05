@@ -559,6 +559,21 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(app.buttons["scan-pairing-qr"].waitForExistence(timeout: 5))
   }
 
+  @MainActor
+  func testTerminalKeyBarPressesKeysOnTheHost() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let escape = app.buttons["key-esc"]
+    XCTAssertTrue(escape.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["key-shift-tab"].exists)
+    attach("Terminal key bar")
+    escape.tap()
+    app.buttons["key-up"].tap()
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "key-refusal").firstMatch.waitForExistence(timeout: 2))
+  }
+
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.
   /// The name matches `MirrorUIFixture.releaseScrollNotification`.
   private func releaseHeldScrolls() {

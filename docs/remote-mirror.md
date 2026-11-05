@@ -271,7 +271,10 @@ the choices; tap one to answer. The Host checks that the Mac still shows the sam
 before it presses any key, so a stale tap is refused with a reason, and typed answers stay on
 the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
-The arrow button returns to the newest message after scrolling up. The floating composer
+The arrow button returns to the newest message after scrolling up. While the agent works and the
+composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
+confirm. In Terminal, agent panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return) for TUI menus.
+The floating composer
 under both views sends through `agents.input`; a note appears only when the Host will not
 deliver at once (the agent is working and the message waits) or a receipt needs a look.
 

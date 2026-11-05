@@ -550,7 +550,9 @@ final class MirrorHost {
               panes: panes,
               capabilities: ["vt-v1", "text-v1", "conversation-v1", "takeover", "refresh"]
                 + (commandService != nil
-                  ? ["launch-profile", "launch-shell", "agents-dispatch", "agent-input", "prompt-respond"] : [])
+                  ? [
+                    "launch-profile", "launch-shell", "agents-dispatch", "agent-input", "prompt-respond", "agent-keys",
+                  ] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
                 + (source.supportsRemoteScroll ? ["remote-scroll"] : [])
                 + (source.supportsViewportText ? ["viewport-text-v1"] : [])
@@ -680,6 +682,10 @@ final class MirrorHost {
       answerPrompt(answer, paneID: paneID, request: request, peer: peer, lease: lease)
       return
     }
+    if case .agentKeys(let input) = request.request.command, let paneID = UUID(uuidString: input.pane) {
+      pressKeys(input, paneID: paneID, request: request, peer: peer, lease: lease)
+      return
+    }
     commandPeers[peer.id] = request
     commandDevices[peer.id] = devicePeers[peer.id]
     let peerID = peer.id
@@ -726,6 +732,39 @@ final class MirrorHost {
       case .refused(let code, let message):
         response = MirrorCommandService.failure(message, code: code)
       }
+      guard let peer, self.peers[peerID] === peer else { return }
+      peer.send(.commandResult(.init(commandResponse: .init(requestID: request.requestID, response: response))))
+    }
+  }
+
+  /// Presses allow-listed keys for the pane this connection mirrors (docs-ai 089 S5).
+  private func pressKeys(
+    _ input: MirrorCommandRequest.AgentKeys, paneID: UUID, request: MirrorCommandRequest,
+    peer: MirrorConnection, lease: UUID?
+  ) {
+    commandPeers[peer.id] = request
+    let peerID = peer.id
+    Task { @MainActor [weak self, weak peer] in
+      guard let self else { return }
+      let refusal: String?
+      if !input.isAllowed {
+        refusal = String(localized: "Only navigation and control keys can be sent from a mirror.")
+      } else if lease != nil, self.subscriptions[peerID]?.id != lease {
+        refusal = String(localized: "The mirror no longer owns this pane.")
+      } else {
+        refusal = await self.source.pressKeys(input.keys, in: paneID)
+      }
+      self.commandPeers.removeValue(forKey: peerID)
+      let response: MirrorJSON =
+        if let refusal {
+          MirrorCommandService.failure(refusal, code: "KEYS_REFUSED")
+        } else {
+          .object([
+            "ok": .bool(true), "command": .string("agent.keys"),
+            "schema_version": .string("prowl.remote.command.v1"),
+            "data": .object(["keys": .array(input.keys.map { .string($0) })]),
+          ])
+        }
       guard let peer, self.peers[peerID] === peer else { return }
       peer.send(.commandResult(.init(commandResponse: .init(requestID: request.requestID, response: response))))
     }

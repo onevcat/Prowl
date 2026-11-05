@@ -7,7 +7,7 @@ struct MirrorLaunchModelTests {
   @Test func deduplicatesWorktreesAndUsesOnlyAvailableHostProfiles() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: throw CancellationError()
@@ -26,7 +26,7 @@ struct MirrorLaunchModelTests {
     var requests: [MirrorCommandRequest.Create] = []
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create(let create): requests.append(create); return try json(Self.created)
@@ -47,7 +47,7 @@ struct MirrorLaunchModelTests {
     var calls = 0
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: calls += 1; throw URLError(.networkConnectionLost)
@@ -65,7 +65,7 @@ struct MirrorLaunchModelTests {
   @Test func unconfirmedHostResultBlocksAnotherCreation() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create:
@@ -81,7 +81,7 @@ struct MirrorLaunchModelTests {
   @Test func explicitRejectionKeepsTheFormEditable() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: return try json(#"{"ok":false,"error":{"message":"Profile removed"}}"#)
@@ -111,7 +111,7 @@ struct MirrorLaunchModelTests {
     let untitled = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":""}}}}"#
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: return try json(untitled)

@@ -104,9 +104,9 @@ final class MirrorCommandService {
       return failure(
         "Host cannot verify an empty shell command line. Use an Agent Profile or control the shell on Host."
       )
-    case .promptRespond:
-      // The Mirror Host answers prompts itself; it never reaches the CLI router.
-      return failure("Prompt answers go to the Mirror Host.")
+    case .promptRespond, .agentKeys:
+      // The Mirror Host handles these itself; they never reach the CLI router.
+      return failure("Prompt answers and keys go to the Mirror Host.")
     case .create(let input):
       guard input.resource == "tab", input.background,
         input.launch == nil || input.launch?.profile.isEmpty == false,

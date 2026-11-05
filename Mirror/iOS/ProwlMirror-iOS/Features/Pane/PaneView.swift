@@ -79,6 +79,9 @@ struct PaneView: View {
         } else if state == .blocked, session.status == .live {
           MirrorBlockedStrip(kind: session.conversation.status?.kind)
         }
+        if session.mode == .screen, session.canSendKeys, !compactWhileComposing {
+          MirrorKeyBar(session: session)
+        }
         ComposerBar(session: session, isEditing: $isComposing)
       }
       .animation(.snappy, value: session.conversation.openScreenPrompt?.id)

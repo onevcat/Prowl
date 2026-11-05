@@ -240,6 +240,26 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   private static let maximumPromptKeys = 16
 
+  /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5): agent panes only, after the
+  /// same input protection as typed input, one key at a time.
+  func pressKeys(_ keys: [String], in pane: UUID) async -> String? {
+    guard let surface = view(pane),
+      let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil }),
+      agentState(pane)?.detectedAgent != nil
+    else { return String(localized: "Keys go only to panes that run an agent.") }
+    if let refusal = AgentDispatchInputProtection.refusal(
+      hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
+      now: ProcessInfo.processInfo.systemUptime)
+    {
+      return refusal
+    }
+    for (index, key) in keys.enumerated() {
+      if index > 0 { try? await Task.sleep(for: .milliseconds(60)) }
+      guard state.sendKeyToken(key, in: pane) else { return String(localized: "The Mac did not accept the key.") }
+    }
+    return nil
+  }
+
   /// Re-reads the screen until the highlight sits on `expected`, the prompt changes, or about a
   /// second passes.
   private func waitForSelection(_ expected: Int, of id: String, in pane: UUID) async -> MirrorScreenPrompt? {

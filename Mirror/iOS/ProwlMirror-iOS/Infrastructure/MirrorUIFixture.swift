@@ -14,7 +14,7 @@
     static func launchCommand(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
       let payload: String
       switch command {
-      case .agentsInput, .agentsDispatch, .send, .promptRespond: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list where CommandLine.arguments.contains("--mirror-ui-roster-fixture"):
         // The roster fixture's projects, with the pane IDs of `rosterPanes`.
         payload =
@@ -239,7 +239,7 @@
                 panes: [pane] + MirrorUIFixture.rosterPanes,
                 capabilities: [
                   "text-v1", "history", "refresh", "launch-profile", "agents-dispatch", "agent-input",
-                  "shell-send",
+                  "shell-send", "agent-keys",
                 ] + (conversation.isEmpty ? [] : ["conversation-v1"])
                   + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
                   + (CommandLine.arguments.contains("--mirror-ui-scroll-boundary-fixture") ? ["scroll-state-v1"] : []),
@@ -292,6 +292,11 @@
                   ])
                 ])
               ]),
+            ])
+          case .agentKeys(let input):
+            payload = .object([
+              "ok": .bool(true), "command": .string("agent.keys"),
+              "data": .object(["keys": .array(input.keys.map { .string($0) })]),
             ])
           case .agentsInput(let input):
             payload = .object([

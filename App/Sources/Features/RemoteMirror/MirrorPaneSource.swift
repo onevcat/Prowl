@@ -20,6 +20,8 @@ protocol MirrorPaneSource {
   /// Picks `choice` in the choice menu on the pane's screen, if it still is the prompt `id`
   /// (docs-ai 089 S4).
   func answerPrompt(_ id: String, choice: Int, in pane: UUID) async -> MirrorPromptAnswer
+  /// Presses allow-listed keys in an agent pane (docs-ai 089 S5); nil when sent, else why not.
+  func pressKeys(_ keys: [String], in pane: UUID) async -> String?
 }
 
 struct MirrorTextSnapshot {
@@ -46,6 +48,9 @@ extension MirrorPaneSource {
   }
   func activeText(_ id: UUID) throws -> String { throw MirrorProtocolError.invalidMessage }
   func agentState(_ id: UUID) -> PaneAgentState? { nil }
+  func pressKeys(_ keys: [String], in pane: UUID) -> String? {
+    String(localized: "This Host cannot press keys from a mirror.")
+  }
   func answerPrompt(_ id: String, choice: Int, in pane: UUID) -> MirrorPromptAnswer {
     .refused(code: "PROMPT_UNSUPPORTED", message: String(localized: "This Host cannot answer prompts."))
   }

@@ -6,6 +6,12 @@ import SwiftUI
 struct ComposerBar: View {
   @Bindable var session: MirrorSession
   @Binding var isEditing: Bool
+  @State private var confirmsStop = false
+
+  /// While the agent works and nothing is typed, the button stops it instead (docs-ai 089 S5).
+  private var showsStop: Bool {
+    session.agentState == .working && session.draft.isEmpty && session.canSendKeys
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -43,19 +49,34 @@ struct ComposerBar: View {
                 .accessibilityIdentifier("mirror-dismiss-keyboard")
                 .help("Hide the keyboard")
             }
-            Button {
-              session.submitDraft()
-            } label: {
-              Image(systemName: "arrow.up")
-                .font(.body.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(session.canSubmit ? Color.accentColor : Color(.systemGray3), in: Circle())
+            if showsStop {
+              Button {
+                confirmsStop = true
+              } label: {
+                Image(systemName: "stop.fill")
+                  .font(.footnote.weight(.bold))
+                  .foregroundStyle(.white)
+                  .frame(width: 32, height: 32)
+                  .background(Color.red, in: Circle())
+              }
+              .accessibilityLabel("Stop")
+              .accessibilityIdentifier("mirror-stop")
+              .help("Interrupt the agent on the Mac (Escape)")
+            } else {
+              Button {
+                session.submitDraft()
+              } label: {
+                Image(systemName: "arrow.up")
+                  .font(.body.weight(.bold))
+                  .foregroundStyle(.white)
+                  .frame(width: 32, height: 32)
+                  .background(session.canSubmit ? Color.accentColor : Color(.systemGray3), in: Circle())
+              }
+              .disabled(!session.canSubmit)
+              .accessibilityLabel("Send")
+              .accessibilityIdentifier("mirror-send")
+              .help("Send the message to the agent on the Host")
             }
-            .disabled(!session.canSubmit)
-            .accessibilityLabel("Send")
-            .accessibilityIdentifier("mirror-send")
-            .help("Send the message to the agent on the Host")
           }
           .padding(.trailing, 2)
         }
@@ -63,6 +84,13 @@ struct ComposerBar: View {
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
     .animation(.snappy, value: note)
+    .animation(.snappy, value: showsStop)
+    .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
+      Button("Stop", role: .destructive) { session.sendKeys(["esc"]) }
+        .accessibilityIdentifier("mirror-stop-confirm")
+    } message: {
+      Text("Prowl presses Escape in the pane on the Mac, which interrupts the current turn.")
+    }
   }
 
   private var receiptControls: some View {

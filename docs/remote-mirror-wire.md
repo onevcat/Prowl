@@ -225,6 +225,16 @@ highlight one row at a time, re-reading the screen after every key, and presses 
 chosen row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSED`,
 `PROMPT_CHANGED`, `PROMPT_CHOICE_INVALID`, `HOST_EDITING` or `DELIVERY_UNCERTAIN`.
 
+## Keys for agent panes (`agent-keys`)
+
+A client with the `agent-keys` capability can press navigation and control keys in the agent
+pane it mirrors (docs-ai 089 S5): the iOS Terminal key bar and Stop. The command is
+`agentKeys {pane, keys}`. `keys` holds 1 to 8 of `esc`, `ctrl-c`, `tab`, `shift-tab`, `up`,
+`down`, `left`, `right` and `enter`. Printable text is never accepted; it goes through
+`agents.input` with its readiness checks. The Host refuses panes without a detected agent and
+panes with IME text or a local edit in the last 2 s (`KEYS_REFUSED`), then presses the keys one
+at a time.
+
 ## Conversation stream (`conversation-v1`)
 
 `conversation-v1` is a third `subscribe` representation (capability `conversation-v1`,
