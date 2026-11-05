@@ -35,4 +35,4 @@ modes through `pane-mode` and open steps rows and tool details.
 
 ## Refs
 
-PR (S2).
+#1047
