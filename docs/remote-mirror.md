@@ -28,7 +28,8 @@ replaces the code; **Cancel** invalidates an unused code without stopping Host o
 revoking a device that already paired. When a device completes pairing, the sheet
 shows **Paired with** its name and closes by itself. On the other Mac, open
 **Remote Mirror → Client → Connect to a New Host** and enter the address (an IP or a
-host name such as `mini.local`), port, and code. On iOS, use the connection editor.
+host name such as `mini.local`), port, and code. On iOS, **Add Host** on the Hosts
+screen takes the same address, port and code, or scans the QR code.
 Successful enrollment consumes the code. The client saves its device credential in
 Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved
@@ -49,10 +50,12 @@ address. If the Host no longer recognizes this Mac, for example after **Revoke**
 the attempt fails at once with an explanation and the code field appears. A
 refused port, an unreachable address, or an unresolved name also fails at once;
 an unanswered connection gives up after ten seconds. Saved credentials survive
-Host stop/start and App restart. They do not discover a changed IP address. The iOS
-connection editor can retain a device credential while updating the Host address;
-the client checks the Host identity after connecting. A new Host or revoked device
-requires a fresh pairing window. Old experiment keys are not migrated.
+Host stop/start and App restart. They do not discover a changed IP address. On iOS,
+a paired Host stays in the Hosts list with its credential and reconnects without a
+code; **Rename** changes the name shown on the phone, **Forget** removes the entry and
+its credential, and a Host that no longer recognizes the device needs a new pairing
+through **Add Host**. A new Host or revoked device requires a fresh pairing window. Old
+experiment keys are not migrated.
 
 The Host section lists paired devices with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
@@ -109,6 +112,16 @@ glyphs with local panning. It starts at the top; subsequent window resizes prese
 the manual scroll position within the available bounds. Large Host grids can make
 Fit to Window text small. iOS
 renders replacement text with local reflow. Cleared output is not an archive.
+
+On iOS, the **Hosts** screen lists paired Macs; opening one lists its panes grouped by
+project, each with its agent name, its state (working, idle, needs you) and whether the
+Host serves its conversation. A pane opens in **Chat** when the conversation is
+available and in **Screen** otherwise; the Chat | Screen control switches between them
+on the same connection, and a Screen pane whose agent starts moves to Chat by itself
+unless you chose Screen. The pane's **…** menu holds **History** and **Live Output** for
+the screen, **Reconnect** or **Take Over** when the connection is lost, and
+**Disconnect**. The pane list keeps refreshing behind the pane, so a new agent or a
+closed pane is noticed within a few seconds.
 
 On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
 the live Host terminal by its current pane height minus three rows (at least one
@@ -218,6 +231,29 @@ different parameters is rejected. Takeover/disconnect cancels input still waitin
 also cancels pending Profile preparation, including requests whose connection was
 already lost. A plain disconnect alone does not cancel accepted Profile creation;
 check Host before retrying an uncertain result. Existing terminal programs continue.
+
+## Conversation view
+
+A Host advertising `conversation-v1` can serve a pane as the agent's conversation instead
+of its screen: the Host reads the agent's own transcript (Claude Code and Codex today),
+its hooks and its OSC 7501 status, and sends normalized events (turns, messages, tool
+cards with bounded output and diffs, prompts, status, session changes). The pane list
+marks each pane `available`, `pending` (agent known, transcript not yet resolved) or
+`unsupported`; Shell panes and other agents keep the text view. A client can switch a
+pane between the conversation and the text view on the same connection, and resumes by
+sequence after a reconnect while the Host still retains the feed (ten minutes). Assistant
+text arrives when a message completes; `working` comes from the agent's status. Codex
+without trusted hooks reports tools only when they finish and no approval content. See
+[wire contract](remote-mirror-wire.md#conversation-stream-conversation-v1) and
+docs-ai 087.
+
+The iOS client renders the stream as a chat: your messages on the right, the agent's
+Markdown on the left, tool cards that expand to their command, output and diff, prompt
+cards that show the question and its choices and ask you to answer on the Mac, session
+dividers, compaction marks and notices. **Latest** returns to the newest message after
+scrolling up. The composer under both views sends through `agents.input`; its hint
+says what the Host will do with the message (deliver now, queue while the agent works,
+or wait because the agent needs an answer on the Mac).
 
 ## Protocol and development
 

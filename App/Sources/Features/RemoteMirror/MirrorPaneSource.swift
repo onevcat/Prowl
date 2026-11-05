@@ -15,6 +15,8 @@ protocol MirrorPaneSource {
   func scroll(_ direction: MirrorMessage.ScrollDirection, to id: UUID) throws
   var supportsBoundedHistory: Bool { get }
   func boundedRetainedText(_ id: UUID) throws -> MirrorRetainedText
+  /// The pane's agent state, for `conversation-v1` (docs-ai 087); nil when unknown.
+  func agentState(_ id: UUID) -> PaneAgentState?
 }
 
 struct MirrorTextSnapshot {
@@ -40,6 +42,7 @@ extension MirrorPaneSource {
     throw MirrorProtocolError.invalidMessage
   }
   func activeText(_ id: UUID) throws -> String { throw MirrorProtocolError.invalidMessage }
+  func agentState(_ id: UUID) -> PaneAgentState? { nil }
 }
 
 // A resize or a viewport move raced a read-only capture. Retry on the next poll.
