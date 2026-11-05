@@ -20,11 +20,14 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
   /// The 1-based number of the highlighted option.
   let selected: Int
 
-  /// The prompt's identity on the wire: the same menu on screen gives the same id, a different
-  /// question or option list gives a new one.
+  /// The menu's content identity: everything a person decides on (question, the command or
+  /// other detail, every option and its description), but not the highlight. Two permissions
+  /// that differ only in their command are different prompts. The feed adds an occurrence, so
+  /// the same menu shown twice still gets two wire ids.
   var id: String {
     var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-    for byte in ([title] + options.map(\.label)).joined(separator: "\u{1F}").utf8 {
+    let parts = [title, detail ?? ""] + options.flatMap { [$0.label, $0.detail ?? ""] }
+    for byte in parts.joined(separator: "\u{1F}").utf8 {
       hash ^= UInt64(byte)
       hash = hash &* 0x0000_0100_0000_01B3
     }

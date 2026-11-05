@@ -55,6 +55,36 @@ struct MirrorScreenPromptTests {
     #expect(other.id != first.id)
   }
 
+  /// Two permissions with the same question and choices but different commands are different
+  /// prompts (089 review S4-R1).
+  @Test func theIdentityCoversTheCommandAndTheDescriptions() throws {
+    let permission = try Self.screen("MirrorScreenPrompt/claude-2.1.318-command-permission.txt")
+    let first = try #require(MirrorScreenPrompt.parse(permission))
+    let other = try #require(
+      MirrorScreenPrompt.parse(permission.replacingOccurrences(of: "--outcome succeeded", with: "--outcome failed")))
+    #expect(first.detail != other.detail)
+    #expect(first.id != other.id)
+    let question = try Self.screen("MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")
+    let described = try #require(MirrorScreenPrompt.parse(question))
+    let redescribed = try #require(
+      MirrorScreenPrompt.parse(question.replacingOccurrences(of: "Raster, smaller files", with: "Raster, larger files"))
+    )
+    #expect(described.id != redescribed.id)
+  }
+
+  @Test func theKeyGuardAllowsItsOwnKeysButNotLocalEditing() {
+    var guardrail = MirrorKeyGuard(hasMarkedText: false, lastEditingAt: 10, now: 100)
+    #expect(guardrail.refusal == nil)
+    // The operation's own key moves the editing stamp; that is not a competing edit.
+    guardrail.noteSent(lastEditingAt: 101)
+    #expect(guardrail.check(hasMarkedText: false, lastEditingAt: 101) == nil)
+    // Someone typed on the Mac after the last key went.
+    #expect(guardrail.check(hasMarkedText: false, lastEditingAt: 102) != nil)
+    #expect(guardrail.check(hasMarkedText: true, lastEditingAt: 101) != nil)
+    // Recent local editing before the first key refuses at once.
+    #expect(MirrorKeyGuard(hasMarkedText: false, lastEditingAt: 99.5, now: 100).refusal != nil)
+  }
+
   @Test func numberedProseAndBrokenMenusAreNotPrompts() {
     #expect(MirrorScreenPrompt.parse("Plan:\n1. First\n2. Second\n\n> ") == nil)
     // A footer but no highlighted row.

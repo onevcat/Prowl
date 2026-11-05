@@ -274,6 +274,8 @@ as the dispatch completion protocol, fold under **Prowl instructions** in your m
 The arrow button returns to the newest message after scrolling up. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
 confirm. In Terminal, agent panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return) for TUI menus.
+When the Mac refuses a key or Stop, for example because someone is typing there, the reason
+shows under the composer. The prompt panel shows in Chat only; Terminal shows the menu itself.
 The floating composer
 under both views sends through `agents.input`; a note appears only when the Host will not
 deliver at once (the agent is working and the message waits) or a receipt needs a look.

@@ -138,6 +138,7 @@ struct ComposerBar: View {
       return Note(text: submission.outcome.detail, isProblem: problem)
     }
     guard session.status == .live else { return nil }
+    if let refusal = session.keyRefusal { return Note(text: refusal, isProblem: true) }
     if !session.supportsSubmission {
       return Note(text: String(localized: "This Host does not accept messages for this pane."), isProblem: false)
     }

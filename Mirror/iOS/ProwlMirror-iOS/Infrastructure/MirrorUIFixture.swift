@@ -88,10 +88,17 @@
 
     /// Replays a bundled `conversation-v1` event file through a fake Host.
     static func conversationSession(
-      fixture: String, agent: String, clock: any Clock<Duration> = ContinuousClock()
+      fixture: String, agent: String, clock: any Clock<Duration> = ContinuousClock(),
+      status: MirrorConversationEvent.AgentState? = nil
     ) -> MirrorSession {
       let channel = Channel(name: "Review PR #1038", longOutput: false)
-      channel.conversation = Self.fixtureEvents(named: fixture)
+      var events = Self.fixtureEvents(named: fixture)
+      if let status {
+        events.append(
+          .init(.agentStatus, .status(.init(state: status)), at: nil, source: .osc,
+            sequence: (events.last?.sequence ?? 0) + 1))
+      }
+      channel.conversation = events
       channel.agent = agent
       let session = MirrorSession(
         configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), clock: clock,
@@ -291,6 +298,13 @@
                     "task": .object(["status": .string("idle")]),
                   ])
                 ])
+              ]),
+            ])
+          case .agentKeys where CommandLine.arguments.contains("--mirror-ui-refuse-keys"):
+            payload = .object([
+              "ok": .bool(false), "command": .string("agent.keys"),
+              "error": .object([
+                "code": .string("KEYS_REFUSED"), "message": .string("Someone is typing in this pane on the Mac."),
               ]),
             ])
           case .agentKeys(let input):

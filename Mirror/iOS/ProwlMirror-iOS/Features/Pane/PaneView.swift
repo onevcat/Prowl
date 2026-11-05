@@ -70,7 +70,9 @@ struct PaneView: View {
     .safeAreaInset(edge: .bottom, spacing: 0) {
       VStack(spacing: 8) {
         if session.status == .live, session.supportsPromptRespond,
-          let prompt = session.conversation.openScreenPrompt, !(prompt.choices ?? []).isEmpty
+          // Only Chat keeps the prompt current; Terminal shows the menu itself.
+          session.mode == .conversation, let prompt = session.conversation.openScreenPrompt,
+          !(prompt.choices ?? []).isEmpty
         {
           MirrorPromptPanel(prompt: prompt, answer: session.promptAnswer) { choice in
             session.answerPrompt(prompt.id, choice: choice)

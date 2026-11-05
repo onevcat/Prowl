@@ -207,10 +207,12 @@ Hosts leave them out.
 While an agent is blocked on a choice menu (Claude Code's permission and AskUserQuestion
 dialogs, Codex's approval), the Host reads the menu from the pane's screen and sends it on
 `conversation-v1` as `prompt.opened` with `source: "screen"` (docs-ai 089 S4). The prompt id is
-`screen:<hash>` of the question and the option labels; `choices[].id` is the option's number on
-screen; `freeform` says the menu also has "Type something." / "Chat about this" rows, which
-are not offered. The prompt resolves when the menu leaves the screen, with the outcome the
-phone chose (`allowed`, `denied`, `answered`, `decidedBy: "mirror"`) or `unknown`.
+`screen:<hash>.<n>`. The hash covers the question, the detail (such as the command to approve),
+and every option with its description. `<n>` counts openings, so the same menu shown twice is
+two prompts. `choices[].id` is the option's number on screen. `freeform` says the menu also
+has "Type something." / "Chat about this" rows, which are not offered. The prompt resolves
+when the phone's answer is pressed, with `allowed`, `denied` or `answered` and
+`decidedBy: "mirror"`. Otherwise it resolves when the menu leaves the screen, with `unknown`.
 
 A client with the `prompt-respond` capability answers with a command on the subscription that
 mirrors the pane:
@@ -219,10 +221,16 @@ mirrors the pane:
 {"command":{"_0":{"subscriptionID":"UUID","commandRequest":{"requestID":"UUID","request":{"output":"json","command":{"promptRespond":{"_0":{"pane":"UUID","prompt":"screen:…","choice":"2"}}}}}}}}
 ```
 
-The Host checks the lease, that the agent is still blocked, that no IME text or local edit
-(2 s) is pending, and that the screen still shows the same prompt. It then moves the
-highlight one row at a time, re-reading the screen after every key, and presses Enter on the
-chosen row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSED`,
+The Host answers only the prompt that is open now. No IME text or local edit may be pending
+(2 s). Before every key, it checks again that:
+
+- the connection still holds the lease;
+- the prompt is still open and the agent is still blocked;
+- nobody started editing on the Mac;
+- the screen still shows the same prompt.
+
+It moves the highlight one row at a time, waits for the move, and presses Enter on the chosen
+row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSED`,
 `PROMPT_CHANGED`, `PROMPT_CHOICE_INVALID`, `HOST_EDITING` or `DELIVERY_UNCERTAIN`.
 
 ## Keys for agent panes (`agent-keys`)
@@ -232,8 +240,10 @@ pane it mirrors (docs-ai 089 S5): the iOS Terminal key bar and Stop. The command
 `agentKeys {pane, keys}`. `keys` holds 1 to 8 of `esc`, `ctrl-c`, `tab`, `shift-tab`, `up`,
 `down`, `left`, `right` and `enter`. Printable text is never accepted; it goes through
 `agents.input` with its readiness checks. The Host refuses panes without a detected agent and
-panes with IME text or a local edit in the last 2 s (`KEYS_REFUSED`), then presses the keys one
-at a time.
+panes with IME text or a local edit in the last 2 s (`KEYS_REFUSED`). It then presses the keys
+one at a time. Before each key, it checks that the connection still holds the lease and that
+nobody started editing on the Mac. A refusal after the first key says how many keys were
+pressed.
 
 ## Conversation stream (`conversation-v1`)
 

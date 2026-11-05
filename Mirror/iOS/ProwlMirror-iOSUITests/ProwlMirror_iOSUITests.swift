@@ -590,7 +590,23 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Terminal key bar")
     escape.tap()
     app.buttons["key-up"].tap()
-    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "key-refusal").firstMatch.waitForExistence(timeout: 2))
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertFalse(note.waitForExistence(timeout: 2) && note.label.contains("typing"))
+  }
+
+  /// A refused key shows under the composer, where a refused Stop shows too (089 review S5-R2).
+  @MainActor
+  func testRefusedKeysExplainWhyInTheComposer() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-refuse-keys"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let escape = app.buttons["key-esc"]
+    XCTAssertTrue(escape.waitForExistence(timeout: 10))
+    escape.tap()
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertTrue(note.waitForExistence(timeout: 5))
+    XCTAssertEqual(note.label, "Someone is typing in this pane on the Mac.")
   }
 
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.

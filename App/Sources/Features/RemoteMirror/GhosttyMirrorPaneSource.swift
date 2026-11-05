@@ -196,28 +196,44 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     return pane.session?.transcriptPath != nil ? .available : .pending
   }
 
-  /// Answers the screen prompt `id` with option `choice` (docs-ai 089 S4). Every key follows a
-  /// fresh read of the screen: the menu must still be this prompt, and a move key must have
-  /// moved the highlight one row before the next key goes. Enter goes only on the chosen row.
-  func answerPrompt(_ id: String, choice: Int, in pane: UUID) async -> MirrorPromptAnswer {
+  /// Answers the screen prompt `id` with option `choice` (docs-ai 089 S4). Before every key the
+  /// mirror must still own the pane (`isLive`), the agent must still be blocked, nobody may be
+  /// editing on the Mac, and a fresh read of the screen must still show this prompt; a move key
+  /// must have moved the highlight one row before the next key goes. Enter goes only on the
+  /// chosen row.
+  func answerPrompt(
+    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+  ) async -> MirrorPromptAnswer {
     let closed = MirrorPromptAnswer.refused(
       code: "PROMPT_CLOSED", message: String(localized: "The prompt is no longer open on the Mac."))
     guard let surface = view(pane),
       let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil })
     else { return closed }
-    guard agentState(pane)?.state == .blocked else { return closed }
-    if let refusal = AgentDispatchInputProtection.refusal(
+    var guardrail = MirrorKeyGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
-    {
-      return .refused(code: "HOST_EDITING", message: refusal)
-    }
+    if let refusal = guardrail.refusal { return .refused(code: "HOST_EDITING", message: refusal) }
+    var moved = false
     var prompt = (try? activeText(pane)).flatMap(MirrorScreenPrompt.parse)
     for _ in 0..<Self.maximumPromptKeys {
-      guard let current = prompt else { return closed }
-      guard current.id == id else {
+      // Stopping after the highlight moved leaves the menu open on another row; say so.
+      func stopped(_ code: String, _ message: String) -> MirrorPromptAnswer {
+        guard moved else { return .refused(code: code, message: message) }
         return .refused(
-          code: "PROMPT_CHANGED", message: String(localized: "The prompt changed on the Mac. Check it again."))
+          code: code,
+          message: message + " " + String(localized: "The selection may have moved; nothing was chosen."))
+      }
+      guard isLive(), agentState(pane)?.state == .blocked else {
+        return stopped("PROMPT_CLOSED", String(localized: "The prompt is no longer open on the Mac."))
+      }
+      if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
+        return stopped("HOST_EDITING", refusal)
+      }
+      guard let current = prompt else {
+        return stopped("PROMPT_CLOSED", String(localized: "The prompt is no longer open on the Mac."))
+      }
+      guard current.id == id else {
+        return stopped("PROMPT_CHANGED", String(localized: "The prompt changed on the Mac. Check it again."))
       }
       guard let option = current.answers.first(where: { $0.number == choice }) else {
         return .refused(
@@ -225,7 +241,9 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       }
       let key = MirrorScreenPrompt.nextKey(selected: current.selected, target: choice)
       guard state.sendKeyToken(key, in: pane) else { return closed }
+      guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
       if key == "enter" { return .delivered(option, permission: current.isPermission) }
+      moved = true
       let expected = current.selected + (key == "down" ? 1 : -1)
       prompt = await waitForSelection(expected, of: id, in: pane)
       guard prompt?.selected == expected else {
@@ -240,22 +258,29 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   private static let maximumPromptKeys = 16
 
-  /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5): agent panes only, after the
-  /// same input protection as typed input, one key at a time.
-  func pressKeys(_ keys: [String], in pane: UUID) async -> String? {
+  /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5): agent panes only, one key at a
+  /// time. Before every key the mirror must still own the pane and nobody may be editing on the
+  /// Mac (`MirrorKeyGuard`).
+  func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String? {
     guard let surface = view(pane),
       let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil }),
       agentState(pane)?.detectedAgent != nil
     else { return String(localized: "Keys go only to panes that run an agent.") }
-    if let refusal = AgentDispatchInputProtection.refusal(
+    var guardrail = MirrorKeyGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
-    {
-      return refusal
-    }
+    if let refusal = guardrail.refusal { return refusal }
     for (index, key) in keys.enumerated() {
       if index > 0 { try? await Task.sleep(for: .milliseconds(60)) }
-      guard state.sendKeyToken(key, in: pane) else { return String(localized: "The Mac did not accept the key.") }
+      let partial = index > 0 ? " " + String(localized: "Only the first \(index) keys were pressed.") : ""
+      guard isLive() else { return String(localized: "The mirror no longer owns this pane.") + partial }
+      if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
+        return refusal + partial
+      }
+      guard state.sendKeyToken(key, in: pane) else {
+        return String(localized: "The Mac did not accept the key.") + partial
+      }
+      guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
     }
     return nil
   }

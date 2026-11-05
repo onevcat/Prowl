@@ -72,6 +72,29 @@ struct MirrorChatRowsTests {
     #expect(rows.map(\.id) == [2, 4])
   }
 
+  /// Two decisions with the same question are two rows; only the transcript's copy of a screen
+  /// answer folds into it (089 review S4-R4).
+  @Test func sameTitledDecisionsAllStayAndOnlyTheirCopiesFold() {
+    func screen(_ id: String, _ outcome: Event.PromptOutcome) -> Event.Prompt {
+      var prompt = Event.Prompt(id: id, kind: .permission, title: "Do you want to proceed?", freeform: false)
+      prompt.outcome = outcome
+      return prompt
+    }
+    var transcript = Event.Prompt(
+      id: "toolu_1", kind: .question, title: nil,
+      questions: [.init(id: "0", question: "Which format?", multiSelect: false, options: [])], freeform: true)
+    transcript.outcome = .answered
+    var question = Event.Prompt(id: "screen:q.3", kind: .question, title: "Which format?", freeform: false)
+    question.outcome = .answered
+    let rows = MirrorChatRow.rows([
+      .prompt(id: 1, prompt: screen("screen:a.1", .allowed), resolved: screen("screen:a.1", .allowed), at: nil),
+      .prompt(id: 2, prompt: screen("screen:b.2", .denied), resolved: screen("screen:b.2", .denied), at: nil),
+      .prompt(id: 3, prompt: transcript, resolved: transcript, at: nil),
+      .prompt(id: 4, prompt: question, resolved: question, at: nil),
+    ])
+    #expect(rows.map(\.id) == [1, 2, 4])
+  }
+
   @MainActor @Test func theOpenScreenPromptIsTheNewestUnresolvedOne() {
     var store = MirrorConversationStore()
     let first = Event.Prompt(id: "screen:a", kind: .permission, title: "Proceed?", freeform: false)

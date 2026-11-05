@@ -103,6 +103,23 @@ struct MirrorConversationFixtureSessionTests {
     #expect(!session.conversation.items.isEmpty)
   }
 
+  /// In Terminal the conversation stream is paused, so the roster's state counts (089 review
+  /// S5-R1); back in Chat the stream's status does.
+  @Test func terminalModeFollowsTheRosterState() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex", status: .working)
+    session.switchMode(.screen)
+    #expect(session.mode == .screen)
+    var pane = try #require(session.pane)
+    pane.agentState = .idle
+    session.refreshDescriptor(pane)
+    // The paused stream still says working; the roster says idle.
+    #expect(session.conversation.status?.state == .working)
+    #expect(session.agentState == .idle)
+    pane.agentState = .working
+    session.refreshDescriptor(pane)
+    #expect(session.agentState == .working)
+  }
+
   @Test func rosterDescriptorReplacesTheOpenedOne() throws {
     let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
     var current = try #require(session.pane)

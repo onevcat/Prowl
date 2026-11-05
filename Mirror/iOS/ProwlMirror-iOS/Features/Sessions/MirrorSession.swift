@@ -44,7 +44,8 @@ final class MirrorSession: Identifiable {
   private(set) var supportsPromptRespond = false
   /// The Host presses navigation and control keys in agent panes (docs-ai 089 S5).
   private(set) var supportsAgentKeys = false
-  /// Why the last key press was refused, until the next one.
+  /// Why the last key press or Stop was refused, until the next one; the composer shows it in
+  /// both modes.
   private(set) var keyRefusal: String?
   @ObservationIgnored private var sendingKeys = false
 
@@ -376,8 +377,13 @@ final class MirrorSession: Identifiable {
     subscribe()
   }
 
+  /// The agent's state now. The conversation stream reports it in Chat; in Terminal that stream
+  /// is paused and its last status is stale, so the roster's state counts (089 review S5-R1).
   var agentState: MirrorConversationEvent.AgentState? {
-    conversation.status?.state ?? pane?.agentState
+    switch mode {
+    case .conversation: conversation.status?.state ?? pane?.agentState
+    case .screen: pane?.agentState ?? conversation.status?.state
+    }
   }
 
   func refreshPanes() {

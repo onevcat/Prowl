@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The keys a TUI needs that a phone keyboard lacks (docs-ai 089 S5): Escape, Control-C,
-/// Shift-Tab and Tab, the arrows, Return. Shown under the terminal screen of an agent pane.
+/// Shift-Tab and Tab, the arrows, Return. Shown under the terminal screen of an agent pane; a
+/// refusal shows in the composer's note, like a refused Stop.
 struct MirrorKeyBar: View {
   @Bindable var session: MirrorSession
 
@@ -51,9 +52,6 @@ struct MirrorKeyBar: View {
         .padding(.horizontal, 2)
       }
       .scrollClipDisabled()
-      if let refusal = session.keyRefusal {
-        MirrorFailureLabel(text: refusal).font(.caption).accessibilityIdentifier("key-refusal")
-      }
     }
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("key-bar")
