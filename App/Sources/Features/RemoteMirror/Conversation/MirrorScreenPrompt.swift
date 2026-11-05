@@ -98,14 +98,16 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     var title = lines[titleIndex].trimmingCharacters(in: .whitespaces)
     guard title.wholeMatch(of: optionPattern) == nil else { return nil }
     var detail = quotedDetail(lines, above: titleIndex)
-    // Codex shows the command () between its question and the options.
-    if title.hasPrefix("$ ") {
-      detail = String(title.dropFirst(2))
-      var questionIndex = titleIndex - 1
+    // Codex shows the command between its question and the options: a block that starts with
+    // `$ ` and may continue over more lines.
+    if let start = commandStart(lines, endingAt: titleIndex) {
+      detail = String(
+        lines[start...titleIndex].map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n").dropFirst(2))
+      var questionIndex = start - 1
       while questionIndex >= 0, isFiller(lines[questionIndex]) { questionIndex -= 1 }
-      if questionIndex >= 0, titleIndex - questionIndex <= 3 {
-        title = lines[questionIndex].trimmingCharacters(in: .whitespaces)
-      }
+      // A command with no question above it is not a prompt the phone can safely answer.
+      guard questionIndex >= 0, start - questionIndex <= 3 else { return nil }
+      title = lines[questionIndex].trimmingCharacters(in: .whitespaces)
     }
     return MirrorScreenPrompt(title: title, detail: detail, options: options, selected: selected)
   }
@@ -130,6 +132,16 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
       }
     }
     return (options, selected)
+  }
+
+  /// The first line of a `$ command` block that ends at `end`, if the block has one.
+  private static func commandStart(_ lines: [String], endingAt end: Int) -> Int? {
+    var index = end
+    while index >= 0, end - index < 12, !isFiller(lines[index]) {
+      if lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("$ ") { return index }
+      index -= 1
+    }
+    return nil
   }
 
   private static func isFiller(_ line: String) -> Bool {

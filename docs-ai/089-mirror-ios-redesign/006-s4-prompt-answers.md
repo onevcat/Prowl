@@ -10,7 +10,7 @@ transcript record while a prompt waits (D6), so the chat could not even show the
 
 | Area | Change |
 | --- | --- |
-| Screen menu | `MirrorScreenPrompt` (`App/Sources/Features/RemoteMirror/Conversation/MirrorScreenPrompt.swift`) parses the menu at the bottom of the screen. A dialog footer ("Enter to select", "Esc to cancel", "Press enter to confirm") anchors it. Above the footer: numbered rows, the highlighted one marked `❯` or `›`, numbered 1…n without gaps, and option descriptions. The question is the prose line above. Claude's `│ …` quote, or Codex's `$ command` line, is the detail. "Type something." and "Chat about this" are freeform rows. The content id is `screen:` plus an FNV-1a hash of the question, the detail, the labels and their descriptions, so moving the highlight keeps it. |
+| Screen menu | `MirrorScreenPrompt` (`App/Sources/Features/RemoteMirror/Conversation/MirrorScreenPrompt.swift`) parses the menu at the bottom of the screen. A dialog footer ("Enter to select", "Esc to cancel", "Press enter to confirm") anchors it. Above the footer: numbered rows, the highlighted one marked `❯` or `›`, numbered 1…n without gaps, and option descriptions. The question is the prose line above. Claude's `│ …` quote, or Codex's `$ command` block (one or more lines), is the detail. "Type something." and "Chat about this" are freeform rows. The content id is `screen:` plus an FNV-1a hash of the question, the detail, the labels and their descriptions, so moving the highlight keeps it. |
 | Feed | While the pane is blocked, `MirrorHost.observeScreenPrompt` reads `activeText` at most every 0.5 s and calls `MirrorConversationFeed.observeScreen`. That emits `prompt.opened` with the wire id `<content id>.<occurrence>` (source `screen`, choices = answer rows), and resolves it when the menu changes or goes. A new log segment restates an open screen prompt. A phone answer resolves the prompt at once (`noteScreenAnswer`); the answered menu is ignored for 3 s while it leaves the screen. |
 | Command | `promptRespond {pane, prompt, choice}` behind the capability `prompt-respond`. `MirrorHost` answers it itself, never through the CLI router. `MirrorHost` answers only the feed's open wire id. `GhosttyMirrorPaneSource.answerPrompt` checks the following before every key: `isLive` (the connection's lease, and the open prompt), the blocked state, `MirrorKeyGuard` (IME text, and editing after its own last key), and the prompt's content id on screen. It sends one `down`/`up` and waits for the highlight to move exactly one row (up to about 1 s), and repeats. Then `enter`. It never replays. Error codes are listed in `docs/remote-mirror-wire.md`. |
 | iOS | `MirrorPromptPanel` above the composer: "Blocked · Question/Permission", the question, the detail in monospaced text, numbered answer buttons with descriptions, a note for typed answers, sending/sent/refused states (`MirrorSession.answerPrompt`, `promptAnswer`). Open prompts leave the chat rows. Each resolved screen prompt leaves one line. It absorbs one transcript copy with the same question. A screen prompt's answer moves to where it happened. |
@@ -28,7 +28,14 @@ Review round 1 fixes:
 - S4-R3: editing between keys stops the answer.
 - S4-R4: decisions with the same title all stay.
 
-The tests are `theIdentityCoversTheCommandAndTheDescriptions`, `theKeyGuardAllowsItsOwnKeysButNotLocalEditing`, `feedGivesEveryOpeningItsOwnID`, `takeoverStopsAnAnswerBetweenKeys` and `sameTitledDecisionsAllStayAndOnlyTheirCopiesFold`.
+Round 2 fixes:
+
+- S4-R4: a screen answer absorbs a transcript copy only between the same two messages.
+- S4-R5: a Codex `$ command` block over several lines is the detail. A command with no question above it does not parse.
+
+Their tests are `aScreenAnswerAbsorbsOnlyTheCopyNextToIt` and `codexMultilineCommandIsTheDetail`.
+
+The round 1 tests are `theIdentityCoversTheCommandAndTheDescriptions`, `theKeyGuardAllowsItsOwnKeysButNotLocalEditing`, `feedGivesEveryOpeningItsOwnID`, `takeoverStopsAnAnswerBetweenKeys` and `sameTitledDecisionsAllStayAndOnlyTheirCopiesFold`.
 
 ## Decisions
 

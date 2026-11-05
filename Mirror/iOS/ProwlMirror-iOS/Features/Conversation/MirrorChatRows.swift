@@ -46,19 +46,10 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
 
   static func rows(_ items: some Sequence<MirrorConversationItem>) -> [MirrorChatRow] {
     var rows: [MirrorChatRow] = []
-    // The screen and the transcript can both report one answered question. Each screen answer
-    // absorbs one transcript copy with the same question, in order; the screen line stays, where
-    // the answer happened. Separate decisions with the same question all keep their rows.
     let items = Array(items)
-    var screenAnswers: [String: Int] = [:]
+    let absorbed = transcriptCopiesOfScreenAnswers(items)
     for item in items {
-      if let title = item.resolvedPromptTitle(screen: true) { screenAnswers[title, default: 0] += 1 }
-    }
-    for item in items {
-      if let title = item.resolvedPromptTitle(screen: false), let count = screenAnswers[title], count > 0 {
-        screenAnswers[title] = count - 1
-        continue
-      }
+      if absorbed.contains(item.id) { continue }
       switch item {
       case .attention, .prompt(_, _, nil, _):
         // Shown once above the composer: the blocked strip, or the prompt panel (docs-ai 089 S4).
@@ -83,6 +74,33 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
 }
 
 extension MirrorChatRow {
+  /// The screen and the transcript can both report one answered question. A screen answer
+  /// absorbs at most one transcript copy with the same question, and only between the same two
+  /// messages, where its own copy lands; the screen line stays, where the answer happened.
+  /// Separate decisions, and answers from another turn, keep their rows (089 review S4-R4).
+  nonisolated static func transcriptCopiesOfScreenAnswers(_ items: [MirrorConversationItem]) -> Set<UInt64> {
+    var absorbed: Set<UInt64> = []
+    var segment: [MirrorConversationItem] = []
+    func pair() {
+      var screenAnswers: [String: Int] = [:]
+      for item in segment {
+        if let title = item.resolvedPromptTitle(screen: true) { screenAnswers[title, default: 0] += 1 }
+      }
+      for item in segment {
+        guard let title = item.resolvedPromptTitle(screen: false), let count = screenAnswers[title], count > 0
+        else { continue }
+        screenAnswers[title] = count - 1
+        absorbed.insert(item.id)
+      }
+      segment.removeAll()
+    }
+    for item in items {
+      if case .user = item { pair() } else if case .assistant = item { pair() } else { segment.append(item) }
+    }
+    pair()
+    return absorbed
+  }
+
   /// The newest `limit` rows and how many rows are hidden before them. Grouping runs over every
   /// item first, so a run of tool calls keeps its identity and its counts across pages.
   nonisolated static func page(_ items: [MirrorConversationItem], limit: Int) -> (rows: ArraySlice<MirrorChatRow>, hidden: Int) {
