@@ -97,6 +97,19 @@ struct MirrorMarkdownTests {
       ])
   }
 
+  @Test func deeplyNestedFenceKeepsItsRelativeIndentation() {
+    let text = "- Deploy\n    - Check the flag\n        ```python\n        if enabled:\n            print(\"ready\")\n        ```"
+    let blocks = MirrorMarkdown.parse(text)
+    #expect(
+      blocks == [
+        .list([
+          .init(marker: .bullet, depth: 0, text: "Deploy"),
+          .init(marker: .bullet, depth: 2, text: "Check the flag"),
+        ]),
+        .code(language: "python", text: "if enabled:\n    print(\"ready\")"),
+      ])
+  }
+
   @Test func onlyALongEnoughBareFenceCloses() {
     let blocks = MirrorMarkdown.parse("````md\n```swift\nlet a = 1\n```\n````\nafter")
     #expect(blocks == [.code(language: "md", text: "```swift\nlet a = 1\n```"), .paragraph("after")])

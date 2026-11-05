@@ -182,8 +182,8 @@ nonisolated enum MirrorMarkdown {
     /// A fence opens with three or more backticks or tildes; a backtick fence's info string
     /// cannot contain a backtick, so "```make``` then" is inline code.
     static func fenceOpening(_ line: String) -> Fence? {
+      // No depth limit: a fence nested in a list sits as deep as its item.
       let indent = line.prefix { $0 == " " }.count
-      guard indent <= 6 else { return nil }
       let trimmed = line.dropFirst(indent)
       guard let character = trimmed.first, character == "`" || character == "~" else { return nil }
       let length = trimmed.prefix { $0 == character }.count

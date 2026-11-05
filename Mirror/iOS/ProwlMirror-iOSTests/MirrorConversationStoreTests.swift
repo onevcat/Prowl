@@ -135,4 +135,21 @@ struct MirrorConversationFixtureSessionTests {
     session.refreshDescriptor(undetected)
     #expect(session.pane?.agent == nil)
   }
+
+  @Test func launchExpectationEndsAtItsDeadlineWithoutAnyRosterChange() async throws {
+    let clock = HostTestClock()
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex", clock: clock)
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched, for: .seconds(30))
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    #expect(await clock.nextSleep() == .seconds(30))
+    await clock.advance()
+    for _ in 0..<100 where session.pane?.agent != nil { await Task.yield() }
+    #expect(session.pane?.agent == nil)
+    #expect(session.pane?.subtitle == "Shell · main")
+  }
 }

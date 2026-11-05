@@ -80,12 +80,15 @@
     }
 
     /// Replays a bundled `conversation-v1` event file through a fake Host.
-    static func conversationSession(fixture: String, agent: String) -> MirrorSession {
+    static func conversationSession(
+      fixture: String, agent: String, clock: any Clock<Duration> = ContinuousClock()
+    ) -> MirrorSession {
       let channel = Channel(name: "Review PR #1038", longOutput: false)
       channel.conversation = Self.fixtureEvents(named: fixture)
       channel.agent = agent
       let session = MirrorSession(
-        configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), makeTransport: { _ in channel })
+        configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), clock: clock,
+        makeTransport: { _ in channel })
       session.open(channel.pane, mode: .conversation)
       return session
     }
