@@ -34,7 +34,9 @@ final class MirrorSession: Identifiable {
   private(set) var configuration: MirrorSavedConnection
   private(set) var panes: [MirrorPaneDescriptor] = []
   private(set) var pane: MirrorPaneDescriptor?
-  @ObservationIgnored private var expectedLaunch: (descriptor: MirrorPaneDescriptor, until: Date)?
+  @ObservationIgnored private var expectedLaunch: MirrorPaneDescriptor?
+  @ObservationIgnored private var latestRosterDescriptor: MirrorPaneDescriptor?
+  @ObservationIgnored private var expectationTask: Task<Void, Never>?
   private(set) var mode: Mode = .screen
   private(set) var conversation = MirrorConversationStore()
   private(set) var supportsConversation = false
@@ -238,21 +240,37 @@ final class MirrorSession: Identifiable {
 
   /// A pane this device just launched from a Profile: until the Host detects the agent, the
   /// roster reports a Shell. Keep the launched agent and title for a short while so the
-  /// composer and title do not flip to "Shell" (docs-ai 089 D1).
-  func expectAgent(of launched: MirrorPaneDescriptor, for duration: TimeInterval = 30) {
+  /// composer and title do not flip to "Shell" (docs-ai 089 D1). When the time runs out
+  /// without detection, the Host's latest descriptor wins, even if it never changed.
+  func expectAgent(of launched: MirrorPaneDescriptor, for duration: Duration = .seconds(30)) {
     guard launched.agent != nil else { return }
-    expectedLaunch = (descriptor: launched, until: Date().addingTimeInterval(duration))
+    expectedLaunch = launched
+    expectationTask?.cancel()
+    let clock = clock
+    expectationTask = Task { [weak self] in
+      do { try await clock.sleep(for: duration) } catch { return }
+      self?.endLaunchExpectation()
+    }
+  }
+
+  private func endLaunchExpectation() {
+    expectationTask?.cancel()
+    expectationTask = nil
+    guard expectedLaunch != nil else { return }
+    expectedLaunch = nil
+    if let latest = latestRosterDescriptor, latest.id == pane?.id, pane != latest { pane = latest }
   }
 
   private func merging(_ descriptor: MirrorPaneDescriptor) -> MirrorPaneDescriptor {
-    guard let expected = expectedLaunch, expected.descriptor.id == descriptor.id else { return descriptor }
-    guard descriptor.agent == nil, Date() < expected.until else {
-      expectedLaunch = nil
+    latestRosterDescriptor = descriptor
+    guard let expected = expectedLaunch, expected.id == descriptor.id else { return descriptor }
+    guard descriptor.agent == nil else {
+      endLaunchExpectation()
       return descriptor
     }
     var merged = descriptor
-    merged.agent = expected.descriptor.agent
-    merged.subtitle = expected.descriptor.subtitle
+    merged.agent = expected.agent
+    merged.subtitle = expected.subtitle
     merged.conversation = descriptor.conversation == .unsupported ? nil : descriptor.conversation
     return merged
   }
@@ -325,6 +343,8 @@ final class MirrorSession: Identifiable {
 
   func disconnect() {
     userDisconnected = true
+    expectationTask?.cancel()
+    expectationTask = nil
     finishCommand(.failure(CommandFailure.disconnected))
     generation = UUID()
     let old = transport
