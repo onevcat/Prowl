@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented |
+| **Status** | Implemented; UI superseded by [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md) |
 | **Anchor date** | 2026-11-04 |
 | **Primary PRs** | #1041 (client), #1040 (Host roster fix) |
 | **Related** | [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [067-remote-mirror](../067-remote-mirror/000-plan.md), `Mirror/iOS/README.md`, `docs/remote-mirror.md`, issue #989 |
@@ -86,3 +86,4 @@ a redesign that may discard the current structure (2026-11-04).
 ## Amendments
 
 - Updated 2026-11-04: implemented in one PR; outcome, deviations and verification in [001-action.md](001-action.md)
+- Updated 2026-11-05: the screens, navigation and visual language are redesigned in [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md); the model layer (host store, host session, pane session, conversation store) stays
