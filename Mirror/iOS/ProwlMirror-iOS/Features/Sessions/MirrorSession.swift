@@ -343,8 +343,9 @@ final class MirrorSession: Identifiable {
 
   func disconnect() {
     userDisconnected = true
-    expectationTask?.cancel()
-    expectationTask = nil
+    // Ending here, not only pausing the timer, keeps a reconnect from showing the launched
+    // agent forever (R089-P0-003).
+    endLaunchExpectation()
     finishCommand(.failure(CommandFailure.disconnected))
     generation = UUID()
     let old = transport
