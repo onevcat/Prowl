@@ -53,7 +53,7 @@ struct MirrorScreenPromptTests {
     let prompt = try #require(MirrorScreenPrompt.parse(loop))
     #expect(prompt.title.contains("Do you want to allow"))
     #expect(prompt.isPermission)
-    #expect(prompt.detail == "for f in a b; do\ntouch \"$f\"\ndone")
+    #expect(prompt.detail == "for f in a b; do\n    touch \"$f\"\n  done")
     let other = try #require(MirrorScreenPrompt.parse(loop.replacingOccurrences(of: "touch \"$f\"", with: "rm \"$f\"")))
     #expect(other.id != prompt.id)
   }
@@ -67,12 +67,32 @@ struct MirrorScreenPromptTests {
         text.replacingOccurrences(
           of: "  $ touch permission-probe.txt",
           with: "  $ for f in a b; do\n\n      touch \"$f\"\n    done")))
-    #expect(blank.detail == "for f in a b; do\n\ntouch \"$f\"\ndone")
+    #expect(blank.detail == "for f in a b; do\n\n    touch \"$f\"\n  done")
     #expect(blank.isPermission && blank.title.contains("Do you want to allow"))
     let body = Array(repeating: "      echo step", count: 60).joined(separator: "\n")
     let long = text.replacingOccurrences(
       of: "  $ touch permission-probe.txt", with: "  $ for f in a b; do\n\(body)\n    done")
     #expect(MirrorScreenPrompt.parse(long) == nil)
+  }
+
+  /// Indentation inside a command is part of it: moving a line out of a block is another
+  /// command (089 review S4-R6).
+  @Test func codexCommandKeepsItsIndentation() throws {
+    let text = try Self.screen("AgentScreenDetection/codex/0.146.1/blocked/command-permission.txt")
+    func approval(_ body: String) throws -> MirrorScreenPrompt {
+      try #require(
+        MirrorScreenPrompt.parse(text.replacingOccurrences(of: "  $ touch permission-probe.txt", with: body)))
+    }
+    // The two scripts differ only in how far `drop.append(path)` is indented.
+    let inside = try approval(
+      "  $ python3 - <<'EOF'\n  for path in paths:\n      if path.endswith('.tmp'):\n          seen += 1\n          drop.append(path)\n  EOF"
+    )
+    let outside = try approval(
+      "  $ python3 - <<'EOF'\n  for path in paths:\n      if path.endswith('.tmp'):\n          seen += 1\n      drop.append(path)\n  EOF"
+    )
+    #expect(
+      inside.detail?.contains("\n    if path.endswith('.tmp'):\n        seen += 1\n        drop.append(path)") == true)
+    #expect(inside.id != outside.id)
   }
 
   /// A `$ ` line in Claude's scrollback is not a Codex command block.
