@@ -19,6 +19,8 @@ Review round 1 fixes:
 - The prompt panel shows in Chat only (S5-R1).
 - Key and Stop refusals show in the composer's note in both modes (S5-R2).
 
+Round 2 fix (S5-R3): `ctrl-c` must be the last key in a command, and `pressKeys` stops when the pane's agent is gone or has changed. So the rest of a batch never reaches the shell underneath.
+
 Tests:
 
 - `agentKeysAllowOnlyNavigationAndControlKeys` (Mac).

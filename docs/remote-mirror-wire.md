@@ -238,11 +238,12 @@ row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSE
 A client with the `agent-keys` capability can press navigation and control keys in the agent
 pane it mirrors (docs-ai 089 S5): the iOS Terminal key bar and Stop. The command is
 `agentKeys {pane, keys}`. `keys` holds 1 to 8 of `esc`, `ctrl-c`, `tab`, `shift-tab`, `up`,
-`down`, `left`, `right` and `enter`. Printable text is never accepted; it goes through
+`down`, `left`, `right` and `enter`. `ctrl-c` can only be the last key, because it may end the
+agent. Printable text is never accepted; it goes through
 `agents.input` with its readiness checks. The Host refuses panes without a detected agent and
 panes with IME text or a local edit in the last 2 s (`KEYS_REFUSED`). It then presses the keys
-one at a time. Before each key, it checks that the connection still holds the lease and that
-nobody started editing on the Mac. A refusal after the first key says how many keys were
+one at a time. Before each key, it checks that the connection still holds the lease, that the
+same agent still runs in the pane, and that nobody started editing on the Mac. A refusal after the first key says how many keys were
 pressed.
 
 ## Conversation stream (`conversation-v1`)

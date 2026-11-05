@@ -48,8 +48,11 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     let pane: String
     let keys: [String]
 
+    /// Control-C may end the agent, so it can only be the last key: nothing may follow it into
+    /// the shell underneath (089 review S5-R3).
     var isAllowed: Bool {
       !keys.isEmpty && keys.count <= Self.maximumCount && keys.allSatisfy(Self.allowed.contains)
+        && !keys.dropLast().contains("ctrl-c")
     }
   }
 

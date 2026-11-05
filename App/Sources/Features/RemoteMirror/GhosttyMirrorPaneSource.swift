@@ -264,7 +264,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String? {
     guard let surface = view(pane),
       let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil }),
-      agentState(pane)?.detectedAgent != nil
+      let agent = agentState(pane)?.detectedAgent
     else { return String(localized: "Keys go only to panes that run an agent.") }
     var guardrail = MirrorKeyGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
@@ -274,6 +274,10 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       if index > 0 { try? await Task.sleep(for: .milliseconds(60)) }
       let partial = index > 0 ? " " + String(localized: "Only the first \(index) keys were pressed.") : ""
       guard isLive() else { return String(localized: "The mirror no longer owns this pane.") + partial }
+      // The agent may have exited; its shell must not get the rest of the keys.
+      guard agentState(pane)?.detectedAgent == agent else {
+        return String(localized: "The agent in this pane is no longer running.") + partial
+      }
       if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
         return refusal + partial
       }
