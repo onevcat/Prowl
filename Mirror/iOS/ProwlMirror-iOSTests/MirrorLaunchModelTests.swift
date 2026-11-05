@@ -149,6 +149,19 @@ struct MirrorLaunchModelTests {
     #expect(model.worktreeID == "ssh:1111:/srv/app")
   }
 
+  @Test func profilesCarryModelEffortAndIcon() async {
+    let catalog = #"{"ok":true,"data":{"profiles":[{"id":"p","name":"Opus","enabled":true,"runtime":"claude","availability":{"status":"available"},"model":"claude-opus-5-5","reasoning_effort":"high","icon":"checkmark.seal"},{"id":"q","name":"Plain","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#
+    let model = MirrorLaunchModel { command in
+      if case .profiles = command { return try json(catalog) }
+      return try json(Self.listing)
+    }
+    await model.load()
+    #expect(model.profiles.first?.model == "claude-opus-5-5")
+    #expect(model.profiles.first?.effort == "high")
+    #expect(model.profiles.first?.icon == "checkmark.seal")
+    #expect(model.profiles.last?.model == nil)
+  }
+
   private static let listing = #"{"ok":true,"data":{"items":[{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}},{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}}]}}"#
   private static let profiles = #"{"ok":true,"data":{"profiles":[{"id":"disabled-profile","name":"Disabled","enabled":false,"runtime":"claude","availability":{"status":"available"}},{"id":"available-profile","name":"Codex","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#
   private static let created = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":"Codex"}}}}"#

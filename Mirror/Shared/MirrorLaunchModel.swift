@@ -19,11 +19,20 @@ nonisolated struct MirrorLaunchProfile: Decodable, Identifiable, Equatable {
   let enabled: Bool
   let runtime: String
   let availability: Availability
+  /// The Profile's model, reasoning effort and SF Symbol, when it sets them (docs-ai 089 S3).
+  var model: String?
+  var effort: String?
+  var icon: String?
   struct Availability: Decodable, Equatable {
     let status: String
     let reason: String?
   }
   var isAvailable: Bool { enabled && availability.status == "available" }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, enabled, runtime, availability, model, icon
+    case effort = "reasoning_effort"
+  }
 }
 
 @MainActor

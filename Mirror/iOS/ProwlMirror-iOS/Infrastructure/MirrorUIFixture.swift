@@ -15,9 +15,16 @@
       let payload: String
       switch command {
       case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .list where CommandLine.arguments.contains("--mirror-ui-roster-fixture"):
+        // The roster fixture's projects, with the pane IDs of `rosterPanes`.
+        payload =
+          #"{"ok":true,"data":{"items":[{"pane":{"id":"A1000000-0000-0000-0000-000000000004"},"worktree":{"id":"/demo/Prowl/","name":"main","path":"/demo/Prowl/","root_path":"/demo/Prowl/"}},{"pane":{"id":"A1000000-0000-0000-0000-000000000003"},"worktree":{"id":"/demo/Prowl-mirror/","name":"feat/mirror-ios","path":"/demo/Prowl-mirror/","root_path":"/demo/Prowl/"}},{"pane":{"id":"A1000000-0000-0000-0000-000000000001"},"worktree":{"id":"/demo/Kingfisher/","name":"main","path":"/demo/Kingfisher/","root_path":"/demo/Kingfisher/"}},{"pane":{"id":"A1000000-0000-0000-0000-000000000002"},"worktree":{"id":"/demo/Kingfisher-8.4/","name":"release/8.4","path":"/demo/Kingfisher-8.4/","root_path":"/demo/Kingfisher/"}},{"pane":{"id":"A1000000-0000-0000-0000-000000000007"},"worktree":{"id":"/demo/FengNiao/","name":"main","path":"/demo/FengNiao/","root_path":"/demo/FengNiao/"}}]}}"#
       case .list:
         payload =
           #"{"ok":true,"data":{"items":[{"worktree":{"id":"fixture-worktree","name":"main","path":"/Projects/Prowl","root_path":"/Projects/Prowl"}}]}}"#
+      case .profiles where CommandLine.arguments.contains("--mirror-ui-roster-fixture"):
+        payload =
+          #"{"ok":true,"data":{"profiles":[{"id":"opus","name":"Claude Code Opus","enabled":true,"runtime":"claude","availability":{"status":"available"},"model":"claude-opus-5-5","reasoning_effort":"high"},{"id":"luna","name":"Luna","enabled":true,"runtime":"codex","availability":{"status":"available"},"model":"gpt-6-luna","reasoning_effort":"xhigh","icon":"paperplane.fill"},{"id":"pi","name":"Pi Reviewer","enabled":true,"runtime":"pi","availability":{"status":"unavailable","reason":"pi is not on your shell's PATH"}}]}}"#
       case .profiles:
         payload =
           #"{"ok":true,"data":{"profiles":[{"id":"fixture-profile","name":"Codex","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#

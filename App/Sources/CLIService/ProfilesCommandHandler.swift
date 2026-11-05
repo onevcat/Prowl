@@ -15,6 +15,11 @@ final class ProfilesCommandHandler: CommandHandler {
     self.snapshotProvider = snapshotProvider
   }
 
+  private static func nonEmpty(_ value: String?) -> String? {
+    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+    return value
+  }
+
   // swiftlint:disable:next async_without_await
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
     do {
@@ -30,7 +35,10 @@ final class ProfilesCommandHandler: CommandHandler {
             availability: availability(
               for: profile.runtime,
               probeResult: snapshot.probeResults[profile.runtime]
-            )
+            ),
+            model: Self.nonEmpty(profile.model),
+            reasoningEffort: Self.nonEmpty(profile.reasoningEffort),
+            icon: Self.nonEmpty(profile.icon)
           )
         }
       )

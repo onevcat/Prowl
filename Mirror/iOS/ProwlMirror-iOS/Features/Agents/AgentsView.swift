@@ -88,6 +88,8 @@ struct AgentsView: View {
           }
         }
       }
+      .presentationDetents([.medium, .large])
+      .presentationDragIndicator(.visible)
     }
     .task(id: host.id) {
       if session.status != .ready { session.start() }

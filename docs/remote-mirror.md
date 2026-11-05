@@ -199,8 +199,12 @@ cancellation, or disconnect. Closing a mirror still leaves the Host program runn
 
 ## Create and send from iOS
 
-**New Agent Pane** selects an existing Host worktree and an available Agent Profile,
-with an optional initial prompt. Host creates a normal background tab through its
+**New Session** (the **+** on the Agents screen, or a project's **…** menu) is shaped like
+the composer: the optional first message on top, and under it two menus. The project menu
+lists the Host's repositories, with worktrees as a submenu, and starts on the project you
+came from. The Profile menu shows each Agent Profile's agent, model and effort, and greys
+out unavailable ones with the reason. The last Profile you started is chosen again. The
+arrow starts the session and opens it. Host creates a normal background tab through its
 public CLI router. There is no special AI Control Console, bundled private control
 skill, or separate agent-launch implementation. Profile settings determine model
 and permissions.

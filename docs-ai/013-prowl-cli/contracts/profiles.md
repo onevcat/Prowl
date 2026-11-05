@@ -32,7 +32,10 @@ profiles, in Settings list order. It does not trigger or wait for an availabilit
         "runtime": "claude",
         "availability": {
           "status": "available"
-        }
+        },
+        "model": "claude-opus-5-5",
+        "reasoning_effort": "high",
+        "icon": "checkmark.seal"
       },
       {
         "id": "…",
@@ -56,6 +59,9 @@ profiles, in Settings list order. It does not trigger or wait for an availabilit
   current login-shell executable probe: positive and negative answers are authoritative;
   `unknown` means the asynchronous probe has not completed. Runtime-home heuristics used by
   the UI and one-time Profile seeding are deliberately not part of this contract.
+- `model`, `reasoning_effort` and `icon` (an SF Symbol name) appear only when the Profile sets
+  them (added 2026-11-06 for the iOS mirror's New Session sheet, docs-ai 089 S3). They describe
+  the Profile; launches still read the full Profile on the Mac.
 - `availability.reason` is optional human-readable context. Automation must branch on
   `status`, not parse this message.
 

@@ -50,6 +50,29 @@ struct CLIProfilesCommandHandlerTests {
     )
   }
 
+  @Test func listCarriesModelEffortAndIconWhenSet() async throws {
+    let tuned = AgentProfile(
+      name: "Opus", runtime: .claude, icon: "checkmark.seal", model: "claude-opus-5-5", reasoningEffort: "high")
+    let blank = AgentProfile(name: "Plain", runtime: .codex, icon: " ", model: "", reasoningEffort: nil)
+    let handler = ProfilesCommandHandler {
+      ProfilesRuntimeSnapshot(profiles: [tuned, blank], probeResults: [:])
+    }
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(output: .json, command: .profiles(ProfilesInput()))
+    )
+
+    let data = try #require(response.data)
+    let payload = try data.decode(as: ProfilesCommandPayload.self)
+    #expect(payload.profiles[0].model == "claude-opus-5-5")
+    #expect(payload.profiles[0].reasoningEffort == "high")
+    #expect(payload.profiles[0].icon == "checkmark.seal")
+    #expect(payload.profiles[1].model == nil && payload.profiles[1].reasoningEffort == nil)
+    #expect(payload.profiles[1].icon == nil)
+    let json = try #require(String(data: JSONEncoder().encode(payload.profiles[0]), encoding: .utf8))
+    #expect(json.contains("\"reasoning_effort\":\"high\""))
+  }
+
   @Test func snapshotFailureReturnsProfilesFailed() async {
     struct SnapshotError: Error {}
     let handler = ProfilesCommandHandler { throw SnapshotError() }

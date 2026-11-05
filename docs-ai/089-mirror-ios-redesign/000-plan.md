@@ -112,10 +112,12 @@ a centered "Host ⌄" title). The shipped screen uses Prowl's own structure and 
 
 ### New Session (replaces the `MirrorLaunchView` form)
 
-A sheet shaped like a composer: two chips above the message field, project
-(`folder`, Mac sidebar groups and colors, recents first, search, worktrees as sub rows) and
-Profile (agent icon, model, effort; last choice remembered). Send creates the pane and opens
-it. The descriptor takes `agent` from the Profile runtime (fixes D1).
+A sheet shaped like a composer: the message field, and under it two menus, project
+(`folder`, repositories in the Host's order with worktrees as a submenu) and Profile (agent
+icon, model, effort; last choice remembered). Send creates the pane and opens it. The
+descriptor takes `agent` from the Profile runtime (fixes D1). Corrected in S3: sidebar
+groups, colors, recents and search are not in the project menu yet; see
+[005-s3-new-session.md](005-s3-new-session.md).
 
 ### Visual language
 
@@ -175,3 +177,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 - Updated 2026-11-06: P0 fixed D1–D5 on the client — see [002-p0-defect-fixes.md](002-p0-defect-fixes.md)
 - Updated 2026-11-06: S1 shipped the Agents screen; the Agents design section is corrected in place (no card rail or chips, Mac wording) — see [003-s1-agents-home.md](003-s1-agents-home.md)
 - Updated 2026-11-06: S2 restyled the pane chrome, folded tool calls into steps rows and moved attention above the composer — see [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)
+- Updated 2026-11-06: S3 replaced the launch form with a composer-shaped New Session sheet and added Profile model, effort and icon to `profiles` — see [005-s3-new-session.md](005-s3-new-session.md)
