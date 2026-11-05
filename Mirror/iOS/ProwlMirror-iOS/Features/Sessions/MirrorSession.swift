@@ -51,7 +51,7 @@ final class MirrorSession: Identifiable {
 
   /// The Host and the pane take keys: the key bar shows.
   var keysAvailable: Bool { status == .live && supportsAgentKeys && pane?.agent != nil }
-  /// A key can go now; not while a message is being delivered.
+  /// A key can go now; not while a message may still be being delivered.
   var canSendKeys: Bool { keysAvailable && !isDeliveringMessage }
 
   /// Presses `keys` in the pane on the Mac: the Terminal key bar and Stop. One press at a time;
@@ -81,10 +81,13 @@ final class MirrorSession: Identifiable {
     }
   }
 
-  /// A message the Host is still delivering. It holds the connection's only Host command, so
-  /// a prompt answer or a key must wait: a second command would close the connection (089
-  /// review S5-R4).
-  var isDeliveringMessage: Bool { submission?.outcome.status == .pending }
+  /// A message the Host may still be delivering. It holds the connection's only Host command,
+  /// so a prompt answer or a key must wait: a second command would close the connection (089
+  /// review S5-R4). An unknown outcome counts too, because a timeout is no proof that the Host
+  /// finished. It ends with a receipt or with "I've Checked", as for the next message.
+  var isDeliveringMessage: Bool {
+    submission?.outcome.status == .pending || submission?.outcome.status == .unknown
+  }
 
   /// The answer this device sent to an open prompt, until the prompt resolves or the Host
   /// refuses it.
@@ -116,7 +119,7 @@ final class MirrorSession: Identifiable {
     guard !isDeliveringMessage else {
       promptAnswer = .init(
         promptID: promptID, choice: choice,
-        state: .refused(String(localized: "Wait until your message reaches the Mac, then answer.")))
+        state: .refused(String(localized: "Wait until the Mac confirms your message, then answer.")))
       return
     }
     promptAnswer = .init(promptID: promptID, choice: choice, state: .sending)

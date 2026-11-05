@@ -103,8 +103,7 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     // command cannot be read in full never offers its answers.
     if isCommandApproval(lines, above: top, options: options) {
       guard let start = commandStart(lines, endingAt: titleIndex) else { return nil }
-      detail = String(
-        lines[start...titleIndex].map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n").dropFirst(2))
+      detail = commandText(lines[start...titleIndex])
       var questionIndex = start - 1
       while questionIndex >= 0, isFiller(lines[questionIndex]) { questionIndex -= 1 }
       // A command with no question above it is not a prompt the phone can safely answer.
@@ -134,6 +133,16 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
       }
     }
     return (options, selected)
+  }
+
+  /// The command in a `$ ` block. Only the terminal's common left margin goes; the script's own
+  /// indentation stays, because it can change what the command does (089 review S4-R6).
+  private static func commandText(_ block: ArraySlice<String>) -> String {
+    let margin =
+      block.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+      .map { $0.prefix(while: { $0 == " " }).count }.min() ?? 0
+    let text = block.map { $0.count > margin ? String($0.dropFirst(margin)) : "" }.joined(separator: "\n")
+    return String(text.dropFirst(2))
   }
 
   /// How far above the options a command block may start.

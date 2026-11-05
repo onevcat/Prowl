@@ -23,6 +23,8 @@ Round 2 fix (S5-R3): `ctrl-c` must be the last key in a command, and `pressKeys`
 
 Round 3 fix (S5-R4): while a message is being delivered, keys and Stop wait (`MirrorSession.canSendKeys`). The key bar stays visible but is disabled, because a second command would make the Host close the connection.
 
+Round 4 fix (S5-R4): an `unknown` delivery outcome also holds keys and Stop, until a receipt or "I've Checked". A timeout does not prove that the Host finished the command.
+
 Tests:
 
 - `agentKeysAllowOnlyNavigationAndControlKeys` (Mac).

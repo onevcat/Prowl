@@ -231,9 +231,35 @@ struct MirrorCommandTransportTests {
     }
   }
 
-  private func makeSession(_ channel: Channel) -> MirrorSession {
+  /// A delivery that timed out may still hold the Host's command, so answers keep waiting
+  /// until a receipt or "I've Checked" (089 review S5-R4, round 4).
+  @Test(.timeLimit(.minutes(1))) func promptAnswersWaitWhileADeliveryIsUnknown() async {
+    let clock = HostTestClock()
+    let channel = Channel(agent: "codex")
+    let session = makeSession(channel, clock: clock)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    _ = await channel.nextInput()
+    while session.submission?.outcome.status != .unknown {
+      _ = await clock.nextSleep()
+      await clock.advance()
+      await Task.yield()
+    }
+    #expect(session.isDeliveringMessage)
+    session.answerPrompt("screen:a.1", choice: "1")
+    #expect(!session.canSendKeys)
+    session.sendKeys(["esc"])
+    for _ in 0..<20 { await Task.yield() }
+    #expect(channel.commands.count == 2)
+    session.acknowledgeUnknownSubmission()
+    #expect(!session.isDeliveringMessage)
+  }
+
+  private func makeSession(_ channel: Channel, clock: any Clock<Duration> = ContinuousClock()) -> MirrorSession {
     MirrorSession(
-      configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"),
+      configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"), clock: clock,
       makeTransport: { _ in channel })
   }
 

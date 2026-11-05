@@ -39,6 +39,13 @@ Round 3 fix (S4-R5): blank lines may be part of the command block, and the parse
 
 Round 3 fix (S5-R4, prompt part): the Host runs one command per connection, so a second command closes the connection. `MirrorSession.isDeliveringMessage` is true while a message is pending, and during that time the client refuses to send a prompt answer. The panel says to wait. Test: `promptAnswersWaitWhileAMessageIsBeingDelivered`.
 
+Round 4 fixes:
+
+- S4-R6: the command detail drops only the common left margin and keeps the script's own indentation. So two commands that differ only in indentation get different ids.
+- S5-R4: an `unknown` delivery outcome also holds answers, until a receipt or "I've Checked".
+
+Tests: `codexCommandKeepsItsIndentation` and `promptAnswersWaitWhileADeliveryIsUnknown`.
+
 The round 1 tests are `theIdentityCoversTheCommandAndTheDescriptions`, `theKeyGuardAllowsItsOwnKeysButNotLocalEditing`, `feedGivesEveryOpeningItsOwnID`, `takeoverStopsAnAnswerBetweenKeys` and `sameTitledDecisionsAllStayAndOnlyTheirCopiesFold`.
 
 ## Decisions
