@@ -25,7 +25,8 @@ struct ComposerBar: View {
       MirrorComposer(session: session, isEditing: $isEditing)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, 6)
-        .padding(.trailing, 44)
+        // Room for Send, and for Hide Keyboard next to it while editing, so neither covers text.
+        .padding(.trailing, isEditing ? 84 : 44)
         .overlay(alignment: .topLeading) {
           if session.draft.isEmpty {
             Text(placeholder).foregroundStyle(.tertiary)
