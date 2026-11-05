@@ -84,12 +84,9 @@ struct MirrorScreenPromptTests {
         MirrorScreenPrompt.parse(text.replacingOccurrences(of: "  $ touch permission-probe.txt", with: body)))
     }
     // The two scripts differ only in how far `drop.append(path)` is indented.
-    let inside = try approval(
-      "  $ python3 - <<'EOF'\n  for path in paths:\n      if path.endswith('.tmp'):\n          seen += 1\n          drop.append(path)\n  EOF"
-    )
-    let outside = try approval(
-      "  $ python3 - <<'EOF'\n  for path in paths:\n      if path.endswith('.tmp'):\n          seen += 1\n      drop.append(path)\n  EOF"
-    )
+    let head = "  $ python3 - <<'EOF'\n  for path in paths:\n      if path.endswith('.tmp'):\n          seen += 1\n"
+    let inside = try approval(head + "          drop.append(path)\n  EOF")
+    let outside = try approval(head + "      drop.append(path)\n  EOF")
     #expect(
       inside.detail?.contains("\n    if path.endswith('.tmp'):\n        seen += 1\n        drop.append(path)") == true)
     #expect(inside.id != outside.id)
