@@ -180,6 +180,33 @@ struct MirrorCommandTransportTests {
     #expect(session.submission?.outcome.detail.contains("Update Host") == true)
   }
 
+  /// While the Host delivers a message, a prompt answer waits instead of sending a second
+  /// command, which the Host would answer by closing the connection (089 review S5-R4).
+  @Test(.timeLimit(.minutes(1))) func promptAnswersWaitWhileAMessageIsBeingDelivered() async {
+    let channel = Channel(agent: "codex")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    let input = await channel.nextInput()
+    #expect(session.isDeliveringMessage)
+    session.answerPrompt("screen:a.1", choice: "1")
+    for _ in 0..<20 { await Task.yield() }
+    #expect(channel.commands.count == 2)
+    guard case .refused = session.promptAnswer?.state else {
+      Issue.record("expected the answer to wait")
+      return
+    }
+    channel.respond(input.requestID, success: true)
+    #expect(!session.isDeliveringMessage)
+    session.answerPrompt("screen:a.1", choice: "1")
+    guard case .promptRespond = await channel.nextInput().request.command else {
+      Issue.record("expected the answer after delivery")
+      return
+    }
+  }
+
   private func makeSession(_ channel: Channel) -> MirrorSession {
     MirrorSession(
       configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"),
@@ -201,7 +228,13 @@ struct MirrorCommandTransportTests {
       return await iterator.next()!
     }
     var receipts: [UUID] = []
-    let pane = MirrorPaneDescriptor(id: UUID(), title: "Codex", directory: "/Project", busy: false)
+    let pane: MirrorPaneDescriptor
+    /// An agent pane on a Host that answers prompts and presses keys.
+    let agent: String?
+    init(agent: String? = nil) {
+      self.agent = agent
+      pane = MirrorPaneDescriptor(id: UUID(), title: "Codex", directory: "/Project", busy: false, agent: agent)
+    }
     let run = UUID()
     func respond(_ id: UUID, success: Bool) {
       let json: MirrorJSON =
@@ -232,7 +265,8 @@ struct MirrorCommandTransportTests {
               capabilities: ["text-v1", "agents-dispatch"]
                 + (supportsAgentInput ? ["agent-input"] : [])
                 + (supportsLaunch ? ["launch-profile"] : [])
-                + (supportsShellSend ? ["shell-send"] : []), hostRunID: UUID())))
+                + (supportsShellSend ? ["shell-send"] : [])
+                + (agent != nil ? ["prompt-respond", "agent-keys"] : []), hostRunID: UUID())))
       } else if message.kind == .subscribe {
         let lease = UUID()
         onMessage?(.subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))
