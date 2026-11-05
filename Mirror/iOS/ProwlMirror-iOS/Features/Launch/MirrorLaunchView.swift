@@ -58,6 +58,7 @@ struct MirrorLaunchView: View {
         TextField("What should the Agent work on?", text: $model.prompt, axis: .vertical)
           .lineLimit(3...8)
           .focused($promptFocused)
+          .autocorrectionDisabled()
           .accessibilityIdentifier("launch-prompt")
         if model.prompt.utf8.count > MirrorWire.maximumInput {
           Text("The message is too long.").foregroundStyle(.red)

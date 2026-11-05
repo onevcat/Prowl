@@ -10,6 +10,12 @@ struct MirrorComposer: UIViewRepresentable {
     view.font = .preferredFont(forTextStyle: .body)
     view.adjustsFontForContentSizeCategory = true
     view.backgroundColor = .clear
+    // Messages to coding agents carry commands, flags and paths: autocorrect turns `ls` into
+    // "late" and smart punctuation turns `--flag` into "—flag" (docs-ai 089 S2 E2E).
+    view.autocorrectionType = .no
+    view.smartDashesType = .no
+    view.smartQuotesType = .no
+    view.smartInsertDeleteType = .no
     view.accessibilityIdentifier = "mirror-message-input"
     view.accessibilityLabel = "Write a message"
     view.delegate = context.coordinator
