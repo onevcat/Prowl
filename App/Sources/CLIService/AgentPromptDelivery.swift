@@ -50,6 +50,17 @@ nonisolated enum AgentComposerProfile: Equatable, Sendable {
   /// Devin loses an Enter that arrives before it accepts the pasted draft.
   var dropsEarlyEnter: Bool { self == .devin }
 
+  /// Nil when the input box can take `text`: it is empty, or it holds `text` itself, left
+  /// without Enter by an earlier delivery whose echo could not be confirmed. Otherwise why not,
+  /// with the start of the draft so the person sees what is in the way.
+  func draftRefusal(_ draft: String, delivering text: String?) -> String? {
+    if draft.isEmpty { return nil }
+    if let text, AgentPromptDelivery.confirmsPaste(draft, text: text, profile: self) { return nil }
+    let collapsed = draft.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    let excerpt = collapsed.count > 40 ? collapsed.prefix(40) + "…" : collapsed[...]
+    return "\(name) has an existing draft or attachment (“\(excerpt)”). Clear it on Host before dispatching."
+  }
+
   /// Nil means type the line and press Enter on the same main-actor turn.
   func pasteConfirmation(for purpose: AgentLinePurpose) -> PasteConfirmation? {
     switch purpose {
@@ -76,9 +87,13 @@ struct AgentPromptDelivery {
   var profile: AgentComposerProfile?
 
   func deliver(_ text: String) async -> AgentLineSubmission {
-    guard !Task.isCancelled, let before = observe(), before.composer == "", !before.hasMarkedText,
-      insert(text)
-    else { return .notInserted }
+    guard !Task.isCancelled, let before = observe(), !before.hasMarkedText else { return .notInserted }
+    // An earlier delivery left this text without Enter (its echo could not be confirmed):
+    // press Enter instead of inserting it twice.
+    if let composer = before.composer, !composer.isEmpty, Self.confirmsPaste(composer, text: text, profile: profile) {
+      return submit() ? .submitted : .notSubmitted
+    }
+    guard before.composer == "", insert(text) else { return .notInserted }
     guard let pasted = observe() else { return .notSubmitted }
     // Code security: the insertion updates editing activity itself; any later edit invalidates this paste.
     for _ in 0..<20 {
@@ -93,28 +108,37 @@ struct AgentPromptDelivery {
     return .notSubmitted
   }
 
-  static func confirmsPaste(_ composer: String, text: String, profile: AgentComposerProfile? = nil) -> Bool {
+  nonisolated static func confirmsPaste(
+    _ composer: String, text: String, profile: AgentComposerProfile? = nil
+  ) -> Bool {
     let actual = composer.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     let expected = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     guard !actual.isEmpty, !expected.isEmpty else { return false }
     if actual == expected { return true }
     switch profile {
     case .claude:
-      // Claude collapses multiline pasted content into a numbered marker in its input box.
+      // Claude collapses multiline pasted content into a numbered marker in its input box, and
+      // wraps text without spaces (CJK) between two characters.
       return actual.wholeMatch(of: /\[Pasted text #\d+ \+\d+ lines\]/) != nil
+        || matchesRows(of: composer, expected: expected)
     case .devin:
-      // Devin can wrap inside a token. Only screen row boundaries may omit a space;
-      // spaces within a row still have to match the inserted text.
-      var remaining = expected[...]
-      for row in composer.split(separator: "\n") {
-        let segment = row.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        remaining = remaining.drop(while: \.isWhitespace)
-        guard remaining.hasPrefix(segment) else { return false }
-        remaining = remaining.dropFirst(segment.count)
-      }
-      return remaining.isEmpty
+      // Devin can wrap inside a token.
+      return matchesRows(of: composer, expected: expected)
     case nil:
       return false
     }
+  }
+
+  /// Only screen row boundaries may omit a space; spaces within a row still have to match the
+  /// inserted text.
+  nonisolated private static func matchesRows(of composer: String, expected: String) -> Bool {
+    var remaining = expected[...]
+    for row in composer.split(separator: "\n") {
+      let segment = row.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+      remaining = remaining.drop(while: \.isWhitespace)
+      guard remaining.hasPrefix(segment) else { return false }
+      remaining = remaining.dropFirst(segment.count)
+    }
+    return remaining.isEmpty
   }
 }

@@ -1003,13 +1003,13 @@ struct ProwlApp: App {
       resolveTarget: { pane in
         resolveTabTarget(.pane(pane))
       },
-      inputProtection: { target in
+      inputProtection: { target, text in
         guard let surfaceID = UUID(uuidString: target.paneID),
           let state = terminalManager.stateIfExists(for: target.worktreeID)
         else {
           return "The target terminal is no longer available."
         }
-        return state.dispatchInputProtection(surfaceID: surfaceID)
+        return state.dispatchInputProtection(surfaceID: surfaceID, delivering: text)
       },
       pendingDispatch: { target in
         UUID(uuidString: target.paneID).flatMap {

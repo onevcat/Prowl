@@ -1,4 +1,5 @@
 import Clocks
+import Foundation
 import Testing
 
 @testable import Prowl
@@ -61,6 +62,55 @@ struct AgentPromptDeliveryTests {
   @MainActor
   private final class RunFence {
     var isLive = true
+  }
+
+  /// Claude wraps CJK text between two characters, so the screen has a line break where the text
+  /// has none. The echo still confirms; spaces inside a row must still match (mirror input that
+  /// stayed unsent, 2026-11-06).
+  @Test func claudeAcknowledgesTextWrappedBetweenCharacters() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .appending(path: "Fixtures/AgentScreenDetection/claude/2.1.319/idle/cjk-wrapped-draft.txt")
+    let screen = AgentScreenSnapshot(text: try String(contentsOf: url, encoding: .utf8))
+    let composer = try #require(ClaudeScreenProfile.composerContents(in: screen))
+    let text =
+      "这是第三条复现消息，故意写得比上一条更长一些，长到在这个宽度的输入框里一定会在两个汉字之间折成两行显示，"
+      + "但是又不会长到被收成粘贴占位符，请只回复明白两个字。"
+    #expect(composer.contains("\n"))
+    #expect(AgentPromptDelivery.confirmsPaste(composer, text: text, profile: .claude))
+    #expect(!AgentPromptDelivery.confirmsPaste(composer, text: text + "多", profile: .claude))
+    #expect(!AgentPromptDelivery.confirmsPaste("这是 一段\n  中文", text: "这是一段中文", profile: .claude))
+  }
+
+  /// An earlier delivery can leave its text in the input box without Enter. The same text goes
+  /// in with Enter alone instead of being inserted twice; another draft still refuses.
+  @Test func theSameTextLeftInTheBoxIsSubmittedAsIs() async {
+    var inserted: [String] = []
+    var submitted = 0
+    func delivery(_ composer: String) -> AgentPromptDelivery {
+      AgentPromptDelivery(
+        observe: { .init(composer: composer, editingRevision: nil, hasMarkedText: false) },
+        insert: {
+          inserted.append($0)
+          return true
+        },
+        submit: {
+          submitted += 1
+          return true
+        }, profile: .claude)
+    }
+    #expect(await delivery("请只回复明白两个\n  字。").deliver("请只回复明白两个字。") == .submitted)
+    #expect(inserted.isEmpty && submitted == 1)
+    #expect(await delivery("something else").deliver("请只回复明白两个字。") == .notInserted)
+    #expect(inserted.isEmpty && submitted == 1)
+  }
+
+  @Test func aDraftRefusalQuotesTheDraftUnlessItIsTheSameText() {
+    #expect(AgentComposerProfile.claude.draftRefusal("", delivering: "hello") == nil)
+    #expect(AgentComposerProfile.claude.draftRefusal("hel\n  lo", delivering: "hello") == nil)
+    let refusal = AgentComposerProfile.claude.draftRefusal("git push --force origin main", delivering: "hello")
+    #expect(refusal?.contains("git push --force") == true)
+    let long = String(repeating: "长", count: 80)
+    #expect((AgentComposerProfile.claude.draftRefusal(long, delivering: nil)?.count ?? 0) < 160)
   }
 
   @Test func onlyClaudeAcceptsItsCollapsedPasteMarker() {

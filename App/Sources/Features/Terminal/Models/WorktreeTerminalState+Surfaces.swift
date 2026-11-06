@@ -19,7 +19,9 @@ extension WorktreeTerminalState {
     isLive: @escaping @MainActor () -> Bool = { true }
   ) async -> AgentLineSubmission {
     guard isLive(), let surface = surfaces[surfaceID] else { return .notInserted }
-    if purpose == .dispatch, dispatchInputProtection(surfaceID: surfaceID) != nil { return .notInserted }
+    if purpose == .dispatch, dispatchInputProtection(surfaceID: surfaceID, delivering: text) != nil {
+      return .notInserted
+    }
     let agent = surfaceAgentStates[surfaceID]?.detectedAgent
     guard let profile = agent.flatMap(AgentComposerProfile.init(agent:)),
       let confirmation = profile.pasteConfirmation(for: purpose),
@@ -64,7 +66,9 @@ extension WorktreeTerminalState {
     }
   }
 
-  func dispatchInputProtection(surfaceID: UUID) -> String? {
+  /// Why `text` cannot go into the agent's input box now, or nil. Pass `text` so a box that
+  /// already holds it (an earlier delivery left it without Enter) does not count as a draft.
+  func dispatchInputProtection(surfaceID: UUID, delivering text: String? = nil) -> String? {
     guard let surface = surfaces[surfaceID] else {
       return "The target terminal is no longer available."
     }
@@ -79,9 +83,7 @@ extension WorktreeTerminalState {
       guard let draft = composerContents(of: surface, profile: profile) else {
         return "The \(profile.name) input area could not be verified. Check Host before dispatching."
       }
-      guard draft.isEmpty else {
-        return "\(profile.name) has an existing draft or attachment. Clear it on Host before dispatching."
-      }
+      if let refusal = profile.draftRefusal(draft, delivering: text) { return refusal }
     }
     if agent == .codex {
       guard let text = surface.readStyledSnapshotForCLI(),

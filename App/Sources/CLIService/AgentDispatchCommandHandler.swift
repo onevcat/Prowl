@@ -16,7 +16,9 @@ final class AgentDispatchCommandHandler: CommandHandler {
   typealias ConditionSnapshotProvider = @MainActor (TabResolvedTarget) -> AgentConditionSnapshot
   typealias IssueDispatch = @MainActor (TabResolvedTarget) -> Result<AgentDispatchSnapshot, AgentDispatchStoreError>
   typealias DeliverPrompt = @MainActor (TabResolvedTarget, String) async -> Bool
-  typealias InputProtection = @MainActor (TabResolvedTarget) -> String?
+  /// Why the text cannot go into the pane's input box now, or nil. The text is passed so the box
+  /// may already hold it, left without Enter by an earlier delivery.
+  typealias InputProtection = @MainActor (TabResolvedTarget, String) -> String?
   typealias CancelDispatch = @MainActor (String) -> Void
 
   /// How long the precondition lets the evidence settle before refusing: a runtime
@@ -46,7 +48,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
 
   init(
     resolveTarget: @escaping ResolveTarget,
-    inputProtection: @escaping InputProtection = { _ in nil },
+    inputProtection: @escaping InputProtection = { _, _ in nil },
     pendingDispatch: @escaping PendingDispatch = { _ in nil },
     conditionSnapshot: @escaping ConditionSnapshotProvider = { _ in
       AgentConditionSnapshot(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
@@ -103,7 +105,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     if !interactive, let pending = pendingDispatch(target) {
       return pendingFailure(pending, target: target)
     }
-    if let refusal = await prepareDelivery(target: target, needsReceipt: !interactive) {
+    if let refusal = await prepareDelivery(target: target, text: input.prompt, needsReceipt: !interactive) {
       return refusal
     }
 
@@ -194,20 +196,20 @@ final class AgentDispatchCommandHandler: CommandHandler {
     )
   }
 
-  private func prepareDelivery(target: TabResolvedTarget, needsReceipt: Bool) async -> CommandResponse? {
+  private func prepareDelivery(target: TabResolvedTarget, text: String, needsReceipt: Bool) async -> CommandResponse? {
     // A blocked agent has no composer either, so its reason comes before the composer check.
-    guard needsReceipt else { return humanInputRefusal(target: target) ?? protectionRefusal(target) }
+    guard needsReceipt else { return humanInputRefusal(target: target) ?? protectionRefusal(target, text: text) }
     if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target, needsReceipt: needsReceipt) {
       return refusal
     }
     // Code security: do not clear local IME input or append into an actively edited composer.
-    if let refusal = protectionRefusal(target) { return refusal }
+    if let refusal = protectionRefusal(target, text: text) { return refusal }
     if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
-    return protectionRefusal(target)
+    return protectionRefusal(target, text: text)
   }
 
-  private func protectionRefusal(_ target: TabResolvedTarget) -> CommandResponse? {
-    inputProtection(target).map { failure(code: CLIErrorCode.dispatchTargetBusy, message: $0) }
+  private func protectionRefusal(_ target: TabResolvedTarget, text: String) -> CommandResponse? {
+    inputProtection(target, text).map { failure(code: CLIErrorCode.dispatchTargetBusy, message: $0) }
   }
 
   /// Human input goes in as typed text, also while the agent works: the agent queues or steers
