@@ -288,7 +288,8 @@ on the Mac and **Submit** sends the checked ones. A question in several parts en
 still shows the same question before it presses any key, so a stale tap is refused with a
 reason, and typed answers stay on the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
-The chat opens at the newest message and stays there as messages arrive. The arrow button shows
+On a wide screen such as an iPad, the chat and its composer keep a readable column in the
+middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows
 only after you scroll away from the end and returns to the newest message. While you type, the
 Hide Keyboard button floats above the composer. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you

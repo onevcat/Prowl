@@ -93,8 +93,10 @@ struct PaneView: View {
         ComposerBar(session: session, isEditing: $isComposing)
       }
       .animation(.snappy, value: openPrompt?.id)
+      .frame(maxWidth: session.mode == .conversation ? ConversationView.readableWidth + 8 : .infinity)
       .padding(.horizontal, 12)
       .padding(.bottom, 6)
+      .frame(maxWidth: .infinity)
     }
     .navigationBarTitleDisplayMode(.inline)
     .navigationTitle(shown.displayTitle)
