@@ -113,8 +113,19 @@
       let longOutput = CommandLine.arguments.contains("--mirror-ui-multiple-fixtures")
       guard let agent = conversationFixtureAgent else { return Channel(name: "UI Fixture", longOutput: longOutput) }
       let channel = Channel(name: "Review PR #1038", longOutput: longOutput)
-      channel.conversation = fixtureEvents(named: "\(agent)-review-1038")
+      var events = fixtureEvents(named: "\(agent)-review-1038")
+      // `--mirror-ui-running-tool-fixture`: the agent works and its last tool call still runs.
+      if CommandLine.arguments.contains("--mirror-ui-running-tool-fixture"), let last = events.last {
+        let start = MirrorConversationEvent.ToolStart(
+          id: "fixture-running", name: "Bash", kind: .shell, title: "Run the mirror tests",
+          command: "make test-mirror-ios-unit")
+        events.append(.init(.toolStarted, .toolStart(start), at: Date(), source: .transcript, sequence: last.sequence + 1))
+        events.append(
+          .init(.agentStatus, .status(.init(state: .working)), at: Date(), source: .osc, sequence: last.sequence + 2))
+      }
+      channel.conversation = events
       channel.agent = agent
+      if CommandLine.arguments.contains("--mirror-ui-running-tool-fixture") { channel.setAgentState(.working) }
       return channel
     }
 
@@ -192,6 +203,7 @@
           pane.agentState = .idle
         }
       }
+      func setAgentState(_ state: MirrorConversationEvent.AgentState) { pane.agentState = state }
       var agent = "codex" {
         didSet {
           pane.agent = agent
