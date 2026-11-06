@@ -114,6 +114,13 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
     var result: [MirrorConversationItem] = []
     var toolIndex: [String: Int] = [:]
     var promptIndex: [String: Int] = [:]
+    // Every removal goes through here: the row after it moves up, and so must every index that
+    // points past it, or a later end lands on the wrong row or past the end.
+    func removeItem(at index: Int) {
+      result.remove(at: index)
+      for (key, value) in promptIndex where value > index { promptIndex[key] = value - 1 }
+      for (key, value) in toolIndex where value > index { toolIndex[key] = value - 1 }
+    }
     for event in events {
       switch (event.kind, event.payload) {
       case (.userMessage, .message(let message)):
@@ -126,7 +133,7 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
           if case .queued(_, let text) = item { return text == message.text.text }
           return false
         }) {
-          result.remove(at: index)
+          removeItem(at: index)
         }
       case (.assistantMessage, .message(let message)):
         result.append(.assistant(id: event.sequence, text: message.text, phase: message.phase, at: event.timestamp))
@@ -157,10 +164,8 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
           if resolution.id.hasPrefix("screen:") {
             // A screen prompt opens before the transcript records anything, so its answer
             // reads where it happened, after the steps that led to it (docs-ai 089 S4).
-            result.remove(at: index)
             promptIndex.removeValue(forKey: resolution.id)
-            for (key, value) in promptIndex where value > index { promptIndex[key] = value - 1 }
-            for (key, value) in toolIndex where value > index { toolIndex[key] = value - 1 }
+            removeItem(at: index)
             result.append(.prompt(id: event.sequence, prompt: prompt, resolved: resolution, at: at))
           } else {
             result[index] = .prompt(id: id, prompt: prompt, resolved: resolution, at: at)
