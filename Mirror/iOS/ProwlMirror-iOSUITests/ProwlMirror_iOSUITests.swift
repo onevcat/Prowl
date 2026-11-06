@@ -740,6 +740,37 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     waitForExpectations(timeout: 5)
   }
 
+  /// A drag at the local end while a remote scroll is on its way must not turn following back
+  /// on: the result shows the new screen's top with Latest, and History keeps that position.
+  @MainActor
+  func testLocalDragDuringRemoteScrollKeepsTheNewTop() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture",
+      "--mirror-ui-scroll-hold-fixture",
+    ]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let reading = app.scrollViews["mirror-live-scroll"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    scrollUp.tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(identifier: "mirror-scroll-progress").firstMatch
+        .waitForExistence(timeout: 5))
+    reading.swipeUp()
+    releaseHeldScrolls()
+    let top = app.staticTexts["Remote -1 marker 1"]
+    expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: top)
+    waitForExpectations(timeout: 8)
+    XCTAssertTrue(app.buttons["mirror-latest"].waitForExistence(timeout: 5))
+    tapPaneAction(app, "History")
+    XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
+    tapPaneAction(app, "Live Output")
+    XCTAssertTrue(top.waitForExistence(timeout: 5))
+    XCTAssertTrue(top.isHittable)
+  }
+
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.
   /// The name matches `MirrorUIFixture.releaseScrollNotification`.
   private func releaseHeldScrolls() {

@@ -81,7 +81,7 @@ struct ScreenView: View {
         geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 24
       } action: { _, isAtBottom in
         atBottom = isAtBottom
-        if userScrolls { session.followsLatest = isAtBottom }
+        syncFollowing()
         if isAtBottom { jumpPending = false }
       }
       .onScrollPhaseChange { _, phase in
@@ -92,9 +92,9 @@ struct ScreenView: View {
           restoring = nil
         case .decelerating:
           // The first move of a drag can report its geometry before its phase; catch up here.
-          if userScrolls { session.followsLatest = atBottom }
+          syncFollowing()
         case .idle, .animating:
-          if userScrolls { session.followsLatest = atBottom }
+          syncFollowing()
           userScrolls = false
           // A jump made while the reader still decelerated is lost; make it again.
           if phase == .idle, jumpPending, !atBottom {
@@ -110,6 +110,11 @@ struct ScreenView: View {
       .onChange(of: session.completedScroll) { _, completion in
         guard completion != nil else { return }
         restoring = nil
+        // The new Host screen opens at its top. A drag that started before it must not settle
+        // into following and pull the reader back to the end.
+        userScrolls = false
+        jumpPending = false
+        session.followsLatest = false
         position.scrollTo(edge: .top)
       }
       .safeAreaBar(edge: .top) {
@@ -171,6 +176,13 @@ struct ScreenView: View {
     }
     .padding(.horizontal)
     .padding(.top, 4)
+  }
+
+  /// The person's own scrolling decides following, except while a remote scroll is on its way:
+  /// that request already turned following off, and its result shows the new screen's top.
+  private func syncFollowing() {
+    guard userScrolls, !session.isScrolling else { return }
+    session.followsLatest = atBottom
   }
 
   private func remoteScrollButton(_ direction: MirrorMessage.ScrollDirection) -> some View {
