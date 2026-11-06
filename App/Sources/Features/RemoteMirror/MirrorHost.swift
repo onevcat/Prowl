@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Observation
+import ProwlCLIShared
 import Security
 
 @MainActor
@@ -552,6 +553,7 @@ final class MirrorHost {
                 + (commandService != nil
                   ? [
                     "launch-profile", "launch-shell", "agents-dispatch", "agent-input", "prompt-respond", "agent-keys",
+                    "shell-send", "shell-keys",
                   ] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
                 + (source.supportsRemoteScroll ? ["remote-scroll"] : [])
@@ -686,6 +688,10 @@ final class MirrorHost {
       pressKeys(input, paneID: paneID, request: request, peer: peer, lease: lease)
       return
     }
+    if case .send(let input) = request.request.command, let paneID = UUID(uuidString: input.selector.value) {
+      runShellLine(input, paneID: paneID, request: request, peer: peer, lease: lease)
+      return
+    }
     commandPeers[peer.id] = request
     commandDevices[peer.id] = devicePeers[peer.id]
     let peerID = peer.id
@@ -775,6 +781,52 @@ final class MirrorHost {
             "ok": .bool(true), "command": .string("agent.keys"),
             "schema_version": .string("prowl.remote.command.v1"),
             "data": .object(["keys": .array(input.keys.map { .string($0) })]),
+          ])
+        }
+      guard let peer, self.peers[peerID] === peer else { return }
+      peer.send(.commandResult(.init(commandResponse: .init(requestID: request.requestID, response: response))))
+    }
+  }
+
+  /// Runs a command in the shell pane this connection mirrors (capability `shell-send`). The
+  /// source checks that the shell is at its prompt and clears the line first.
+  private func runShellLine(
+    _ input: MirrorShellInput, paneID: UUID, request: MirrorCommandRequest, peer: MirrorConnection, lease: UUID?
+  ) {
+    commandPeers[peer.id] = request
+    let peerID = peer.id
+    let isLive: @MainActor () -> Bool = { [weak self, weak peer] in
+      guard let self, let peer, self.peers[peerID] === peer else { return false }
+      return lease == nil || self.subscriptions[peerID]?.id == lease
+    }
+    Task { @MainActor [weak self, weak peer] in
+      guard let self else { return }
+      let refusal: String?
+      if !input.trailingEnter || input.wait || input.captureOutput
+        || input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || input.text.utf8.count > MirrorWire.maximumInput
+      {
+        refusal = String(localized: "Send one command line from a mirror.")
+      } else if let invalid = DispatchInput(pane: input.selector.value, prompt: input.text).validationErrorMessage {
+        refusal = invalid
+      } else if !isLive() {
+        refusal = String(localized: "The mirror no longer owns this pane.")
+      } else {
+        refusal = await self.source.sendShellLine(input.text, in: paneID, isLive: isLive)
+      }
+      self.commandPeers.removeValue(forKey: peerID)
+      let response: MirrorJSON =
+        if let refusal {
+          MirrorCommandService.failure(refusal, code: "SHELL_REFUSED")
+        } else {
+          .object([
+            "ok": .bool(true), "command": .string("send"),
+            "schema_version": .string("prowl.remote.command.v1"),
+            "data": .object([
+              "input": .object([
+                "bytes": .number(Double(input.text.utf8.count)), "trailing_enter_sent": .bool(true),
+              ])
+            ]),
           ])
         }
       guard let peer, self.peers[peerID] === peer else { return }

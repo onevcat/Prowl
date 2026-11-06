@@ -247,7 +247,7 @@
                 panes: [pane] + MirrorUIFixture.rosterPanes,
                 capabilities: [
                   "text-v1", "history", "refresh", "launch-profile", "agents-dispatch", "agent-input",
-                  "shell-send", "agent-keys",
+                  "shell-send", "agent-keys", "shell-keys",
                 ] + (conversation.isEmpty ? [] : ["conversation-v1"])
                   + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
                   + (CommandLine.arguments.contains("--mirror-ui-scroll-boundary-fixture") ? ["scroll-state-v1"] : []),

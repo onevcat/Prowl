@@ -119,6 +119,14 @@ final class GhosttySurfaceBridge {
     return pid > 0 ? pid_t(pid) : nil
   }
 
+  /// Whether input sent now reaches a primary shell prompt, from shell integration (OSC 133),
+  /// and whether bracketed paste is on; nil without a terminal.
+  func inputState() -> MirrorShellPrompt.InputState? {
+    guard let surface else { return nil }
+    let state = ghostty_surface_input_state(surface)
+    return .init(primaryPrompt: state.primary_prompt, bracketedPaste: state.bracketed_paste)
+  }
+
   /// The pty's foreground process group (`tcgetpgrp` on the master side), or
   /// `nil` when the lookup fails. Upstream exports it as
   /// `ghostty_surface_foreground_pid`; the fork no longer carries its own export.
