@@ -273,7 +273,8 @@ ones fold after twelve lines), the agent's Markdown as text (headings, lists, qu
 blocks and tables), and each run of tool calls between two messages as one quiet row
 ("6 tool calls", with failures counted in red and the running call shown while the agent
 works). A row opens to one line per call, and a line opens its command, changes and output
-in a sheet. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
+in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
+Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
 above the composer shows the question, what it is about (such as the command to approve) and
 the choices; tap one to answer. In a multi-select question, each tap checks or unchecks a box
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's

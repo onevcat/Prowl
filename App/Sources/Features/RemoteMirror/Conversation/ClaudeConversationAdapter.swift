@@ -174,7 +174,12 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
               .assistantMessage, .message(.init(text: .init(text), model: model)), at: timestamp, source: .transcript))
         }
       case "thinking":
-        let reasoning = Event.Reasoning(durationMs: Value.int(record, "thinkingDurationMs"))
+        // Claude Code shows its thinking text in the pane like a reply, so the mirror shows it
+        // too. A redacted block holds only "…".
+        let thought = Value.string(block, "thinking")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reasoning = Event.Reasoning(
+          durationMs: Value.int(record, "thinkingDurationMs"),
+          summary: thought.flatMap { $0.isEmpty || $0 == "…" ? nil : MirrorBoundedText($0) })
         events.append(Event(.assistantReasoning, .reasoning(reasoning), at: timestamp, source: .transcript))
       case "tool_use":
         events += toolStartEvents(block, at: timestamp)

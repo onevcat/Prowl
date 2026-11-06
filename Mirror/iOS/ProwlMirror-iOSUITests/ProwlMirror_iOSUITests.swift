@@ -343,6 +343,25 @@ final class ProwlMirror_iOSUITests: XCTestCase {
 
   // MARK: - Conversation (conversation-v1)
 
+  /// Claude Code's visible thinking reads like a reply between the steps, in secondary type.
+  @MainActor
+  func testVisibleThinkingShowsAsItsOwnRow() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let thought = app.descendants(matching: .any).matching(identifier: "conversation-thought").firstMatch
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    for _ in 0..<12 where !(thought.exists && thought.isHittable) {
+      app.swipeDown()
+    }
+    XCTAssertTrue(thought.exists)
+    XCTAssertTrue(thought.label.contains("iOS decoder") || app.staticTexts.containing(
+      NSPredicate(format: "label CONTAINS 'iOS decoder'")).firstMatch.exists)
+    attach("Visible thinking between steps")
+  }
+
   @MainActor
   func testConversationFixtureRendersTheChatAndSwitchesToTheScreen() {
     let app = XCUIApplication()

@@ -147,6 +147,8 @@ struct ConversationItemView: View {
       .accessibilityLabel("Queued: \(MirrorInjectedText.split(text).message)")
     case .assistant(_, let text, _, _):
       AssistantText(text: text)
+    case .reasoning(_, _, let summary?) where !summary.text.isEmpty:
+      ThoughtText(text: summary)
     case .reasoning, .tool, .attention:
       // Folded into steps rows or shown above the composer.
       EmptyView()
@@ -262,6 +264,21 @@ private struct AssistantText: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("conversation-assistant")
+  }
+}
+
+/// What the agent thinks between steps, when it shows that text (Claude Code's visible
+/// thinking, Codex's reasoning summary): like a reply, in secondary type.
+private struct ThoughtText: View {
+  let text: MirrorBoundedText
+
+  var body: some View {
+    MirrorMarkdownView(text: text.text)
+      .font(.callout)
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("conversation-thought")
   }
 }
 

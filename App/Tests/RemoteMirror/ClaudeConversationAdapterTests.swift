@@ -101,6 +101,29 @@ struct ClaudeConversationAdapterTests {
     #expect(origins == [.automation, .system, .automation])
   }
 
+  /// Claude Code shows its thinking text between tool calls like a reply; the Host carries it as
+  /// the reasoning summary. A redacted or empty block ("…") has no summary.
+  @Test func thinkingTextBecomesTheReasoningSummary() {
+    let events = run([
+      base(
+        "assistant",
+        [
+          "message": [
+            "content": [
+              ["type": "thinking", "thinking": "打包脚本取的是已提交的 gitlink，所以得先提交 Prowl 再打包。"]
+            ]
+          ]
+        ]),
+      base("assistant", ["message": ["content": [["type": "thinking", "thinking": "…"]]]]),
+      base("assistant", ["message": ["content": [["type": "thinking", "thinking": "  "]]]]),
+    ])
+    let reasonings = events.compactMap { event -> Event.Reasoning? in
+      guard case .reasoning(let reasoning) = event.payload else { return nil }
+      return reasoning
+    }
+    #expect(reasonings.map { $0.summary?.text ?? "-" } == ["打包脚本取的是已提交的 gitlink，所以得先提交 Prowl 再打包。", "-", "-"])
+  }
+
   @Test func pairsToolUseWithResultAndReportsFailures() {
     let events = run([
       base(

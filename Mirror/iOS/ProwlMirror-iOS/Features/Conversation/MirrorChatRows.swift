@@ -54,6 +54,9 @@ nonisolated enum MirrorChatRow: Identifiable, Equatable, Sendable {
       case .attention, .prompt(_, _, nil, _):
         // Shown once above the composer: the blocked strip, or the prompt panel (docs-ai 089 S4).
         continue
+      case .reasoning(_, _, let summary?) where !summary.text.isEmpty:
+        // Thinking the agent shows as text reads like a reply: its own row, between the steps.
+        rows.append(.item(item))
       case .tool, .reasoning:
         if case .steps(var steps) = rows.last {
           steps.items.append(item)

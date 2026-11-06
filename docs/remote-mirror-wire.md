@@ -337,7 +337,9 @@ they do not know. Kinds: `session.started` / `session.updated` / `session.change
 `user.queued` / `user.unqueued`, `assistant.message` / `assistant.reasoning`,
 `tool.started` / `tool.completed`, `agent.status`, `prompt.opened` / `prompt.resolved`,
 `context.compacted`, `subagent.started` / `subagent.completed`, `notice`. Long text is
-bounded (`{"text","truncated","totalBytes"}`); reasoning content is never sent. The Swift
+bounded (`{"text","truncated","totalBytes"}`). Hidden reasoning is never sent:
+`assistant.reasoning` carries as `summary` only text the agent itself shows in the pane (Codex's
+reasoning summary, Claude Code's visible thinking). The Swift
 model is `Mirror/Shared/MirrorConversationEvent.swift`, compiled by the Mac app and the iOS
 client; both pin the same JSON vectors.
 
