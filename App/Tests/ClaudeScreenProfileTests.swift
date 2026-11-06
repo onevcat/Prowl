@@ -181,6 +181,7 @@ struct ClaudeScreenProfileTests {
         ClaudeScreenProfile.RuleID.spinner
       ),
       "claude/2.1.317/idle/startup-hint-composer.txt": .matched(ClaudeScreenProfile.RuleID.idleComposer),
+      "claude/2.1.319/idle/cjk-wrapped-draft.txt": .noRuleMatched,
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .claude }
 
