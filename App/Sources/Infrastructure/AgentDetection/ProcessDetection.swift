@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-struct ForegroundProcess: Equatable, Sendable {
+nonisolated struct ForegroundProcess: Equatable, Sendable {
   let ref: ProcessRef
   /// The parent's pid in the namespace of `ref`. It relates members of one job only.
   let parentPID: Int32?
@@ -40,19 +40,38 @@ struct ForegroundProcess: Equatable, Sendable {
   }
 }
 
-struct ForegroundJob: Equatable, Sendable {
+nonisolated struct ForegroundJob: Equatable, Sendable {
   let processGroupID: pid_t
   let processes: [ForegroundProcess]
+  /// Descendants of a job member that runs agents outside the job (see
+  /// `AgentLauncher`), in breadth-first order so the shallowest is first. They are
+  /// deliberately kept out of `processes`: the job is still what the kernel says it
+  /// is, so everything that reasons about the job itself — the pane's foreground
+  /// `ssh`, remote binding, the Codex daemon guard — is unaffected. Only agent
+  /// identification looks here, and only after the job itself named no agent.
+  let hosted: [ForegroundProcess]
+
+  nonisolated init(processGroupID: pid_t, processes: [ForegroundProcess], hosted: [ForegroundProcess] = []) {
+    self.processGroupID = processGroupID
+    self.processes = processes
+    self.hosted = hosted
+  }
+
+  /// Every process this job can speak for, the job's own members first.
+  nonisolated var allProcesses: [ForegroundProcess] { processes + hosted }
 
   /// The job member the shell launched on behalf of `process`: its topmost ancestor
   /// that is still part of this job. A runtime that forks an engine child
-  /// (Droid's `droid exec`) moves the identified process while this stays put.
+  /// (Droid's `droid exec`) moves the identified process while this stays put, and a
+  /// launcher-hosted engine resolves through its out-of-job ancestors to the
+  /// launcher the shell actually started.
   nonisolated func launchProcess(of process: ProcessRef) -> ProcessRef {
+    let candidates = allProcesses
     var current = process
     var hops = 0
-    while hops < processes.count,
-      let parent = processes.first(where: { $0.ref == current })?.parentPID,
-      let parentProcess = processes.first(where: { $0.ref.namespacePID == parent })
+    while hops < candidates.count,
+      let parent = candidates.first(where: { $0.ref == current })?.parentPID,
+      let parentProcess = candidates.first(where: { $0.ref.namespacePID == parent })
     {
       current = parentProcess.ref
       hops += 1
@@ -136,26 +155,115 @@ nonisolated enum ProcessDetection {
 
   static func foregroundJob(processGroupID: pid_t) -> ForegroundJob? {
     guard processGroupID > 0 else { return nil }
-    let processes = processGroupPIDs(processGroupID).compactMap { pid -> ForegroundProcess? in
-      guard pid > 0,
-        let info = processBSDInfo(pid: pid),
-        let name = comm(from: info)
-      else {
-        return nil
-      }
-      let argv = processArguments(pid: pid)
-      return ForegroundProcess(
-        pid: pid,
-        parentProcessID: pid_t(info.pbi_ppid),
-        name: name,
-        argv0: argv?.first.flatMap(basename),
-        cmdline: argv?.joined(separator: " "),
-        arguments: argv
-      )
-    }
+    let processes = processGroupPIDs(processGroupID).compactMap(describeProcess)
 
     guard !processes.isEmpty else { return nil }
-    return ForegroundJob(processGroupID: processGroupID, processes: processes)
+    return ForegroundJob(
+      processGroupID: processGroupID,
+      processes: processes,
+      hosted: hostedProcesses(of: processes)
+    )
+  }
+
+  /// How the walk reads the process tree. The live implementations are the defaults;
+  /// tests inject a tree so the traversal rules can be checked without one.
+  struct HostedWalkSource: Sendable {
+    var children: @Sendable (pid_t) -> [pid_t]
+    var describe: @Sendable (pid_t) -> ForegroundProcess?
+
+    static let live = HostedWalkSource(children: childPIDs, describe: describeProcess)
+  }
+
+  private static func describeProcess(pid: pid_t) -> ForegroundProcess? {
+    guard pid > 0,
+      let info = processBSDInfo(pid: pid),
+      let name = comm(from: info)
+    else {
+      return nil
+    }
+    let argv = processArguments(pid: pid)
+    return ForegroundProcess(
+      pid: pid,
+      parentProcessID: pid_t(info.pbi_ppid),
+      name: name,
+      argv0: argv?.first.flatMap(basename),
+      cmdline: argv?.joined(separator: " "),
+      arguments: argv
+    )
+  }
+
+  /// Breadth-first descendants of the job members that run agents outside the job
+  /// (`AgentLauncher`), shallowest first, excluding anything already in the job.
+  ///
+  /// Only such a launcher is expanded, so an ordinary pane pays one path check per job
+  /// member and walks nothing. `PROC_PPID_ONLY` lists one process's children directly,
+  /// which keeps one probe of a live Happy tree at about 0.13 ms — comfortably inside
+  /// the detection cadence, and cached like the rest of the job.
+  ///
+  /// The walk knows nothing about agents: it cannot stop at the first one it finds,
+  /// because a wrapped runtime's real engine is the *child* of the script that names
+  /// it (`codex` is a node script that spawns a native binary). Identification sorts
+  /// that out; the depth and count limits are what bound the cost.
+  static func hostedProcesses(
+    of processes: [ForegroundProcess],
+    source: HostedWalkSource = .live
+  ) -> [ForegroundProcess] {
+    var frontier = processes.filter(AgentLauncher.hostsAgentsOutsideJob).compactMap(\.ref.localPID)
+    guard !frontier.isEmpty else { return [] }
+    var seen = Set(processes.compactMap(\.ref.localPID))
+    var hosted: [ForegroundProcess] = []
+    var depth = 0
+    while !frontier.isEmpty, depth < hostedWalkDepthLimit, hosted.count < hostedWalkCountLimit {
+      depth += 1
+      var next: [pid_t] = []
+      for parent in frontier {
+        guard hosted.count < hostedWalkCountLimit else { break }
+        for child in source.children(parent) where seen.insert(child).inserted {
+          guard hosted.count < hostedWalkCountLimit else { break }
+          guard let process = source.describe(child) else { continue }
+          hosted.append(process)
+          next.append(child)
+        }
+      }
+      frontier = next
+    }
+    return hosted
+  }
+
+  /// Happy reaches its engine in two levels; the depth leaves room for a launcher
+  /// that nests more shims. The count bounds a wide tree. Together they stop a
+  /// pathological or adversarial tree from turning one poll into an unbounded walk,
+  /// which the stop-at-the-engine rule alone cannot: a branch that never reaches an
+  /// agent would otherwise be walked to its leaves.
+  static let hostedWalkDepthLimit = 4
+  static let hostedWalkCountLimit = 64
+
+  /// The direct children of `pid`.
+  static func childPIDs(_ pid: pid_t) -> [pid_t] {
+    guard pid > 0 else { return [] }
+    var capacity = 16
+
+    while capacity <= 4096 {
+      var pids = [pid_t](repeating: 0, count: capacity)
+      let bytes = pids.withUnsafeMutableBufferPointer { buffer in
+        proc_listpids(
+          UInt32(PROC_PPID_ONLY),
+          UInt32(pid),
+          buffer.baseAddress,
+          Int32(buffer.count * MemoryLayout<pid_t>.size)
+        )
+      }
+      guard bytes > 0 else { return [] }
+
+      let count = Int(bytes) / MemoryLayout<pid_t>.size
+      let result = pids.prefix(count).filter { $0 > 0 }
+      if count < capacity {
+        return Array(result)
+      }
+      capacity *= 2
+    }
+
+    return []
   }
 
   static func processGroupPIDs(_ processGroupID: pid_t) -> [pid_t] {
