@@ -350,9 +350,11 @@ nonisolated enum ClaudeThinkingSignature {
     return Array(kind) == Array("narration".utf8)
   }
 
-  /// The first length-delimited field `number` of a protobuf message; nil when it is missing or
-  /// the message is malformed.
+  /// The last length-delimited field `number` of a protobuf message, as Claude Code decodes it:
+  /// the whole message must parse, and a repeated field keeps its last value. Nil when the field
+  /// is missing or any part of the message is malformed.
   static func field(_ number: UInt64, in message: ArraySlice<UInt8>) -> ArraySlice<UInt8>? {
+    var found: ArraySlice<UInt8>?
     var index = message.startIndex
     func varint() -> UInt64? {
       var value: UInt64 = 0
@@ -378,7 +380,7 @@ nonisolated enum ClaudeThinkingSignature {
         guard let length = varint(), length <= UInt64(message.endIndex - index) else { return nil }
         let value = message[index..<(index + Int(length))]
         index += Int(length)
-        if key >> 3 == number { return value }
+        if key >> 3 == number { found = value }
       case 5:
         guard message.endIndex - index >= 4 else { return nil }
         index += 4
@@ -386,6 +388,6 @@ nonisolated enum ClaudeThinkingSignature {
         return nil
       }
     }
-    return nil
+    return found
   }
 }

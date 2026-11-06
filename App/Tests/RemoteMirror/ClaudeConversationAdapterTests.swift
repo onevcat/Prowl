@@ -133,6 +133,22 @@ struct ClaudeConversationAdapterTests {
     #expect(!ClaudeThinkingSignature.isNarration(Data([0x12, 0x7F]).base64EncodedString()))
   }
 
+  /// The classifier agrees with Claude Code 2.1.319's own decoder (vectors checked against it in
+  /// PR #1058 review R2-001): the whole message must parse at every level, and a repeated kind
+  /// keeps its last value.
+  @Test(arguments: [
+    ("Eg0KC0IJbmFycmF0aW9u", true),  // narration
+    ("EgwKCkIIdGhpbmtpbmc=", false),  // ordinary thinking
+    ("Eg0KC0IJbmFycmF0aW9uGgUB", false),  // narration, then an incomplete outer field
+    ("EhAKC0IJbmFycmF0aW9uGgUB", false),  // narration, then an incomplete middle field
+    ("EhAKDkIJbmFycmF0aW9uSgUB", false),  // narration, then an incomplete innermost field
+    ("EhcKFUIJbmFycmF0aW9uQgh0aGlua2luZw==", false),  // narration, then thinking
+    ("EhcKFUIIdGhpbmtpbmdCCW5hcnJhdGlvbg==", true),  // thinking, then narration
+  ])
+  func narrationSignaturesMatchClaudeCode(signature: String, narration: Bool) {
+    #expect(ClaudeThinkingSignature.isNarration(signature) == narration)
+  }
+
   @Test func pairsToolUseWithResultAndReportsFailures() {
     let events = run([
       base(
