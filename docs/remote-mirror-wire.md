@@ -208,14 +208,35 @@ Hosts leave them out.
 ## Answering prompts (`prompt-respond`)
 
 While an agent is blocked on a choice menu (Claude Code's permission and AskUserQuestion
-dialogs, Codex's approval), the Host reads the menu from the pane's screen and sends it on
-`conversation-v1` as `prompt.opened` with `source: "screen"` (docs-ai 089 S4). The prompt id is
-`screen:<hash>.<n>`. The hash covers the question, the detail (such as the command to approve),
-and every option with its description. `<n>` counts openings, so the same menu shown twice is
-two prompts. `choices[].id` is the option's number on screen. `freeform` says the menu also
-has "Type something." / "Chat about this" rows, which are not offered. The prompt resolves
-when the phone's answer is pressed, with `allowed`, `denied` or `answered` and
-`decidedBy: "mirror"`. Otherwise it resolves when the menu leaves the screen, with `unknown`.
+dialogs, including the multi-select dialog and the "Review your answers" page, and Codex's
+approval), the Host reads the menu from the pane's screen and sends it on `conversation-v1` as
+`prompt.opened` with `source: "screen"` (docs-ai 089 S4). The prompt id is
+`screen:<hash>.<n>`. The hash covers the question, the detail (such as the command to approve,
+or the answers a review page submits), and every answer with its description. It does not cover
+the highlight, the boxes of a multi-select menu, or text typed into the "Type something" row, so
+these changes keep the prompt. `<n>` counts openings, so the same menu shown twice is two
+prompts. `choices[].id` is the option's number on screen. `freeform` says the menu also has
+"Type something" / "Chat about this" rows, which are not offered.
+
+A multi-select menu has `multiSelect: true` and `choices[].checked`. When a box changes, the
+Host sends `prompt.opened` again with the same id and the new boxes; a client replaces the open
+prompt with that id. Choosing an option toggles its box and leaves the menu open. The choice
+`submit` presses the menu's Submit row; Claude then shows its review page, which is a new
+prompt.
+
+The prompt resolves when the phone's answer is pressed, with `allowed`, `denied` or `answered`
+and `decidedBy: "mirror"`. Otherwise it resolves when the menu leaves the screen, with
+`unknown`.
+
+A `text-v1` subscription that sets `includeScreenPrompt: true` on subscribe gets the same menu
+as a `screenPrompt` message, so the Terminal view can answer it too:
+
+```json
+{"screenPrompt":{"_0":{"prompt":{"id":"screen:…","kind":"question","title":"…","choices":[…],"freeform":false},"subscriptionID":"UUID"}}}
+```
+
+The Host sends it when the menu opens, changes or closes (`prompt` absent). It needs no
+acknowledgement. A Host that does not know the flag ignores it and sends no `screenPrompt`.
 
 A client with the `prompt-respond` capability answers with a command on the subscription that
 mirrors the pane:

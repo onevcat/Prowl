@@ -275,16 +275,20 @@ blocks and tables), and each run of tool calls between two messages as one quiet
 works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
 above the composer shows the question, what it is about (such as the command to approve) and
-the choices; tap one to answer. The Host checks that the Mac still shows the same question
-before it presses any key, so a stale tap is refused with a reason, and typed answers stay on
-the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
+the choices; tap one to answer. In a multi-select question, each tap checks or unchecks a box
+on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
+"Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
+still shows the same question before it presses any key, so a stale tap is refused with a
+reason, and typed answers stay on the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 The arrow button returns to the newest message after scrolling up. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
 confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
 TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
-shows under the composer. The prompt panel shows in Chat only; Terminal shows the menu itself. While a message is still on its way to the Mac, the key bar and prompt answers wait.
+shows under the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
+The iOS app logs connections, prompts and Host command results to the unified log under the
+subsystem `com.onevcat.prowl.mirror-ios`; collect it with Console.app or `log collect --device`.
 The floating composer
 under both views sends through `agents.input`; a note appears only when the Host refused
 something or a receipt needs a look. While the agent works, Send still delivers: the agent

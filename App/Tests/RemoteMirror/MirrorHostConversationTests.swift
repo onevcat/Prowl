@@ -227,6 +227,63 @@ struct MirrorHostConversationTests {
     #expect(feed.openScreenPromptID == nil)
   }
 
+  /// Checking a box keeps the prompt: the feed sends it again under the same id with the new
+  /// boxes, and never resolves it (a new prompt per key press flooded the chat).
+  @Test func feedSendsNewBoxesUnderTheSameID() throws {
+    func parse(_ name: String) throws -> MirrorScreenPrompt {
+      try #require(MirrorScreenPrompt.parse(try String(contentsOf: Self.fixture(name), encoding: .utf8)))
+    }
+    let plain = try parse("claude-2.1.319-multi-select.txt")
+    let checked = try parse("claude-2.1.319-multi-select-checked.txt")
+    let feed = MirrorConversationFeed()
+    let now = Date()
+    feed.observeScreen(plain, now: now)
+    feed.observeScreen(checked, now: now)
+    feed.observeScreen(checked, now: now)
+    let events = feed.log.snapshot(since: nil).events
+    #expect(events.map(\.kind) == [.promptOpened, .promptOpened])
+    let prompts = events.compactMap { event -> MirrorConversationEvent.Prompt? in
+      if case .prompt(let prompt) = event.payload { return prompt }
+      return nil
+    }
+    #expect(prompts.map(\.id) == [feed.openScreenPromptID, feed.openScreenPromptID])
+    #expect(prompts.map { $0.multiSelect } == [true, true])
+    #expect(prompts.last?.choices?.map(\.checked) == [true, false, false])
+  }
+
+  /// Terminal view: a text subscription that asks for it gets the open menu, then nil when it
+  /// closes (089 S4 follow-up). Text frames keep flowing and need no change.
+  @Test(.timeLimit(.minutes(1))) func textSubscriptionGetsTheOpenScreenPrompt() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    fixture.peer.connection.send(
+      .subscribe(.init(paneID: fixture.source.id, representation: .text, intent: .ifFree, includeScreenPrompt: true)))
+    let lease = try #require(await fixture.peer.next()?.subscriptionID)
+    func nextPrompt() async throws -> MirrorMessage.ScreenPromptPayload {
+      while true {
+        let message = try #require(await fixture.peer.next())
+        switch message {
+        case .textFrame(let frame):
+          fixture.peer.connection.send(.acknowledge(.init(sequence: frame.sequence, subscriptionID: lease)))
+        case .screenPrompt(let payload):
+          return payload
+        default:
+          continue
+        }
+      }
+    }
+    fixture.source.screen = try String(contentsOf: Self.fixture("claude-2.1.319-review-answers.txt"), encoding: .utf8)
+    fixture.source.setState(.blocked, reason: .native(.blocked))
+    let opened = try await nextPrompt()
+    #expect(opened.subscriptionID == lease)
+    #expect(opened.prompt?.title == "Ready to submit your answers?")
+    #expect(opened.prompt?.choices?.map(\.label) == ["Submit answers", "Cancel"])
+    fixture.source.screen = "shell"
+    fixture.source.setState(.working, reason: .native(.working))
+    let closed = try await nextPrompt()
+    #expect(closed.prompt == nil)
+  }
+
   /// The same menu shown twice is two prompts, so an answer to the first cannot answer the
   /// second (089 review S4-R1).
   @Test func feedGivesEveryOpeningItsOwnID() throws {
@@ -455,7 +512,7 @@ struct MirrorHostConversationTests {
     var answerGate: (AsyncStream<Void>, AsyncStream<Void>.Continuation)?
     private(set) var answerLiveness: [Bool] = []
     func answerPrompt(
-      _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+      _ id: String, choice: MirrorScreenPrompt.Target, in pane: UUID, isLive: @escaping @MainActor () -> Bool
     ) async -> MirrorPromptAnswer {
       answerLiveness.append(isLive())
       if let (gate, entered) = answerGate {

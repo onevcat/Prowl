@@ -1,0 +1,35 @@
+  - "Later, separately" — "This change only makes command sending work."                           
+                                                                                                   
+  ---                                                                                              
+  Prowl dispatch completion protocol v1:                                                           
+  Before ending this task, choose exactly one terminal outcome and make this command your final    
+  tool action:                                                                                     
+  prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"           
+  Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be 
+  completed.                                                                                       
+  Keep the required summary to a single line with no control characters, and explain the result    
+  clearly.                                                                                         
+  Do not omit the command; Prowl supplies its dispatch context                                     
+  automatically.                                                                                   
+───────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Prompt draft  ☐ Key bar  ✔ Submit  →
+
+│ From the phone, you send a command to a shell pane, but the Mac prompt line still has typed text 
+│ that was never run. How should the Host handle it?
+
+❯ 1. Clear line first (Recommended)
+     Host presses Ctrl-E Ctrl-U, then pastes your command and presses Enter. The old text is not 
+     lost: it stays in the shell kill ring, and Ctrl-Y brings it back. You always run exactly what 
+     you typed. In vi-mode shells, these keys may not clear the line.
+  2. Refuse if Mac typed
+     If someone typed on the Mac after the last prompt appeared, refuse the send. This is 
+     conservative, but you get false refusals: typing a command and then deleting it also counts as
+     typing.
+  3. Send as-is
+     Behave like the local CLI `send`: paste and press Enter, with no check on the line. Simplest, 
+     but text can join the old draft and run as one command.
+  4. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

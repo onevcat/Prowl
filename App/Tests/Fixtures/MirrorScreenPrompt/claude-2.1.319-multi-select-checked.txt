@@ -1,0 +1,35 @@
+
+❯ Test fixture capture. Do not read files or run any tool other than AskUserQuestion. Call         
+  AskUserQuestion exactly once with ONE question, multiSelect true, header "Fruits", question      
+  "Which fruits do you like?", options: "Apple" (description "Red and crisp."), "Banana"           
+  (description "Yellow and soft."), "Cherry" (description "Small and sweet."). After the answer,   
+  reply with one short sentence and stop.                                                          
+                                                                                                   
+  ---                                                                                              
+  Prowl dispatch completion protocol v1:                                                           
+  Before ending this task, choose exactly one terminal outcome and make this command your final    
+  tool action:                                                                                     
+  prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"           
+  Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be 
+  completed.                                                                                       
+  Keep the required summary to a single line with no control characters, and explain the result    
+  clearly.                                                                                         
+  Do not omit the command; Prowl supplies its dispatch context                                     
+  automatically.                                                                                   
+───────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Fruits  ✔ Submit  →
+
+Which fruits do you like?
+
+❯ 1. [✔] Apple
+         Red and crisp.
+  2. [ ] Banana
+         Yellow and soft.
+  3. [ ] Cherry
+         Small and sweet.
+  4. [✔] Durian
+     Submit
+───────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

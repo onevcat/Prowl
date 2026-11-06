@@ -152,8 +152,13 @@ nonisolated struct MirrorConversationStore: Equatable, Sendable {
           result.append(.tool(id: event.sequence, start: start, end: end, startedAt: nil, endedAt: event.timestamp))
         }
       case (.promptOpened, .prompt(let prompt)):
-        promptIndex[prompt.id] = result.count
-        result.append(.prompt(id: event.sequence, prompt: prompt, resolved: nil, at: event.timestamp))
+        // The Host sends an open screen menu again under its id when its boxes change.
+        if let index = promptIndex[prompt.id], case .prompt(let id, _, nil, let at) = result[index] {
+          result[index] = .prompt(id: id, prompt: prompt, resolved: nil, at: at)
+        } else {
+          promptIndex[prompt.id] = result.count
+          result.append(.prompt(id: event.sequence, prompt: prompt, resolved: nil, at: event.timestamp))
+        }
       case (.promptResolved, .prompt(let resolution)):
         if let index = promptIndex[resolution.id], case .prompt(let id, let prompt, _, let at) = result[index] {
           if resolution.id.hasPrefix("screen:") {

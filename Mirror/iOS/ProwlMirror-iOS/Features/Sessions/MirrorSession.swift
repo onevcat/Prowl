@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Network
 import Observation
 
@@ -82,6 +83,7 @@ final class MirrorSession: Identifiable {
       } catch {
         refusal = error.localizedDescription
       }
+      if let refusal { MirrorLog.commands.notice("Keys \(keys, privacy: .public) refused: \(refusal, privacy: .private)") }
       guard let self else { return }
       self.sendingKeys = false
       self.keyRefusal = refusal
@@ -95,6 +97,13 @@ final class MirrorSession: Identifiable {
   var isDeliveringMessage: Bool {
     submission?.outcome.status == .pending || submission?.outcome.status == .unknown
   }
+
+  /// The `promptRespond` choice for the Submit row of a multi-select menu.
+  static let submitChoice = "submit"
+
+  /// Terminal view: the choice menu the agent waits on, from the Host's `screenPrompt` (docs-ai
+  /// 089 S4). Chat reads it from the conversation instead.
+  private(set) var screenPrompt: MirrorConversationEvent.Prompt?
 
   /// The answer this device sent to an open prompt, until the prompt resolves or the Host
   /// refuses it.
@@ -111,15 +120,19 @@ final class MirrorSession: Identifiable {
     let promptID: String
     let choice: String
     var state: State
+    /// A box of a multi-select menu: once delivered, the menu still takes more answers.
+    var toggles = false
   }
 
   /// Sends `choice` for the open screen prompt. The Host checks that the screen still shows
   /// this prompt before it presses any key, and never retries.
-  func answerPrompt(_ promptID: String, choice: String) {
+  /// `toggles` marks a box of a multi-select menu: the menu stays open, so more boxes may follow.
+  func answerPrompt(_ promptID: String, choice: String, toggles: Bool = false) {
     guard status == .live, supportsPromptRespond, let pane else { return }
-    // One answer per prompt: a refused one may be tried again, a sent one may not.
+    // One answer per prompt: a refused one may be tried again, a sent one may not. Boxes may
+    // change one at a time until the menu is submitted.
     if let promptAnswer, promptAnswer.promptID == promptID, promptAnswer.state == .sending
-      || promptAnswer.state == .delivered
+      || (promptAnswer.state == .delivered && !promptAnswer.toggles)
     {
       return
     }
@@ -129,7 +142,7 @@ final class MirrorSession: Identifiable {
         state: .refused(String(localized: "Wait until the Mac confirms your message, then answer.")))
       return
     }
-    promptAnswer = .init(promptID: promptID, choice: choice, state: .sending)
+    promptAnswer = .init(promptID: promptID, choice: choice, state: .sending, toggles: toggles)
     Task { [weak self] in
       let state: PromptAnswer.State
       do {
@@ -146,13 +159,22 @@ final class MirrorSession: Identifiable {
       } catch {
         state = .refused(error.localizedDescription)
       }
+      MirrorLog.commands.info(
+        "Prompt answer \(promptID, privacy: .public) choice \(choice, privacy: .public): \(String(describing: state), privacy: .private)"
+      )
       guard let self, self.promptAnswer?.promptID == promptID, self.promptAnswer?.choice == choice else { return }
       self.promptAnswer?.state = state
     }
   }
   /// A representation switch that keeps the connection: the next `subscribed` is not a reconnect.
   @ObservationIgnored private var resumesConversation = false
-  private(set) var status: Status = .disconnected
+  private(set) var status: Status = .disconnected {
+    didSet {
+      guard status != oldValue else { return }
+      MirrorLog.session.info(
+        "Status \(String(describing: oldValue), privacy: .public) -> \(String(describing: self.status), privacy: .public)")
+    }
+  }
   private(set) var text = ""
   private(set) var revision: UInt64 = 0
   private(set) var updatedAt: Date?
@@ -550,6 +572,7 @@ final class MirrorSession: Identifiable {
             subscriptionID: lease,
             commandRequest: .init(requestID: request.id, request: .init(command: input)))))
     } catch {
+      MirrorLog.commands.notice("Message refused before sending: \(error.localizedDescription, privacy: .public)")
       guard submission?.id == request.id else { return }
       submission?.outcome = .init(
         status: .rejected, detail: error.localizedDescription + " No input was sent.")
@@ -724,8 +747,12 @@ final class MirrorSession: Identifiable {
     status = .subscribing
     revision = 0
     subscriptionID = nil
+    screenPrompt = nil
     clearScroll()
     clearScrollState()
+    MirrorLog.session.info(
+      "Subscribe pane \(pane.id, privacy: .public) as \(self.mode == .conversation ? "conversation" : "text", privacy: .public)"
+    )
     if mode == .conversation {
       let since = conversation.latestSequence > 0 ? conversation.latestSequence : nil
       resumesConversation = since != nil
@@ -736,7 +763,7 @@ final class MirrorSession: Identifiable {
       .subscribe(
         .init(
           paneID: pane.id, representation: .text, intent: intent,
-          includeScrollState: supportsScrollState ? true : nil)))
+          includeScrollState: supportsScrollState ? true : nil, includeScreenPrompt: true)))
   }
 
   private func send(_ message: MirrorMessage) { transport?.send(message, closeAfterSending: false) }
@@ -812,6 +839,14 @@ final class MirrorSession: Identifiable {
         invalidMessage()
         return
       }
+      let openPrompt = conversation.openScreenPrompt?.id
+      defer {
+        if conversation.openScreenPrompt?.id != openPrompt {
+          MirrorLog.prompts.info(
+            "Chat prompt \(self.conversation.openScreenPrompt?.id ?? "closed", privacy: .public) on pane \(lease, privacy: .public)"
+          )
+        }
+      }
       if case .conversationSnapshot(let payload) = message {
         conversation.apply(
           snapshot: events, gap: payload.gap, sequence: sequence, session: payload.session,
@@ -836,6 +871,15 @@ final class MirrorSession: Identifiable {
       updatedAt = Date()
       status = .live
       send(.acknowledge(.init(sequence: sequence, subscriptionID: lease)))
+    case .screenPrompt:
+      guard case .screenPrompt(let payload) = message, let lease = subscriptionID,
+        payload.subscriptionID == lease, mode == .screen
+      else { return }
+      if payload.prompt?.id != screenPrompt?.id {
+        MirrorLog.prompts.info(
+          "Terminal prompt \(payload.prompt?.id ?? "closed", privacy: .public) on pane \(lease, privacy: .public)")
+      }
+      screenPrompt = payload.prompt
     case .scrollResult:
       receiveScrollResult(message)
     case .scrollState:
@@ -898,7 +942,8 @@ final class MirrorSession: Identifiable {
     }
   }
 
-  private func invalidMessage() {
+  private func invalidMessage(line: Int = #line) {
+    MirrorLog.session.error("Invalid mirror message, rejected at MirrorSession.swift:\(line, privacy: .public)")
     error = "Host sent an invalid mirror message."
     transport?.close(error)
   }

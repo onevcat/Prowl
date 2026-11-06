@@ -196,13 +196,13 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     return pane.session?.transcriptPath != nil ? .available : .pending
   }
 
-  /// Answers the screen prompt `id` with option `choice` (docs-ai 089 S4). Before every key the
-  /// mirror must still own the pane (`isLive`), the agent must still be blocked, nobody may be
-  /// editing on the Mac, and a fresh read of the screen must still show this prompt; a move key
-  /// must have moved the highlight one row before the next key goes. Enter goes only on the
-  /// chosen row.
+  /// Answers the screen prompt `id` with `choice` (docs-ai 089 S4). Before every key the mirror
+  /// must still own the pane (`isLive`), the agent must still be blocked, nobody may be editing
+  /// on the Mac, and a fresh read of the screen must still show this prompt; a move key must
+  /// have moved the highlight one row before the next key goes. Enter goes only on the chosen
+  /// row. In a multi-select menu, Enter on an option toggles its box and the menu stays open.
   func answerPrompt(
-    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+    _ id: String, choice: MirrorScreenPrompt.Target, in pane: UUID, isLive: @escaping @MainActor () -> Bool
   ) async -> MirrorPromptAnswer {
     let closed = MirrorPromptAnswer.refused(
       code: "PROMPT_CLOSED", message: String(localized: "The prompt is no longer open on the Mac."))
@@ -235,18 +235,27 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       guard current.id == id else {
         return stopped("PROMPT_CHANGED", String(localized: "The prompt changed on the Mac. Check it again."))
       }
-      guard let option = current.answers.first(where: { $0.number == choice }) else {
+      let option: MirrorScreenPrompt.Option?
+      switch choice {
+      case .option(let number): option = current.answers.first { $0.number == number }
+      case .submit: option = nil
+      }
+      guard option != nil || (choice == .submit && current.isMultiSelect),
+        let key = current.nextKey(toward: choice)
+      else {
         return .refused(
           code: "PROMPT_CHOICE_INVALID", message: String(localized: "That answer is not offered on the Mac."))
       }
-      let key = MirrorScreenPrompt.nextKey(selected: current.selected, target: choice)
       guard state.sendKeyToken(key, in: pane) else { return closed }
       guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
-      if key == "enter" { return .delivered(option, permission: current.isPermission) }
+      if key == "enter" {
+        guard let option else { return .submitted }
+        return current.isMultiSelect ? .toggled(option) : .delivered(option, permission: current.isPermission)
+      }
       moved = true
-      let expected = current.selected + (key == "down" ? 1 : -1)
-      prompt = await waitForSelection(expected, of: id, in: pane)
-      guard prompt?.selected == expected else {
+      guard let expected = current.target(after: key) else { return closed }
+      prompt = await waitForHighlight(expected, of: id, in: pane)
+      guard prompt?.highlighted == expected else {
         return .refused(
           code: "DELIVERY_UNCERTAIN",
           message: String(localized: "The Mac did not move the selection as expected. Check the prompt there."))
@@ -353,12 +362,14 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   /// Re-reads the screen until the highlight sits on `expected`, the prompt changes, or about a
   /// second passes.
-  private func waitForSelection(_ expected: Int, of id: String, in pane: UUID) async -> MirrorScreenPrompt? {
+  private func waitForHighlight(
+    _ expected: MirrorScreenPrompt.Target, of id: String, in pane: UUID
+  ) async -> MirrorScreenPrompt? {
     var latest: MirrorScreenPrompt?
     for _ in 0..<10 {
       try? await Task.sleep(for: .milliseconds(100))
       latest = (try? activeText(pane)).flatMap(MirrorScreenPrompt.parse)
-      if latest?.id != id || latest?.selected == expected { return latest }
+      if latest?.id != id || latest?.highlighted == expected { return latest }
     }
     return latest
   }
