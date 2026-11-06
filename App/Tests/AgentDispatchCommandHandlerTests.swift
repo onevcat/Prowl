@@ -321,7 +321,7 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       // An unverifiable composer must not mask the reason.
-      inputProtection: { _ in "The input area could not be verified." },
+      inputProtection: { _, _ in "The input area could not be verified." },
       conditionSnapshot: { _ in remote },
       issueDispatch: { _ in
         issued += 1
@@ -442,7 +442,7 @@ struct AgentDispatchCommandHandlerTests {
     var issued = false
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      inputProtection: { _ in
+      inputProtection: { _, _ in
         checks += 1
         return checks == 2 ? "Host started editing" : nil
       },
@@ -724,7 +724,7 @@ struct AgentDispatchCommandHandlerTests {
       // A menu on screen also hides the composer; the person gets the reason that applies.
       let handler = AgentDispatchCommandHandler(
         resolveTarget: { _ in .success(target) },
-        inputProtection: { _ in "The Claude input area could not be verified." },
+        inputProtection: { _, _ in "The Claude input area could not be verified." },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
         deliverPrompt: { _, _ in
           calls += 1
@@ -744,6 +744,25 @@ struct AgentDispatchCommandHandlerTests {
     #expect(refused.error?.code == CLIErrorCode.dispatchTargetBusy)
   }
 
+  /// Protection checks the text that goes in: automation's injected prompt with its protocol,
+  /// interactive input as typed (PR #1057 review R3).
+  @Test func protectionChecksTheTextThatIsDelivered() async {
+    let target = resolvedTarget()
+    var checked: [String] = []
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      inputProtection: { _, text in
+        checked.append(text)
+        return "stop"
+      },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) })
+    _ = await handler.handle(envelope: dispatch(pane: target.paneID))
+    _ = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    #expect(checked.count == 2)
+    #expect(checked.first == AgentDispatchPrompt.renderInjected(userPrompt: "Round two."))
+    #expect(checked.last == "hello")
+  }
+
   @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
     let target = resolvedTarget()
     for (status, protection, delivered) in [
@@ -751,7 +770,7 @@ struct AgentDispatchCommandHandlerTests {
     ] {
       var calls = 0
       let handler = AgentDispatchCommandHandler(
-        resolveTarget: { _ in .success(target) }, inputProtection: { _ in protection },
+        resolveTarget: { _ in .success(target) }, inputProtection: { _, _ in protection },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: self.turnEnded) },
         deliverPrompt: { _, _ in
           calls += 1

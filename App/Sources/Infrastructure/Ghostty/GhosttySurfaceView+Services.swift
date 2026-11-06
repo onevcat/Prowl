@@ -37,6 +37,7 @@ extension GhosttySurfaceView: NSServicesMenuRequestor {
     guard let str = pboard.getOpinionatedStringContents() else { return false }
     let len = str.utf8CString.count
     if len == 0 { return true }
+    noteInput()
     str.withCString { ptr in
       ghostty_surface_text(surface, ptr, UInt(len - 1))
     }

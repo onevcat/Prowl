@@ -5,6 +5,7 @@ import SwiftUI
 
 extension GhosttySurfaceView {
   override func keyDown(with event: NSEvent) {
+    noteInput()
     guard let surface else {
       interpretKeyEvents([event])
       return
@@ -448,6 +449,7 @@ extension GhosttySurfaceView {
   }
 
   @IBAction func paste(_ sender: Any?) {
+    noteInput()
     performBindingAction("paste_from_clipboard")
     if let text = NSPasteboard.general.string(forType: .string), !text.isEmpty {
       onCommittedText?(text)
@@ -511,6 +513,9 @@ extension GhosttySurfaceView {
   }
 
   func performBindingAction(_ action: String) {
+    // Actions such as `text:`, `csi:` and `esc:` write to the pty directly; count every action
+    // as input rather than sort them.
+    noteInput()
     guard let surface else { return }
     _ = action.withCString { ptr in
       ghostty_surface_binding_action(surface, ptr, UInt(action.lengthOfBytes(using: .utf8)))

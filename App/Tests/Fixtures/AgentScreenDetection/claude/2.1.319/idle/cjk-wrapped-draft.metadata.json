@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-06T14:45:30Z",
+  "cli_version": "2.1.319",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 99,
+    "rows": 11
+  },
+  "redactions": [
+    "kept only the rows from the last reply down",
+    "status line plan label replaced with [XXX]",
+    "status line context percentage replaced with XX%",
+    "status line project name replaced with XXXXX",
+    "status line branch replaced with git:(main)",
+    "PR number removed from the mode line"
+  ],
+  "issue": null
+}
