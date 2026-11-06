@@ -286,12 +286,14 @@ on the Mac and **Submit** sends the checked ones. A question in several parts en
 still shows the same question before it presses any key, so a stale tap is refused with a
 reason, and typed answers stay on the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
-The arrow button returns to the newest message after scrolling up. While the agent works and the
+The chat opens at the newest message and stays there as messages arrive. The arrow button shows
+only after you scroll away from the end and returns to the newest message. While you type, the
+Hide Keyboard button floats above the composer. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
 confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
 TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
-shows under the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
+shows above the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
 The iOS app logs connections, prompts and Host command results to the unified log under the
 subsystem `com.onevcat.prowl.mirror-ios`; collect it with Console.app or `log collect --device`.
 The floating composer

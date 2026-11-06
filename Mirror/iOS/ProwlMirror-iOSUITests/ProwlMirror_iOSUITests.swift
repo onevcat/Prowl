@@ -303,7 +303,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
   }
 
-  /// The editing buttons grow with Dynamic Type; the text must end before them (089 S2-R3).
+  /// Send grows with Dynamic Type; the text must end before it (089 S2-R3). Hide Keyboard floats
+  /// above the field, away from Send and Stop.
   @MainActor
   func testComposerTextStaysClearOfItsButtonsAtAccessibilitySizes() {
     let app = XCUIApplication()
@@ -319,7 +320,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
     input.typeText("git log --oneline --graph --decorate --all")
     attach("Composer at accessibility size")
-    XCTAssertLessThanOrEqual(input.frame.maxX, dismiss.frame.minX + 0.5)
+    XCTAssertLessThanOrEqual(input.frame.maxX, app.buttons["mirror-send"].frame.minX + 0.5)
+    XCTAssertLessThanOrEqual(dismiss.frame.maxY, input.frame.minY)
   }
 
   @MainActor
@@ -381,6 +383,68 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     segment(app, "Chat").tap()
     XCTAssertTrue(assistant.waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["mirror-scroll-up"].exists)
+  }
+
+  /// The chat opens at its end, also when the snapshot arrives late and in batches.
+  @MainActor
+  func testChatOpensAtTheEndWithoutTheLatestButton() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-slow-snapshot"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let last = lastChatEntry(app)
+    XCTAssertTrue(last.waitForExistence(timeout: 10))
+    expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: last)
+    waitForExpectations(timeout: 5)
+    XCTAssertFalse(app.buttons["conversation-latest"].exists)
+    attach("Chat opened at its end")
+  }
+
+  /// Latest shows only away from the end: not for a drag down at the end, and a tap reaches it.
+  @MainActor
+  func testLatestButtonShowsOnlyAwayFromTheEnd() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let last = lastChatEntry(app)
+    XCTAssertTrue(last.waitForExistence(timeout: 10))
+    let scroll = app.descendants(matching: .any).matching(identifier: "conversation-scroll").firstMatch
+    let latest = app.buttons["conversation-latest"]
+    scroll.swipeUp()
+    XCTAssertFalse(latest.waitForExistence(timeout: 2))
+    scroll.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    attach("Away from the end")
+    latest.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: latest)
+    waitForExpectations(timeout: 5)
+    XCTAssertTrue(last.isHittable)
+  }
+
+  /// A refused message explains why above the field, on its own background, not over the chat.
+  @MainActor
+  func testRefusedMessageExplainsAboveTheField() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-refuse-input"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    input.typeText("Run the tests again")
+    app.buttons["mirror-send"].tap()
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertTrue(note.waitForExistence(timeout: 5))
+    XCTAssertTrue(note.label.contains("existing draft"))
+    XCTAssertLessThanOrEqual(note.frame.maxY, input.frame.minY)
+    attach("Refused message")
+  }
+
+  /// The recap note that ends the Claude fixture.
+  @MainActor
+  private func lastChatEntry(_ app: XCUIApplication) -> XCUIElement {
+    app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'disable recaps'")).firstMatch
   }
 
   @MainActor

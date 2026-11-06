@@ -4,7 +4,17 @@ import SwiftUI
 /// each run of tool calls folded into one quiet row between them.
 struct ConversationView: View {
   @Bindable var session: MirrorSession
+  /// The chat keeps its end in view as content arrives. Only the person's own scrolling changes
+  /// it, to whether the end is in view when they let go; content that grows (a snapshot that
+  /// arrives late, rows that size themselves) never turns it off.
   @State private var follows = true
+  /// The end of the chat is in view, from the scroll geometry.
+  @State private var atBottom = true
+  /// The person drags, or the scroll view still moves from their drag.
+  @State private var userScrolls = false
+  /// Latest was tapped; scroll again if the view was still moving and the jump was lost.
+  @State private var jumpPending = false
+  @State private var position = ScrollPosition(edge: .bottom)
   @State private var expandedSteps: Set<UInt64> = []
   @State private var detail: ToolDetail?
   /// Rows are laid out eagerly so the bottom anchor never lands on an unsized lazy row;
@@ -16,77 +26,105 @@ struct ConversationView: View {
 
   var body: some View {
     let (rows, hiddenCount) = MirrorChatRow.page(store.items, limit: visibleLimit)
-    ScrollViewReader { proxy in
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          if store.gap {
-            caption("Earlier messages are not available on this device.")
-          }
-          if hiddenCount > 0 {
-            Button("Show \(min(hiddenCount, Self.page)) earlier") { visibleLimit += Self.page }
-              .buttonStyle(.bordered).controlSize(.small).frame(maxWidth: .infinity)
-              .accessibilityIdentifier("conversation-earlier")
-          }
-          if store.isEmpty, session.status == .live {
-            ContentUnavailableView(
-              "Nothing here yet", systemImage: "text.bubble",
-              description: Text("Messages appear as you and the agent write them."))
-          }
-          ForEach(rows) { row in
-            ChatRowView(
-              row: row, expanded: binding(for: row.id), showDetail: { detail = $0 }
-            )
-            .id(row.id)
-          }
-          if session.agentState == .working {
-            HStack(spacing: 6) {
-              MirrorBaguaIndicator()
-              Text("Working")
-            }
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(.orange)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("conversation-working")
-          }
-          Color.clear.frame(height: 1).id("conversation-bottom")
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        if store.gap {
+          caption("Earlier messages are not available on this device.")
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-      }
-      .defaultScrollAnchor(.bottom)
-      .scrollDismissesKeyboard(.interactively)
-      .accessibilityIdentifier("conversation-scroll")
-      .onScrollPhaseChange { _, phase in
-        if phase == .interacting { follows = false }
-      }
-      .onScrollGeometryChange(for: Bool.self) { geometry in
-        geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 40
-      } action: { _, atBottom in
-        if atBottom { follows = true }
-      }
-      .onChange(of: store.latestSequence) { _, _ in
-        if follows { withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) } }
-      }
-      // An inset, not an overlay: it sits above the pane's floating composer.
-      .safeAreaInset(edge: .bottom, spacing: 0) {
-        if !follows {
-          Button {
-            follows = true
-            withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
-          } label: {
-            Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
-          }
-          .buttonStyle(.glass)
-          .buttonBorderShape(.circle)
-          .padding(.bottom, 8)
-          .accessibilityLabel("Latest")
-          .accessibilityIdentifier("conversation-latest")
-          .help("Scroll to the newest message")
-          .transition(.scale.combined(with: .opacity))
+        if hiddenCount > 0 {
+          Button("Show \(min(hiddenCount, Self.page)) earlier") { visibleLimit += Self.page }
+            .buttonStyle(.bordered).controlSize(.small).frame(maxWidth: .infinity)
+            .accessibilityIdentifier("conversation-earlier")
         }
+        if store.isEmpty, session.status == .live {
+          ContentUnavailableView(
+            "Nothing here yet", systemImage: "text.bubble",
+            description: Text("Messages appear as you and the agent write them."))
+        }
+        ForEach(rows) { row in
+          ChatRowView(
+            row: row, expanded: binding(for: row.id), showDetail: { detail = $0 }
+          )
+          .id(row.id)
+        }
+        if session.agentState == .working {
+          HStack(spacing: 6) {
+            MirrorBaguaIndicator()
+            Text("Working")
+          }
+          .font(.footnote.weight(.medium))
+          .foregroundStyle(.orange)
+          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("conversation-working")
+        }
+        Color.clear.frame(height: 1).id("conversation-bottom")
       }
-      .animation(.snappy, value: follows)
+      .padding(.horizontal)
+      .padding(.vertical, 12)
     }
+    .scrollPosition($position)
+    .defaultScrollAnchor(.bottom)
+    // While following, growth keeps the end in view in the same layout pass: the snapshot, later
+    // batches and new messages land without a visible scroll. Otherwise what is read stays put.
+    .defaultScrollAnchor(follows ? .bottom : nil, for: .sizeChanges)
+    .scrollDismissesKeyboard(.interactively)
+    .accessibilityIdentifier("conversation-scroll")
+    .onScrollGeometryChange(for: Bool.self) { geometry in
+      // The visible rect spans the whole scroll view; the end shows above the composer area.
+      geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 40
+    } action: { _, isAtBottom in
+      atBottom = isAtBottom
+      // A drag down at the end (a bounce) stays at the end, so it keeps following.
+      if userScrolls { follows = isAtBottom }
+      if isAtBottom { jumpPending = false }
+    }
+    // Content or the composer area (a note, the keyboard) changed height: catch up with the end
+    // when the anchor alone did not.
+    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+      geometry.contentSize.height + geometry.contentInsets.bottom
+    } action: { _, _ in
+      if follows, !userScrolls, !atBottom { position.scrollTo(edge: .bottom) }
+    }
+    .onScrollPhaseChange { _, phase in
+      switch phase {
+      case .tracking, .interacting:
+        userScrolls = true
+        jumpPending = false
+      case .decelerating:
+        // The first move of a drag can report its geometry before its phase; catch up here.
+        if userScrolls { follows = atBottom }
+      case .idle, .animating:
+        if userScrolls { follows = atBottom }
+        userScrolls = false
+        // A jump made while the view still decelerated is lost; make it again.
+        if phase == .idle, jumpPending, !atBottom {
+          withAnimation { position.scrollTo(edge: .bottom) }
+        }
+      @unknown default:
+        userScrolls = false
+      }
+    }
+    // An inset, not an overlay: it sits above the pane's floating composer.
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if !follows {
+        Button {
+          follows = true
+          userScrolls = false
+          jumpPending = true
+          withAnimation { position.scrollTo(edge: .bottom) }
+        } label: {
+          Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .padding(.bottom, 8)
+        .accessibilityLabel("Latest")
+        .accessibilityIdentifier("conversation-latest")
+        .help("Scroll to the newest message")
+        .transition(.scale.combined(with: .opacity))
+      }
+    }
+    .animation(.snappy, value: follows)
     .sheet(item: $detail) { detail in
       ToolDetailView(detail: detail, session: session)
         .presentationDetents([.medium, .large])

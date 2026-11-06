@@ -264,6 +264,29 @@
               if case .session(let value) = event.payload { return value }
               return nil
             }
+            // `--mirror-ui-slow-snapshot`: as over a real network, the snapshot arrives late with the
+            // first half, and the rest follows as event batches.
+            if CommandLine.arguments.contains("--mirror-ui-slow-snapshot"), events.count > 8 {
+              let first = Array(events.prefix(events.count / 2))
+              let rest = Array(events.dropFirst(events.count / 2))
+              let lease = lease
+              Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(700))
+                self?.onMessage?(
+                  .conversationSnapshot(
+                    .init(
+                      events: first, gap: false, sequence: first.last?.sequence ?? 0, subscriptionID: lease,
+                      session: session)))
+                for batch in stride(from: 0, to: rest.count, by: max(1, rest.count / 4)) {
+                  try? await Task.sleep(for: .milliseconds(250))
+                  let slice = Array(rest[batch..<min(rest.count, batch + max(1, rest.count / 4))])
+                  self?.onMessage?(
+                    .conversationEvents(
+                      .init(events: slice, sequence: slice.last?.sequence ?? 0, subscriptionID: lease)))
+                }
+              }
+              return
+            }
             onMessage?(
               .conversationSnapshot(
                 .init(
@@ -312,6 +335,16 @@
             payload = .object([
               "ok": .bool(true), "command": .string("agent.keys"),
               "data": .object(["keys": .array(input.keys.map { .string($0) })]),
+            ])
+          case .agentsInput where CommandLine.arguments.contains("--mirror-ui-refuse-input"):
+            payload = .object([
+              "ok": .bool(false), "command": .string("agents.input"),
+              "error": .object([
+                "code": .string("INPUT_NOT_READY"),
+                "message": .string(
+                  "Claude has an existing draft or attachment in its input box: \"review the tests\". Clear it on the Mac, or send it there, then try again."
+                ),
+              ]),
             ])
           case .agentsInput(let input):
             payload = .object([
