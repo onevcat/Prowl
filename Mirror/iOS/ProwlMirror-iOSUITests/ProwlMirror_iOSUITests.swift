@@ -740,6 +740,36 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     waitForExpectations(timeout: 5)
   }
 
+  /// A phone on its side gives the reader no spare height while composing: Latest waits until
+  /// the keyboard is down, then returns to the end.
+  @MainActor
+  func testTerminalLatestHidesWhileComposingOnALandscapePhone() throws {
+    try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Compact height only on iPhone")
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let reading = app.scrollViews["mirror-live-scroll"]
+    let latest = app.buttons["mirror-latest"]
+    XCTAssertTrue(reading.waitForExistence(timeout: 10))
+    reading.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    input.tap()
+    let dismiss = app.buttons["mirror-dismiss-keyboard"]
+    XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+    XCTAssertFalse(latest.exists)
+    attach("Landscape phone composing")
+    dismiss.tap()
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    latest.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: latest)
+    waitForExpectations(timeout: 5)
+    XCUIDevice.shared.orientation = .portrait
+  }
+
   /// A drag at the local end while a remote scroll is on its way must not turn following back
   /// on: the result shows the new screen's top with Latest, and History keeps that position.
   @MainActor

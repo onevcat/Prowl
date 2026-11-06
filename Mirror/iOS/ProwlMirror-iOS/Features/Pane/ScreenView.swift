@@ -11,7 +11,7 @@ private final class MirrorLiveReadingLayout {
 /// History pages. Reading positions survive pane switches.
 struct ScreenView: View {
   @Bindable var session: MirrorSession
-  /// The remote scroll row; a phone on its side drops it while the keyboard is up.
+  /// The remote scroll row and Latest; a phone on its side drops them while the keyboard is up.
   var showsControls = true
   @State private var position = ScrollPosition(edge: .top)
   /// The end of the output is in view, from the scroll geometry.
@@ -124,7 +124,9 @@ struct ScreenView: View {
       }
       // An inset, not an overlay: it sits above the pane's composer and key bar.
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if !session.followsLatest {
+        // A phone on its side drops it while composing, as the remote scroll row: the reader has
+        // no height to spare, and the arrow would be pushed into the navigation bar.
+        if showsControls, !session.followsLatest {
           Button {
             session.followsLatest = true
             userScrolls = false
