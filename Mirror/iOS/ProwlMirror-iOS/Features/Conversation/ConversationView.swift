@@ -343,7 +343,7 @@ private struct StepsRow: View {
   @ViewBuilder private var summary: some View {
     if let running = steps.running {
       HStack(spacing: 5) {
-        MirrorBaguaIndicator().foregroundStyle(.orange)
+        MirrorHourglassIndicator().foregroundStyle(.orange)
         Text(MirrorToolKindStyle.title(running)).lineLimit(1)
       }
     } else {
@@ -391,7 +391,7 @@ private struct StepLine: View {
       }
     case .error?: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
     case .interrupted?: Image(systemName: "stop.circle").foregroundStyle(.orange)
-    case nil: MirrorBaguaIndicator().foregroundStyle(.orange)
+    case nil: MirrorHourglassIndicator().foregroundStyle(.orange)
     }
   }
 }

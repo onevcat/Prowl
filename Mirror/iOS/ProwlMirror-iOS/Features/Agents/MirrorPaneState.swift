@@ -133,6 +133,9 @@ struct MirrorBaguaIndicator: View {
     Text(frame)
       .font(.system(size: size, weight: .bold, design: .monospaced))
       .lineLimit(1)
+      // The trigrams come from a fallback font that draws them low in the line; lift them to the
+      // middle of the text next to them. Scales with the glyph.
+      .offset(y: -size * 0.1)
       .accessibilityHidden(true)
   }
 
@@ -141,6 +144,34 @@ struct MirrorBaguaIndicator: View {
     let cycleLength = (frames.count * 2) - 2
     let cycleIndex = ((tick % cycleLength) + cycleLength) % cycleLength
     return cycleIndex < frames.count ? cycleIndex : cycleLength - cycleIndex
+  }
+}
+
+/// A tool call that still runs: an hourglass that turns over now and then, so the chat does not
+/// repeat the agent's working spinner on every running step.
+struct MirrorHourglassIndicator: View {
+  nonisolated static let turnInterval = 1.6
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    if reduceMotion {
+      glyph(turns: 0)
+    } else {
+      TimelineView(.periodic(from: .now, by: Self.turnInterval)) { context in
+        glyph(turns: Self.turns(at: context.date))
+      }
+    }
+  }
+
+  private func glyph(turns: Int) -> some View {
+    Image(systemName: "hourglass")
+      .rotationEffect(.degrees(Double(turns) * 180))
+      .animation(.easeInOut(duration: 0.45), value: turns)
+      .accessibilityHidden(true)
+  }
+
+  nonisolated static func turns(at date: Date) -> Int {
+    Int(date.timeIntervalSinceReferenceDate / turnInterval)
   }
 }
 
