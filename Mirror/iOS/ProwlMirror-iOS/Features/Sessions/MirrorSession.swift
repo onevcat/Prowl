@@ -57,6 +57,10 @@ final class MirrorSession: Identifiable {
   /// A key can go now; not while a message may still be being delivered.
   var canSendKeys: Bool { keysAvailable && !isDeliveringMessage }
 
+  /// The composer's Stop button: an agent works in the pane and a key can go (docs-ai 089 S5).
+  /// Stop presses Escape, which interrupts an agent but not a shell command; a shell has ⌃C.
+  var canStopAgent: Bool { pane?.agent != nil && agentState == .working && canSendKeys }
+
   /// Presses `keys` in the pane on the Mac: the Terminal key bar and Stop. One press at a time;
   /// a press while another is in flight is dropped rather than queued.
   func sendKeys(_ keys: [String]) {
@@ -400,11 +404,12 @@ final class MirrorSession: Identifiable {
   }
 
   /// The agent's state now. The conversation stream reports it in Chat; in Terminal that stream
-  /// is paused and its last status is stale, so the roster's state counts (089 review S5-R1).
+  /// is paused and its last status is stale, so the roster's state counts (089 review S5-R1). A
+  /// pane whose agent is gone has no agent state, whatever the paused stream last said.
   var agentState: MirrorConversationEvent.AgentState? {
     switch mode {
     case .conversation: conversation.status?.state ?? pane?.agentState
-    case .screen: pane?.agentState ?? conversation.status?.state
+    case .screen: pane?.agent == nil ? nil : pane?.agentState ?? conversation.status?.state
     }
   }
 

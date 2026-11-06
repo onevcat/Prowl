@@ -10,7 +10,7 @@ struct ComposerBar: View {
 
   /// While the agent works and nothing is typed, the button stops it instead (docs-ai 089 S5).
   private var showsStop: Bool {
-    session.agentState == .working && session.draft.isEmpty && session.canSendKeys
+    session.canStopAgent && session.draft.isEmpty
   }
   /// The measured width of the trailing buttons; the Hide Keyboard symbol grows with Dynamic
   /// Type, so a constant reservation overlaps the text at accessibility sizes.
