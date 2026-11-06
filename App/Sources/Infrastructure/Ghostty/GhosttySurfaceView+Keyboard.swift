@@ -5,6 +5,7 @@ import SwiftUI
 
 extension GhosttySurfaceView {
   override func keyDown(with event: NSEvent) {
+    noteInput()
     guard let surface else {
       interpretKeyEvents([event])
       return
@@ -448,6 +449,7 @@ extension GhosttySurfaceView {
   }
 
   @IBAction func paste(_ sender: Any?) {
+    noteInput()
     performBindingAction("paste_from_clipboard")
     if let text = NSPasteboard.general.string(forType: .string), !text.isEmpty {
       onCommittedText?(text)

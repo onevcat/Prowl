@@ -34,20 +34,17 @@ extension WorktreeTerminalState {
         else { return nil }
         return .init(
           composer: self.composerContents(of: surface, profile: profile),
-          editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText())
+          editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText(),
+          inputGeneration: surface.inputGeneration)
       },
       insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
       submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
-      profile: profile, unsent: unsentAgentLines[surfaceID])
-    let result = await delivery.deliver(text)
-    switch result {
-    case .submitted: unsentAgentLines.removeValue(forKey: surfaceID)
-    case .notSubmitted:
+      profile: profile, unsent: unsentAgentLines[surfaceID],
       // The text may stay in the box. Remember exactly what Prowl left, so a retry of the same
       // text can press Enter instead of refusing it as someone's draft.
-      unsentAgentLines[surfaceID] = surfaces[surfaceID].map { .init(text: text, editingRevision: $0.lastEditingAt) }
-    case .notInserted: break
-    }
+      onUnsent: { [weak self] in self?.unsentAgentLines[surfaceID] = $0 })
+    let result = await delivery.deliver(text)
+    if result == .submitted { unsentAgentLines.removeValue(forKey: surfaceID) }
     return result
   }
 
@@ -93,7 +90,7 @@ extension WorktreeTerminalState {
         return "The \(profile.name) input area could not be verified. Check Host before dispatching."
       }
       if let refusal = profile.draftRefusal(
-        draft, delivering: text, unsent: unsentAgentLines[surfaceID], editingRevision: surface.lastEditingAt)
+        draft, delivering: text, unsent: unsentAgentLines[surfaceID], inputGeneration: surface.inputGeneration)
       {
         return refusal
       }

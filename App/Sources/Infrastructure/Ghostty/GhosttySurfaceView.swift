@@ -169,6 +169,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func recordEditingActivity() {
     lastEditingAt = ProcessInfo.processInfo.systemUptime
+    noteInput()
+  }
+
+  /// Counts every input that can change what a prompt holds: any key press (also control keys,
+  /// arrows and Return, which `lastEditingAt` leaves out), text, paste and IME composition. Unlike
+  /// the editing timestamp, it is a complete change identity for the input line.
+  private(set) var inputGeneration: UInt64 = 0
+
+  func noteInput() {
+    inputGeneration &+= 1
   }
 
   var keyboardLayoutChangeKeyUpSuppression: KeyboardLayoutChangeKeyUpSuppression?

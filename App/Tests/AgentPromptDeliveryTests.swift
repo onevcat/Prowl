@@ -1,5 +1,7 @@
+import AppKit
 import Clocks
 import Foundation
+import GhosttyKit
 import Testing
 
 @testable import Prowl
@@ -81,15 +83,15 @@ struct AgentPromptDeliveryTests {
     #expect(!AgentPromptDelivery.confirmsPaste("这是 一段\n  中文", text: "这是一段中文", profile: .claude))
   }
 
-  /// Only the line Prowl itself left unsent, untouched since, goes in with Enter alone. A draft
-  /// that merely looks the same on screen (a collapsed paste marker, collapsed whitespace) is
-  /// someone else's and refuses (PR #1057 review R1, R2).
+  /// Only the line Prowl itself left unsent, with no input since, goes in with Enter alone. A
+  /// draft that merely looks the same on screen (a collapsed paste marker, collapsed whitespace)
+  /// is someone else's and refuses (PR #1057 review R1, R2).
   @Test func onlyProwlsOwnUnsentLineIsSubmittedAsIs() async {
     var inserted: [String] = []
     var submitted = 0
-    func delivery(_ composer: String, unsent: AgentUnsentLine?, revision: TimeInterval? = 5) -> AgentPromptDelivery {
+    func delivery(_ composer: String, unsent: AgentUnsentLine?, generation: UInt64 = 5) -> AgentPromptDelivery {
       AgentPromptDelivery(
-        observe: { .init(composer: composer, editingRevision: revision, hasMarkedText: false) },
+        observe: { .init(composer: composer, editingRevision: nil, hasMarkedText: false, inputGeneration: generation) },
         insert: {
           inserted.append($0)
           return true
@@ -100,39 +102,98 @@ struct AgentPromptDeliveryTests {
         }, profile: .claude, unsent: unsent)
     }
     let text = "请只回复明白两个字。"
-    let left = AgentUnsentLine(text: text, editingRevision: 5)
+    let left = AgentUnsentLine(text: text, inputGeneration: 5)
     #expect(await delivery("请只回复明白两个\n  字。", unsent: left).deliver(text) == .submitted)
     #expect(inserted.isEmpty && submitted == 1)
-    // Edited since Prowl left it.
-    #expect(await delivery("请只回复明白两个\n  字。", unsent: left, revision: 6).deliver(text) == .notInserted)
+    // Any input since Prowl left it, such as ⌃U or a history key.
+    #expect(await delivery("请只回复明白两个\n  字。", unsent: left, generation: 6).deliver(text) == .notInserted)
     // Someone's own paste: the marker hides its content.
     let marker = "[Pasted text #1 +20 lines]"
     #expect(await delivery(marker, unsent: nil).deliver("Only reply hello") == .notInserted)
     // Prowl's own multiline paste, collapsed to a marker.
-    let pasted = AgentUnsentLine(text: "first\nsecond", editingRevision: 5)
+    let pasted = AgentUnsentLine(text: "first\nsecond", inputGeneration: 5)
     #expect(await delivery(marker, unsent: pasted).deliver("first\nsecond") == .submitted)
     // A different request whose text only differs in whitespace.
-    let spaced = AgentUnsentLine(text: "exactly 'a  b'", editingRevision: 5)
+    let spaced = AgentUnsentLine(text: "exactly 'a  b'", inputGeneration: 5)
     #expect(await delivery("exactly 'a b'", unsent: spaced).deliver("exactly 'a b'") == .notInserted)
     #expect(inserted.isEmpty && submitted == 2)
   }
 
+  /// The record is taken right after Prowl's insertion. An edit that ends the delivery must not
+  /// become the provenance of a later retry (PR #1057 review R4).
+  @Test func anEditThatEndsTheDeliveryIsNeverResumed() async {
+    let clock = TestClock()
+    var step = 0
+    var recorded: AgentUnsentLine?
+    var submitted = 0
+    let text = "first\nsecond"
+    let marker = "[Pasted text #1 +20 lines]"
+    let first = AgentPromptDelivery(
+      observe: {
+        defer { step += 1 }
+        switch step {
+        case 0: return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
+        case 1: return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
+        // Someone replaced the box on the Mac while Prowl waited for the echo.
+        default: return .init(composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3)
+        }
+      },
+      insert: { _ in true },
+      submit: {
+        submitted += 1
+        return true
+      }, clock: clock, profile: .claude, onUnsent: { recorded = $0 })
+    let task = Task { await first.deliver(text) }
+    await clock.advance(by: .milliseconds(100))
+    #expect(await task.value == .notSubmitted)
+    #expect(recorded == AgentUnsentLine(text: text, inputGeneration: 2))
+    let retry = AgentPromptDelivery(
+      observe: { .init(composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3) },
+      insert: { _ in true },
+      submit: {
+        submitted += 1
+        return true
+      }, profile: .claude, unsent: recorded)
+    #expect(await retry.deliver(text) == .notInserted)
+    #expect(submitted == 0)
+  }
+
   @Test func aDraftRefusalQuotesTheDraftUnlessItIsProwlsOwnUnsentLine() {
     let profile = AgentComposerProfile.claude
-    let left = AgentUnsentLine(text: "hello", editingRevision: 5)
-    #expect(profile.draftRefusal("", delivering: "hello", unsent: nil, editingRevision: 5) == nil)
-    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, editingRevision: 5) == nil)
-    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, editingRevision: 6) != nil)
-    #expect(profile.draftRefusal("hello", delivering: "hello", unsent: nil, editingRevision: 5) != nil)
+    let left = AgentUnsentLine(text: "hello", inputGeneration: 5)
+    #expect(profile.draftRefusal("", delivering: "hello", unsent: nil, inputGeneration: 5) == nil)
+    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, inputGeneration: 5) == nil)
+    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, inputGeneration: 6) != nil)
+    #expect(profile.draftRefusal("hello", delivering: "hello", unsent: nil, inputGeneration: 5) != nil)
     #expect(
       profile.draftRefusal(
-        "[Pasted text #1 +20 lines]", delivering: "Only reply hello", unsent: nil, editingRevision: 5)
+        "[Pasted text #1 +20 lines]", delivering: "Only reply hello", unsent: nil, inputGeneration: 5)
         != nil)
     let refusal = profile.draftRefusal(
-      "git push --force origin main", delivering: "hello", unsent: nil, editingRevision: 5)
+      "git push --force origin main", delivering: "hello", unsent: nil, inputGeneration: 5)
     #expect(refusal?.contains("git push --force") == true)
     let long = String(repeating: "长", count: 80)
-    #expect((profile.draftRefusal(long, delivering: nil, unsent: nil, editingRevision: nil)?.count ?? 0) < 160)
+    #expect((profile.draftRefusal(long, delivering: nil, unsent: nil, inputGeneration: nil)?.count ?? 0) < 160)
+  }
+
+  /// Keys that clear, recall or submit a line count as input, though they are not editing keys
+  /// for the local-edit guard (PR #1057 review R5).
+  @Test func everyKeyPressCountsAsInput() throws {
+    let view = GhosttySurfaceView(
+      runtime: GhosttyRuntime(), workingDirectory: URL(fileURLWithPath: "/tmp"), fontSize: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB, skipsSurfaceCreationForTesting: true)
+    func press(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) throws {
+      let event = try #require(
+        NSEvent.keyEvent(
+          with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+      view.keyDown(with: event)
+    }
+    let start = view.inputGeneration
+    try press("\u{15}", keyCode: 32, modifiers: .control)  // ⌃U
+    try press("\u{F700}", keyCode: 126)  // Up
+    try press("\r", keyCode: 36)  // Return
+    #expect(view.inputGeneration == start + 3)
   }
 
   @Test func onlyClaudeAcceptsItsCollapsedPasteMarker() {

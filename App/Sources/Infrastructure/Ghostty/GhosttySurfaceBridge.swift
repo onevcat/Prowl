@@ -92,6 +92,7 @@ final class GhosttySurfaceBridge {
 
   func sendText(_ text: String) {
     guard let surface else { return }
+    surfaceView?.noteInput()
     text.withCString { ptr in
       ghostty_surface_text(surface, ptr, UInt(text.lengthOfBytes(using: .utf8)))
     }
