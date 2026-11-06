@@ -19,22 +19,43 @@ struct ComposerBar: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       if let note {
+        // On glass, like the field: the chat scrolls behind this area, and bare text over it
+        // reads as overlapping rows.
         Text(note.text)
           .font(.caption)
           .foregroundStyle(note.isProblem ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-          .lineLimit(2)
-          .padding(.horizontal, 6)
+          .lineLimit(3)
+          .padding(.horizontal, 12).padding(.vertical, 8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
           .accessibilityIdentifier("composer-note")
       }
       if session.submission?.outcome.status == .unknown || session.submission?.outcome.status == .pending {
         receiptControls
+          .padding(.vertical, 8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+      }
+      if isEditing {
+        // Above the field's trailing corner, away from Send and Stop: a tap meant to close the
+        // keyboard must never stop the agent.
+        Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isEditing = false }
+          .labelStyle(.iconOnly)
+          .font(.body.weight(.medium))
+          .padding(4)
+          .buttonStyle(.glass)
+          .buttonBorderShape(.circle)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+          .accessibilityIdentifier("mirror-dismiss-keyboard")
+          .help("Hide the keyboard")
+          .transition(.scale.combined(with: .opacity))
       }
       // The text view sits directly in the VStack so it is proposed a definite width; a
       // UITextView in an HStack gets a nil width during measurement and never grows.
       MirrorComposer(session: session, isEditing: $isEditing)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, 6)
-        // Room for Send, and for Hide Keyboard next to it while editing, so neither covers text.
+        // Room for Send or Stop, so neither covers text.
         .padding(.trailing, controlsWidth + 6)
         .overlay(alignment: .topLeading) {
           if session.draft.isEmpty {
@@ -45,13 +66,6 @@ struct ComposerBar: View {
         }
         .overlay(alignment: .bottomTrailing) {
           HStack(spacing: 6) {
-            if isEditing {
-              Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isEditing = false }
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("mirror-dismiss-keyboard")
-                .help("Hide the keyboard")
-            }
             if showsStop {
               Button {
                 confirmsStop = true
@@ -92,6 +106,7 @@ struct ComposerBar: View {
     }
     .animation(.snappy, value: note)
     .animation(.snappy, value: showsStop)
+    .animation(.snappy, value: isEditing)
     .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
       Button("Stop", role: .destructive) { session.sendKeys(["esc"]) }
         .accessibilityIdentifier("mirror-stop-confirm")
