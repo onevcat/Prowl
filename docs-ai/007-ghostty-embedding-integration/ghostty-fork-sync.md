@@ -10,7 +10,7 @@ Prowl embeds GhosttyKit from `ThirdParty/ghostty`. The submodule points to the `
 - Fork remote: `git@github.com:onevcat/ghostty.git`
 - Per-version patched branches: `release/v<UPSTREAM_TAG>-patched`
 - Current patched branch: `release/v1.4.0-patched`
-- Current pinned tip: `5a6f04461` (upstream `v1.4.0` + 6 patches)
+- Current pinned tip: `9811138fb` (upstream `v1.4.0` + 7 patches)
 
 Each patched branch starts at the matching upstream tag and only adds onevcat patches. Do not rewrite an existing patched branch after publishing it.
 
@@ -47,8 +47,18 @@ tag, cherry-pick these commits, not older copies on previous branches.
    - Tests: `display snapshot preserves background-only cells after reset` (upstream rule) and
      `display snapshot preserves styled cells without text after reset` (this patch; it fails
      without it). Drop the patch when upstream keeps styled cells in VT rows.
+7. `9811138fb` — `embedded: expose whether input reaches a primary prompt`
+   - Adds `ghostty_surface_input_state` (`Terminal.cursorIsAtPrimaryPrompt` and mode 2004) for
+     shell commands from the iOS mirror (docs-ai 089 `010-shell-commands.md`).
+   - `cursorIsAtPrompt` is also true at a continuation prompt of a pending command. The new check
+     is false there, after OSC 133 C (also while a builtin such as `read` waits), on the
+     alternate screen, without shell integration, and with input below the cursor's line. A
+     primary mark anywhere in the cursor's soft-wrapped line counts (zsh's PROMPT_SP draws the
+     prompt on a wrapped row); later lines of a multi-line PS1 count when no input is above them.
+   - Tests: `Terminal: cursorIsAtPrimaryPrompt …` (7 cases). Drop the patch only if upstream
+     exports an equivalent.
    - This is the commit the submodule points at. Matching artifacts use release tag
-     `xcframework-5a6f0446160ef0b4806c7fc19e3f212324c2c0d9-prowl-v1`.
+     `xcframework-9811138fb6acaf1f1737e5148b007070601f4948-prowl-v1`.
 
 Patches dropped on the way to `v1.4.0`: the foreground process group patches (replaced by
 upstream `ghostty_surface_foreground_pid`) and the text free ABI and lazy display link
@@ -65,7 +75,7 @@ git fetch onevcat
 
 PREV=v1.4.0
 NEXT=v1.4.1
-PATCH_TIP=5a6f0446160ef0b4806c7fc19e3f212324c2c0d9
+PATCH_TIP=9811138fb6acaf1f1737e5148b007070601f4948
 
 git checkout -b "release/${NEXT}-patched" "${NEXT}"
 git cherry-pick $(git rev-list --reverse --no-merges "${PREV}..${PATCH_TIP}")
