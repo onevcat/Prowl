@@ -101,27 +101,36 @@ struct ClaudeConversationAdapterTests {
     #expect(origins == [.automation, .system, .automation])
   }
 
-  /// Claude Code shows its thinking text between tool calls like a reply; the Host carries it as
-  /// the reasoning summary. A redacted or empty block ("…") has no summary.
-  @Test func thinkingTextBecomesTheReasoningSummary() {
+  /// A thinking-block signature in the shape Claude Code 2.1.319 writes: base64 protobuf with
+  /// the kind at field 2 → 1 → 8 (`narration` or `thinking`), next to other fields.
+  static func signature(kind: String) -> String {
+    func field(_ number: UInt8, _ bytes: [UInt8]) -> [UInt8] { [number << 3 | 2, UInt8(bytes.count)] + bytes }
+    return Data(field(2, field(1, [0x08, 0x01] + field(8, Array(kind.utf8))))).base64EncodedString()
+  }
+
+  /// Claude Code shows thinking in the pane like a reply only when its signature marks it as
+  /// narration; only that text goes as the reasoning summary (PR #1058 review R1-001).
+  @Test func onlyNarrationThinkingBecomesTheReasoningSummary() {
+    func thinking(_ text: String, signature: String?) -> [String: Any] {
+      var block: [String: Any] = ["type": "thinking", "thinking": text]
+      if let signature { block["signature"] = signature }
+      return base("assistant", ["message": ["content": [block]]])
+    }
+    let narration = Self.signature(kind: "narration")
     let events = run([
-      base(
-        "assistant",
-        [
-          "message": [
-            "content": [
-              ["type": "thinking", "thinking": "打包脚本取的是已提交的 gitlink，所以得先提交 Prowl 再打包。"]
-            ]
-          ]
-        ]),
-      base("assistant", ["message": ["content": [["type": "thinking", "thinking": "…"]]]]),
-      base("assistant", ["message": ["content": [["type": "thinking", "thinking": "  "]]]]),
+      thinking("Next I check the decoder.", signature: narration),
+      thinking("Hidden reasoning.", signature: Self.signature(kind: "thinking")),
+      thinking("No signature.", signature: nil),
+      thinking("Not base64.", signature: "%%%"),
+      thinking("…", signature: narration),
+      thinking("  ", signature: narration),
     ])
     let reasonings = events.compactMap { event -> Event.Reasoning? in
       guard case .reasoning(let reasoning) = event.payload else { return nil }
       return reasoning
     }
-    #expect(reasonings.map { $0.summary?.text ?? "-" } == ["打包脚本取的是已提交的 gitlink，所以得先提交 Prowl 再打包。", "-", "-"])
+    #expect(reasonings.map { $0.summary?.text ?? "-" } == ["Next I check the decoder.", "-", "-", "-", "-", "-"])
+    #expect(!ClaudeThinkingSignature.isNarration(Data([0x12, 0x7F]).base64EncodedString()))
   }
 
   @Test func pairsToolUseWithResultAndReportsFailures() {

@@ -174,12 +174,13 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
               .assistantMessage, .message(.init(text: .init(text), model: model)), at: timestamp, source: .transcript))
         }
       case "thinking":
-        // Claude Code shows its thinking text in the pane like a reply, so the mirror shows it
-        // too. A redacted block holds only "…".
+        // Claude Code shows a thinking block in the pane like a reply only when its signature
+        // marks it as narration; other thinking stays hidden there, so only its duration goes.
         let thought = Value.string(block, "thinking")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = ClaudeThinkingSignature.isNarration(Value.string(block, "signature"))
         let reasoning = Event.Reasoning(
           durationMs: Value.int(record, "thinkingDurationMs"),
-          summary: thought.flatMap { $0.isEmpty || $0 == "…" ? nil : MirrorBoundedText($0) })
+          summary: thought.flatMap { !shown || $0.isEmpty || $0 == "…" ? nil : MirrorBoundedText($0) })
         events.append(Event(.assistantReasoning, .reasoning(reasoning), at: timestamp, source: .transcript))
       case "tool_use":
         events += toolStartEvents(block, at: timestamp)
@@ -334,5 +335,57 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     case "reject": .denied
     default: .unknown
     }
+  }
+}
+
+/// The kind Claude Code reads from a thinking block's signature: a base64 protobuf whose field
+/// 2 → 1 → 8 holds `narration` for thinking it shows in the pane as a reply (Claude Code
+/// 2.1.319). Anything that does not decode to exactly that is hidden thinking.
+nonisolated enum ClaudeThinkingSignature {
+  static func isNarration(_ signature: String?) -> Bool {
+    guard let signature, let data = Data(base64Encoded: signature) else { return false }
+    let bytes = [UInt8](data)
+    guard let outer = field(2, in: bytes[...]), let inner = field(1, in: outer), let kind = field(8, in: inner)
+    else { return false }
+    return Array(kind) == Array("narration".utf8)
+  }
+
+  /// The first length-delimited field `number` of a protobuf message; nil when it is missing or
+  /// the message is malformed.
+  static func field(_ number: UInt64, in message: ArraySlice<UInt8>) -> ArraySlice<UInt8>? {
+    var index = message.startIndex
+    func varint() -> UInt64? {
+      var value: UInt64 = 0
+      var shift: UInt64 = 0
+      while index < message.endIndex, shift < 64 {
+        let byte = message[index]
+        index += 1
+        value |= UInt64(byte & 0x7F) << shift
+        if byte < 0x80 { return value }
+        shift += 7
+      }
+      return nil
+    }
+    while index < message.endIndex {
+      guard let key = varint() else { return nil }
+      switch key & 7 {
+      case 0:
+        guard varint() != nil else { return nil }
+      case 1:
+        guard message.endIndex - index >= 8 else { return nil }
+        index += 8
+      case 2:
+        guard let length = varint(), length <= UInt64(message.endIndex - index) else { return nil }
+        let value = message[index..<(index + Int(length))]
+        index += Int(length)
+        if key >> 3 == number { return value }
+      case 5:
+        guard message.endIndex - index >= 4 else { return nil }
+        index += 4
+      default:
+        return nil
+      }
+    }
+    return nil
   }
 }

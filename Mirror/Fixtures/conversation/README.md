@@ -15,7 +15,8 @@ DEBUG fixture mode without a Host.
 bulky and private records (API request blobs, attachments, developer instructions, token
 counts), truncates long text at 3,000 characters, and replaces the home directory. Claude Code
 2.1.317 wrote its thinking blocks empty; one block in `claude-review-1038.jsonl` has a short
-thought added by hand, as Claude Code 2.1.319 writes visible thinking, so the client shows one.
+thought added by hand, with a minimal narration signature (field 2 → 1 → 8 = `narration`), as
+Claude Code 2.1.319 writes visible thinking, so the client shows one.
 
 Regenerate the event files after an adapter change:
 

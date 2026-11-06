@@ -273,12 +273,17 @@ private struct ThoughtText: View {
   let text: MirrorBoundedText
 
   var body: some View {
-    MirrorMarkdownView(text: text.text)
-      .font(.callout)
-      .foregroundStyle(.secondary)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .accessibilityElement(children: .contain)
-      .accessibilityIdentifier("conversation-thought")
+    VStack(alignment: .leading, spacing: 6) {
+      MirrorMarkdownView(text: text.text)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      if text.truncated {
+        Text("Thought truncated by the Host.").font(.caption2).foregroundStyle(.secondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("conversation-thought")
   }
 }
 
