@@ -294,11 +294,12 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   }
 
   /// Runs a command from a mirror in a shell pane (docs-ai 089 follow-up): only while the shell
-  /// is at its prompt with nobody editing on the Mac. It clears the line first (Control-E,
-  /// Control-U), so an old draft cannot join the command; the shell keeps the cleared text in
-  /// its kill ring. A one-line command is typed as plain bytes: zsh pushes pasted text onto the
-  /// kill ring too, which would hide the draft from Control-Y. A command with newlines or tabs
-  /// is pasted, so its lines do not run one by one and a tab does not complete.
+  /// alone is in front and the cursor is on the input line of a primary prompt
+  /// (`MirrorShellPrompt`), with nobody editing on the Mac. It clears that line first
+  /// (Control-E, Control-U), so an old draft cannot join the command; the shell keeps the
+  /// cleared text in its kill ring. A one-line command is typed as plain bytes: zsh pushes pasted
+  /// text onto the kill ring too, which would hide the draft from Control-Y. A command with
+  /// newlines or tabs is pasted, and only while the shell takes bracketed paste.
   func sendShellLine(_ text: String, in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
     guard let surface = view(pane), let state = worktreeState(of: pane) else {
       return String(localized: "The pane is no longer open on the Mac.")
@@ -312,7 +313,8 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     if let refusal = guardrail.refusal { return refusal }
     func shellRefusal() -> String? {
       MirrorShellPrompt.refusal(
-        for: surface.bridge.foregroundProcessGroupID().flatMap { ProcessDetection.foregroundJob(processGroupID: $0) })
+        for: surface.bridge.foregroundProcessGroupID().flatMap { ProcessDetection.foregroundJob(processGroupID: $0) },
+        input: surface.bridge.inputState(), text: text)
     }
     if let refusal = shellRefusal() { return refusal }
     let cleared = String(
@@ -332,12 +334,11 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
       return refusal + " " + cleared
     }
-    let inserted: Bool
-    if text.contains(where: { $0 == "\n" || $0 == "\r" || $0 == "\t" }) {
-      inserted = state.insertCommittedText(text, in: pane)
-    } else {
-      inserted = (try? write(Data(text.utf8), to: pane)) != nil
-    }
+    // The keys may not have reached the shell yet, but nothing else may have moved it off its prompt.
+    if let refusal = shellRefusal() { return refusal + " " + cleared }
+    let inserted =
+      MirrorShellPrompt.needsPaste(text)
+      ? state.insertCommittedText(text, in: pane) : (try? write(Data(text.utf8), to: pane)) != nil
     guard inserted else { return String(localized: "The Mac did not accept the text.") + " " + cleared }
     guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
     guard isLive(), state.submitLine(in: pane) else {

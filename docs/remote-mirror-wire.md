@@ -248,12 +248,18 @@ size limit. The Mirror Host handles it itself; it never reaches the CLI router. 
 - a detected agent runs in the pane;
 - the terminal's foreground process group is not the shell alone, as an interactive shell
   (no script operand, no `-c`), so `vim`, `ssh`, a pipeline or a script refuse;
+- the cursor is not on the input line of a primary prompt, as Ghostty's shell integration
+  (OSC 133) marks it (`ghostty_surface_input_state`): a continuation prompt of an unfinished
+  command, a command that runs (also a builtin such as `read` waiting for input), and a shell
+  without integration refuse;
+- the text has a newline, carriage return or tab and the shell has not enabled bracketed
+  paste;
 - IME text or a local edit in the last 2 s is pending, or someone edits during the steps;
 - the connection no longer holds the lease.
 
-It presses Control-E and Control-U to clear the line, then inserts the text and presses
-Return. One-line text is written as plain bytes, so the shell's kill ring keeps the cleared
-draft for Control-Y. Text with newlines or tabs is pasted. Success has `command: "send"` and
+It presses Control-E and Control-U to clear the line, checks the prompt again, then inserts
+the text and presses Return. One-line text is written as plain bytes, so the shell's kill ring
+keeps the cleared draft for Control-Y. Text with newlines or tabs is pasted. Success has `command: "send"` and
 `data.input` with UTF-8 `bytes` and `trailing_enter_sent: true`. A refusal after the line was
 cleared says so. Hosts before this feature do not advertise `shell-send`; clients then keep
 shell panes read-only.

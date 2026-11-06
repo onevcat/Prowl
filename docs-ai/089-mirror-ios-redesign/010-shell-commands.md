@@ -22,6 +22,16 @@ onevcat wants to run commands from the phone (2026-11-06).
   process, a known interactive shell with only option arguments. `vim`, `less`, `ssh`,
   pipelines, scripts and `zsh -c` refuse with the program's name. This replaces the
   worktree-wide `task.status` check on iOS.
+- **The cursor must be on a primary prompt's input line** (review R1, R2). The process
+  inventory is the same at a continuation prompt (`echo OLD \` + Return: Control-U clears only
+  the last line, and the old first line runs with the phone's command) and while a builtin
+  `read` waits (the command becomes its answer). Ghostty fork patch 7 adds
+  `ghostty_surface_input_state` (`Terminal.cursorIsAtPrimaryPrompt`): false after OSC 133 C
+  (command output), at a continuation line with input above it, on the alternate screen, and
+  without shell integration. zsh marks the later lines of a multi-line PS1 as continuations too;
+  they count as primary because no input is above them. The check runs again after clearing.
+- **Paste only with bracketed paste** (review R3). Without mode 2004 (macOS `/bin/bash` 3.2),
+  Ghostty sends pasted newlines as Return and tabs stay completion keys, so such text refuses.
 - **The Mirror Host runs it, not the CLI router**, like `promptRespond` and `agentKeys`, so it
   can check the foreground job and the editing guard between steps. The CLI router keeps
   refusing a remote `send`.
@@ -33,14 +43,18 @@ onevcat wants to run commands from the phone (2026-11-06).
 
 - vi-mode shells may not bind Control-E / Control-U to "end of line" / "kill line".
 - Remote panes (084) run `ssh` in front, so they refuse; the key bar still works.
-- A shell without job control shares its group with its commands; this is not detected
-  beyond the one-process rule.
+- Shells without Ghostty shell integration (macOS `/bin/bash` 3.2, integration turned off)
+  refuse: there is no prompt evidence.
+- A multi-line zle buffer (a newline inserted without running) is cleared only on its last
+  line; its earlier lines are input above the cursor, so they refuse only when marked as
+  continuation lines.
 
 ## Implementation
 
 | Part | File |
 | --- | --- |
-| Foreground check | `App/Sources/Features/RemoteMirror/MirrorShellPrompt.swift` |
+| Foreground and prompt checks | `App/Sources/Features/RemoteMirror/MirrorShellPrompt.swift` |
+| Prompt evidence | Ghostty fork patch 7 (`ghostty_surface_input_state`), `GhosttySurfaceBridge.inputState()` |
 | Steps and guard | `GhosttyMirrorPaneSource.sendShellLine`, `pressKeys` |
 | Command handling, capabilities `shell-send`, `shell-keys` | `MirrorHost.runShellLine` |
 | iOS routing, key bar, placeholder | `MirrorInputRoute`, `MirrorSession.keysAvailable`, `ComposerBar` |

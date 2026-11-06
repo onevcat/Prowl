@@ -221,12 +221,15 @@ the agent queues it or steers its current turn by its own rules (Claude Code que
 Codex adds it to the running turn). Only a blocked agent, one that waits for an answer to a
 question or permission, refuses the message. The local input protections still apply.
 Host rechecks the exact subscribed pane and lease, plus input protection, before delivery.
-In a shell pane, the composer runs a command. The Host takes it only while the shell is
-at its prompt: when a program such as `vim`, `less`, `ssh` or a script runs in front of
-the shell, it refuses and names the program. It also refuses while someone types on the
-Mac. It clears the prompt line first (⌃E, ⌃U), so an old draft on the Mac cannot join
-the command; ⌃Y on the Mac brings the draft back. A one-line command is typed; a command
-with several lines is pasted. Local CLI `send` and Mac mirror keyboard input keep their
+In a shell pane, the composer runs a command. The Host takes it only while the shell waits
+for a new command at its primary prompt, which it learns from Ghostty's shell integration
+(zsh, bash 4 and later, fish; not the macOS `/bin/bash` 3.2). It refuses when a program
+such as `vim`, `less`, `ssh` or a script runs in front of the shell (and names it), at a
+continuation prompt of an unfinished command, while a command such as a `read` waits for
+input, and while someone types on the Mac. It clears the prompt line first (⌃E, ⌃U), so an
+old draft on the Mac cannot join the command; ⌃Y on the Mac brings the draft back. A
+one-line command is typed. A command with several lines or a tab is pasted, and only to a
+shell that takes bracketed paste. Local CLI `send` and Mac mirror keyboard input keep their
 direct-input behavior.
 
 Shared Agent input delivery rejects IME composition and recent Host editing. Claude must

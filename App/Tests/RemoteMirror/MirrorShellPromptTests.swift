@@ -53,4 +53,30 @@ struct MirrorShellPromptTests {
     // The group leader is gone; only another member is left.
     #expect(MirrorShellPrompt.refusal(for: Self.job([Member(101, "zsh", ["-zsh"])])) != nil)
   }
+
+  private static let zsh = job([Member(100, "zsh", ["-zsh"])])
+  private static let primary = MirrorShellPrompt.InputState(primaryPrompt: true, bracketedPaste: true)
+
+  /// 089 review R1/R2: the process inventory is the same at a continuation prompt and while a
+  /// builtin `read` waits; only the terminal's primary-prompt evidence lets a command go.
+  @Test func onlyAPrimaryPromptTakesACommand() {
+    #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: Self.primary, text: "ls") == nil)
+    let pending = MirrorShellPrompt.InputState(primaryPrompt: false, bracketedPaste: true)
+    #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: pending, text: "ls") != nil)
+    #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: nil, text: "ls") != nil)
+    // A program in front is named, even at what looks like a prompt.
+    let vim = Self.job([Member(100, "vim", ["vim"])])
+    #expect(MirrorShellPrompt.refusal(for: vim, input: Self.primary, text: "ls")?.contains("vim") == true)
+  }
+
+  /// 089 review R3: without bracketed paste, a newline would run its line and a tab would complete.
+  @Test func linesAndTabsNeedBracketedPaste() {
+    let plain = MirrorShellPrompt.InputState(primaryPrompt: true, bracketedPaste: false)
+    for text in ["echo a\necho b", "printf '%s' A\tB", "echo a\r"] {
+      #expect(MirrorShellPrompt.needsPaste(text))
+      #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: plain, text: text) != nil)
+      #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: Self.primary, text: text) == nil)
+    }
+    #expect(MirrorShellPrompt.refusal(for: Self.zsh, input: plain, text: "echo one line") == nil)
+  }
 }
