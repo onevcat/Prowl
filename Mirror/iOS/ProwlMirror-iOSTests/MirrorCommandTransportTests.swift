@@ -310,6 +310,21 @@ struct MirrorCommandTransportTests {
     #expect(channel.commands.count == count)
   }
 
+  /// Shell panes get the key bar (⌃C, Tab, arrows) only from a Host that presses keys there.
+  @Test(.timeLimit(.minutes(1))) func shellPanesGetKeysFromAHostThatSupportsThem() {
+    let old = Channel()
+    let oldSession = makeSession(old)
+    oldSession.connect()
+    oldSession.select(old.pane)
+    #expect(!oldSession.keysAvailable)
+    let channel = Channel()
+    channel.supportsShellKeys = true
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    #expect(session.keysAvailable)
+  }
+
   private func makeSession(_ channel: Channel, clock: any Clock<Duration> = ContinuousClock()) -> MirrorSession {
     MirrorSession(
       configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"), clock: clock,
@@ -322,6 +337,7 @@ struct MirrorCommandTransportTests {
     var onClose: ((String?) -> Void)?
     var supportsLaunch = true
     var supportsShellSend = false
+    var supportsShellKeys = false
     var supportsAgentInput = true
     var reply: ((MirrorCommandRequest) -> Void)?
     var commands: [MirrorCommandRequest] = []
@@ -371,6 +387,7 @@ struct MirrorCommandTransportTests {
                 + (supportsAgentInput ? ["agent-input"] : [])
                 + (supportsLaunch ? ["launch-profile"] : [])
                 + (supportsShellSend ? ["shell-send"] : [])
+                + (supportsShellKeys ? ["agent-keys", "shell-keys"] : [])
                 + (agent != nil ? ["prompt-respond", "agent-keys"] : []), hostRunID: UUID())))
       } else if message.kind == .subscribe {
         let lease = UUID()

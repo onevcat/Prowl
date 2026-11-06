@@ -170,6 +170,23 @@ struct MirrorConversationFixtureSessionTests {
     #expect(session.agentState == .working)
   }
 
+  /// 089 review R4: Terminal pauses the conversation, so its status stays `working` after the
+  /// agent leaves. The shell left behind keeps its key bar but offers no agent Stop, which
+  /// would press Escape into the shell.
+  @Test func shellLeftByTheAgentOffersKeysButNoStop() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex", status: .working)
+    session.switchMode(.screen)
+    var pane = try #require(session.pane)
+    pane.agent = nil
+    pane.agentState = nil
+    pane.conversation = .unsupported
+    session.refreshDescriptor(pane)
+    #expect(session.conversation.status?.state == .working)
+    #expect(session.keysAvailable)
+    #expect(session.agentState == nil)
+    #expect(!session.canStopAgent)
+  }
+
   @Test func rosterDescriptorReplacesTheOpenedOne() throws {
     let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
     var current = try #require(session.pane)

@@ -13,6 +13,7 @@
 | 2026-11-06 | S5: Terminal key bar and Stop (`agentKeys`); `vt-v1` rendering deferred | #1051, [007](007-s5-terminal-keys.md) |
 | 2026-11-06 | S6: messages reach a working agent (queue or steer by the agent's rules); `agents dispatch` still waits for idle | S6 PR, [008](008-s6-input-while-working.md) |
 | 2026-11-06 | S4 follow-up: review page, multi-select boxes and Submit, stable ids (no flood), quoted titles, prompts in Terminal, iOS unified log | [009](009-s4-prompt-fixes.md) |
+| 2026-11-06 | Shell commands from the phone (`shell-send`: clear the line, then type or paste at the shell's own prompt) and the key bar in shell panes (`shell-keys`) | [010](010-shell-commands.md) |
 
 The slices form one stack (#1045 → #1051, then S6).
 
