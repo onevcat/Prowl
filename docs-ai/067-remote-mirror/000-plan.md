@@ -73,3 +73,4 @@ capability needed here. Browser clients are outside this implementation.
 - Updated 2026-10-01: Preserve History and add direct remote viewport scrolling — see [011-remote-scroll.md](011-remote-scroll.md).
 
 - Updated 2026-10-01: Button-only scrolling, frame-matched boundaries and passive replica report handling — see [012](012-scroll-controls-and-report-feedback.md).
+- Updated 2026-11-06: `agents.input` no longer waits for the turn to end; a working agent takes the message as typed input, and only a blocked agent refuses it — see [089.008](../089-mirror-ios-redesign/008-s6-input-while-working.md).

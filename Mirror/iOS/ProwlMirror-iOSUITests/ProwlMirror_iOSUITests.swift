@@ -13,12 +13,21 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     item.tap()
   }
 
-  /// One segment of the Chat | Screen picker.
+  /// The toolbar button that switches Chat and Terminal (docs-ai 089 S2); `label` is the
+  /// view it opens.
   @MainActor
   private func segment(_ app: XCUIApplication, _ label: String) -> XCUIElement {
-    let picker = app.descendants(matching: .any).matching(identifier: "pane-mode").firstMatch
-    let scoped = picker.buttons[label].firstMatch
-    return scoped.exists ? scoped : app.buttons[label].firstMatch
+    app.buttons.matching(identifier: "pane-mode").matching(
+      NSPredicate(format: "label == %@", label == "Screen" ? "Terminal" : label)
+    ).firstMatch
+  }
+
+  @MainActor
+  private func paneTitle(_ app: XCUIApplication, contains text: String) -> Bool {
+    let title = app.descendants(matching: .any).matching(identifier: "pane-title").firstMatch
+    expectation(for: NSPredicate(format: "label CONTAINS %@", text), evaluatedWith: title)
+    waitForExpectations(timeout: 5)
+    return title.label.contains(text)
   }
 
   @MainActor
@@ -288,8 +297,29 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     input.tap()
     XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(
-      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
+    // A delivered message clears the draft; the composer shows no note for a plain success (089 S2).
+    expectation(for: NSPredicate(format: "enabled == false"), evaluatedWith: app.buttons["Send"])
+    waitForExpectations(timeout: 5)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
+  }
+
+  /// The editing buttons grow with Dynamic Type; the text must end before them (089 S2-R3).
+  @MainActor
+  func testComposerTextStaysClearOfItsButtonsAtAccessibilitySizes() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+    ]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    let dismiss = app.buttons["mirror-dismiss-keyboard"]
+    XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+    input.typeText("git log --oneline --graph --decorate --all")
+    attach("Composer at accessibility size")
+    XCTAssertLessThanOrEqual(input.frame.maxX, dismiss.frame.minX + 0.5)
   }
 
   @MainActor
@@ -307,9 +337,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     input.typeText("First line\nSecond line")
     XCTAssertTrue(app.buttons["Send"].isEnabled)
     app.buttons["Send"].tap()
-    XCTAssertTrue(
-      app.staticTexts["Sends to the agent on the Host; it checks readiness first."].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Send"].isEnabled)
+    expectation(for: NSPredicate(format: "enabled == false"), evaluatedWith: app.buttons["Send"])
+    waitForExpectations(timeout: 5)
   }
 
   // MARK: - Conversation (conversation-v1)
@@ -322,9 +351,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
-    let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
-    XCTAssertTrue(tool.waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    let steps = app.descendants(matching: .any).matching(identifier: "conversation-steps").firstMatch
+    XCTAssertTrue(steps.waitForExistence(timeout: 5))
+    XCTAssertTrue(paneTitle(app, contains: "Idle"))
     attach("Claude conversation, latest")
     segment(app, "Screen").tap()
     XCTAssertTrue(app.buttons["mirror-scroll-up"].waitForExistence(timeout: 5))
@@ -343,11 +372,19 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCUIDevice.shared.orientation = .portrait
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Idle"].waitForExistence(timeout: 5))
+    XCTAssertTrue(paneTitle(app, contains: "Idle"))
     attach("Codex conversation, latest")
     app.descendants(matching: .any).matching(identifier: "conversation-scroll").firstMatch.swipeDown()
+    // Tool calls fold into steps rows; a row opens to one line per call, a line to its details.
+    let steps = app.descendants(matching: .any).matching(identifier: "conversation-steps").firstMatch
+    XCTAssertTrue(steps.waitForExistence(timeout: 5))
+    steps.tap()
     let tool = app.descendants(matching: .any).matching(identifier: "conversation-tool").firstMatch
     XCTAssertTrue(tool.waitForExistence(timeout: 5))
+    attach("Codex tool calls unfolded")
+    tool.tap()
+    XCTAssertTrue(app.staticTexts["Command"].waitForExistence(timeout: 5))
+    attach("Codex tool call details")
   }
 
   @MainActor
@@ -394,15 +431,12 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-conversation-fixture", "claude"]
     app.launch()
     XCUIDevice.shared.orientation = .portrait
-    let host = app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
-    XCTAssertTrue(host.waitForExistence(timeout: 10))
-    attach("Hosts")
-    host.tap()
+    // The app opens on the agents of the only Host (docs-ai 089).
     let pane = app.descendants(matching: .any).matching(identifier: "pane-0F1C2D3E-4A5B-6C7D-8E9F-A0B1C2D3E4F5")
       .firstMatch
     XCTAssertTrue(pane.waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Claude Code"].exists)
-    attach("Panes of one Host")
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "host-menu").firstMatch.exists)
+    attach("Agents of one Host")
     pane.tap()
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
@@ -416,9 +450,6 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-connection-fixture"]
     app.launch()
-    let host = app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
-    XCTAssertTrue(host.waitForExistence(timeout: 10))
-    host.tap()
     let launch = app.buttons["new-agent-pane"]
     XCTAssertTrue(launch.waitForExistence(timeout: 10))
     expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: launch)
@@ -452,7 +483,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   @MainActor
   func testPairingCodeUsesTwoEditableHalves() {
     let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .landscapeLeft
     let add = app.buttons["add-host"]
@@ -480,7 +511,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   @MainActor
   func testAddHostFormRemainsUsableAcrossRotation() {
     let app = XCUIApplication()
-    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .landscapeLeft
     waitForOrientation(app, wide: true)
@@ -499,6 +530,108 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Portrait Add Host form")
     app.buttons["Cancel"].tap()
     XCTAssertTrue(add.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testAgentsScreenSummarizesStatesAndFoldsTerminals() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-connection-fixture", "--mirror-ui-roster-fixture", "--mirror-ui-conversation-fixture", "claude",
+    ]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let blocked = app.descendants(matching: .any).matching(identifier: "pane-A1000000-0000-0000-0000-000000000001")
+      .firstMatch
+    XCTAssertTrue(blocked.waitForExistence(timeout: 10))
+    let summary = app.buttons["state-summary-blocked"]
+    XCTAssertTrue(summary.exists)
+    // VoiceOver reads which agent runs in a row, as the mark shows it.
+    XCTAssertTrue(blocked.label.contains("Claude Code"), blocked.label)
+    let shell = app.descendants(matching: .any).matching(identifier: "pane-A1000000-0000-0000-0000-000000000005")
+      .firstMatch
+    XCTAssertFalse(shell.exists)
+    attach("Agents grouped like the Mac sidebar")
+    app.descendants(matching: .any).matching(identifier: "terminals-toggle").firstMatch.tap()
+    XCTAssertTrue(shell.waitForExistence(timeout: 5))
+    summary.tap()
+    let working = app.descendants(matching: .any).matching(identifier: "pane-A1000000-0000-0000-0000-000000000003")
+      .firstMatch
+    XCTAssertTrue(working.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(blocked.exists)
+    attach("Only the blocked agents")
+    blocked.tap()
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+  }
+
+  @MainActor
+  func testOnboardingLeadsToPairing() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let add = app.buttons["add-host"]
+    XCTAssertTrue(add.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Prowl Mirror"].exists)
+    attach("Onboarding")
+    add.tap()
+    XCTAssertTrue(app.buttons["scan-pairing-qr"].waitForExistence(timeout: 5))
+  }
+
+  @MainActor
+  func testTerminalKeyBarPressesKeysOnTheHost() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let escape = app.buttons["key-esc"]
+    XCTAssertTrue(escape.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["key-shift-tab"].exists)
+    attach("Terminal key bar")
+    escape.tap()
+    app.buttons["key-up"].tap()
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertFalse(note.waitForExistence(timeout: 2) && note.label.contains("typing"))
+  }
+
+  /// A refused key shows under the composer, where a refused Stop shows too (089 review S5-R2).
+  @MainActor
+  func testRefusedKeysExplainWhyInTheComposer() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-refuse-keys"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let escape = app.buttons["key-esc"]
+    XCTAssertTrue(escape.waitForExistence(timeout: 10))
+    escape.tap()
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertTrue(note.waitForExistence(timeout: 5))
+    XCTAssertEqual(note.label, "Someone is typing in this pane on the Mac.")
+  }
+
+  /// A working agent takes a message as typed on the Mac, so Send stays and no note says the
+  /// message waits (089 S6).
+  @MainActor
+  func testAWorkingAgentTakesAMessage() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-working-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    XCTAssertTrue(app.buttons["mirror-stop"].waitForExistence(timeout: 10))
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    input.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["mirror-dismiss-keyboard"].waitForExistence(timeout: 5))
+    input.typeText("Also check the tests")
+    let send = app.buttons["mirror-send"]
+    XCTAssertTrue(send.waitForExistence(timeout: 5))
+    XCTAssertTrue(send.isEnabled)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
+    attach("Message to a working agent")
+    send.tap()
+    // The Host confirmed the message, so the draft is cleared.
+    expectation(
+      for: NSPredicate(format: "NOT (value CONTAINS %@)", "Also check the tests"), evaluatedWith: input)
+    waitForExpectations(timeout: 5)
   }
 
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.

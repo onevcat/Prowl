@@ -522,7 +522,8 @@ prowl profiles list --json
 ```
 
 Each `.data.profiles[]` item contains `id`, `name`, `enabled`, `runtime`, and
-`availability`. `availability.status` is `available`, `unavailable`, or `unknown` and
+`availability`, plus `model`, `reasoning_effort` and `icon` (an SF Symbol name) when the
+Profile sets them. `availability.status` is `available`, `unavailable`, or `unknown` and
 reflects the login-shell executable probe only; `reason` provides optional human context.
 Availability is advisory and never blocks launch. Disabled profiles remain visible but
 cannot be passed to `create --profile`. Use the Profile UUID for stable automation; an

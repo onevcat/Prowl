@@ -20,14 +20,48 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     case agentsInput(Dispatch)
     case agentsDispatch(Dispatch)
     case send(MirrorShellInput)
+    /// Answers the choice menu on the pane's screen (docs-ai 089 S4, capability `prompt-respond`).
+    case promptRespond(PromptRespond)
+    /// Presses keys in an agent pane: the Terminal key bar and Stop (docs-ai 089 S5,
+    /// capability `agent-keys`). Only `AgentKeys.allowed` keys pass.
+    case agentKeys(AgentKeys)
 
     var targetPaneID: UUID? {
       switch self {
       case .agentsInput(let input), .agentsDispatch(let input): UUID(uuidString: input.pane)
       case .send(let input): UUID(uuidString: input.selector.value)
+      case .promptRespond(let answer): UUID(uuidString: answer.pane)
+      case .agentKeys(let input): UUID(uuidString: input.pane)
       default: nil
       }
     }
+  }
+
+  struct AgentKeys: Codable, Equatable, Sendable {
+    /// Navigation and control keys a TUI needs; no printable text, which goes through
+    /// `agents.input` with its readiness checks.
+    static let allowed: Set<String> = [
+      "esc", "ctrl-c", "tab", "shift-tab", "up", "down", "left", "right", "enter",
+    ]
+    static let maximumCount = 8
+
+    let pane: String
+    let keys: [String]
+
+    /// Control-C may end the agent, so it can only be the last key: nothing may follow it into
+    /// the shell underneath (089 review S5-R3).
+    var isAllowed: Bool {
+      !keys.isEmpty && keys.count <= Self.maximumCount && keys.allSatisfy(Self.allowed.contains)
+        && !keys.dropLast().contains("ctrl-c")
+    }
+  }
+
+  struct PromptRespond: Codable, Equatable, Sendable {
+    let pane: String
+    /// The `prompt.opened` id the client saw; the Host refuses when the screen shows another.
+    let prompt: String
+    /// The choice id, the option's number on screen.
+    let choice: String
   }
 
   struct Dispatch: Codable, Equatable, Sendable {

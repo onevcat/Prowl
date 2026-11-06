@@ -11,9 +11,12 @@ nonisolated struct MirrorHostRecord: Codable, Identifiable, Equatable, Hashable,
   var hostID: UUID?
   var pairedAt: Date
   var lastConnectedAt: Date?
+  /// The Mac's computer name as the Host last reported it (docs-ai 089).
+  var hostName: String?
 
   var displayName: String {
     if let alias, !alias.isEmpty { return alias }
+    if let hostName, !hostName.isEmpty { return hostName }
     return address
   }
 
@@ -32,21 +35,43 @@ nonisolated struct MirrorHostRecord: Codable, Identifiable, Equatable, Hashable,
 @Observable
 final class MirrorHostStore {
   static let defaultsKey = "mirror.hosts"
+  static let selectedKey = "mirror.selectedHost"
 
   private(set) var hosts: [MirrorHostRecord] = []
+  /// The Host the Agents screen shows; the first Host when none was chosen or it was forgotten.
+  private(set) var selectedHostID: UUID?
   private let defaults: UserDefaults
 
-  init(defaults: UserDefaults = .standard) {
+  init(defaults: UserDefaults = .standard, adoptsLegacyConnection: Bool = true) {
     self.defaults = defaults
     if let data = defaults.data(forKey: Self.defaultsKey),
       let decoded = try? JSONDecoder().decode([MirrorHostRecord].self, from: data)
     {
       hosts = decoded
     }
-    migrateLegacyConnection()
+    selectedHostID = defaults.string(forKey: Self.selectedKey).flatMap(UUID.init(uuidString:))
+    if adoptsLegacyConnection { migrateLegacyConnection() }
   }
 
   func host(id: UUID) -> MirrorHostRecord? { hosts.first { $0.id == id } }
+
+  var selectedHost: MirrorHostRecord? {
+    selectedHostID.flatMap(host(id:)) ?? hosts.first
+  }
+
+  func select(_ id: UUID) {
+    guard host(id: id) != nil else { return }
+    selectedHostID = id
+    defaults.set(id.uuidString, forKey: Self.selectedKey)
+  }
+
+  func updateHostName(_ id: UUID, name: String?) {
+    guard let index = hosts.firstIndex(where: { $0.id == id }), let name, !name.isEmpty,
+      hosts[index].hostName != name
+    else { return }
+    hosts[index].hostName = name
+    persist()
+  }
 
   /// Records a verified connection; an existing entry for the endpoint keeps its alias.
   @discardableResult
@@ -81,6 +106,10 @@ final class MirrorHostStore {
   func remove(_ id: UUID) {
     guard let record = host(id: id) else { return }
     hosts.removeAll { $0.id == id }
+    if selectedHostID == id {
+      selectedHostID = nil
+      defaults.removeObject(forKey: Self.selectedKey)
+    }
     persist()
     try? MirrorSavedConnection.remove(account: record.credentialAccount)
   }

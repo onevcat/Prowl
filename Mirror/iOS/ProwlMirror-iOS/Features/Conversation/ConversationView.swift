@@ -1,26 +1,26 @@
 import SwiftUI
 
-/// The chat: user bubbles, assistant Markdown, tool cards, prompts, dividers (docs-ai 088).
+/// The chat (docs-ai 089 S2): the person's messages in bubbles, the agent's words as text, and
+/// each run of tool calls folded into one quiet row between them.
 struct ConversationView: View {
   @Bindable var session: MirrorSession
   @State private var follows = true
-  @State private var expandedTools: Set<UInt64> = []
-  /// Items are laid out eagerly so the bottom anchor never lands on an unsized lazy row;
-  /// older items load in pages on request instead.
+  @State private var expandedSteps: Set<UInt64> = []
+  @State private var detail: ToolDetail?
+  /// Rows are laid out eagerly so the bottom anchor never lands on an unsized lazy row;
+  /// older rows load in pages on request instead.
   @State private var visibleLimit = ConversationView.page
 
   private static let page = 120
   private var store: MirrorConversationStore { session.conversation }
-  private var hiddenCount: Int { max(0, store.items.count - visibleLimit) }
-  private var visibleItems: ArraySlice<MirrorConversationItem> { store.items.suffix(visibleLimit) }
 
   var body: some View {
+    let (rows, hiddenCount) = MirrorChatRow.page(store.items, limit: visibleLimit)
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
           if store.gap {
-            Text("Earlier messages are not available on this device.")
-              .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            caption("Earlier messages are not available on this device.")
           }
           if hiddenCount > 0 {
             Button("Show \(min(hiddenCount, Self.page)) earlier") { visibleLimit += Self.page }
@@ -29,26 +29,32 @@ struct ConversationView: View {
           }
           if store.isEmpty, session.status == .live {
             ContentUnavailableView(
-              "Waiting for the agent", systemImage: "bubble.left.and.text.bubble.right",
-              description: Text("Messages appear here as the agent and you exchange them."))
+              "Nothing here yet", systemImage: "text.bubble",
+              description: Text("Messages appear as you and the agent write them."))
           }
-          ForEach(visibleItems) { item in
-            ConversationItemView(item: item, expanded: binding(for: item.id))
-              .id(item.id)
+          ForEach(rows) { row in
+            ChatRowView(
+              row: row, expanded: binding(for: row.id), showDetail: { detail = $0 }
+            )
+            .id(row.id)
           }
           if session.agentState == .working {
-            HStack(spacing: 8) {
-              ProgressView().controlSize(.small)
-              Text("Working…").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+              MirrorBaguaIndicator()
+              Text("Working")
             }
-            .padding(.leading, 4)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.orange)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("conversation-working")
           }
           Color.clear.frame(height: 1).id("conversation-bottom")
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 12)
       }
       .defaultScrollAnchor(.bottom)
+      .scrollDismissesKeyboard(.interactively)
       .accessibilityIdentifier("conversation-scroll")
       .onScrollPhaseChange { _, phase in
         if phase == .interacting { follows = false }
@@ -61,35 +67,69 @@ struct ConversationView: View {
       .onChange(of: store.latestSequence) { _, _ in
         if follows { withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) } }
       }
-      .overlay(alignment: .bottomTrailing) {
+      // An inset, not an overlay: it sits above the pane's floating composer.
+      .safeAreaInset(edge: .bottom, spacing: 0) {
         if !follows {
           Button {
             follows = true
             withAnimation { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
           } label: {
-            Label("Latest", systemImage: "arrow.down")
+            Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
           }
-          .buttonStyle(.borderedProminent)
-          .controlSize(.small)
-          .padding()
+          .buttonStyle(.glass)
+          .buttonBorderShape(.circle)
+          .padding(.bottom, 8)
+          .accessibilityLabel("Latest")
           .accessibilityIdentifier("conversation-latest")
+          .help("Scroll to the newest message")
+          .transition(.scale.combined(with: .opacity))
         }
       }
+      .animation(.snappy, value: follows)
     }
+    .sheet(item: $detail) { detail in
+      ToolDetailView(detail: detail, session: session)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+  }
+
+  private func caption(_ text: LocalizedStringKey) -> some View {
+    Text(text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
   }
 
   private func binding(for id: UInt64) -> Binding<Bool> {
     Binding(
-      get: { expandedTools.contains(id) },
+      get: { expandedSteps.contains(id) },
       set: { expanded in
-        if expanded { expandedTools.insert(id) } else { expandedTools.remove(id) }
+        if expanded { expandedSteps.insert(id) } else { expandedSteps.remove(id) }
       })
+  }
+}
+
+/// A tool call opened from a steps row: its identity only, so the sheet reads the call's
+/// current state and shows the output once it arrives.
+struct ToolDetail: Identifiable {
+  let id: UInt64
+}
+
+private struct ChatRowView: View {
+  let row: MirrorChatRow
+  @Binding var expanded: Bool
+  let showDetail: (ToolDetail) -> Void
+
+  var body: some View {
+    switch row {
+    case .steps(let steps):
+      StepsRow(steps: steps, expanded: $expanded, showDetail: showDetail)
+    case .item(let item):
+      ConversationItemView(item: item)
+    }
   }
 }
 
 struct ConversationItemView: View {
   let item: MirrorConversationItem
-  @Binding var expanded: Bool
 
   var body: some View {
     switch item {
@@ -98,60 +138,38 @@ struct ConversationItemView: View {
     case .queued(_, let text):
       HStack(spacing: 6) {
         Image(systemName: "clock")
-        Text(text).lineLimit(2)
+        Text(MirrorInjectedText.split(text).message).lineLimit(2)
       }
       .font(.callout).foregroundStyle(.secondary)
       .padding(.horizontal, 12).padding(.vertical, 8)
-      .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
       .frame(maxWidth: .infinity, alignment: .trailing)
-      .accessibilityLabel("Queued: \(text)")
-    case .assistant(_, let text, _, let at):
-      AssistantBubble(text: text, at: at)
-    case .reasoning(_, let durationMs, let summary):
-      HStack(spacing: 6) {
-        Image(systemName: "brain")
-        if let summary, !summary.text.isEmpty {
-          Text(summary.text).lineLimit(2)
-        } else if let durationMs {
-          Text(
-            "Thought for \(Duration.milliseconds(durationMs).formatted(.units(allowed: [.seconds], width: .narrow)))")
-        } else {
-          Text("Thinking")
-        }
-      }
-      .font(.caption).foregroundStyle(.secondary)
-    case .tool(_, let start, let end, let startedAt, let endedAt):
-      ToolCard(start: start, end: end, startedAt: startedAt, endedAt: endedAt, expanded: $expanded)
-    case .prompt(_, let prompt, let resolved, _):
+      .accessibilityLabel("Queued: \(MirrorInjectedText.split(text).message)")
+    case .assistant(_, let text, _, _):
+      AssistantText(text: text)
+    case .reasoning, .tool, .attention:
+      // Folded into steps rows or shown above the composer.
+      EmptyView()
+    case .prompt(_, let prompt, let resolved?, _):
       PromptCard(prompt: prompt, resolved: resolved)
-    case .attention(_, let status, _):
-      Label(attentionText(status), systemImage: "exclamationmark.circle.fill")
-        .font(.callout).foregroundStyle(.red)
+    case .prompt(_, _, nil, _):
+      // An open prompt shows once, above the composer (docs-ai 089 S4).
+      EmptyView()
     case .session(_, let kind, let session, _):
       SessionDivider(kind: kind, session: session)
     case .compaction:
-      Divider().overlay {
-        Text("Context compacted").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 6)
-          .background(Color(.systemBackground))
-      }
+      SessionDivider(text: String(localized: "Context compacted"))
     case .subagent(_, let kind, let agent):
       Label(
-        "\(agent.type ?? "Subagent") \(kind == .subagentStarted ? "started" : "finished")",
+        kind == .subagentStarted
+          ? String(localized: "\(agent.type ?? String(localized: "Subagent")) started")
+          : String(localized: "\(agent.type ?? String(localized: "Subagent")) finished"),
         systemImage: "person.2"
       )
       .font(.caption).foregroundStyle(.secondary)
     case .notice(_, let notice, _):
       Label(notice.text, systemImage: notice.level == .warning ? "exclamationmark.triangle" : "info.circle")
         .font(.caption).foregroundStyle(notice.level == .warning ? .orange : .secondary)
-    }
-  }
-
-  private func attentionText(_ status: MirrorConversationEvent.Status) -> String {
-    switch status.kind {
-    case "permission": String(localized: "Waiting for a permission decision on the Mac")
-    case "question": String(localized: "Waiting for your answer on the Mac")
-    case "auth": String(localized: "Waiting for sign-in on the Mac")
-    default: String(localized: "Waiting for you on the Mac")
     }
   }
 }
@@ -161,27 +179,61 @@ private struct UserBubble: View {
   let origin: MirrorConversationEvent.MessageOrigin?
   let images: Int?
   let at: Date?
+  @State private var showsInjected = false
+  @State private var showsAll = false
+
+  /// Long prompts (briefs, pasted logs) fold so they do not fill several screens.
+  private static let foldedLines = 12
 
   var body: some View {
+    let parts = MirrorInjectedText.split(text.text)
+    let isLong = parts.message.count > 700 || parts.message.split(separator: "\n").count > Self.foldedLines
     VStack(alignment: .trailing, spacing: 4) {
       VStack(alignment: .leading, spacing: 6) {
         if let images, images > 0 {
-          Label("\(images) image(s)", systemImage: "photo").font(.caption).opacity(0.8)
+          Label("^[\(images) image](inflect: true)", systemImage: "photo").font(.caption).opacity(0.85)
         }
-        Text(text.text).textSelection(.enabled)
-        if text.truncated { Text("…").opacity(0.7) }
+        Text(parts.message)
+          .lineLimit(isLong && !showsAll ? Self.foldedLines : nil)
+          .textSelection(.enabled)
+        if isLong {
+          Button(showsAll ? "Show less" : "Show more") {
+            withAnimation(.snappy) { showsAll.toggle() }
+          }
+          .buttonStyle(.plain)
+          .font(.caption.weight(.semibold))
+          .opacity(0.85)
+          .accessibilityIdentifier("conversation-user-more")
+          .help(showsAll ? "Fold the message" : "Show the whole message")
+        }
+        if text.truncated, parts.injected == nil { Text("…").opacity(0.7) }
+        if let injected = parts.injected {
+          Button {
+            withAnimation(.snappy) { showsInjected.toggle() }
+          } label: {
+            Label("Prowl instructions", systemImage: showsInjected ? "chevron.down" : "chevron.right")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .opacity(0.8)
+          .accessibilityIdentifier("conversation-injected-toggle")
+          .help("Show the instructions Prowl added to this message")
+          if showsInjected {
+            Text(text.truncated ? injected + "…" : injected).font(.caption).opacity(0.8).textSelection(.enabled)
+          }
+        }
       }
       .padding(.horizontal, 14).padding(.vertical, 10)
       .foregroundStyle(.white)
-      .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
+      .background(Color("UserBubble"), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
       HStack(spacing: 4) {
         if let origin, origin != .human { Text(originLabel(origin)) }
         if let at { Text(at, style: .time) }
       }
-      .font(.caption2).foregroundStyle(.secondary)
+      .font(.caption2).foregroundStyle(.tertiary)
     }
     .frame(maxWidth: .infinity, alignment: .trailing)
-    .padding(.leading, 40)
+    .padding(.leading, 48)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("conversation-user")
   }
@@ -197,74 +249,209 @@ private struct UserBubble: View {
   }
 }
 
-private struct AssistantBubble: View {
+private struct AssistantText: View {
   let text: MirrorBoundedText
-  let at: Date?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      MirrorDocumentView(text: text.text)
+      MirrorMarkdownView(text: text.text)
       if text.truncated {
         Text("Message truncated by the Host.").font(.caption2).foregroundStyle(.secondary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.trailing, 24)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("conversation-assistant")
   }
 }
 
-private struct ToolCard: View {
-  let start: MirrorConversationEvent.ToolStart
-  let end: MirrorConversationEvent.ToolEnd?
-  let startedAt: Date?
-  let endedAt: Date?
+/// A run of tool calls as one line in secondary type: what kinds ran, how many, how many
+/// failed, or what runs now. Expanded, one line per call; a line opens its details.
+private struct StepsRow: View {
+  let steps: MirrorChatRow.Steps
   @Binding var expanded: Bool
+  let showDetail: (ToolDetail) -> Void
 
   var body: some View {
-    DisclosureGroup(isExpanded: $expanded) {
-      VStack(alignment: .leading, spacing: 8) {
-        if let command = start.command, !command.isEmpty {
-          code(command, label: String(localized: "Command"))
-        } else if let path = start.path {
-          Text(path).font(.caption.monospaced()).textSelection(.enabled)
+    VStack(alignment: .leading, spacing: 0) {
+      Button {
+        withAnimation(.snappy) { expanded.toggle() }
+      } label: {
+        HStack(spacing: 8) {
+          HStack(spacing: -3) {
+            ForEach(Array(steps.kinds.prefix(3).enumerated()), id: \.offset) { _, kind in
+              Image(systemName: MirrorToolKindStyle.symbol(kind))
+                .font(.caption2.weight(.semibold))
+                .frame(width: 18, height: 18)
+                .background(Color(.tertiarySystemFill), in: Circle())
+            }
+          }
+          summary
+          Spacer(minLength: 4)
+          Image(systemName: "chevron.right")
+            .font(.caption2.weight(.semibold))
+            .rotationEffect(.degrees(expanded ? 90 : 0))
         }
-        if let diff = end?.diff, !diff.text.isEmpty {
-          code(diff.text, label: String(localized: "Changes"), truncated: diff.truncated)
-        }
-        if let output = end?.output, !output.text.isEmpty {
-          code(output.text, label: String(localized: "Output"), truncated: output.truncated)
-        }
-        if end == nil, start.kind != .question {
-          Label("Running", systemImage: "hourglass").font(.caption).foregroundStyle(.secondary)
-        }
+        .foregroundStyle(.secondary)
+        .contentShape(.rect)
       }
-      .padding(.top, 6)
-    } label: {
-      HStack(spacing: 10) {
-        Image(systemName: icon).frame(width: 20).foregroundStyle(.secondary)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(start.title.isEmpty ? start.name : start.title)
-            .font(.callout).lineLimit(2).multilineTextAlignment(.leading)
-          Text(subtitle).font(.caption).foregroundStyle(.secondary)
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("conversation-steps")
+      .help(expanded ? "Hide the tool calls" : "Show the tool calls")
+      if expanded {
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(steps.tools, id: \.id) { item in
+            if case .tool(let id, let start, let end, _, _) = item {
+              StepLine(start: start, end: end) { showDetail(.init(id: id)) }
+            }
+          }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        statusIcon
+        .padding(.leading, 10)
+        .padding(.top, 6)
+        .overlay(alignment: .leading) {
+          Rectangle().fill(.quaternary).frame(width: 1).padding(.top, 6)
+        }
+        .transition(.opacity)
       }
-      .foregroundStyle(.primary)
     }
-    .tint(.secondary)
-    .padding(12)
-    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+    .font(.footnote)
     .accessibilityElement(children: .contain)
-    .accessibilityIdentifier("conversation-tool")
   }
 
-  private var icon: String {
-    switch start.kind {
+  @ViewBuilder private var summary: some View {
+    if let running = steps.running {
+      HStack(spacing: 5) {
+        MirrorBaguaIndicator().foregroundStyle(.orange)
+        Text(MirrorToolKindStyle.title(running)).lineLimit(1)
+      }
+    } else {
+      HStack(spacing: 4) {
+        Text("^[\(steps.toolCount) tool call](inflect: true)")
+        if steps.failedCount > 0 {
+          Text("·")
+          Text("\(steps.failedCount) failed").foregroundStyle(.red)
+        }
+      }
+    }
+  }
+}
+
+private struct StepLine: View {
+  let start: MirrorConversationEvent.ToolStart
+  let end: MirrorConversationEvent.ToolEnd?
+  let open: () -> Void
+
+  var body: some View {
+    Button(action: open) {
+      HStack(spacing: 8) {
+        Image(systemName: MirrorToolKindStyle.symbol(start.kind)).frame(width: 16)
+        Text(MirrorToolKindStyle.title(start)).lineLimit(1)
+        Spacer(minLength: 4)
+        status
+      }
+      .padding(.vertical, 5)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(.secondary)
+    .accessibilityIdentifier("conversation-tool")
+    .help("Show the command, output and changes")
+  }
+
+  @ViewBuilder private var status: some View {
+    switch end?.status {
+    case .succeeded?:
+      if let code = end?.exitCode, code != 0 {
+        Text("exit \(code)").foregroundStyle(.red)
+      } else if let duration = end?.durationMs, duration >= 1000 {
+        Text(Duration.milliseconds(duration), format: .units(allowed: [.seconds, .minutes], width: .narrow))
+          .foregroundStyle(.tertiary)
+      }
+    case .error?: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+    case .interrupted?: Image(systemName: "stop.circle").foregroundStyle(.orange)
+    case nil: MirrorBaguaIndicator().foregroundStyle(.orange)
+    }
+  }
+}
+
+/// One tool call in full: its command or path, its changes and its output.
+private struct ToolDetailView: View {
+  let detail: ToolDetail
+  /// Read here, not passed in as a value, so the sheet observes the call finishing.
+  @Bindable var session: MirrorSession
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    if let tool = session.conversation.tool(id: detail.id) {
+      content(start: tool.start, end: tool.end)
+    } else {
+      ContentUnavailableView("This tool call is no longer here", systemImage: "wrench.and.screwdriver")
+    }
+  }
+
+  private func content(start: MirrorConversationEvent.ToolStart, end: MirrorConversationEvent.ToolEnd?)
+    -> some View
+  {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          if let command = start.command, !command.isEmpty {
+            block(String(localized: "Command"), command)
+          } else if let path = start.path {
+            block(String(localized: "File"), path)
+          }
+          if let diff = end?.diff, !diff.text.isEmpty {
+            block(String(localized: "Changes"), diff.text, truncated: diff.truncated)
+          }
+          if let output = end?.output, !output.text.isEmpty {
+            block(String(localized: "Output"), output.text, truncated: output.truncated)
+          }
+          if end == nil {
+            Label("Running", systemImage: "hourglass").foregroundStyle(.secondary)
+          }
+        }
+        .padding()
+      }
+      .navigationTitle(MirrorToolKindStyle.title(start))
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done", systemImage: "checkmark") { dismiss() }
+        }
+      }
+    }
+  }
+
+  private func block(_ title: String, _ text: String, truncated: Bool = false) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+      ScrollView(.horizontal, showsIndicators: false) {
+        Text(text).font(.footnote.monospaced()).textSelection(.enabled).fixedSize(horizontal: true, vertical: false)
+          .padding(10)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+      if truncated { Text("Truncated by the Host.").font(.caption2).foregroundStyle(.secondary) }
+    }
+  }
+}
+
+enum MirrorToolKindStyle {
+  /// A tool's name for a line: its title without the shell wrapper Codex puts around every
+  /// command (`/bin/zsh -lc …`).
+  nonisolated static func title(_ start: MirrorConversationEvent.ToolStart) -> String {
+    let title = start.title.isEmpty ? start.name : start.title
+    for wrapper in ["/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c ", "zsh -lc ", "bash -lc ", "sh -c "]
+    where title.hasPrefix(wrapper) {
+      return String(title.dropFirst(wrapper.count))
+    }
+    return title
+  }
+
+  static func symbol(_ kind: MirrorConversationEvent.ToolKind) -> String {
+    switch kind {
     case .shell: "terminal"
-    case .edit: "pencil.line"
+    case .edit: "pencil"
     case .read: "doc.text"
     case .search: "magnifyingglass"
     case .web: "globe"
@@ -276,108 +463,31 @@ private struct ToolCard: View {
     case .other: "wrench.and.screwdriver"
     }
   }
-
-  private var subtitle: String {
-    var parts = [start.name]
-    if let end {
-      switch end.status {
-      case .succeeded: if let code = end.exitCode, code != 0 { parts.append("exit \(code)") }
-      case .error: parts.append(String(localized: "failed"))
-      case .interrupted: parts.append(String(localized: "interrupted"))
-      }
-      if let duration = end.durationMs, duration >= 1000 {
-        parts.append(Duration.milliseconds(duration).formatted(.units(allowed: [.seconds], width: .narrow)))
-      }
-    } else if let startedAt {
-      parts.append(startedAt.formatted(date: .omitted, time: .shortened))
-    }
-    return parts.joined(separator: " · ")
-  }
-
-  @ViewBuilder private var statusIcon: some View {
-    if let end {
-      switch end.status {
-      case .succeeded: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-      case .error: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-      case .interrupted: Image(systemName: "stop.circle.fill").foregroundStyle(.orange)
-      }
-    } else {
-      ProgressView().controlSize(.small)
-    }
-  }
-
-  private func code(_ text: String, label: String, truncated: Bool = false) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(label).font(.caption2).foregroundStyle(.secondary)
-      ScrollView(.horizontal) {
-        Text(text).font(.caption.monospaced()).textSelection(.enabled).lineLimit(40)
-      }
-      if truncated { Text("Truncated by the Host.").font(.caption2).foregroundStyle(.secondary) }
-    }
-    .padding(8)
-    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-  }
 }
 
 private struct PromptCard: View {
   let prompt: MirrorConversationEvent.Prompt
-  let resolved: MirrorConversationEvent.Prompt?
+  let resolved: MirrorConversationEvent.Prompt
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Label(title, systemImage: icon).font(.headline).foregroundStyle(resolved == nil ? .orange : .secondary)
-      if let detail = prompt.detail { Text(detail.text).font(.callout) }
-      ForEach(prompt.questions ?? []) { question in
-        VStack(alignment: .leading, spacing: 4) {
-          if let header = question.header { Text(header).font(.caption).foregroundStyle(.secondary) }
-          Text(question.question).font(.callout)
-          ForEach(question.options) { option in
-            HStack(alignment: .top, spacing: 6) {
-              Image(systemName: "circle").font(.caption2).padding(.top, 3)
-              VStack(alignment: .leading) {
-                Text(option.label).font(.callout)
-                if let description = option.description {
-                  Text(description).font(.caption).foregroundStyle(.secondary)
-                }
-              }
-            }
-          }
-        }
-      }
-      ForEach(prompt.choices ?? []) { choice in
-        Label(choice.label, systemImage: "circle").font(.callout)
-      }
-      if let resolved {
-        Label(outcomeLabel(resolved.outcome), systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
-      } else {
-        Text("Answer on the Mac.").font(.caption).foregroundStyle(.secondary)
-      }
+    Label {
+      Text("\(prompt.title ?? prompt.questions?.first?.question ?? title) · \(outcomeLabel(resolved.outcome))")
+        .lineLimit(2)
+    } icon: {
+      Image(systemName: "checkmark.circle")
     }
-    .padding(12)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(resolved == nil ? Color.orange : Color.clear))
-    .accessibilityElement(children: .contain)
+    .font(.footnote).foregroundStyle(.secondary)
     .accessibilityIdentifier("conversation-prompt")
   }
 
   private var title: String {
     switch prompt.kind {
     case .permission: String(localized: "Permission requested")
-    case .question: String(localized: "The agent has a question")
-    case .planApproval: String(localized: "Plan ready for approval")
+    case .question: String(localized: "Question")
+    case .planApproval: String(localized: "Plan approval")
     case .auth: String(localized: "Sign-in needed")
     case .trust: String(localized: "Trust requested")
     case .elicitation: String(localized: "Input requested")
-    }
-  }
-
-  private var icon: String {
-    switch prompt.kind {
-    case .permission, .trust: "lock.shield"
-    case .question, .elicitation: "questionmark.bubble"
-    case .planApproval: "list.clipboard"
-    case .auth: "person.badge.key"
     }
   }
 
@@ -393,27 +503,29 @@ private struct PromptCard: View {
 }
 
 private struct SessionDivider: View {
-  let kind: MirrorConversationEvent.Kind
-  let session: MirrorConversationEvent.Session?
+  let text: String
 
-  var body: some View {
-    HStack {
-      Rectangle().fill(.quaternary).frame(height: 1)
-      Text(text).font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
-      Rectangle().fill(.quaternary).frame(height: 1)
-    }
-  }
+  init(text: String) { self.text = text }
 
-  private var text: String {
+  init(kind: MirrorConversationEvent.Kind, session: MirrorConversationEvent.Session?) {
     switch kind {
     case .sessionStarted:
       let model = session?.model.map { " · \($0)" } ?? ""
-      return String(localized: "Session started") + model
-    case .sessionChanged: return String(localized: "New session")
-    case .sessionPending: return String(localized: "Waiting for the session")
-    case .sessionEnded: return String(localized: "Session ended")
-    default: return ""
+      text = String(localized: "Session started") + model
+    case .sessionChanged: text = String(localized: "New session")
+    case .sessionPending: text = String(localized: "Waiting for the session")
+    case .sessionEnded: text = String(localized: "Session ended")
+    default: text = ""
     }
+  }
+
+  var body: some View {
+    Text(text)
+      .font(.caption2.weight(.medium))
+      .foregroundStyle(.tertiary)
+      .lineLimit(1)
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 2)
   }
 }
 

@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-11-05 |
-| **Primary PRs** | (fill in as slices merge) |
+| **Primary PRs** | #1045 (P0), #1046 (S1), #1047 (S2), #1049 (S3), #1050 (S4), #1051 (S5) |
 | **Related** | [088-mirror-ios-app](../088-mirror-ios-app/000-plan.md), [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [086-sidebar-repository-groups](../086-sidebar-repository-groups/000-plan.md), `docs/remote-mirror.md`, issue #1043 |
 
 ## Background
@@ -38,9 +38,10 @@ Defects found in the same walkthrough (fixed in slice P0):
 ## Goals
 
 - **Agents first.** The app opens on the agents of the last Host. Hosts become a switcher in
-  the title menu. The Hosts list shows only before the first pairing (onboarding).
-- **Show what needs the user.** A "Needs You" area lists blocked panes and panes that finished
-  after the user last looked. Projects follow the Mac sidebar order, groups and colors.
+  a toolbar menu. The Hosts list shows only before the first pairing (onboarding).
+- **Show what needs the user.** Counts of blocked, working and done agents (done: finished
+  after the user last looked) filter the list. Projects follow the Mac sidebar order, groups
+  and colors.
 - **Same design language as Prowl for Mac.** Same state colors, the Bagua working indicator,
   agent icons, repository colors. Native controls, SF Symbols, Liquid Glass.
 - **Agent messages stay in view.** Consecutive tool calls merge into one quiet summary row.
@@ -67,21 +68,26 @@ Title menu "<Host name> ⌄": switch Host · Add Host… · Manage Hosts
 
 ### Agents (replaces `HostsView` + `PanesView` as root)
 
-- Title: Host display name with `chevron.down` and a connection mark. When the Host is not
-  reachable, a banner under the title shows the reason and Retry; the last roster stays.
-- Project chips: All, then the projects in Mac sidebar order. A chip shows a red dot when a
-  pane in it is blocked.
-- **Needs You** horizontal cards: blocked panes, then done panes. A card shows state, title,
-  project and one line (the question or the last agent message).
-- Sections by project, with the repository color. Rows: title; agent icon + last agent message
-  in secondary text; trailing state. Sort in a section: blocked, working, done, idle.
-- Shell panes fold into one "N terminals" row per project. `…` → Show Terminals lists them.
-- A `+` in each section header starts a session in that project.
+Corrected 2026-11-06 in S1 (see [003-s1-agents-home.md](003-s1-agents-home.md)): the first
+draft followed the reference screenshots too closely (a "Needs You" card rail, project chips,
+a centered "Host ⌄" title). The shipped screen uses Prowl's own structure and words:
+
+- Large navigation title: the Mac's computer name. A `macbook` menu at the top left carries
+  the connection mark and switches the Host, adds one, or opens Manage Hosts. When the Host
+  cannot be reached, a row on top shows the reason and Retry; the last roster stays.
+- A state summary: three counts, **Blocked**, **Working**, **Done**, as the Mac's Active
+  Agents panel ranks them. A count filters the list to that state.
+- An inset grouped list in Mac sidebar order: one section per project with its repository
+  color and group. Rows: agent mark, tab title, worktree and relative time, the state.
+  Sort in a section: blocked, working, done, idle.
+- Shell panes fold into one "N terminals" row per project.
+- A section's `…` menu starts a session in that project.
 
 ### Pane (replaces `PaneHeader` and the segmented picker)
 
-- Navigation title is a menu with `chevron.down` to jump to another pane of the same project;
-  subtitle "<state> · <project> / <worktree>".
+- Navigation title: the pane name, with the subtitle "<state> · <project> / <worktree>"
+  (corrected in S2: no pane-switching title menu, see
+  [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)).
 - Trailing glass group: one Chat ⇄ Terminal toggle (`apple.terminal` /
   `bubble.left.and.text.bubble.right`) and `…` (History, Take Over, Disconnect).
 - **Chat**
@@ -106,17 +112,19 @@ Title menu "<Host name> ⌄": switch Host · Add Host… · Manage Hosts
 
 ### New Session (replaces the `MirrorLaunchView` form)
 
-A sheet shaped like a composer: two chips above the message field, project
-(`folder`, Mac sidebar groups and colors, recents first, search, worktrees as sub rows) and
-Profile (agent icon, model, effort; last choice remembered). Send creates the pane and opens
-it. The descriptor takes `agent` from the Profile runtime (fixes D1).
+A sheet shaped like a composer: the message field, and under it two menus, project
+(`folder`, repositories in the Host's order with worktrees as a submenu) and Profile (agent
+icon, model, effort; last choice remembered). Send creates the pane and opens it. The
+descriptor takes `agent` from the Profile runtime (fixes D1). Corrected in S3: sidebar
+groups, colors, recents and search are not in the project menu yet; see
+[005-s3-new-session.md](005-s3-new-session.md).
 
 ### Visual language
 
 | State | Mac source | iOS |
 | --- | --- | --- |
 | Working | `.orange` + `BaguaWorkingIndicator` | same; the glyph is static when Reduce Motion is on |
-| Blocked ("Needs you") | `.red` | same |
+| Blocked | `.red` | same; the label is the Mac's "Blocked" |
 | Done (idle, not seen) | `.blue` | same |
 | Idle | `.secondary` | same, no badge |
 | Failed / disconnected | — | `exclamationmark.circle.fill` in red with the reason, stronger than the state dot |
@@ -134,7 +142,7 @@ The brand color is the deep green of the app icon. It is the iOS `AccentColor`
 | --- | --- |
 | Agents screen | roster: Host display name, `displayState` (adds done), repository color, sidebar group and order, tab ID, last agent message, last activity time |
 | New Session | `profiles`: icon, model, effort; worktree list in sidebar order with groups |
-| Prompt panel | `promptRespond` (087 S3); Claude pending prompts from the `PermissionRequest` hook, not only the transcript (D6) |
+| Prompt panel | `promptRespond` (087 S3); pending prompts read from the screen menu (D6; corrected in S4 from the `PermissionRequest` hook, see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)) |
 | Terminal, Stop | key input for agent panes (`agents.input` keys or a new command), limited to a key allow list |
 | D2 | mark the injected launch text so clients can fold it |
 
@@ -142,7 +150,8 @@ The brand color is the deep green of the app icon. It is the iOS `AccentColor`
 
 | Option | Decision |
 | --- | --- |
-| Keep Hosts as the root | Rejected: one-Mac users pay a step on every launch. Hosts move to the title menu. |
+| Keep Hosts as the root | Rejected: one-Mac users pay a step on every launch. Hosts move to a toolbar menu. |
+| Follow the reference layout and copy (card rail, chips, "Needs You") | Rejected by onevcat (2026-11-06): the screenshots show another app; take only the feel. Use Prowl's structure (Mac sidebar, Active Agents ranking) and words, and our own project names in fixtures. A sliding Agent Island capsule was tried and dropped as too busy. |
 | New palette for iOS (orange for blocked) | Rejected by onevcat (2026-11-05): use the Mac state colors and the Bagua indicator. |
 | One card per tool call (088) | Replaced: merged step groups with a count; details on demand in secondary style. |
 | Brand color vs system colors only | onevcat allows the brand color (2026-11-05); only the accent assets are custom. |
@@ -155,13 +164,20 @@ The brand color is the deep green of the app icon. It is the iOS `AccentColor`
 | Slice | Content |
 | --- | --- |
 | P0 | D1–D5 fixes; tests for the launch descriptor and attention removal |
-| S1 | iOS 26 target, color and state tokens, Bagua indicator; Agents screen, Host title menu, onboarding; roster wire fields |
+| S1 | iOS 26 target, color and state tokens, Bagua indicator; Agents screen, Host menu, onboarding; roster wire fields |
 | S2 | Pane chrome, Chat restyle (Markdown, tool step groups, folded injected text), composer |
 | S3 | New Session sheet; `profiles` and worktree wire fields |
 | S4 | `promptRespond` on Host and client, Claude hook prompts (D6), prompt panel |
-| S5 | Terminal: `vt-v1` rendering, key bar, key input on Host, Stop |
+| S5 | Terminal: key bar, key input on Host, Stop (`vt-v1` rendering deferred, see 007) |
 
 Each slice ships simulator screenshots (light and dark) against a live Host and updates
 `docs/remote-mirror.md` when user-facing behavior changes.
 
 ## Amendments
+- Updated 2026-11-06: P0 fixed D1–D5 on the client — see [002-p0-defect-fixes.md](002-p0-defect-fixes.md)
+- Updated 2026-11-06: S1 shipped the Agents screen; the Agents design section is corrected in place (no card rail or chips, Mac wording) — see [003-s1-agents-home.md](003-s1-agents-home.md)
+- Updated 2026-11-06: S2 restyled the pane chrome, folded tool calls into steps rows and moved attention above the composer — see [004-s2-pane-and-chat.md](004-s2-pane-and-chat.md)
+- Updated 2026-11-06: S3 replaced the launch form with a composer-shaped New Session sheet and added Profile model, effort and icon to `profiles` — see [005-s3-new-session.md](005-s3-new-session.md)
+- Updated 2026-11-06: S4 answers screen prompts from the phone (`promptRespond`, D6 via the screen instead of hooks) — see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)
+- Updated 2026-11-06: S5 added the Terminal key bar and Stop (`agentKeys`); the `vt-v1` terminal view is deferred — see [007-s5-terminal-keys.md](007-s5-terminal-keys.md)
+- Updated 2026-11-06: S6 lets the phone send to a working agent; the agent queues or steers the message, and only a blocked agent refuses it — see [008-s6-input-while-working.md](008-s6-input-while-working.md)

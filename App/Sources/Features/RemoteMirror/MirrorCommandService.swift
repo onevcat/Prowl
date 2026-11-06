@@ -104,6 +104,9 @@ final class MirrorCommandService {
       return failure(
         "Host cannot verify an empty shell command line. Use an Agent Profile or control the shell on Host."
       )
+    case .promptRespond, .agentKeys:
+      // The Mirror Host handles these itself; they never reach the CLI router.
+      return failure("Prompt answers and keys go to the Mirror Host.")
     case .create(let input):
       guard input.resource == "tab", input.background,
         input.launch == nil || input.launch?.profile.isEmpty == false,
@@ -119,7 +122,7 @@ final class MirrorCommandService {
     "Could not encode the command result. Check Host before retrying.",
     code: "REMOTE_COMMAND_UNCONFIRMED")
 
-  private static func failure(_ message: String, code: String = "REMOTE_COMMAND_REJECTED")
+  static func failure(_ message: String, code: String = "REMOTE_COMMAND_REJECTED")
     -> MirrorJSON
   {
     .object([

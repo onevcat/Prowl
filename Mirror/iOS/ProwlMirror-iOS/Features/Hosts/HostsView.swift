@@ -3,65 +3,60 @@ import SwiftUI
 nonisolated struct MirrorPaneRoute: Hashable {
   let host: MirrorHostRecord
   let pane: MirrorPaneDescriptor
+  /// The pane was just launched from this device; its agent is not detected yet.
+  var launched = false
 }
 
 extension MirrorPaneDescriptor: Hashable {
   nonisolated func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-/// The paired Hosts. Adding one pairs with a code or a QR; a row opens its panes.
-struct HostsView: View {
+/// The paired Hosts, opened from the Agents title menu (docs-ai 089): pick the Host to show,
+/// rename or forget one, or pair another.
+struct HostsManagerView: View {
   @Bindable var store: MirrorHostStore
+  let onAddHost: () -> Void
   @Environment(MirrorHostSessions.self) private var sessions
-  @State private var path = NavigationPath()
-  @State private var showsAdd = false
+  @Environment(\.dismiss) private var dismiss
   @State private var renaming: MirrorHostRecord?
   @State private var alias = ""
 
   var body: some View {
-    NavigationStack(path: $path) {
-      Group {
-        if store.hosts.isEmpty {
-          ContentUnavailableView {
-            Label("No Hosts", systemImage: "desktopcomputer")
-          } description: {
-            Text("Pair with a Mac running Prowl to see its agents here.")
-          } actions: {
-            Button("Add Host") { showsAdd = true }.buttonStyle(.borderedProminent)
+    NavigationStack {
+      List {
+        ForEach(store.hosts) { host in
+          Button {
+            store.select(host.id)
+            dismiss()
+          } label: {
+            HostRow(host: host, session: sessions.existing(for: host), selected: host.id == store.selectedHost?.id)
           }
-        } else {
-          List {
-            ForEach(store.hosts) { host in
-              NavigationLink(value: host) { HostRow(host: host, session: sessions.existing(for: host)) }
-                .accessibilityIdentifier("host-\(host.endpoint)")
-                .swipeActions(edge: .trailing) {
-                  Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-                  Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
-                }
-                .contextMenu {
-                  Button("Rename…", systemImage: "pencil") { startRenaming(host) }
-                  Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-                }
-            }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("host-\(host.endpoint)")
+          .swipeActions(edge: .trailing) {
+            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
+            Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
+          }
+          .contextMenu {
+            Button("Rename…", systemImage: "pencil") { startRenaming(host) }
+            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
           }
         }
       }
       .navigationTitle("Hosts")
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        Button("Add Host", systemImage: "plus") { showsAdd = true }
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Close", systemImage: "xmark") { dismiss() }
+            .help("Close the Host list")
+        }
+        ToolbarItem(placement: .primaryAction) {
+          Button("Add Host", systemImage: "plus") {
+            dismiss()
+            onAddHost()
+          }
           .accessibilityIdentifier("add-host")
           .help("Pair with a Mac running Prowl")
-      }
-      .navigationDestination(for: MirrorHostRecord.self) { host in
-        PanesView(host: host, path: $path)
-      }
-      .navigationDestination(for: MirrorPaneRoute.self) { route in
-        PaneView(route: route, session: sessions.makePaneSession(route.host))
-      }
-      .sheet(isPresented: $showsAdd) {
-        AddHostView(store: store) { host in
-          showsAdd = false
-          path.append(host)
         }
       }
       .alert("Rename Host", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -85,30 +80,39 @@ struct HostsView: View {
   private func forget(_ host: MirrorHostRecord) {
     sessions.forget(host.id)
     store.remove(host.id)
+    if store.hosts.isEmpty { dismiss() }
   }
 }
 
 private struct HostRow: View {
   let host: MirrorHostRecord
   let session: MirrorHostSession?
+  let selected: Bool
 
   var body: some View {
     HStack(spacing: 14) {
-      Image(systemName: "desktopcomputer")
+      Image(systemName: "macbook")
         .font(.title2)
         .foregroundStyle(.tint)
-        .frame(width: 32)
+        .frame(width: 34)
       VStack(alignment: .leading, spacing: 3) {
         Text(host.displayName).font(.headline)
-        Text(caption).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        Text(caption).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer()
-      if let session {
-        Circle().fill(color(for: session.status)).frame(width: 9, height: 9)
-          .accessibilityLabel(session.status.label)
+      if case .failed? = session?.status {
+        Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+          .accessibilityLabel(session?.status.label ?? "")
+      } else if session?.status == .ready {
+        Circle().fill(.green).frame(width: 8, height: 8).accessibilityLabel(String(localized: "Connected"))
+      }
+      if selected {
+        Image(systemName: "checkmark").font(.body.weight(.semibold)).foregroundStyle(.tint)
+          .accessibilityLabel(String(localized: "Shown"))
       }
     }
     .padding(.vertical, 4)
+    .contentShape(.rect)
   }
 
   private var caption: String {
@@ -119,15 +123,6 @@ private struct HostRow: View {
       parts.append(String(localized: "Last connected \(last.formatted(.relative(presentation: .named)))"))
     }
     return parts.joined(separator: " · ")
-  }
-
-  private func color(for status: MirrorHostSession.Status) -> Color {
-    switch status {
-    case .ready: .green
-    case .connecting: .yellow
-    case .failed: .red
-    case .idle: .secondary
-    }
   }
 }
 

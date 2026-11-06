@@ -7,7 +7,7 @@ struct MirrorLaunchModelTests {
   @Test func deduplicatesWorktreesAndUsesOnlyAvailableHostProfiles() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: throw CancellationError()
@@ -26,7 +26,7 @@ struct MirrorLaunchModelTests {
     var requests: [MirrorCommandRequest.Create] = []
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create(let create): requests.append(create); return try json(Self.created)
@@ -47,7 +47,7 @@ struct MirrorLaunchModelTests {
     var calls = 0
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: calls += 1; throw URLError(.networkConnectionLost)
@@ -65,7 +65,7 @@ struct MirrorLaunchModelTests {
   @Test func unconfirmedHostResultBlocksAnotherCreation() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create:
@@ -81,7 +81,7 @@ struct MirrorLaunchModelTests {
   @Test func explicitRejectionKeepsTheFormEditable() async {
     let model = MirrorLaunchModel { command in
       switch command {
-      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
       case .list: return try json(Self.listing)
       case .profiles: return try json(Self.profiles)
       case .create: return try json(#"{"ok":false,"error":{"message":"Profile removed"}}"#)
@@ -105,6 +105,61 @@ struct MirrorLaunchModelTests {
     await model.load()
     model.prompt = String(repeating: "你", count: MirrorWire.maximumInput / 3 + 1)
     #expect(!model.canCreate)
+  }
+
+  @Test func createdProfilePaneCarriesTheAgentAndANonEmptyTitle() async throws {
+    let untitled = #"{"ok":true,"data":{"target":{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"},"pane":{"id":"03F5535A-D08C-498C-B70B-C665AC8D02CB","title":""}}}}"#
+    let model = MirrorLaunchModel { command in
+      switch command {
+      case .agentsInput, .agentsDispatch, .send, .promptRespond, .agentKeys: throw CancellationError()
+      case .list: return try json(Self.listing)
+      case .profiles: return try json(Self.profiles)
+      case .create: return try json(untitled)
+      }
+    }
+    await model.load()
+    let pane = try #require(await model.create())
+    #expect(pane.agent == "codex")
+    #expect(pane.conversation == nil)
+    #expect(pane.title == "Codex")
+    #expect(pane.subtitle == "Codex · main")
+  }
+
+  @Test func projectLaunchSelectsAWorktreeOfThatProjectOrNone() async {
+    // Two SSH repositories at the same path on different hosts, and a local one first.
+    let listing = #"{"ok":true,"data":{"items":[{"pane":{"id":"aaaaaaaa-0000-0000-0000-000000000001"},"worktree":{"id":"/A/","name":"main","path":"/A/","root_path":"/A/"}},{"pane":{"id":"BBBBBBBB-0000-0000-0000-000000000001"},"worktree":{"id":"ssh:1111:/srv/app","name":"main","path":"/srv/app","root_path":"/srv/app"}},{"pane":{"id":"CCCCCCCC-0000-0000-0000-000000000001"},"worktree":{"id":"ssh:2222:/srv/app","name":"main","path":"/srv/app","root_path":"/srv/app"}},{"pane":{"id":"CCCCCCCC-0000-0000-0000-000000000002"},"worktree":{"id":"ssh:2222:/wt/feature","name":"feature","path":"/wt/feature","root_path":"/srv/app"}}]}}"#
+    let model = MirrorLaunchModel { command in
+      if case .profiles = command { return try json(Self.profiles) }
+      return try json(listing)
+    }
+    await model.load()
+    #expect(model.worktreeID == "/A/")
+    model.focusProject(paneIDs: ["cccccccc-0000-0000-0000-000000000002", "CCCCCCCC-0000-0000-0000-000000000001"])
+    #expect(model.worktreeID == "ssh:2222:/srv/app")
+    model.focusProject(paneIDs: ["CCCCCCCC-0000-0000-0000-000000000002"])
+    #expect(model.worktreeID == "ssh:2222:/wt/feature")
+    model.focusProject(paneIDs: ["DDDDDDDD-0000-0000-0000-000000000001"])
+    #expect(model.worktreeID == nil)
+    #expect(!model.canCreate)
+    // A reload keeps the project restriction instead of falling back to the first worktree.
+    await model.load()
+    #expect(model.worktreeID == nil)
+    model.focusProject(paneIDs: ["BBBBBBBB-0000-0000-0000-000000000001"])
+    await model.load()
+    #expect(model.worktreeID == "ssh:1111:/srv/app")
+  }
+
+  @Test func profilesCarryModelEffortAndIcon() async {
+    let catalog = #"{"ok":true,"data":{"profiles":[{"id":"p","name":"Opus","enabled":true,"runtime":"claude","availability":{"status":"available"},"model":"claude-opus-5-5","reasoning_effort":"high","icon":"checkmark.seal"},{"id":"q","name":"Plain","enabled":true,"runtime":"codex","availability":{"status":"available"}}]}}"#
+    let model = MirrorLaunchModel { command in
+      if case .profiles = command { return try json(catalog) }
+      return try json(Self.listing)
+    }
+    await model.load()
+    #expect(model.profiles.first?.model == "claude-opus-5-5")
+    #expect(model.profiles.first?.effort == "high")
+    #expect(model.profiles.first?.icon == "checkmark.seal")
+    #expect(model.profiles.last?.model == nil)
   }
 
   private static let listing = #"{"ok":true,"data":{"items":[{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}},{"worktree":{"id":"worktree-1","name":"main","path":"/Project","root_path":"/Project"}}]}}"#

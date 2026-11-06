@@ -114,7 +114,7 @@ struct MirrorHostSessionTests {
   func close(_ reason: String?) { closed = true }
 }
 
-private nonisolated struct HostTestClock: Clock {
+nonisolated struct HostTestClock: Clock {
   let now = ContinuousClock.now
   let minimumResolution = Duration.zero
   private let storage = Storage()

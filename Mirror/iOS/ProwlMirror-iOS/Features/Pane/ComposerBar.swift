@@ -1,89 +1,148 @@
 import SwiftUI
 
-/// One composer for both views: Send goes through `agents.input`; the hint says what the
-/// Host will do with it, and a receipt never locks the composer without a way out.
+/// One composer for both views (docs-ai 089 S2): a floating glass field with the send button
+/// inside. Send goes through `agents.input`. A note appears only when the Host will do
+/// something other than deliver now, and a receipt never locks the field without a way out.
 struct ComposerBar: View {
   @Bindable var session: MirrorSession
   @Binding var isEditing: Bool
+  @State private var confirmsStop = false
+
+  /// While the agent works and nothing is typed, the button stops it instead (docs-ai 089 S5).
+  private var showsStop: Bool {
+    session.agentState == .working && session.draft.isEmpty && session.canSendKeys
+  }
+  /// The measured width of the trailing buttons; the Hide Keyboard symbol grows with Dynamic
+  /// Type, so a constant reservation overlaps the text at accessibility sizes.
+  @State private var controlsWidth: CGFloat = 34
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
+      if let note {
+        Text(note.text)
+          .font(.caption)
+          .foregroundStyle(note.isProblem ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+          .lineLimit(2)
+          .padding(.horizontal, 6)
+          .accessibilityIdentifier("composer-note")
+      }
+      if session.submission?.outcome.status == .unknown || session.submission?.outcome.status == .pending {
+        receiptControls
+      }
       // The text view sits directly in the VStack so it is proposed a definite width; a
       // UITextView in an HStack gets a nil width during measurement and never grows.
       MirrorComposer(session: session, isEditing: $isEditing)
         .fixedSize(horizontal: false, vertical: true)
-        .padding(.trailing, 40)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
+        .padding(.leading, 6)
+        // Room for Send, and for Hide Keyboard next to it while editing, so neither covers text.
+        .padding(.trailing, controlsWidth + 6)
         .overlay(alignment: .topLeading) {
           if session.draft.isEmpty {
-            Text(placeholder).foregroundStyle(.secondary)
-              .padding(.horizontal, 5).padding(.vertical, 8).allowsHitTesting(false)
+            Text(placeholder).foregroundStyle(.tertiary)
+              .padding(.leading, 11).padding(.vertical, 8).allowsHitTesting(false)
               .accessibilityHidden(true)
           }
         }
         .overlay(alignment: .bottomTrailing) {
-          Button {
-            session.submitDraft()
-          } label: {
-            Image(systemName: "arrow.up.circle.fill").font(.title2)
+          HStack(spacing: 6) {
+            if isEditing {
+              Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isEditing = false }
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("mirror-dismiss-keyboard")
+                .help("Hide the keyboard")
+            }
+            if showsStop {
+              Button {
+                confirmsStop = true
+              } label: {
+                Image(systemName: "stop.fill")
+                  .font(.footnote.weight(.bold))
+                  .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                  .foregroundStyle(.white)
+                  .frame(width: 32, height: 32)
+                  .background(Color.red, in: Circle())
+              }
+              .accessibilityLabel("Stop")
+              .accessibilityIdentifier("mirror-stop")
+              .help("Interrupt the agent on the Mac (Escape)")
+            } else {
+              Button {
+                session.submitDraft()
+              } label: {
+                Image(systemName: "arrow.up")
+                  .font(.body.weight(.bold))
+                  // The circle is a fixed 32 points; a larger glyph spills out of it.
+                  .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                  .foregroundStyle(.white)
+                  .frame(width: 32, height: 32)
+                  .background(session.canSubmit ? Color.accentColor : Color(.systemGray3), in: Circle())
+              }
+              .disabled(!session.canSubmit)
+              .accessibilityLabel("Send")
+              .accessibilityIdentifier("mirror-send")
+              .help("Send the message to the agent on the Host")
+            }
           }
-          .disabled(!session.canSubmit)
-          .padding(.trailing, 6).padding(.bottom, 4)
-          .accessibilityLabel("Send")
-          .accessibilityIdentifier("mirror-send")
-          .help("Send the message to the agent on the Host")
+          .padding(.trailing, 2)
+          .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { controlsWidth = $0 }
         }
+        .padding(6)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+    .animation(.snappy, value: note)
+    .animation(.snappy, value: showsStop)
+    .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
+      Button("Stop", role: .destructive) { session.sendKeys(["esc"]) }
+        .accessibilityIdentifier("mirror-stop-confirm")
+    } message: {
+      Text("Prowl presses Escape in the pane on the Mac, which interrupts the current turn.")
+    }
+  }
+
+  private var receiptControls: some View {
+    VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(hint).font(.caption).foregroundStyle(hintColor).lineLimit(2)
-        Spacer()
-        if isEditing {
-          Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isEditing = false }
-            .labelStyle(.iconOnly)
-            .accessibilityIdentifier("mirror-dismiss-keyboard")
-        }
-        if session.submission?.outcome.status == .unknown || session.submission?.outcome.status == .pending {
-          Button("Check Receipt") { session.querySubmission() }
-            .disabled(session.status != .live)
-            .font(.caption)
-        }
+        Button("Check Receipt") { session.querySubmission() }
+          .disabled(session.status != .live)
         if session.submission?.outcome.status == .unknown {
-          Button("I've Checked") { session.acknowledgeUnknownSubmission() }.font(.caption)
+          Button("I've Checked") { session.acknowledgeUnknownSubmission() }
         }
       }
-      if let submission = session.submission,
-        submission.outcome.status == .pending || submission.outcome.status == .unknown
-      {
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      if let submission = session.submission {
         DisclosureGroup("Submitted message") {
           ScrollView { Text(submission.text).textSelection(.enabled) }.frame(maxHeight: 120)
         }
         .font(.caption)
       }
     }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
-    .background(.bar)
+    .padding(.horizontal, 6)
   }
 
   private var placeholder: String {
-    session.mode == .conversation ? String(localized: "Message the agent") : String(localized: "Write a message")
+    session.pane?.agent == nil ? String(localized: "Terminal is read-only here") : String(localized: "Message")
   }
 
-  private var hint: String {
+  private struct Note: Equatable {
+    let text: String
+    let isProblem: Bool
+  }
+
+  /// Only what changes the outcome: a receipt that is not a plain success, a refused key, or a
+  /// pane that does not take messages. A working agent takes a message as typed on the Mac: it
+  /// queues or steers it by its own rules (docs-ai 089 S6), so that needs no note.
+  private var note: Note? {
     if let submission = session.submission, submission.outcome.status != .accepted {
-      return submission.outcome.detail
+      let problem = submission.outcome.status == .rejected || submission.outcome.status == .unknown
+      return Note(text: submission.outcome.detail, isProblem: problem)
     }
-    if session.status != .live { return String(localized: "Reconnect to the pane before sending.") }
-    if !session.supportsSubmission { return String(localized: "This Host does not accept messages for this pane.") }
-    if session.pane?.agent == nil { return String(localized: "Shell panes are read-only from here.") }
-    switch session.agentState {
-    case .working: return String(localized: "The agent is working; the Host delivers once its composer is free.")
-    case .blocked: return String(localized: "The agent is waiting for an answer on the Mac.")
-    default: return String(localized: "Sends to the agent on the Host; it checks readiness first.")
+    guard session.status == .live else { return nil }
+    if let refusal = session.keyRefusal { return Note(text: refusal, isProblem: true) }
+    if !session.supportsSubmission {
+      return Note(text: String(localized: "This Host does not accept messages for this pane."), isProblem: false)
     }
-  }
-
-  private var hintColor: Color {
-    if let status = session.submission?.outcome.status, status == .rejected || status == .unknown { return .red }
-    return .secondary
+    return nil
   }
 }

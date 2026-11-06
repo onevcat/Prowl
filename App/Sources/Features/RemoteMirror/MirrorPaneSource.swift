@@ -17,6 +17,14 @@ protocol MirrorPaneSource {
   func boundedRetainedText(_ id: UUID) throws -> MirrorRetainedText
   /// The pane's agent state, for `conversation-v1` (docs-ai 087); nil when unknown.
   func agentState(_ id: UUID) -> PaneAgentState?
+  /// Picks `choice` in the choice menu on the pane's screen, if it still is the prompt `id`
+  /// (docs-ai 089 S4). `isLive` is asked before every key; once it is false, no key goes.
+  func answerPrompt(
+    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+  ) async -> MirrorPromptAnswer
+  /// Presses allow-listed keys in an agent pane (docs-ai 089 S5); nil when sent, else why not.
+  /// `isLive` is asked before every key; once it is false, no key goes.
+  func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String?
 }
 
 struct MirrorTextSnapshot {
@@ -43,9 +51,49 @@ extension MirrorPaneSource {
   }
   func activeText(_ id: UUID) throws -> String { throw MirrorProtocolError.invalidMessage }
   func agentState(_ id: UUID) -> PaneAgentState? { nil }
+  func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
+    String(localized: "This Host cannot press keys from a mirror.")
+  }
+  func answerPrompt(
+    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+  ) -> MirrorPromptAnswer {
+    .refused(code: "PROMPT_UNSUPPORTED", message: String(localized: "This Host cannot answer prompts."))
+  }
 }
 
 // A resize or a viewport move raced a read-only capture. Retry on the next poll.
 enum MirrorPaneSourceError: Error {
   case captureChanged
+}
+
+/// The result of answering a screen prompt from a mirror (docs-ai 089 S4).
+nonisolated enum MirrorPromptAnswer: Equatable, Sendable {
+  case delivered(MirrorScreenPrompt.Option, permission: Bool)
+  case refused(code: String, message: String)
+}
+
+/// Local input protection across a sequence of keys from a mirror (docs-ai 089 review S4-R3).
+/// The first key needs the usual quiet period. After that, the operation's own keys may move
+/// the editing stamp, so the guard records the stamp after each key it sends: any later change,
+/// or marked text, means someone is editing on the Mac and the next key must not go.
+nonisolated struct MirrorKeyGuard: Equatable, Sendable {
+  let refusal: String?
+  private var ownStamp: TimeInterval?
+
+  init(hasMarkedText: Bool, lastEditingAt: TimeInterval?, now: TimeInterval) {
+    refusal = AgentDispatchInputProtection.refusal(hasMarkedText: hasMarkedText, lastEditingAt: lastEditingAt, now: now)
+    ownStamp = lastEditingAt
+  }
+
+  mutating func noteSent(lastEditingAt: TimeInterval?) {
+    ownStamp = lastEditingAt
+  }
+
+  func check(hasMarkedText: Bool, lastEditingAt: TimeInterval?) -> String? {
+    if hasMarkedText {
+      return String(localized: "Someone is typing with an input method on the Mac. Finish there first.")
+    }
+    if lastEditingAt != ownStamp { return String(localized: "Someone is typing in this pane on the Mac.") }
+    return nil
+  }
 }

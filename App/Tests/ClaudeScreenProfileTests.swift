@@ -39,6 +39,25 @@ struct ClaudeScreenProfileTests {
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "❯ old transcript") == nil)
   }
 
+  /// While a turn runs with a message queued, Claude Code 2.1.318 shows a dim hint in the empty
+  /// composer (captured 2026-11-06); a person can add another message there (089 S6).
+  @Test func dimQueuedMessagesHintReadsAsAnEmptyComposer() {
+    func screen(_ composer: String) -> String { "────────\r\n" + composer + "\r\n────────\r\n  status" }
+    let hint = "\u{1B}[38;5;246m❯ \u{1B}[2m\u{1B}[39mPress up to edit queued messages\u{1B}[0m"
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(hint)) == "")
+    #expect(
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ Press up to edit queued messages"))
+        == "Press up to edit queued messages")
+    var styledReads = 0
+    let plain = AgentScreenSnapshot(text: "────────\n❯ Press up to edit queued messages\n────────\n  status")
+    let contents = ClaudeScreenProfile.composerContents(in: plain) {
+      styledReads += 1
+      return screen(hint)
+    }
+    #expect(contents == "")
+    #expect(styledReads == 1)
+  }
+
   @Test func styledSnapshotIsReadOnlyForTheHint() {
     func screen(_ composer: String) -> String { "────────\n" + composer + "\n────────\n  status" }
     let dimHint = screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m")

@@ -168,6 +168,206 @@ struct MirrorHostConversationTests {
     #expect(pane.agentState != nil)
     #expect(pane.conversation == .available)
     #expect(pane.busy == false)
+    #expect(pane.displayState == .done && pane.stateChangedAt == "2026-11-05T12:00:00.000Z")
+    #expect(pane.tabTitle == "Fixture tab" && pane.worktreeName == "main")
+    #expect(pane.repositoryColor == "mint" && pane.projectOrder == 2 && pane.groupName == "Apps")
+    #expect(list.hostName == MirrorHostAddresses.computerName)
+  }
+
+  /// docs-ai 089 S4: a blocked pane's screen menu is the open prompt; it resolves when it closes.
+  @Test(.timeLimit(.minutes(1))) func blockedScreenMenuOpensAndResolvesAPrompt() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    let lease = try await fixture.subscribeConversation()
+    _ = try await fixture.collect(until: .userMessage, lease: lease)
+    let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Fixtures/MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")
+    fixture.source.screen = try String(contentsOf: fixtures, encoding: .utf8)
+    fixture.source.setState(.blocked, reason: .native(.blocked))
+    let opened = try await fixture.collect(until: .promptOpened, lease: lease)
+    guard case .prompt(let prompt) = try #require(opened.last(where: { $0.kind == .promptOpened })).payload else {
+      Issue.record("expected a prompt payload")
+      return
+    }
+    #expect(prompt.id.hasPrefix("screen:"))
+    #expect(prompt.kind == .question && prompt.freeform)
+    #expect(prompt.title == "Which image format do you prefer for icons?")
+    #expect(prompt.choices?.map(\.id) == ["1", "2", "3"])
+    #expect(prompt.choices?.map(\.label) == ["PNG", "WebP", "SVG"])
+    fixture.source.screen = "shell"
+    fixture.source.setState(.working, reason: .native(.working))
+    let resolved = try await fixture.collect(until: .promptResolved, lease: lease)
+    guard case .prompt(let resolution) = try #require(resolved.last(where: { $0.kind == .promptResolved })).payload
+    else {
+      Issue.record("expected a prompt resolution")
+      return
+    }
+    #expect(resolution.id == prompt.id && resolution.outcome == .unknown)
+  }
+
+  @Test func feedResolvesAPhoneAnswerWithItsOutcome() throws {
+    let feed = MirrorConversationFeed()
+    let prompt = try Self.permissionPrompt()
+    let now = Date()
+    feed.observeScreen(prompt, now: now)
+    feed.observeScreen(prompt, now: now)
+    let id = try #require(feed.openScreenPromptID)
+    feed.noteScreenAnswer(promptID: id, option: prompt.options[3], permission: true, now: now)
+    // The answered menu can stay on screen for a moment; it does not open again.
+    feed.observeScreen(prompt, now: now.addingTimeInterval(0.5))
+    feed.observeScreen(nil, now: now.addingTimeInterval(1))
+    let events = feed.log.snapshot(since: nil).events
+    #expect(events.map(\.kind) == [.promptOpened, .promptResolved])
+    guard case .prompt(let resolution) = events[1].payload else {
+      Issue.record("expected a prompt resolution")
+      return
+    }
+    #expect(resolution.id == id && resolution.outcome == .denied && resolution.decidedBy == "mirror")
+    #expect(events[0].source == .screen)
+    #expect(feed.openScreenPromptID == nil)
+  }
+
+  /// The same menu shown twice is two prompts, so an answer to the first cannot answer the
+  /// second (089 review S4-R1).
+  @Test func feedGivesEveryOpeningItsOwnID() throws {
+    let feed = MirrorConversationFeed()
+    let prompt = try Self.permissionPrompt()
+    let now = Date()
+    feed.observeScreen(prompt, now: now)
+    let first = try #require(feed.openScreenPromptID)
+    feed.observeScreen(nil, now: now)
+    feed.observeScreen(prompt, now: now)
+    let second = try #require(feed.openScreenPromptID)
+    #expect(first != second && first.hasPrefix("screen:") && second.hasPrefix("screen:"))
+    // A menu still on screen long after an answer is a prompt again.
+    feed.noteScreenAnswer(promptID: second, option: prompt.options[0], permission: true, now: now)
+    feed.observeScreen(prompt, now: now.addingTimeInterval(10))
+    let third = try #require(feed.openScreenPromptID)
+    #expect(third != second)
+  }
+
+  /// Losing the pane stops an answer that is waiting between keys (089 review S4-R2).
+  @Test(.timeLimit(.minutes(1))) func takeoverStopsAnAnswerBetweenKeys() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    fixture.host.commandService = MirrorCommandService(router: CLICommandRouter())
+    let lease = try await fixture.subscribeConversation()
+    _ = try await fixture.collect(until: .userMessage, lease: lease)
+    fixture.source.screen = try String(
+      contentsOf: Self.fixture("claude-2.1.318-ask-user-question.txt"), encoding: .utf8)
+    fixture.source.setState(.blocked, reason: .native(.blocked))
+    let opened = try await fixture.collect(until: .promptOpened, lease: lease)
+    guard case .prompt(let prompt) = try #require(opened.last(where: { $0.kind == .promptOpened })).payload else {
+      Issue.record("expected a prompt payload")
+      return
+    }
+    let gate = AsyncStream.makeStream(of: Void.self)
+    let entered = AsyncStream.makeStream(of: Void.self)
+    fixture.source.answerGate = (gate.stream, entered.continuation)
+    let request = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(command: .promptRespond(.init(pane: fixture.source.id.uuidString, prompt: prompt.id, choice: "2")))
+    )
+    fixture.peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
+    var enteredIterator = entered.stream.makeAsyncIterator()
+    _ = await enteredIterator.next()
+    let next = try await Peer(port: fixture.port, key: fixture.host.pairingKey)
+    defer { next.connection.close() }
+    next.connection.send(.subscribe(.init(paneID: fixture.source.id, representation: .text, intent: .takeover)))
+    #expect(await next.next()?.kind == .subscribed)
+    gate.continuation.yield(())
+    _ = await enteredIterator.next()
+    #expect(fixture.source.answerLiveness == [true, false])
+  }
+
+  /// Losing the pane stops a key sequence between keys (089 review S4-R2, for `agentKeys`).
+  @Test(.timeLimit(.minutes(1))) func takeoverStopsKeysBetweenPresses() async throws {
+    let fixture = try await Fixture(transcript: [Self.claudeUser("hello")])
+    defer { fixture.tearDown() }
+    fixture.host.commandService = MirrorCommandService(router: CLICommandRouter())
+    let lease = try await fixture.subscribeConversation()
+    _ = try await fixture.collect(until: .userMessage, lease: lease)
+    let gate = AsyncStream.makeStream(of: Void.self)
+    let entered = AsyncStream.makeStream(of: Void.self)
+    fixture.source.answerGate = (gate.stream, entered.continuation)
+    let request = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(command: .agentKeys(.init(pane: fixture.source.id.uuidString, keys: ["down", "enter"]))))
+    fixture.peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
+    var enteredIterator = entered.stream.makeAsyncIterator()
+    _ = await enteredIterator.next()
+    let next = try await Peer(port: fixture.port, key: fixture.host.pairingKey)
+    defer { next.connection.close() }
+    next.connection.send(.subscribe(.init(paneID: fixture.source.id, representation: .text, intent: .takeover)))
+    #expect(await next.next()?.kind == .subscribed)
+    gate.continuation.yield(())
+    _ = await enteredIterator.next()
+    #expect(fixture.source.answerLiveness == [true, false])
+  }
+
+  static func fixture(_ name: String) -> URL {
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Fixtures/MirrorScreenPrompt/\(name)")
+  }
+
+  static func permissionPrompt() throws -> MirrorScreenPrompt {
+    try #require(
+      MirrorScreenPrompt.parse(
+        try String(contentsOf: fixture("claude-2.1.318-command-permission.txt"), encoding: .utf8)))
+  }
+
+  /// docs-ai 089 S5: only navigation and control keys, at most eight, pass.
+  @Test func agentKeysAllowOnlyNavigationAndControlKeys() {
+    #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["esc"]).isAllowed)
+    #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["shift-tab", "enter", "ctrl-c"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: []).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: ["a"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: ["cmd-q"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: Array(repeating: "up", count: 9)).isAllowed)
+    // Nothing may follow Control-C, which can end the agent (089 review S5-R3).
+    #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["esc", "ctrl-c"]).isAllowed)
+    #expect(!MirrorCommandRequest.AgentKeys(pane: "p", keys: ["ctrl-c", "enter"]).isAllowed)
+  }
+
+  @Test func rosterDecorationsFollowTheSidebarLayout() {
+    var layout = SidebarLayout()
+    layout.items = [
+      .repository("/b/"),
+      .group(.init(id: UUID(), title: "Apps", repositoryIDs: ["/a/", "/c/"])),
+    ]
+    let decorations = MirrorRosterDecorations(
+      layout: layout,
+      appearances: ["/a/": .init(color: .mint), "/c/": .init(color: .custom(.init(red: 1, green: 0.5, blue: 0)))],
+      customTitles: ["/b/": " Bee ", "/c/": "  "])
+    #expect(decorations.project(for: "/b/") == .init(title: "Bee", color: nil, order: 0, group: nil))
+    #expect(decorations.project(for: "/a/") == .init(title: nil, color: "mint", order: 1, group: "Apps"))
+    #expect(decorations.project(for: "/c/") == .init(title: nil, color: "#FF8000", order: 2, group: "Apps"))
+    #expect(decorations.project(for: "/missing/") == nil)
+  }
+
+  @Test func rosterTitleReplacesTheLaunchCommand() {
+    let command = "env -u PROWL_LAUNCH_DISPATCH -u PROWL_LAUNCH_HOOK_ARG_0 claude"
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: "Opus", agent: .claude) == "Opus")
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: nil, agent: .claude) == "claude")
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: " ", profileName: nil, agent: nil) == "Shell")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "Fix tests", profileName: "Opus", agent: .claude) == "Fix tests")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "env | grep X", profileName: "Opus", agent: nil) == "env | grep X")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(paneTitle: "⠦ Run tests | Kingfisher", profileName: nil, agent: .codex)
+        == "Run tests | Kingfisher")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(
+        customTitle: "Release audit", paneTitle: "Fix tests", profileName: "Opus", agent: .claude) == "Release audit")
+    #expect(
+      GhosttyMirrorPaneSource.rosterTitle(customTitle: "  ", paneTitle: "Fix tests", profileName: nil, agent: nil)
+        == "Fix tests")
+  }
+
+  @Test func displayStateMapsTheMacStates() {
+    #expect(GhosttyMirrorPaneSource.displayState(.done) == .done)
+    #expect(GhosttyMirrorPaneSource.displayState(.blocked) == .blocked)
   }
 
   @Test func paneDescriptorsCarryAgentAndConversationSupport() {
@@ -205,12 +405,41 @@ struct MirrorHostConversationTests {
         MirrorPaneDescriptor(
           id: id, title: "Fixture", directory: "/", busy: false, agent: state?.detectedAgent?.rawValue,
           agentState: state.map { MirrorConversationEvent.AgentState(rawValue: $0.state.rawValue) ?? .unknown },
-          conversation: GhosttyMirrorPaneSource.conversationSupport(state))
+          conversation: GhosttyMirrorPaneSource.conversationSupport(state),
+          displayState: .done, stateChangedAt: "2026-11-05T12:00:00.000Z", tabTitle: "Fixture tab",
+          worktreeName: "main", repositoryColor: "mint", projectOrder: 2, groupName: "Apps")
       ]
     }
     func snapshot(_ id: UUID) throws -> MirrorFrame { MirrorFrame(columns: 80, rows: 24, bytes: Data("x".utf8)) }
     func write(_ bytes: Data, to id: UUID) throws {}
-    func activeText(_ id: UUID) throws -> String { "shell" }
+    var screen = "shell"
+    func activeText(_ id: UUID) throws -> String { screen }
+    /// Holds `answerPrompt` until the stream yields; tells the continuation when it starts and
+    /// when it has checked liveness again.
+    var answerGate: (AsyncStream<Void>, AsyncStream<Void>.Continuation)?
+    private(set) var answerLiveness: [Bool] = []
+    func answerPrompt(
+      _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+    ) async -> MirrorPromptAnswer {
+      answerLiveness.append(isLive())
+      if let (gate, entered) = answerGate {
+        entered.yield(())
+        for await _ in gate { break }
+      }
+      answerLiveness.append(isLive())
+      answerGate?.1.yield(())
+      return .refused(code: "PROMPT_CLOSED", message: "Test")
+    }
+    func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String? {
+      answerLiveness.append(isLive())
+      if let (gate, entered) = answerGate {
+        entered.yield(())
+        for await _ in gate { break }
+      }
+      answerLiveness.append(isLive())
+      answerGate?.1.yield(())
+      return nil
+    }
     func agentState(_ id: UUID) -> PaneAgentState? { state }
 
     func setAgent(_ agent: DetectedAgent?, transcript: URL?) {

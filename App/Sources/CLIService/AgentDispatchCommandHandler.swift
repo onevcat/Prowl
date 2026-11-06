@@ -195,18 +195,55 @@ final class AgentDispatchCommandHandler: CommandHandler {
   }
 
   private func prepareDelivery(target: TabResolvedTarget, needsReceipt: Bool) async -> CommandResponse? {
+    // A blocked agent has no composer either, so its reason comes before the composer check.
+    guard needsReceipt else { return humanInputRefusal(target: target) ?? protectionRefusal(target) }
     if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target, needsReceipt: needsReceipt) {
       return refusal
     }
     // Code security: do not clear local IME input or append into an actively edited composer.
-    if let reason = inputProtection(target) {
-      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
-    }
+    if let refusal = protectionRefusal(target) { return refusal }
     if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
-    if let reason = inputProtection(target) {
-      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
+    return protectionRefusal(target)
+  }
+
+  private func protectionRefusal(_ target: TabResolvedTarget) -> CommandResponse? {
+    inputProtection(target).map { failure(code: CLIErrorCode.dispatchTargetBusy, message: $0) }
+  }
+
+  /// Human input goes in as typed text, also while the agent works: the agent queues or steers
+  /// it by its own rules, as with the Mac keyboard (docs-ai 089 S6). Only automation waits for
+  /// the turn to end. A question or a permission on screen would take the text as its answer,
+  /// so a blocked agent is refused. A `needs-input` level alone does not refuse: it stays until
+  /// the turn ends, also after the question was answered, and like any level that predates the
+  /// call it counts only where the detector agrees. The input protection still requires an
+  /// empty composer, which a question or permission on screen does not leave.
+  private func humanInputRefusal(target: TabResolvedTarget) -> CommandResponse? {
+    let snapshot = conditionSnapshot(target)
+    guard snapshot.isLive else {
+      return failure(
+        code: CLIErrorCode.agentGone,
+        message: "The selected agent pane is gone.",
+        details: AgentDispatchErrorDetails(target: TabTarget(from: target), signals: snapshot.signals)
+      )
     }
-    return nil
+    guard snapshot.agent != nil else {
+      return failure(
+        code: CLIErrorCode.agentNotFound,
+        message: "The selected pane hosts no detected agent to send the message to.",
+        details: AgentDispatchErrorDetails(target: TabTarget(from: target), signals: snapshot.signals)
+      )
+    }
+    let state = AgentConditionEvidence.normalizedState(snapshot)
+    guard AgentConditionEvidence.detectorReports(.blocked, normalizedState: state) else { return nil }
+    return failure(
+      code: CLIErrorCode.dispatchTargetBusy,
+      message: "The pane's agent waits for an answer. Answer it before you send a message.",
+      details: AgentDispatchErrorDetails(
+        target: TabTarget(from: target),
+        observation: heuristicObservation(snapshot, state: state),
+        signals: snapshot.signals
+      )
+    )
   }
 
   /// Nil when the pane hosts an idle agent; otherwise the structured refusal.

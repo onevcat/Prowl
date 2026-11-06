@@ -28,6 +28,8 @@ final class MirrorHostSession {
   private(set) var capabilities: Set<String> = []
   private(set) var hostRunID: UUID?
   private(set) var lastRefreshedAt: Date?
+  /// The Mac's computer name from the last roster (docs-ai 089).
+  private(set) var hostName: String?
   /// Called once the Host verified the device; carries the credential-bearing configuration.
   var onVerified: ((MirrorSavedConnection) -> Void)?
 
@@ -201,6 +203,7 @@ final class MirrorHostSession {
       panes = (message.panes ?? []).sorted { ($0.projectName ?? "", $0.title) < ($1.projectName ?? "", $1.title) }
       capabilities = Set(message.capabilities ?? [])
       hostRunID = message.hostRunID
+      if let name = message.hostName { hostName = name }
       lastRefreshedAt = Date()
       status = .ready
     case .commandResult:

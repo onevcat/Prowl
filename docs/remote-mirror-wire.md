@@ -148,8 +148,11 @@ an independent history archive, and does not export scrollback colors.
 A Host advertising `agent-input` accepts structured `agentsInput` with the same
 `{pane, prompt}` payload as `agentsDispatch`. The pane must be a UUID owned by the
 current authenticated subscription. The command is routed as `agents.input`; it
-uses the shared Agent readiness and guarded paste/Enter path without creating or
-mutating task dispatch records or injecting completion instructions. `text-v1`
+uses the guarded paste/Enter path without creating or mutating task dispatch records or
+injecting completion instructions. Unlike `agentsDispatch`, it does not wait for the turn
+to end: a working agent takes the text as typed input. A blocked agent refuses it with
+`DISPATCH_TARGET_BUSY`. A runtime `needs-input` signal refuses it only when the screen
+detector also reports blocked, because the signal stays until the turn ends. `text-v1`
 remains the mobile representation. `agentsDispatch` retains its automation semantics.
 
 Success has `command: "agents.input"`, schema `prowl.cli.agents.input.v1`, and
@@ -186,6 +189,65 @@ both mobile apps. Cameras are not required for manual enrollment.
 zero-based offsets at 5,000 rows. Missing metadata retains the existing plain-text
 fallback. No new messages are sent to text-v1 subscribers. Binary VT frames and
 mobile wire behavior are unchanged.
+
+## Pane roster fields
+
+The `panes` reply also carries what a client needs to show the roster the way the Mac
+sidebar does (docs-ai 089). All fields are optional; older clients ignore them and older
+Hosts leave them out.
+
+| Field | Content |
+| --- | --- |
+| `hostName` (on `panes`) | The Mac's computer name |
+| `displayState` | `working`, `blocked`, `done` (idle and not looked at yet) or `idle`, as Prowl for Mac shows the agent |
+| `stateChangedAt` | When the agent state last changed, ISO 8601 with milliseconds |
+| `tabTitle`, `worktreeName` | The Mac tab title and the worktree name |
+| `repositoryColor` | The repository color: a preset name (`red`, `orange`, `yellow`, `green`, `mint`, `cyan`, `blue`, `purple`, `pink`, `gray`) or `#RRGGBB` |
+| `projectOrder`, `groupName` | The project's position in the sidebar and the name of the group that holds it; `projectName` is the sidebar name |
+
+## Answering prompts (`prompt-respond`)
+
+While an agent is blocked on a choice menu (Claude Code's permission and AskUserQuestion
+dialogs, Codex's approval), the Host reads the menu from the pane's screen and sends it on
+`conversation-v1` as `prompt.opened` with `source: "screen"` (docs-ai 089 S4). The prompt id is
+`screen:<hash>.<n>`. The hash covers the question, the detail (such as the command to approve),
+and every option with its description. `<n>` counts openings, so the same menu shown twice is
+two prompts. `choices[].id` is the option's number on screen. `freeform` says the menu also
+has "Type something." / "Chat about this" rows, which are not offered. The prompt resolves
+when the phone's answer is pressed, with `allowed`, `denied` or `answered` and
+`decidedBy: "mirror"`. Otherwise it resolves when the menu leaves the screen, with `unknown`.
+
+A client with the `prompt-respond` capability answers with a command on the subscription that
+mirrors the pane:
+
+```json
+{"command":{"_0":{"subscriptionID":"UUID","commandRequest":{"requestID":"UUID","request":{"output":"json","command":{"promptRespond":{"_0":{"pane":"UUID","prompt":"screen:…","choice":"2"}}}}}}}}
+```
+
+The Host answers only the prompt that is open now. No IME text or local edit may be pending
+(2 s). Before every key, it checks again that:
+
+- the connection still holds the lease;
+- the prompt is still open and the agent is still blocked;
+- nobody started editing on the Mac;
+- the screen still shows the same prompt.
+
+It moves the highlight one row at a time, waits for the move, and presses Enter on the chosen
+row. It never retries. Refusals use the common error envelope with `PROMPT_CLOSED`,
+`PROMPT_CHANGED`, `PROMPT_CHOICE_INVALID`, `HOST_EDITING` or `DELIVERY_UNCERTAIN`.
+
+## Keys for agent panes (`agent-keys`)
+
+A client with the `agent-keys` capability can press navigation and control keys in the agent
+pane it mirrors (docs-ai 089 S5): the iOS Terminal key bar and Stop. The command is
+`agentKeys {pane, keys}`. `keys` holds 1 to 8 of `esc`, `ctrl-c`, `tab`, `shift-tab`, `up`,
+`down`, `left`, `right` and `enter`. `ctrl-c` can only be the last key, because it may end the
+agent. Printable text is never accepted; it goes through
+`agents.input` with its readiness checks. The Host refuses panes without a detected agent and
+panes with IME text or a local edit in the last 2 s (`KEYS_REFUSED`). It then presses the keys
+one at a time. Before each key, it checks that the connection still holds the lease, that the
+same agent still runs in the pane, and that nobody started editing on the Mac. A refusal after the first key says how many keys were
+pressed.
 
 ## Conversation stream (`conversation-v1`)
 

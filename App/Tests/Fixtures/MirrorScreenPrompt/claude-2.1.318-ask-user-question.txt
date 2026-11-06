@@ -1,0 +1,35 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 with high effort · Claude Ultra
+ ▝▝   ▝▝   ~/FengNiao
+
+
+❯ Use the AskUserQuestion tool to ask me which image format I prefer for icons: PNG, WebP or SVG.  
+  After I answer, run ls with the Bash tool and reply in one sentence.                             
+                                                                                                   
+  ---                                                                                              
+  Prowl dispatch completion protocol v1:                                                           
+  Before ending this task, choose exactly one terminal outcome and make this command your final    
+  tool action:                                                                                     
+  prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"           
+  Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be 
+  completed.                                                                                       
+  Keep the required summary to a single line with no control characters, and explain the result    
+  clearly.                                                                                         
+  Do not omit the command; Prowl supplies its dispatch context                                     
+  automatically.                                                                                   
+───────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Icon format 
+
+Which image format do you prefer for icons?
+
+❯ 1. PNG
+     Raster, lossless, universally supported.
+  2. WebP
+     Raster, smaller files, modern support.
+  3. SVG
+     Vector, scales to any size.
+  4. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

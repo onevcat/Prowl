@@ -19,11 +19,20 @@ nonisolated struct MirrorLaunchProfile: Decodable, Identifiable, Equatable {
   let enabled: Bool
   let runtime: String
   let availability: Availability
+  /// The Profile's model, reasoning effort and SF Symbol, when it sets them (docs-ai 089 S3).
+  var model: String?
+  var effort: String?
+  var icon: String?
   struct Availability: Decodable, Equatable {
     let status: String
     let reason: String?
   }
   var isAvailable: Bool { enabled && availability.status == "available" }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, enabled, runtime, availability, model, icon
+    case effort = "reasoning_effort"
+  }
 }
 
 @MainActor
@@ -76,7 +85,14 @@ final class MirrorLaunchModel {
       worktrees = (listing.worktrees ?? listing.items.map(\.worktree)).filter {
         seen.insert($0.id).inserted
       }
-      if !worktrees.contains(where: { $0.id == worktreeID }) { worktreeID = worktrees.first?.id }
+      worktreeIDsByPane = Dictionary(
+        listing.items.compactMap { item in item.pane.map { ($0.id.uppercased(), item.worktree.id) } },
+        uniquingKeysWith: { first, _ in first })
+      if projectPaneIDs != nil {
+        applyProjectSelection()
+      } else if !worktrees.contains(where: { $0.id == worktreeID }) {
+        worktreeID = worktrees.first?.id
+      }
       if supportsProfiles {
         let catalog: Catalog = try await response(.profiles(.init()))
         profiles = catalog.profiles
@@ -87,8 +103,35 @@ final class MirrorLaunchModel {
     } catch { self.error = error.localizedDescription }
   }
 
+  /// The panes of the project the person started from (docs-ai 089). While set, the
+  /// selection only takes a worktree that holds one of them, also after a reload.
+  private(set) var projectPaneIDs: [String]?
+  /// Worktree IDs (which carry the origin, such as an SSH host) by the pane IDs `list` reports.
+  private var worktreeIDsByPane: [String: String] = [:]
+
+  /// Restricts the selection to the worktrees of these panes: the project's main worktree when
+  /// one of them is it, otherwise the first. With no match nothing is selected, so a
+  /// project-specific launch never runs in another repository or on another host.
+  func focusProject(paneIDs: [String]) {
+    projectPaneIDs = paneIDs.map { $0.uppercased() }
+    applyProjectSelection()
+  }
+
+  private func applyProjectSelection() {
+    guard let projectPaneIDs else { return }
+    func normalized(_ path: String) -> String {
+      var path = path
+      while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+      return path
+    }
+    let wanted = Set(projectPaneIDs.compactMap { worktreeIDsByPane[$0] })
+    let matches = worktrees.filter { wanted.contains($0.id) }
+    worktreeID = (matches.first { normalized($0.path) == normalized($0.rootPath) } ?? matches.first)?.id
+  }
+
   func create() async -> MirrorPaneDescriptor? {
     guard canCreate, let worktreeID else { return nil }
+    let launchedProfile = kind == .shell ? nil : profiles.first { $0.id == profileID }
     isCreating = true
     error = nil
     defer { isCreating = false }
@@ -107,10 +150,16 @@ final class MirrorLaunchModel {
         throw LaunchError.invalidResponse
       }
       let worktree = created.target.worktree
+      // The Host names the tab after the agent only once it starts; until the roster says
+      // more, the pane carries the Profile's name and agent (docs-ai 089 D1).
+      let profile = launchedProfile
+      let hostTitle = created.target.pane.title.trimmingCharacters(in: .whitespacesAndNewlines)
+      let title = hostTitle.isEmpty ? profile?.name ?? String(localized: "Shell") : hostTitle
       return MirrorPaneDescriptor(
-        id: id, title: created.target.pane.title, directory: worktree.path, busy: false,
+        id: id, title: title, directory: worktree.path, busy: false,
         projectName: URL(fileURLWithPath: worktree.rootPath).lastPathComponent,
-        subtitle: "\(created.target.pane.title) · \(worktree.name)")
+        subtitle: "\(title) · \(worktree.name)",
+        agent: profile?.runtime)
     } catch {
       // A transport failure may follow a successful creation. Never automatically create again.
       creationUncertain =
@@ -147,7 +196,11 @@ final class MirrorLaunchModel {
     var errorDescription: String? { "Host returned an invalid launch result." }
   }
   private struct Listing: Decodable {
-    struct Item: Decodable { let worktree: MirrorLaunchWorktree }
+    struct Item: Decodable {
+      struct Pane: Decodable { let id: String }
+      let worktree: MirrorLaunchWorktree
+      let pane: Pane?
+    }
     let items: [Item]
     let worktrees: [MirrorLaunchWorktree]?
   }

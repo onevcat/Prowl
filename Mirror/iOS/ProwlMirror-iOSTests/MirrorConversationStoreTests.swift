@@ -65,13 +65,31 @@ struct MirrorConversationStoreTests {
       .init(.promptResolved, .prompt(.init(id: "p", kind: .question, freeform: true, outcome: .answered)), at: nil, source: .transcript, sequence: 3),
       .init(.agentStatus, .status(.init(state: .working)), at: nil, source: .osc, sequence: 4),
     ], sequence: 4)
-    #expect(store.items.count == 2)
+    // The attention row goes away once the agent is no longer blocked (docs-ai 089 D3).
+    #expect(store.items.count == 1)
     guard case .prompt(_, _, let resolved, _) = store.items[0] else {
       Issue.record("expected a prompt item")
       return
     }
     #expect(resolved?.outcome == .answered)
     #expect(store.agentState == .working)
+  }
+}
+
+extension MirrorConversationStoreTests {
+  @Test func attentionShowsOnlyWhileTheAgentIsBlocked() {
+    func status(_ state: MirrorConversationEvent.AgentState, _ sequence: UInt64) -> MirrorConversationEvent {
+      .init(.agentStatus, .status(.init(state: state, kind: state == .blocked ? "permission" : nil)),
+        at: nil, source: .osc, sequence: sequence)
+    }
+    var store = MirrorConversationStore()
+    store.apply(events: [status(.blocked, 1)], sequence: 1)
+    #expect(store.items.count == 1)
+    store.apply(events: [status(.working, 2), status(.blocked, 3)], sequence: 3)
+    let attentions = store.items.filter { if case .attention = $0 { true } else { false } }
+    #expect(attentions.map(\.id) == [3])
+    store.apply(events: [status(.idle, 4)], sequence: 4)
+    #expect(store.items.isEmpty)
   }
 }
 
@@ -83,5 +101,89 @@ struct MirrorConversationFixtureSessionTests {
     #expect(session.status == .live)
     #expect(session.supportsConversation)
     #expect(!session.conversation.items.isEmpty)
+  }
+
+  /// In Terminal the conversation stream is paused, so the roster's state counts (089 review
+  /// S5-R1); back in Chat the stream's status does.
+  @Test func terminalModeFollowsTheRosterState() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex", status: .working)
+    session.switchMode(.screen)
+    #expect(session.mode == .screen)
+    var pane = try #require(session.pane)
+    pane.agentState = .idle
+    session.refreshDescriptor(pane)
+    // The paused stream still says working; the roster says idle.
+    #expect(session.conversation.status?.state == .working)
+    #expect(session.agentState == .idle)
+    pane.agentState = .working
+    session.refreshDescriptor(pane)
+    #expect(session.agentState == .working)
+  }
+
+  @Test func rosterDescriptorReplacesTheOpenedOne() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    var current = try #require(session.pane)
+    current.agent = "claude"
+    current.subtitle = "Renamed · main"
+    session.refreshDescriptor(current)
+    #expect(session.pane?.agent == "claude")
+    #expect(session.pane?.subtitle == "Renamed · main")
+    let other = MirrorPaneDescriptor(id: UUID(), title: "Other", directory: "/", busy: false, agent: "pi")
+    session.refreshDescriptor(other)
+    #expect(session.pane?.agent == "claude")
+  }
+
+  @Test func launchedAgentSurvivesARosterThatHasNotDetectedItYet() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched)
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    undetected.conversation = .unsupported
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    #expect(session.pane?.subtitle == launched.subtitle)
+    var detected = launched
+    detected.agent = "claude"
+    detected.subtitle = "Claude · main"
+    session.refreshDescriptor(detected)
+    #expect(session.pane?.agent == "claude")
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == nil)
+  }
+
+  @Test func launchExpectationEndsAtItsDeadlineWithoutAnyRosterChange() async throws {
+    let clock = HostTestClock()
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex", clock: clock)
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched, for: .seconds(30))
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    #expect(await clock.nextSleep() == .seconds(30))
+    await clock.advance()
+    for _ in 0..<100 where session.pane?.agent != nil { await Task.yield() }
+    #expect(session.pane?.agent == nil)
+    #expect(session.pane?.subtitle == "Shell · main")
+  }
+
+  @Test func disconnectEndsTheLaunchExpectation() throws {
+    let session = MirrorUIFixture.conversationSession(fixture: "codex-review-1038", agent: "codex")
+    let launched = try #require(session.pane)
+    session.expectAgent(of: launched)
+    var undetected = launched
+    undetected.agent = nil
+    undetected.subtitle = "Shell · main"
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == "codex")
+    session.disconnect()
+    #expect(session.pane?.agent == nil)
+    session.retry()
+    session.refreshDescriptor(undetected)
+    #expect(session.pane?.agent == nil)
+    #expect(session.pane?.subtitle == "Shell · main")
   }
 }

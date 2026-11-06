@@ -32,7 +32,7 @@ The app has three levels (docs-ai 088):
    **…** menu holds History / Live Output (screen), Reconnect or Take Over, and
    Disconnect. Leaving the pane closes its connection; the Host session keeps listing.
 
-iPhone and iPad use the same stack navigation (iOS 18+).
+iPhone and iPad use the same stack navigation (iOS 26+).
 
 ## Chat
 
@@ -89,9 +89,8 @@ text without task dispatch receipts. Older Hosts must be updated. The Host does 
 permit structured Shell submission because it cannot confirm that the Shell input line
 is empty; the composer says so for a shell pane. Host validates the pane lease,
 readiness, drafts and IME/editing activity. Input delivery is not Agent completion.
-The hint under the composer says what the Host will do with the message: deliver it
-now, hold it while the agent is working (the Host delivers once its composer is free),
-or wait because the agent needs an answer on the Mac. A pending or unknown receipt shows
+Messages also go to a working agent, which queues them or steers its turn as it does for
+keyboard input on the Mac; only an agent that waits for an answer refuses them. A pending or unknown receipt shows
 the submitted text with **Check Receipt** and **I've Checked**; the draft is preserved
 and commands are never automatically replayed.
 

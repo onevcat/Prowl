@@ -16,19 +16,35 @@ public struct ProfilesCommandProfile: Codable, Sendable, Equatable {
   public let enabled: Bool
   public let runtime: String
   public let availability: ProfilesCommandAvailability
+  /// The model and reasoning effort the Profile passes to its agent, when set.
+  public let model: String?
+  public let reasoningEffort: String?
+  /// The SF Symbol the user chose for the Profile, when set.
+  public let icon: String?
 
   public init(
     id: String,
     name: String,
     enabled: Bool,
     runtime: String,
-    availability: ProfilesCommandAvailability
+    availability: ProfilesCommandAvailability,
+    model: String? = nil,
+    reasoningEffort: String? = nil,
+    icon: String? = nil
   ) {
     self.id = id
     self.name = name
     self.enabled = enabled
     self.runtime = runtime
     self.availability = availability
+    self.model = model
+    self.reasoningEffort = reasoningEffort
+    self.icon = icon
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, name, enabled, runtime, availability, model, icon
+    case reasoningEffort = "reasoning_effort"
   }
 }
 
