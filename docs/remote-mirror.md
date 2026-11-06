@@ -275,8 +275,8 @@ docs-ai 087.
 The iOS client renders the stream as a chat: your messages in bubbles on the right (long
 ones fold after twelve lines), the agent's Markdown as text (headings, lists, quotes, code
 blocks and tables), and each run of tool calls between two messages as one quiet row
-("6 tool calls", with failures counted in red and the running call shown while the agent
-works). A row opens to one line per call, and a line opens its command, changes and output
+("6 tool calls", with failures counted in red and the running call shown with a turning
+hourglass while the agent works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
 Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
 above the composer shows the question, what it is about (such as the command to approve) and

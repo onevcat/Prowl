@@ -91,6 +91,14 @@ struct MirrorAgentsRosterTests {
     #expect(MirrorAgentIcon.displayName(for: nil) == "Terminal")
   }
 
+  /// A running tool's hourglass turns over once per interval, not continuously (onevcat UX, 2026-11-07).
+  @Test func hourglassTurnsOncePerInterval() {
+    let interval = MirrorHourglassIndicator.turnInterval
+    let turns = (0..<4).map { MirrorHourglassIndicator.turns(at: Date(timeIntervalSinceReferenceDate: Double($0) * interval + 0.01)) }
+    #expect(zip(turns, turns.dropFirst()).allSatisfy { $1 == $0 + 1 })
+    #expect(MirrorHourglassIndicator.turns(at: Date(timeIntervalSinceReferenceDate: interval * 0.5)) == 0)
+  }
+
   @Test func baguaFramesPingPong() {
     let indices = (0..<16).map { MirrorBaguaIndicator.frameIndex(at: Date(timeIntervalSinceReferenceDate: Double($0) * 0.12 + 0.01)) }
     #expect(indices == [0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 0, 1])
