@@ -195,22 +195,19 @@ final class AgentDispatchCommandHandler: CommandHandler {
   }
 
   private func prepareDelivery(target: TabResolvedTarget, needsReceipt: Bool) async -> CommandResponse? {
+    // A blocked agent has no composer either, so its reason comes before the composer check.
+    guard needsReceipt else { return humanInputRefusal(target: target) ?? protectionRefusal(target) }
     if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target, needsReceipt: needsReceipt) {
       return refusal
     }
     // Code security: do not clear local IME input or append into an actively edited composer.
-    if let reason = inputProtection(target) {
-      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
-    }
-    if needsReceipt {
-      if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
-    } else if let refusal = humanInputRefusal(target: target) {
-      return refusal
-    }
-    if let reason = inputProtection(target) {
-      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
-    }
-    return nil
+    if let refusal = protectionRefusal(target) { return refusal }
+    if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
+    return protectionRefusal(target)
+  }
+
+  private func protectionRefusal(_ target: TabResolvedTarget) -> CommandResponse? {
+    inputProtection(target).map { failure(code: CLIErrorCode.dispatchTargetBusy, message: $0) }
   }
 
   /// Human input goes in as typed text, also while the agent works: the agent queues or steers

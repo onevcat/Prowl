@@ -22,6 +22,16 @@ Observed behavior (2026-11-06, in tmux, captured with styles):
 | Claude Code 2.1.318 | Empty `❯ `; after a queued message, the dim queued messages hint | Queues the message (`ctrl+x ctrl+s to send now` under it); the transcript records `queue-operation`, which the feed shows as `user.queued` |
 | Codex 0.166.0 | The same empty composer with its dim hint as when idle; `CodexScreenProfile.composerIsEmpty` already accepts it | Adds the message to the running turn (steer). Tab would queue it; the Host does not use Tab |
 
+For human input, the blocked check runs before the input protection. A menu on screen also hides the composer, and the composer check would refuse with a less useful reason.
+
+End to end (2026-11-06): an isolated Debug Host built from this branch received raw `agentsInput` requests on its CLI socket. The screen was locked, so the phone could not pair; the iOS side is covered by the UI test.
+
+| Case | Result |
+| --- | --- |
+| Claude Code idle, then working, then working with one message queued | All three accepted; the two later messages waited in Claude's queue and became its next turn after the first one ended |
+| Codex working | Accepted; the message joined the running turn, and the reply followed it |
+| Claude Code on a Bash permission prompt | Refused, nothing typed, the command did not run |
+
 Tests:
 
 - `interactiveInputReachesAWorkingAgentButNotABlockedOne`: working delivers (also with a leftover `needs-input` level), blocked refuses, `agents dispatch` still refuses a working agent. Red on the old handler.

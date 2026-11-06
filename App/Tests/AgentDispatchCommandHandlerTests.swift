@@ -721,8 +721,10 @@ struct AgentDispatchCommandHandlerTests {
     }
     for (status, signal) in [(AgentDisplayState.blocked, AgentSignal?.none), (.blocked, needsInput)] {
       var calls = 0
+      // A menu on screen also hides the composer; the person gets the reason that applies.
       let handler = AgentDispatchCommandHandler(
         resolveTarget: { _ in .success(target) },
+        inputProtection: { _ in "The Claude input area could not be verified." },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
         deliverPrompt: { _, _ in
           calls += 1
