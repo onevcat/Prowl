@@ -148,6 +148,8 @@ extension MirrorConversationEvent {
     var id: String
     var label: String
     var description: String?
+    /// The box of a multi-select choice; nil when the menu has no boxes.
+    var checked: Bool?
   }
 
   nonisolated struct Question: Codable, Equatable, Sendable {
@@ -168,6 +170,8 @@ extension MirrorConversationEvent {
     var freeform: Bool
     var outcome: PromptOutcome?
     var decidedBy: String?
+    /// A screen menu with boxes: each choice toggles, and `submit` sends the checked ones.
+    var multiSelect: Bool?
   }
 
   nonisolated struct Subagent: Codable, Equatable, Sendable {

@@ -257,6 +257,59 @@ struct MirrorCommandTransportTests {
     #expect(!session.isDeliveringMessage)
   }
 
+  /// Terminal view: the text subscription asks for screen prompts and keeps the latest one of
+  /// its own lease (089 S4 follow-up).
+  @Test(.timeLimit(.minutes(1))) func terminalSubscriptionTracksTheScreenPrompt() async throws {
+    let channel = Channel(agent: "claude")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    #expect(channel.subscribes.last?.representation == .text)
+    #expect(channel.subscribes.last?.includeScreenPrompt == true)
+    let lease = try #require(channel.lease)
+    let prompt = MirrorConversationEvent.Prompt(
+      id: "screen:a.1", kind: .question, title: "Ready to submit your answers?",
+      choices: [.init(id: "1", label: "Submit answers"), .init(id: "2", label: "Cancel")], freeform: false)
+    channel.onMessage?(.screenPrompt(.init(prompt: prompt, subscriptionID: UUID())))
+    #expect(session.screenPrompt == nil)
+    channel.onMessage?(.screenPrompt(.init(prompt: prompt, subscriptionID: lease)))
+    #expect(session.screenPrompt?.id == "screen:a.1")
+    channel.onMessage?(.screenPrompt(.init(prompt: nil, subscriptionID: lease)))
+    #expect(session.screenPrompt == nil)
+  }
+
+  /// Multi-select: boxes may change one after another; after Submit nothing more goes.
+  @Test(.timeLimit(.minutes(1))) func multiSelectBoxesToggleUntilSubmitted() async {
+    let channel = Channel(agent: "claude")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    func answer(_ choice: String, toggles: Bool) async -> MirrorCommandRequest.PromptRespond? {
+      let count = channel.commands.count
+      session.answerPrompt("screen:m.1", choice: choice, toggles: toggles)
+      for _ in 0..<200 { await Task.yield() }
+      guard let request = channel.commands.dropFirst(count).first,
+        case .promptRespond(let sent) = request.request.command
+      else {
+        Issue.record("no answer for \(choice): \(String(describing: session.promptAnswer))")
+        return nil
+      }
+      channel.respond(request.requestID, success: true)
+      for _ in 0..<200 { await Task.yield() }
+      if session.promptAnswer?.state != .delivered {
+        Issue.record("answer \(choice) not delivered: \(String(describing: session.promptAnswer))")
+      }
+      return sent
+    }
+    #expect(await answer("1", toggles: true)?.choice == "1")
+    #expect(await answer("2", toggles: true)?.choice == "2")
+    #expect(await answer(MirrorSession.submitChoice, toggles: false)?.choice == "submit")
+    let count = channel.commands.count
+    session.answerPrompt("screen:m.1", choice: "3", toggles: true)
+    for _ in 0..<20 { await Task.yield() }
+    #expect(channel.commands.count == count)
+  }
+
   private func makeSession(_ channel: Channel, clock: any Clock<Duration> = ContinuousClock()) -> MirrorSession {
     MirrorSession(
       configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"), clock: clock,
@@ -278,6 +331,8 @@ struct MirrorCommandTransportTests {
       return await iterator.next()!
     }
     var receipts: [UUID] = []
+    var subscribes: [MirrorMessage.SubscribePayload] = []
+    var lease: UUID?
     let pane: MirrorPaneDescriptor
     /// An agent pane on a Host that answers prompts and presses keys.
     let agent: String?
@@ -319,6 +374,8 @@ struct MirrorCommandTransportTests {
                 + (agent != nil ? ["prompt-respond", "agent-keys"] : []), hostRunID: UUID())))
       } else if message.kind == .subscribe {
         let lease = UUID()
+        self.lease = lease
+        if case .subscribe(let payload) = message { subscribes.append(payload) }
         onMessage?(.subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))
         onMessage?(.textFrame(.init(sequence: 1, text: "ready", subscriptionID: lease)))
       } else if let receipt = message.commandReceiptID {

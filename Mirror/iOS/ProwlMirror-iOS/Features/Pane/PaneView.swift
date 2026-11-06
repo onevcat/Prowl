@@ -53,6 +53,12 @@ struct PaneView: View {
 
   private var compactWhileComposing: Bool { isComposing && verticalSizeClass == .compact }
 
+  /// The menu the agent waits on: Chat reads it from the conversation, Terminal from the Host's
+  /// `screenPrompt` (docs-ai 089 S4).
+  private var openPrompt: MirrorConversationEvent.Prompt? {
+    session.mode == .conversation ? session.conversation.openScreenPrompt : session.screenPrompt
+  }
+
   var body: some View {
     Group {
       switch session.mode {
@@ -69,13 +75,11 @@ struct PaneView: View {
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       VStack(spacing: 8) {
-        if session.status == .live, session.supportsPromptRespond,
-          // Only Chat keeps the prompt current; Terminal shows the menu itself.
-          session.mode == .conversation, let prompt = session.conversation.openScreenPrompt,
+        if session.status == .live, session.supportsPromptRespond, let prompt = openPrompt,
           !(prompt.choices ?? []).isEmpty
         {
-          MirrorPromptPanel(prompt: prompt, answer: session.promptAnswer) { choice in
-            session.answerPrompt(prompt.id, choice: choice)
+          MirrorPromptPanel(prompt: prompt, answer: session.promptAnswer) { choice, toggles in
+            session.answerPrompt(prompt.id, choice: choice, toggles: toggles)
           }
           .transition(.move(edge: .bottom).combined(with: .opacity))
         } else if state == .blocked, session.status == .live {
@@ -86,7 +90,7 @@ struct PaneView: View {
         }
         ComposerBar(session: session, isEditing: $isComposing)
       }
-      .animation(.snappy, value: session.conversation.openScreenPrompt?.id)
+      .animation(.snappy, value: openPrompt?.id)
       .padding(.horizontal, 12)
       .padding(.bottom, 6)
     }

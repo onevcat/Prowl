@@ -99,7 +99,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, viewport, acknowledge, input, history, historyPage, failure, ping, pong, ended,
       refresh, scroll, scrollResult, scrollState, command, commandResult, commandReceipt,
-      conversationSnapshot, conversationEvents
+      conversationSnapshot, conversationEvents, screenPrompt
   }
   case list
   case panes(PanesPayload)
@@ -120,6 +120,8 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var includeStyledScrollback: Bool?
     /// `conversation-v1`: the last sequence this client holds; the snapshot resumes after it.
     var since: UInt64?
+    /// `text-v1`: also send `screenPrompt` when the agent waits on a choice menu (docs-ai 089 S4).
+    var includeScreenPrompt: Bool?
   }
   case subscribed(SubscribedPayload)
   struct SubscribedPayload: Codable, Sendable {
@@ -167,6 +169,14 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   struct ConversationEventsPayload: Codable, Sendable {
     var events: [MirrorConversationEvent]
     var sequence: UInt64
+    var subscriptionID: UUID
+  }
+  /// `text-v1` with `includeScreenPrompt`: the choice menu the agent waits on, or nil once it
+  /// closes, as `prompt.opened` carries it on `conversation-v1` (docs-ai 089 S4). Sent when it
+  /// changes; it needs no acknowledgement.
+  case screenPrompt(ScreenPromptPayload)
+  struct ScreenPromptPayload: Codable, Sendable {
+    var prompt: MirrorConversationEvent.Prompt?
     var subscriptionID: UUID
   }
   case acknowledge(AcknowledgePayload)
@@ -275,6 +285,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .commandReceipt: .commandReceipt
     case .conversationSnapshot: .conversationSnapshot
     case .conversationEvents: .conversationEvents
+    case .screenPrompt: .screenPrompt
     }
   }
   var panes: [MirrorPaneDescriptor]? {
@@ -340,6 +351,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .commandReceipt(let payload): payload.subscriptionID
     case .conversationSnapshot(let payload): payload.subscriptionID
     case .conversationEvents(let payload): payload.subscriptionID
+    case .screenPrompt(let payload): payload.subscriptionID
     default: nil
     }
   }
@@ -406,6 +418,12 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   var includeScrollState: Bool? {
     switch self {
     case .subscribe(let payload): payload.includeScrollState
+    default: nil
+    }
+  }
+  var includeScreenPrompt: Bool? {
+    switch self {
+    case .subscribe(let payload): payload.includeScreenPrompt
     default: nil
     }
   }

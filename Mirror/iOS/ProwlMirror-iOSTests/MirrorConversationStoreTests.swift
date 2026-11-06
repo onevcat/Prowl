@@ -56,6 +56,29 @@ struct MirrorConversationStoreTests {
     #expect(store.items.isEmpty)
   }
 
+  /// The Host sends an open multi-select menu again under its id when a box changes: one row,
+  /// with the new boxes (089 S4 follow-up).
+  @Test func reopenedScreenPromptUpdatesItsRow() {
+    func menu(_ checked: [Bool]) -> MirrorConversationEvent.Prompt {
+      .init(
+        id: "screen:m.1", kind: .question, title: "Which fruits?",
+        choices: checked.enumerated().map { .init(id: String($0.offset + 1), label: "F\($0.offset)", checked: $0.element) },
+        freeform: true, multiSelect: true)
+    }
+    var store = MirrorConversationStore()
+    store.apply(
+      events: [
+        .init(.promptOpened, .prompt(menu([false, false])), at: nil, source: .screen, sequence: 1),
+        .init(.promptOpened, .prompt(menu([true, false])), at: nil, source: .screen, sequence: 2),
+      ], sequence: 2)
+    #expect(store.items.count == 1)
+    guard case .prompt(_, let prompt, nil, _) = store.items.first else {
+      Issue.record("expected an open prompt row")
+      return
+    }
+    #expect(prompt.choices?.map(\.checked) == [true, false])
+  }
+
   @Test func promptsResolveInPlaceAndBlockedStatusIsAnItem() {
     let prompt = MirrorConversationEvent.Prompt(id: "p", kind: .question, freeform: true)
     var store = MirrorConversationStore()

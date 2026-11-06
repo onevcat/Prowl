@@ -163,6 +163,11 @@ final class MirrorConversationFeed {
   /// the same menu shown twice is two prompts and an answer to one cannot answer the other.
   private(set) var openScreenPromptID: String?
   private var screenOccurrence = 0
+  /// The open screen prompt as the wire carries it.
+  var openScreenPromptPayload: MirrorConversationEvent.Prompt? {
+    guard let screenPrompt, let openScreenPromptID else { return nil }
+    return Self.payload(screenPrompt, id: openScreenPromptID)
+  }
   /// A menu the phone just answered, while it may still be on screen; it does not open again.
   private var answeredMenu: (contentID: String, until: Date)?
   /// How long an answered menu may stay on screen before it counts as a new prompt.
@@ -174,6 +179,10 @@ final class MirrorConversationFeed {
       self.answeredMenu = nil
     }
     guard prompt?.id != screenPrompt?.id else {
+      // Same menu, new boxes: send it again under the same id so the phone shows them.
+      if let prompt, let id = openScreenPromptID, prompt.state != screenPrompt?.state {
+        append([.init(.promptOpened, .prompt(Self.payload(prompt, id: id)), at: now, source: .screen)])
+      }
       screenPrompt = prompt
       return
     }
@@ -209,8 +218,11 @@ final class MirrorConversationFeed {
     .init(
       id: id, kind: prompt.isPermission ? .permission : .question, title: prompt.title,
       detail: prompt.detail.map { MirrorBoundedText($0) },
-      choices: prompt.answers.map { .init(id: String($0.number), label: $0.label, description: $0.detail) },
-      questions: nil, freeform: prompt.options.contains(where: \.isFreeform), outcome: nil, decidedBy: nil)
+      choices: prompt.answers.map {
+        .init(id: String($0.number), label: $0.label, description: $0.detail, checked: $0.checked)
+      },
+      questions: nil, freeform: prompt.options.contains(where: \.isFreeform), outcome: nil, decidedBy: nil,
+      multiSelect: prompt.isMultiSelect ? true : nil)
   }
 
   private static func resolution(
@@ -244,9 +256,8 @@ final class MirrorConversationFeed {
     var events: [MirrorConversationEvent] = []
     if let lastPane, let event = statusMapper.event(for: lastPane, at: Date()) { events.append(event) }
     // A new segment restates an open screen prompt too, so a client can still answer it.
-    if let screenPrompt, let openScreenPromptID {
-      events.append(
-        .init(.promptOpened, .prompt(Self.payload(screenPrompt, id: openScreenPromptID)), at: Date(), source: .screen))
+    if let openScreenPromptPayload {
+      events.append(.init(.promptOpened, .prompt(openScreenPromptPayload), at: Date(), source: .screen))
     }
     return events
   }

@@ -20,7 +20,7 @@ protocol MirrorPaneSource {
   /// Picks `choice` in the choice menu on the pane's screen, if it still is the prompt `id`
   /// (docs-ai 089 S4). `isLive` is asked before every key; once it is false, no key goes.
   func answerPrompt(
-    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+    _ id: String, choice: MirrorScreenPrompt.Target, in pane: UUID, isLive: @escaping @MainActor () -> Bool
   ) async -> MirrorPromptAnswer
   /// Presses allow-listed keys in an agent pane (docs-ai 089 S5); nil when sent, else why not.
   /// `isLive` is asked before every key; once it is false, no key goes.
@@ -55,7 +55,7 @@ extension MirrorPaneSource {
     String(localized: "This Host cannot press keys from a mirror.")
   }
   func answerPrompt(
-    _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
+    _ id: String, choice: MirrorScreenPrompt.Target, in pane: UUID, isLive: @escaping @MainActor () -> Bool
   ) -> MirrorPromptAnswer {
     .refused(code: "PROMPT_UNSUPPORTED", message: String(localized: "This Host cannot answer prompts."))
   }
@@ -69,6 +69,10 @@ enum MirrorPaneSourceError: Error {
 /// The result of answering a screen prompt from a mirror (docs-ai 089 S4).
 nonisolated enum MirrorPromptAnswer: Equatable, Sendable {
   case delivered(MirrorScreenPrompt.Option, permission: Bool)
+  /// A box of a multi-select menu changed; the menu stays open until its Submit row is chosen.
+  case toggled(MirrorScreenPrompt.Option)
+  /// The Submit row of a multi-select menu was chosen.
+  case submitted
   case refused(code: String, message: String)
 }
 
@@ -95,5 +99,17 @@ nonisolated struct MirrorKeyGuard: Equatable, Sendable {
     }
     if lastEditingAt != ownStamp { return String(localized: "Someone is typing in this pane on the Mac.") }
     return nil
+  }
+}
+
+/// The `choice` of a `promptRespond` command: an option's number, or `submit` for the Submit
+/// row of a multi-select menu.
+nonisolated enum MirrorPromptChoice {
+  static let submit = "submit"
+  static let submitOption = MirrorScreenPrompt.Option(number: 0, label: "Submit", detail: nil, isFreeform: false)
+
+  static func target(_ choice: String) -> MirrorScreenPrompt.Target? {
+    if choice == submit { return .submit }
+    return Int(choice).map { .option($0) }
   }
 }

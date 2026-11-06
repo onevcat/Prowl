@@ -19,7 +19,7 @@ struct MirrorScreenPromptTests {
     #expect(prompt.options.map(\.label) == ["PNG", "WebP", "SVG", "Type something.", "Chat about this"])
     #expect(prompt.answers.map(\.number) == [1, 2, 3])
     #expect(prompt.options[1].detail == "Raster, smaller files, modern support.")
-    #expect(prompt.selected == 1)
+    #expect(prompt.highlighted == .option(1))
     #expect(!prompt.isPermission)
   }
 
@@ -110,7 +110,7 @@ struct MirrorScreenPromptTests {
       .replacingOccurrences(of: "  2. WebP", with: "❯ 2. WebP")
     let first = try #require(MirrorScreenPrompt.parse(text))
     let second = try #require(MirrorScreenPrompt.parse(moved))
-    #expect(second.selected == 2)
+    #expect(second.highlighted == .option(2))
     #expect(first.id == second.id)
     let other = try #require(MirrorScreenPrompt.parse(moved.replacingOccurrences(of: "SVG", with: "AVIF")))
     #expect(other.id != first.id)
@@ -154,9 +154,92 @@ struct MirrorScreenPromptTests {
     #expect(MirrorScreenPrompt.parse("Pick one\n❯ 1. A\n  3. B\nEnter to select · Esc to cancel") == nil)
   }
 
-  @Test func navigationMovesOneRowAtATimeTowardTheAnswer() {
-    #expect(MirrorScreenPrompt.nextKey(selected: 1, target: 3) == "down")
-    #expect(MirrorScreenPrompt.nextKey(selected: 4, target: 2) == "up")
-    #expect(MirrorScreenPrompt.nextKey(selected: 2, target: 2) == "enter")
+  @Test func navigationMovesOneRowAtATimeTowardTheAnswer() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.318-ask-user-question.txt")))
+    #expect(prompt.highlighted == .option(1))
+    #expect(prompt.nextKey(toward: .option(3)) == "down")
+    #expect(prompt.nextKey(toward: .option(1)) == "enter")
+    #expect(prompt.nextKey(toward: .submit) == nil)
+    #expect(prompt.target(after: "down") == .option(2))
+    #expect(prompt.target(after: "up") == nil)
+  }
+
+  // MARK: - Claude Code 2.1.319 dialogs (docs-ai 089 S4 follow-up)
+
+  /// The last step of a multi-question or multi-select dialog has no footer line.
+  @Test func reviewPageWithoutAFooterIsAPrompt() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-review-answers.txt")))
+    #expect(prompt.title == "Ready to submit your answers?")
+    #expect(prompt.answers.map(\.label) == ["Submit answers", "Cancel"])
+    #expect(prompt.highlighted == .option(1))
+    #expect(prompt.detail == "Which fruits do you like?\n→ Apple, Durian")
+    #expect(!prompt.isPermission && !prompt.isMultiSelect)
+    // Without a footer, only the review question counts: a numbered list stays prose.
+    #expect(MirrorScreenPrompt.parse("Plan:\n❯ 1. First\n  2. Second\n") == nil)
+  }
+
+  @Test func multiSelectReadsBoxesFreeformRowsAndTheSubmitRow() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select.txt")))
+    #expect(prompt.title == "Which fruits do you like?")
+    #expect(prompt.isMultiSelect)
+    #expect(prompt.options.map(\.label) == ["Apple", "Banana", "Cherry", "Type something", "Chat about this"])
+    #expect(prompt.answers.map(\.number) == [1, 2, 3])
+    #expect(prompt.answers.map(\.checked) == [false, false, false])
+    #expect(prompt.options[3].detail == nil)
+    #expect(prompt.rows == [.option(1), .option(2), .option(3), .option(4), .submit, .option(5)])
+    #expect(prompt.nextKey(toward: .submit) == "down")
+  }
+
+  /// Checking a box or typing an own answer is not a new prompt: the identity covers what a
+  /// person decides on, not the state of the boxes or the freeform text.
+  @Test func boxesAndTypedTextKeepTheIdentity() throws {
+    let plain = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select.txt")))
+    let checked = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select-checked.txt")))
+    let typed = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select-typed.txt")))
+    #expect(checked.answers.map(\.checked) == [true, false, false])
+    #expect(typed.options[3].label == "Durian" && typed.options[3].isFreeform)
+    #expect(typed.answers.map(\.number) == [1, 2, 3])
+    #expect(plain.id == checked.id && plain.id == typed.id)
+    #expect(plain.state != checked.state)
+  }
+
+  @Test func highlightedSubmitRowIsReadAndReachable() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select-submit-row.txt")))
+    #expect(prompt.highlighted == .submit)
+    #expect(prompt.nextKey(toward: .submit) == "enter")
+    #expect(prompt.nextKey(toward: .option(1)) == "up")
+    #expect(prompt.target(after: "up") == .option(4))
+    #expect(prompt.target(after: "down") == .option(5))
+  }
+
+  /// A question in a multi-question dialog is quoted with `│` and may wrap.
+  @Test func quotedQuestionBecomesOneTitle() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-two-questions.txt")))
+    #expect(
+      prompt.title
+        == "From the phone, you send a command to a shell pane, but the Mac prompt line still has typed text "
+        + "that was never run. How should the Host handle it?")
+    #expect(prompt.detail == nil)
+    #expect(prompt.answers.map(\.number) == [1, 2, 3])
+  }
+
+  /// `│` lines in the conversation above the dialog are not the dialog's detail.
+  @Test func quotesAboveTheDialogBorderAreNotTheDetail() throws {
+    let text = try Self.screen("MirrorScreenPrompt/claude-2.1.319-two-questions.txt")
+    let original = try #require(MirrorScreenPrompt.parse(text))
+    var lines = text.components(separatedBy: "\n")
+    let border = try #require(lines.lastIndex { $0.hasPrefix("←") }) - 1
+    lines.insert(contentsOf: ["", "│ ● An older message that quotes something"], at: border)
+    let prompt = try #require(MirrorScreenPrompt.parse(lines.joined(separator: "\n")))
+    #expect(prompt.detail == nil)
+    #expect(prompt.id == original.id)
   }
 }

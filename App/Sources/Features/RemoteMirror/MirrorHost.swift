@@ -196,6 +196,11 @@ final class MirrorHost {
     /// `conversation-v1` only: the pane's event feed, the last sequence sent, and the batch
     /// awaiting acknowledgement (docs-ai 087).
     var feed: MirrorConversationFeed?
+    /// `text-v1` with `includeScreenPrompt`: the subscription reads the pane's screen prompts
+    /// through its conversation feed, and remembers the last one it sent.
+    var includeScreenPrompt = false
+    var holdsFeed = false
+    var sentScreenPrompt: MirrorConversationEvent.Prompt?
     var conversationCursor: UInt64 = 0
     var conversationOutstanding: UInt64?
   }
@@ -719,9 +724,10 @@ final class MirrorHost {
     Task { @MainActor [weak self, weak peer] in
       guard let self else { return }
       let result: MirrorPromptAnswer
-      if let choice = Int(answer.choice), isLive(), let contentID = self.conversationFeeds[paneID]?.screenPrompt?.id {
+      let choice = MirrorPromptChoice.target(answer.choice)
+      if let choice, isLive(), let contentID = self.conversationFeeds[paneID]?.screenPrompt?.id {
         result = await self.source.answerPrompt(contentID, choice: choice, in: paneID, isLive: isLive)
-      } else if Int(answer.choice) != nil, lease == nil || self.subscriptions[peerID]?.id == lease {
+      } else if choice != nil, lease == nil || self.subscriptions[peerID]?.id == lease {
         result = .refused(code: "PROMPT_CLOSED", message: String(localized: "The prompt is no longer open on the Mac."))
       } else {
         result = .refused(code: "PROMPT_CLOSED", message: String(localized: "The mirror no longer owns this pane."))
@@ -732,17 +738,28 @@ final class MirrorHost {
       case .delivered(let option, let permission):
         self.conversationFeeds[paneID]?.noteScreenAnswer(
           promptID: answer.prompt, option: option, permission: permission)
-        response = .object([
-          "ok": .bool(true), "command": .string("prompt.respond"),
-          "schema_version": .string("prowl.remote.command.v1"),
-          "data": .object(["prompt": .string(answer.prompt), "choice": .string(answer.choice)]),
-        ])
+        response = Self.promptAnswered(answer)
+      case .submitted:
+        self.conversationFeeds[paneID]?.noteScreenAnswer(
+          promptID: answer.prompt, option: MirrorPromptChoice.submitOption, permission: false)
+        response = Self.promptAnswered(answer)
+      case .toggled:
+        // The menu stays open; the next screen read sends the new boxes with the same prompt id.
+        response = Self.promptAnswered(answer)
       case .refused(let code, let message):
         response = MirrorCommandService.failure(message, code: code)
       }
       guard let peer, self.peers[peerID] === peer else { return }
       peer.send(.commandResult(.init(commandResponse: .init(requestID: request.requestID, response: response))))
     }
+  }
+
+  private static func promptAnswered(_ answer: MirrorCommandRequest.PromptRespond) -> MirrorJSON {
+    .object([
+      "ok": .bool(true), "command": .string("prompt.respond"),
+      "schema_version": .string("prowl.remote.command.v1"),
+      "data": .object(["prompt": .string(answer.prompt), "choice": .string(answer.choice)]),
+    ])
   }
 
   /// Presses allow-listed keys for the pane this connection mirrors (docs-ai 089 S5).
@@ -846,7 +863,8 @@ final class MirrorHost {
         && source.supportsViewportText,
       includeStyledScrollback: representation == .terminal && message.includeViewportText == true
         && message.includeStyledScrollback == true && source.supportsStyledScrollback,
-      includeScrollState: message.includeScrollState == true && source.supportsScrollState)
+      includeScrollState: message.includeScrollState == true && source.supportsScrollState,
+      includeScreenPrompt: representation == .text && message.includeScreenPrompt == true)
     if representation == .conversation {
       guard let feed = conversationFeed(for: paneID) else {
         peer.send(
@@ -1013,6 +1031,15 @@ final class MirrorHost {
         }
       } catch {
         peer.close("Host pane is unavailable: \(error.localizedDescription)")
+        continue
+      }
+      if subscription.includeScreenPrompt {
+        let prompt = screenPrompt(for: &subscription)
+        if prompt != subscription.sentScreenPrompt {
+          subscription.sentScreenPrompt = prompt
+          peer.send(.screenPrompt(.init(prompt: prompt, subscriptionID: subscription.id)))
+        }
+        subscriptions[id] = subscription
       }
     }
   }
@@ -1022,8 +1049,18 @@ final class MirrorHost {
   @discardableResult
   private func removeSubscription(_ peerID: UUID) -> Subscription? {
     guard let removed = subscriptions.removeValue(forKey: peerID) else { return nil }
-    if removed.feed != nil { scheduleConversationRelease(paneID: removed.paneID) }
+    if removed.feed != nil || removed.holdsFeed { scheduleConversationRelease(paneID: removed.paneID) }
     return removed
+  }
+
+  /// The menu a text subscription's agent waits on (docs-ai 089 S4). The pane's conversation
+  /// feed reads it from the screen, as for Chat, so an answer from Terminal is checked the same
+  /// way; the subscription keeps the feed alive until it ends.
+  private func screenPrompt(for subscription: inout Subscription) -> MirrorConversationEvent.Prompt? {
+    guard let feed = conversationFeed(for: subscription.paneID) else { return nil }
+    subscription.holdsFeed = true
+    syncConversation(feed, pane: source.agentState(subscription.paneID), paneID: subscription.paneID)
+    return feed.openScreenPromptPayload
   }
 
   private func conversationFeed(for paneID: UUID) -> MirrorConversationFeed? {
