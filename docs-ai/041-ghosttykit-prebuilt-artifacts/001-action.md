@@ -42,8 +42,10 @@ accept/reject fixtures, a full `sync-ghostty` → package → release → clean
   only on cache miss, then unconditionally rewrites the marker files to match the pinned
   SHA.
 - Operational publishing steps (tag format, packaging, manifest update, clean-path
-  verification, the Xcode 26.3 `DEVELOPER_DIR` pin for Zig builds) are maintained in the
-  living [ghostty-fork-sync runbook](../007-ghostty-embedding-integration/ghostty-fork-sync.md).
+  verification) are maintained in the living
+  [ghostty-fork-sync runbook](../007-ghostty-embedding-integration/ghostty-fork-sync.md).
+  The Xcode 26.3 `DEVELOPER_DIR` pin of that time is obsolete: since Ghostty 1.4 (Zig 0.17)
+  GhosttyKit builds with the default Xcode.
 
 ## Deviations from plan
 
@@ -58,6 +60,6 @@ accept/reject fixtures, a full `sync-ghostty` → package → release → clean
   `build-ghostty-xcframework` directly. Because that target is stamp-file-gated, a
   release build on a machine that acquired artifacts via `ensure-ghostty` reuses them
   (the downloader writes `.ghostty_build_stamp`), which appears intentional — but it
-  means release builds are only source-built when no stamp exists, and then require the
-  Xcode 26.3 toolchain. Not verified whether this asymmetry is deliberate policy or just
+  means release builds are only source-built when no stamp exists (with the default Xcode
+  since Ghostty 1.4). Not verified whether this asymmetry is deliberate policy or just
   historical wiring.

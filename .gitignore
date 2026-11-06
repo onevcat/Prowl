@@ -92,6 +92,7 @@ build/
 
 # Release-only credentials (analytics, crash reporting)
 Config/Secrets.env
+Config/Local.xcconfig
 .build-benchmark/
 scripts/__pycache__/
 
