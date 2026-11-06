@@ -744,6 +744,25 @@ struct AgentDispatchCommandHandlerTests {
     #expect(refused.error?.code == CLIErrorCode.dispatchTargetBusy)
   }
 
+  /// Protection checks the text that goes in: automation's injected prompt with its protocol,
+  /// interactive input as typed (PR #1057 review R3).
+  @Test func protectionChecksTheTextThatIsDelivered() async {
+    let target = resolvedTarget()
+    var checked: [String] = []
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      inputProtection: { _, text in
+        checked.append(text)
+        return "stop"
+      },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) })
+    _ = await handler.handle(envelope: dispatch(pane: target.paneID))
+    _ = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    #expect(checked.count == 2)
+    #expect(checked.first == AgentDispatchPrompt.renderInjected(userPrompt: "Round two."))
+    #expect(checked.last == "hello")
+  }
+
   @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
     let target = resolvedTarget()
     for (status, protection, delivered) in [

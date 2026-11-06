@@ -81,14 +81,15 @@ struct AgentPromptDeliveryTests {
     #expect(!AgentPromptDelivery.confirmsPaste("这是 一段\n  中文", text: "这是一段中文", profile: .claude))
   }
 
-  /// An earlier delivery can leave its text in the input box without Enter. The same text goes
-  /// in with Enter alone instead of being inserted twice; another draft still refuses.
-  @Test func theSameTextLeftInTheBoxIsSubmittedAsIs() async {
+  /// Only the line Prowl itself left unsent, untouched since, goes in with Enter alone. A draft
+  /// that merely looks the same on screen (a collapsed paste marker, collapsed whitespace) is
+  /// someone else's and refuses (PR #1057 review R1, R2).
+  @Test func onlyProwlsOwnUnsentLineIsSubmittedAsIs() async {
     var inserted: [String] = []
     var submitted = 0
-    func delivery(_ composer: String) -> AgentPromptDelivery {
+    func delivery(_ composer: String, unsent: AgentUnsentLine?, revision: TimeInterval? = 5) -> AgentPromptDelivery {
       AgentPromptDelivery(
-        observe: { .init(composer: composer, editingRevision: nil, hasMarkedText: false) },
+        observe: { .init(composer: composer, editingRevision: revision, hasMarkedText: false) },
         insert: {
           inserted.append($0)
           return true
@@ -96,21 +97,42 @@ struct AgentPromptDeliveryTests {
         submit: {
           submitted += 1
           return true
-        }, profile: .claude)
+        }, profile: .claude, unsent: unsent)
     }
-    #expect(await delivery("请只回复明白两个\n  字。").deliver("请只回复明白两个字。") == .submitted)
+    let text = "请只回复明白两个字。"
+    let left = AgentUnsentLine(text: text, editingRevision: 5)
+    #expect(await delivery("请只回复明白两个\n  字。", unsent: left).deliver(text) == .submitted)
     #expect(inserted.isEmpty && submitted == 1)
-    #expect(await delivery("something else").deliver("请只回复明白两个字。") == .notInserted)
-    #expect(inserted.isEmpty && submitted == 1)
+    // Edited since Prowl left it.
+    #expect(await delivery("请只回复明白两个\n  字。", unsent: left, revision: 6).deliver(text) == .notInserted)
+    // Someone's own paste: the marker hides its content.
+    let marker = "[Pasted text #1 +20 lines]"
+    #expect(await delivery(marker, unsent: nil).deliver("Only reply hello") == .notInserted)
+    // Prowl's own multiline paste, collapsed to a marker.
+    let pasted = AgentUnsentLine(text: "first\nsecond", editingRevision: 5)
+    #expect(await delivery(marker, unsent: pasted).deliver("first\nsecond") == .submitted)
+    // A different request whose text only differs in whitespace.
+    let spaced = AgentUnsentLine(text: "exactly 'a  b'", editingRevision: 5)
+    #expect(await delivery("exactly 'a b'", unsent: spaced).deliver("exactly 'a b'") == .notInserted)
+    #expect(inserted.isEmpty && submitted == 2)
   }
 
-  @Test func aDraftRefusalQuotesTheDraftUnlessItIsTheSameText() {
-    #expect(AgentComposerProfile.claude.draftRefusal("", delivering: "hello") == nil)
-    #expect(AgentComposerProfile.claude.draftRefusal("hel\n  lo", delivering: "hello") == nil)
-    let refusal = AgentComposerProfile.claude.draftRefusal("git push --force origin main", delivering: "hello")
+  @Test func aDraftRefusalQuotesTheDraftUnlessItIsProwlsOwnUnsentLine() {
+    let profile = AgentComposerProfile.claude
+    let left = AgentUnsentLine(text: "hello", editingRevision: 5)
+    #expect(profile.draftRefusal("", delivering: "hello", unsent: nil, editingRevision: 5) == nil)
+    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, editingRevision: 5) == nil)
+    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, editingRevision: 6) != nil)
+    #expect(profile.draftRefusal("hello", delivering: "hello", unsent: nil, editingRevision: 5) != nil)
+    #expect(
+      profile.draftRefusal(
+        "[Pasted text #1 +20 lines]", delivering: "Only reply hello", unsent: nil, editingRevision: 5)
+        != nil)
+    let refusal = profile.draftRefusal(
+      "git push --force origin main", delivering: "hello", unsent: nil, editingRevision: 5)
     #expect(refusal?.contains("git push --force") == true)
     let long = String(repeating: "长", count: 80)
-    #expect((AgentComposerProfile.claude.draftRefusal(long, delivering: nil)?.count ?? 0) < 160)
+    #expect((profile.draftRefusal(long, delivering: nil, unsent: nil, editingRevision: nil)?.count ?? 0) < 160)
   }
 
   @Test func onlyClaudeAcceptsItsCollapsedPasteMarker() {

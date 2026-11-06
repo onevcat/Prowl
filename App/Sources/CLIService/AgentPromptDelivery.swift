@@ -11,6 +11,15 @@ nonisolated enum AgentLinePurpose: Sendable {
   case send
 }
 
+/// Text Prowl inserted into an agent's input box and could not submit, because its echo could
+/// not be confirmed in time. Only this text, still untouched since (`editingRevision`), may be
+/// submitted later without inserting it again: the screen alone cannot prove what a draft is
+/// (a collapsed paste marker hides its content, and whitespace is lost on screen).
+nonisolated struct AgentUnsentLine: Equatable, Sendable {
+  let text: String
+  let editingRevision: TimeInterval?
+}
+
 /// Result of typing a line and pressing Enter.
 nonisolated enum AgentLineSubmission: Equatable, Sendable {
   case submitted
@@ -50,12 +59,16 @@ nonisolated enum AgentComposerProfile: Equatable, Sendable {
   /// Devin loses an Enter that arrives before it accepts the pasted draft.
   var dropsEarlyEnter: Bool { self == .devin }
 
-  /// Nil when the input box can take `text`: it is empty, or it holds `text` itself, left
-  /// without Enter by an earlier delivery whose echo could not be confirmed. Otherwise why not,
-  /// with the start of the draft so the person sees what is in the way.
-  func draftRefusal(_ draft: String, delivering text: String?) -> String? {
+  /// Nil when the input box can take `text`: it is empty, or it holds the line Prowl left there
+  /// unsent (`unsent`), which is exactly `text` and untouched since (`editingRevision`).
+  /// Otherwise why not, with the start of the draft so the person sees what is in the way.
+  func draftRefusal(
+    _ draft: String, delivering text: String?, unsent: AgentUnsentLine?, editingRevision: TimeInterval?
+  ) -> String? {
     if draft.isEmpty { return nil }
-    if let text, AgentPromptDelivery.confirmsPaste(draft, text: text, profile: self) { return nil }
+    if let text, let unsent, unsent.resumes(text, composer: draft, editingRevision: editingRevision, profile: self) {
+      return nil
+    }
     let collapsed = draft.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     let excerpt = collapsed.count > 40 ? collapsed.prefix(40) + "…" : collapsed[...]
     return "\(name) has an existing draft or attachment (“\(excerpt)”). Clear it on Host before dispatching."
@@ -85,12 +98,16 @@ struct AgentPromptDelivery {
   let submit: @MainActor () -> Bool
   var clock: any Clock<Duration> = ContinuousClock()
   var profile: AgentComposerProfile?
+  /// The line Prowl left unsent in this input box, if any.
+  var unsent: AgentUnsentLine?
 
   func deliver(_ text: String) async -> AgentLineSubmission {
     guard !Task.isCancelled, let before = observe(), !before.hasMarkedText else { return .notInserted }
-    // An earlier delivery left this text without Enter (its echo could not be confirmed):
-    // press Enter instead of inserting it twice.
-    if let composer = before.composer, !composer.isEmpty, Self.confirmsPaste(composer, text: text, profile: profile) {
+    // An earlier delivery left exactly this text without Enter and nobody edited since: press
+    // Enter instead of inserting it twice.
+    if let composer = before.composer, !composer.isEmpty, let unsent,
+      unsent.resumes(text, composer: composer, editingRevision: before.editingRevision, profile: profile)
+    {
       return submit() ? .submitted : .notSubmitted
     }
     guard before.composer == "", insert(text) else { return .notInserted }
@@ -140,5 +157,16 @@ struct AgentPromptDelivery {
       remaining = remaining.dropFirst(segment.count)
     }
     return remaining.isEmpty
+  }
+}
+
+extension AgentUnsentLine {
+  /// Whether the input box still shows this unsent line as `text`: the same text was requested,
+  /// nobody edited the box since Prowl inserted it, and the screen still echoes it.
+  nonisolated func resumes(
+    _ requested: String, composer: String, editingRevision: TimeInterval?, profile: AgentComposerProfile?
+  ) -> Bool {
+    requested == text && editingRevision == self.editingRevision
+      && AgentPromptDelivery.confirmsPaste(composer, text: text, profile: profile)
   }
 }

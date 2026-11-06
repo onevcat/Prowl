@@ -146,6 +146,8 @@ final class WorktreeTerminalState {
   @SharedReader private var repositorySettings: RepositorySettings
   var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   var surfaces: [UUID: GhosttySurfaceView] = [:]
+  /// Agent input Prowl inserted but could not submit, per surface (see `AgentUnsentLine`).
+  var unsentAgentLines: [UUID: AgentUnsentLine] = [:]
   var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
   struct SurfaceLaunchProfile: Equatable {
     let profileID: UUID

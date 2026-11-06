@@ -38,8 +38,17 @@ extension WorktreeTerminalState {
       },
       insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
       submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
-      profile: profile)
-    return await delivery.deliver(text)
+      profile: profile, unsent: unsentAgentLines[surfaceID])
+    let result = await delivery.deliver(text)
+    switch result {
+    case .submitted: unsentAgentLines.removeValue(forKey: surfaceID)
+    case .notSubmitted:
+      // The text may stay in the box. Remember exactly what Prowl left, so a retry of the same
+      // text can press Enter instead of refusing it as someone's draft.
+      unsentAgentLines[surfaceID] = surfaces[surfaceID].map { .init(text: text, editingRevision: $0.lastEditingAt) }
+    case .notInserted: break
+    }
+    return result
   }
 
   private func submitDirectly(
@@ -83,7 +92,11 @@ extension WorktreeTerminalState {
       guard let draft = composerContents(of: surface, profile: profile) else {
         return "The \(profile.name) input area could not be verified. Check Host before dispatching."
       }
-      if let refusal = profile.draftRefusal(draft, delivering: text) { return refusal }
+      if let refusal = profile.draftRefusal(
+        draft, delivering: text, unsent: unsentAgentLines[surfaceID], editingRevision: surface.lastEditingAt)
+      {
+        return refusal
+      }
     }
     if agent == .codex {
       guard let text = surface.readStyledSnapshotForCLI(),

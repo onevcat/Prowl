@@ -105,7 +105,9 @@ final class AgentDispatchCommandHandler: CommandHandler {
     if !interactive, let pending = pendingDispatch(target) {
       return pendingFailure(pending, target: target)
     }
-    if let refusal = await prepareDelivery(target: target, text: input.prompt, needsReceipt: !interactive) {
+    // Protection checks the text that will actually go in: automation adds its protocol.
+    let deliveryText = interactive ? input.prompt : AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)
+    if let refusal = await prepareDelivery(target: target, text: deliveryText, needsReceipt: !interactive) {
       return refusal
     }
 
@@ -114,7 +116,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     }
     if interactive {
       // Human input does not assert an outcome for an automation task or create a new one.
-      guard await deliverPrompt(target, input.prompt) else {
+      guard await deliverPrompt(target, deliveryText) else {
         return failure(
           code: CLIErrorCode.sendFailed, message: "Input delivery is unconfirmed. Check the pane before retrying.")
       }
@@ -135,10 +137,13 @@ final class AgentDispatchCommandHandler: CommandHandler {
       }
     }
 
-    return await dispatch(input: input, target: target)
+    return await dispatch(input: input, text: deliveryText, target: target)
   }
 
-  private func dispatch(input: DispatchInput, target: TabResolvedTarget) async -> CommandResponse {
+  /// `text` is the injected prompt that protection already checked.
+  private func dispatch(input: DispatchInput, text deliveryText: String, target: TabResolvedTarget) async
+    -> CommandResponse
+  {
     let issued: AgentDispatchSnapshot
     switch issueDispatch(target) {
     case .success(let snapshot):
@@ -160,7 +165,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
         message: "The dispatch could not be bound to the pane's current agent."
       )
     }
-    guard await deliverPrompt(target, AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)) else {
+    guard await deliverPrompt(target, deliveryText) else {
       cancelDispatch(issued.record.id)
       return failure(
         code: CLIErrorCode.dispatchFailed,
