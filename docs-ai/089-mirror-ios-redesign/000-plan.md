@@ -180,3 +180,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 - Updated 2026-11-06: S3 replaced the launch form with a composer-shaped New Session sheet and added Profile model, effort and icon to `profiles` — see [005-s3-new-session.md](005-s3-new-session.md)
 - Updated 2026-11-06: S4 answers screen prompts from the phone (`promptRespond`, D6 via the screen instead of hooks) — see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)
 - Updated 2026-11-06: S5 added the Terminal key bar and Stop (`agentKeys`); the `vt-v1` terminal view is deferred — see [007-s5-terminal-keys.md](007-s5-terminal-keys.md)
+- Updated 2026-11-06: S6 lets the phone send to a working agent; the agent queues or steers the message, and only a blocked agent refuses it — see [008-s6-input-while-working.md](008-s6-input-while-working.md)

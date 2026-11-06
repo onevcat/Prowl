@@ -130,8 +130,9 @@ struct ComposerBar: View {
     let isProblem: Bool
   }
 
-  /// Only what changes the outcome: a receipt that is not a plain success, a pane that does
-  /// not take messages, or an agent that is busy.
+  /// Only what changes the outcome: a receipt that is not a plain success, a refused key, or a
+  /// pane that does not take messages. A working agent takes a message as typed on the Mac: it
+  /// queues or steers it by its own rules (docs-ai 089 S6), so that needs no note.
   private var note: Note? {
     if let submission = session.submission, submission.outcome.status != .accepted {
       let problem = submission.outcome.status == .rejected || submission.outcome.status == .unknown
@@ -141,10 +142,6 @@ struct ComposerBar: View {
     if let refusal = session.keyRefusal { return Note(text: refusal, isProblem: true) }
     if !session.supportsSubmission {
       return Note(text: String(localized: "This Host does not accept messages for this pane."), isProblem: false)
-    }
-    if session.pane?.agent == nil { return nil }
-    if session.agentState == .working {
-      return Note(text: String(localized: "The agent is working; your message waits until it is free."), isProblem: false)
     }
     return nil
   }

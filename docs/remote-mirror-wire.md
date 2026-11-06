@@ -148,8 +148,11 @@ an independent history archive, and does not export scrollback colors.
 A Host advertising `agent-input` accepts structured `agentsInput` with the same
 `{pane, prompt}` payload as `agentsDispatch`. The pane must be a UUID owned by the
 current authenticated subscription. The command is routed as `agents.input`; it
-uses the shared Agent readiness and guarded paste/Enter path without creating or
-mutating task dispatch records or injecting completion instructions. `text-v1`
+uses the guarded paste/Enter path without creating or mutating task dispatch records or
+injecting completion instructions. Unlike `agentsDispatch`, it does not wait for the turn
+to end: a working agent takes the text as typed input. A blocked agent refuses it with
+`DISPATCH_TARGET_BUSY`. A runtime `needs-input` signal refuses it only when the screen
+detector also reports blocked, because the signal stays until the turn ends. `text-v1`
 remains the mobile representation. `agentsDispatch` retains its automation semantics.
 
 Success has `command: "agents.input"`, schema `prowl.cli.agents.input.v1`, and

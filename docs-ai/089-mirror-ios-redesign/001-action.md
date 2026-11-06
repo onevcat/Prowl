@@ -11,8 +11,9 @@
 | 2026-11-06 | S3: composer-shaped New Session sheet; `profiles` returns model, effort and icon | #1049, [005](005-s3-new-session.md) |
 | 2026-11-06 | S4: `promptRespond` answers screen prompts, checked key by key | #1050, [006](006-s4-prompt-answers.md) |
 | 2026-11-06 | S5: Terminal key bar and Stop (`agentKeys`); `vt-v1` rendering deferred | #1051, [007](007-s5-terminal-keys.md) |
+| 2026-11-06 | S6: messages reach a working agent (queue or steer by the agent's rules); `agents dispatch` still waits for idle | S6 PR, [008](008-s6-input-while-working.md) |
 
-The slices form one stack (#1045 → #1051).
+The slices form one stack (#1045 → #1051, then S6).
 
 ## Outcome & current state (as of 2026-11-06)
 

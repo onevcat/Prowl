@@ -206,7 +206,8 @@
         self.longOutput = longOutput
         pane = MirrorPaneDescriptor(
           id: MirrorUIFixture.paneID, title: "\(name) · Codex", directory: "/fixture", busy: false,
-          projectName: name, subtitle: "Codex · main", agent: "codex")
+          projectName: name, subtitle: "Codex · main", agent: "codex",
+          agentState: CommandLine.arguments.contains("--mirror-ui-working-fixture") ? .working : nil)
         if MirrorUIFixture.holdsScroll {
           CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(),

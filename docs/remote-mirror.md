@@ -216,7 +216,10 @@ Interactive input delivers the message as written, without a `[Prowl]` prefix or
 completion instruction. It creates no dispatch record and does not require
 `dispatch-complete`. An existing pending automation receipt is neither completed nor
 abandoned and does not block this human input, just as local typing does not settle
-an automation task. The usual Agent readiness and local input protections still apply.
+an automation task. Like typing at the Mac, a message also goes in while the agent works:
+the agent queues it or steers its current turn by its own rules (Claude Code queues it,
+Codex adds it to the running turn). Only a blocked agent, one that waits for an answer to a
+question or permission, refuses the message. The local input protections still apply.
 Host rechecks the exact subscribed pane and lease, plus input protection, before delivery.
 Mobile shell panes are read-only: Host cannot yet verify an empty shell command line,
 so structured shell Send is refused and its capability is not advertised. An idle task
@@ -225,8 +228,8 @@ control the shell on Host. Local CLI `send` and Mac mirror keyboard input retain
 existing direct-input behavior.
 
 Shared Agent input delivery rejects IME composition and recent Host editing. Claude must
-have a recognized empty composer; the dim `Try "…"` hint of a fresh session counts as
-empty. It inserts text, waits up to two seconds for the paste echo, and only then sends
+have a recognized empty composer; the dim `Try "…"` hint of a fresh session and the dim
+queued messages hint of a running turn count as empty. It inserts text, waits up to two seconds for the paste echo, and only then sends
 Enter, provided the surface/Agent/edit revision is unchanged. Codex has an explicit
 idle-composer rule. For both, the delivery boundary checks formatter dim styling so a
 hint is not confused with an identically worded draft. Unknown layouts, wrapped drafts
@@ -277,8 +280,9 @@ confirm. In Terminal, agent panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows,
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
 shows under the composer. The prompt panel shows in Chat only; Terminal shows the menu itself. While a message is still on its way to the Mac, the key bar and prompt answers wait.
 The floating composer
-under both views sends through `agents.input`; a note appears only when the Host will not
-deliver at once (the agent is working and the message waits) or a receipt needs a look.
+under both views sends through `agents.input`; a note appears only when the Host refused
+something or a receipt needs a look. While the agent works, Send still delivers: the agent
+gets the message as if it was typed on the Mac.
 
 ## Protocol and development
 

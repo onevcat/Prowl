@@ -83,9 +83,11 @@ enum ClaudeScreenProfile {
     return onlyHint ? "" : contents
   }
 
+  /// The dim hints of an empty composer: `Try "…"` before the first message, and the queued
+  /// messages hint while a running turn holds queued input.
   nonisolated private static func isEmptyComposerHint(_ contents: String) -> Bool {
     let collapsed = contents.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    return collapsed.wholeMatch(of: /Try ".+"/) != nil
+    return collapsed.wholeMatch(of: /Try ".+"/) != nil || collapsed == "Press up to edit queued messages"
   }
 
   /// The prompt row through the last row before the closing border.

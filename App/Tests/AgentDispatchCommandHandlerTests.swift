@@ -698,6 +698,50 @@ struct AgentDispatchCommandHandlerTests {
     #expect(automated.error?.code == CLIErrorCode.dispatchPending)
   }
 
+  /// A person types into a working agent the way they would at the Mac: the agent queues or
+  /// steers the message by its own rules (089 S6). A menu on screen would take the text as an
+  /// answer, so a blocked agent still refuses. A `needs-input` level stays after the question is
+  /// answered, so it refuses only where the detector agrees.
+  @Test func interactiveInputReachesAWorkingAgentButNotABlockedOne() async throws {
+    let target = resolvedTarget()
+    for (status, signal) in [
+      (AgentDisplayState.working, AgentSignal?.none), (.working, turnEnded), (.working, needsInput),
+    ] {
+      var delivered: [String] = []
+      let handler = AgentDispatchCommandHandler(
+        resolveTarget: { _ in .success(target) },
+        conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
+        deliverPrompt: { _, text in
+          delivered.append(text)
+          return true
+        })
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
+      #expect(response.ok)
+      #expect(delivered == ["also"])
+    }
+    for (status, signal) in [(AgentDisplayState.blocked, AgentSignal?.none), (.blocked, needsInput)] {
+      var calls = 0
+      let handler = AgentDispatchCommandHandler(
+        resolveTarget: { _ in .success(target) },
+        conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
+        deliverPrompt: { _, _ in
+          calls += 1
+          return true
+        })
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
+      #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+      #expect(response.error?.message.contains("waits for an answer") == true)
+      #expect(calls == 0)
+    }
+    // Automation keeps its order: a dispatch still waits for the turn to end.
+    let automated = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .working, signal: nil) },
+      issueDispatch: { _ in .failure(.bindingMissing) })
+    let refused = await automated.handle(envelope: dispatch(pane: target.paneID))
+    #expect(refused.error?.code == CLIErrorCode.dispatchTargetBusy)
+  }
+
   @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
     let target = resolvedTarget()
     for (status, protection, delivered) in [
@@ -713,7 +757,7 @@ struct AgentDispatchCommandHandlerTests {
         })
       let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
       #expect(!response.ok)
-      if status == .idle && protection == nil {
+      if protection == nil {
         #expect(response.error?.code == CLIErrorCode.sendFailed)
         #expect(calls == 1)
       } else {

@@ -609,6 +609,31 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertEqual(note.label, "Someone is typing in this pane on the Mac.")
   }
 
+  /// A working agent takes a message as typed on the Mac, so Send stays and no note says the
+  /// message waits (089 S6).
+  @MainActor
+  func testAWorkingAgentTakesAMessage() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-working-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    XCTAssertTrue(app.buttons["mirror-stop"].waitForExistence(timeout: 10))
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    input.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["mirror-dismiss-keyboard"].waitForExistence(timeout: 5))
+    input.typeText("Also check the tests")
+    let send = app.buttons["mirror-send"]
+    XCTAssertTrue(send.waitForExistence(timeout: 5))
+    XCTAssertTrue(send.isEnabled)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
+    attach("Message to a working agent")
+    send.tap()
+    // The Host confirmed the message, so the draft is cleared.
+    expectation(
+      for: NSPredicate(format: "NOT (value CONTAINS %@)", "Also check the tests"), evaluatedWith: input)
+    waitForExpectations(timeout: 5)
+  }
+
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.
   /// The name matches `MirrorUIFixture.releaseScrollNotification`.
   private func releaseHeldScrolls() {
