@@ -464,6 +464,26 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Refused message")
   }
 
+  /// On a wide screen the chat keeps a readable column, and the composer lines up with it.
+  @MainActor
+  func testChatKeepsAReadableColumnOnIPad() throws {
+    try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "Wide screens only")
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude"]
+    app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
+    XCTAssertTrue(assistant.waitForExistence(timeout: 10))
+    XCTAssertLessThanOrEqual(assistant.frame.width, 721)
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertLessThanOrEqual(input.frame.width, 729)
+    // The field leaves room for Send on its right, so check its left edge against the column.
+    XCTAssertGreaterThanOrEqual(input.frame.minX, (app.frame.width - 728) / 2)
+    attach("Readable chat column")
+    XCUIDevice.shared.orientation = .portrait
+  }
+
   /// The recap note that ends the Claude fixture.
   @MainActor
   private func lastChatEntry(_ app: XCUIApplication) -> XCUIElement {

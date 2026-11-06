@@ -22,6 +22,8 @@ struct ConversationView: View {
   @State private var visibleLimit = ConversationView.page
 
   private static let page = 120
+  /// About 80 characters of body text; the composer uses it too, so both line up.
+  static let readableWidth: CGFloat = 720
   private var store: MirrorConversationStore { session.conversation }
 
   var body: some View {
@@ -59,8 +61,12 @@ struct ConversationView: View {
         }
         Color.clear.frame(height: 1).id("conversation-bottom")
       }
+      // A readable column on a wide screen; the scroll view stays full width, so a drag in the
+      // margins still scrolls.
+      .frame(maxWidth: Self.readableWidth, alignment: .leading)
       .padding(.horizontal)
       .padding(.vertical, 12)
+      .frame(maxWidth: .infinity)
     }
     .scrollPosition($position)
     // The composer area is a bar; under it the content fades out instead of showing through.
