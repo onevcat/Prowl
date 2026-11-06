@@ -127,8 +127,10 @@ struct AgentPromptDelivery {
     // Code security: the insertion updates editing activity itself; any later edit invalidates this paste.
     for _ in 0..<20 {
       do { try await clock.sleep(for: .milliseconds(100)) } catch { return leftUnsent() }
+      // Any input since the insertion (also history keys, which leave the editing timestamp
+      // alone) may have replaced the box: never press Enter on it.
       guard !Task.isCancelled, let current = observe(), !current.hasMarkedText,
-        current.editingRevision == pasted.editingRevision
+        current.editingRevision == pasted.editingRevision, current.inputGeneration == pasted.inputGeneration
       else { return leftUnsent() }
       if let composer = current.composer, Self.confirmsPaste(composer, text: text, profile: profile) {
         return submit() ? .submitted : leftUnsent()

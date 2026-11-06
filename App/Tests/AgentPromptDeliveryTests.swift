@@ -158,6 +158,46 @@ struct AgentPromptDeliveryTests {
     #expect(submitted == 0)
   }
 
+  /// Input that leaves the editing timestamp alone (a history key) can still swap the box
+  /// during the echo wait; the first delivery must not press Enter then (PR #1057 review R6).
+  @Test func inputDuringTheEchoWaitStopsTheDelivery() async {
+    let clock = TestClock()
+    var step = 0
+    var submitted = 0
+    let delivery = AgentPromptDelivery(
+      observe: {
+        defer { step += 1 }
+        switch step {
+        case 0: return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
+        case 1: return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
+        default:
+          return .init(
+            composer: "[Pasted text #2 +9 lines]", editingRevision: 2, hasMarkedText: false, inputGeneration: 3)
+        }
+      },
+      insert: { _ in true },
+      submit: {
+        submitted += 1
+        return true
+      }, clock: clock, profile: .claude)
+    let task = Task { await delivery.deliver("first\nsecond") }
+    await clock.advance(by: .milliseconds(100))
+    #expect(await task.value == .notSubmitted)
+    #expect(submitted == 0)
+  }
+
+  /// Ghostty binding actions such as `csi:` and `text:` write to the pty directly; they count as
+  /// input too (PR #1057 review R7).
+  @Test func bindingActionsCountAsInput() {
+    let view = GhosttySurfaceView(
+      runtime: GhosttyRuntime(), workingDirectory: URL(fileURLWithPath: "/tmp"), fontSize: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB, skipsSurfaceCreationForTesting: true)
+    let start = view.inputGeneration
+    view.performBindingAction("csi:A")
+    view.performBindingAction("text:hello")
+    #expect(view.inputGeneration == start + 2)
+  }
+
   @Test func aDraftRefusalQuotesTheDraftUnlessItIsProwlsOwnUnsentLine() {
     let profile = AgentComposerProfile.claude
     let left = AgentUnsentLine(text: "hello", inputGeneration: 5)

@@ -513,6 +513,9 @@ extension GhosttySurfaceView {
   }
 
   func performBindingAction(_ action: String) {
+    // Actions such as `text:`, `csi:` and `esc:` write to the pty directly; count every action
+    // as input rather than sort them.
+    noteInput()
     guard let surface else { return }
     _ = action.withCString { ptr in
       ghostty_surface_binding_action(surface, ptr, UInt(action.lengthOfBytes(using: .utf8)))
