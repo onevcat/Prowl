@@ -104,7 +104,30 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.scrollViews["mirror-live-scroll"].swipeDown()
     app.scrollViews["mirror-live-scroll"].swipeUp()
     XCTAssertTrue(text.exists)
-    XCTAssertTrue(app.buttons["Latest"].isEnabled)
+    // The short screen fits, so its end stays in view and there is nothing to return to.
+    XCTAssertFalse(app.buttons["mirror-latest"].exists)
+  }
+
+  /// The reader follows the newest output while its end is in view. Latest shows only after
+  /// scrolling away, not for a drag down at the end, and a tap returns to the end.
+  @MainActor
+  func testTerminalLatestShowsOnlyAwayFromTheEnd() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let reading = app.scrollViews["mirror-live-scroll"]
+    let latest = app.buttons["mirror-latest"]
+    XCTAssertTrue(reading.waitForExistence(timeout: 10))
+    XCTAssertFalse(latest.exists)
+    reading.swipeUp()
+    XCTAssertFalse(latest.waitForExistence(timeout: 2))
+    reading.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    attach("Terminal away from the end")
+    latest.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: latest)
+    waitForExpectations(timeout: 5)
   }
 
   @MainActor

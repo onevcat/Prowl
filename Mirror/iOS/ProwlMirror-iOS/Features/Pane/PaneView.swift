@@ -73,7 +73,9 @@ struct PaneView: View {
           .padding(.horizontal).padding(.top, 4)
       }
     }
-    .safeAreaInset(edge: .bottom, spacing: 0) {
+    // A bar, not a plain inset: the chat or the screen fades under it with the scroll edge
+    // effect, so text never shows through between the key bar, the composer and the edge.
+    .safeAreaBar(edge: .bottom, spacing: 0) {
       VStack(spacing: 8) {
         if session.status == .live, session.supportsPromptRespond, let prompt = openPrompt,
           !(prompt.choices ?? []).isEmpty
