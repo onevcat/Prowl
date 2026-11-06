@@ -34,6 +34,21 @@ struct MirrorChatRowsTests {
     #expect(steps.running == nil)
   }
 
+  /// Thinking shown as text (Claude Code's visible thinking) is its own row between the steps; a
+  /// reasoning without text still folds away.
+  @Test func thoughtsWithTextAreTheirOwnRows() {
+    let rows = MirrorChatRow.rows([
+      Self.tool(1), .reasoning(id: 2, durationMs: nil, summary: .init("Check the resources next.")), Self.tool(3),
+      .reasoning(id: 4, durationMs: 1500, summary: nil), Self.tool(5),
+    ])
+    #expect(rows.map(\.id) == [1, 2, 3])
+    guard case .item(.reasoning) = rows[1], case .steps(let after) = rows[2] else {
+      Issue.record("expected steps, a thought row, then steps")
+      return
+    }
+    #expect(after.toolCount == 2)
+  }
+
   @Test func failuresAndRunningToolsAreCounted() {
     let rows = MirrorChatRow.rows([
       Self.tool(1, end: .error), Self.tool(2, exit: 1), Self.tool(3), Self.tool(4, end: nil),
