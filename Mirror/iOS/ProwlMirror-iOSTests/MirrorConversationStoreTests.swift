@@ -56,6 +56,33 @@ struct MirrorConversationStoreTests {
     #expect(store.items.isEmpty)
   }
 
+  /// A queued message taken before tools finish must not shift their results onto other rows,
+  /// or past the end of the list (a crash on device).
+  @Test func takingAQueuedMessageKeepsLaterToolsMatched() {
+    typealias Event = MirrorConversationEvent
+    let message = Event.Message(text: .init("later"), origin: .queued)
+    var store = MirrorConversationStore()
+    store.apply(
+      events: [
+        .init(.userQueued, .message(message), at: nil, source: .transcript, sequence: 1),
+        .init(
+          .toolStarted, .toolStart(.init(id: "a", name: "Bash", kind: .shell, title: "a")),
+          at: nil, source: .transcript, sequence: 2),
+        .init(
+          .toolStarted, .toolStart(.init(id: "b", name: "Bash", kind: .shell, title: "b")),
+          at: nil, source: .transcript, sequence: 3),
+        .init(.userUnqueued, .message(message), at: nil, source: .transcript, sequence: 4),
+        .init(.toolCompleted, .toolEnd(.init(id: "b", status: .succeeded)), at: nil, source: .transcript, sequence: 5),
+        .init(.toolCompleted, .toolEnd(.init(id: "a", status: .error)), at: nil, source: .transcript, sequence: 6),
+      ], sequence: 6)
+    let ends = store.items.compactMap { item -> (String, Event.ToolStatus?)? in
+      guard case .tool(_, let start, let end, _, _) = item else { return nil }
+      return (start.id, end?.status)
+    }
+    #expect(ends.map(\.0) == ["a", "b"])
+    #expect(ends.map(\.1) == [.error, .succeeded])
+  }
+
   @Test func promptsResolveInPlaceAndBlockedStatusIsAnItem() {
     let prompt = MirrorConversationEvent.Prompt(id: "p", kind: .question, freeform: true)
     var store = MirrorConversationStore()
