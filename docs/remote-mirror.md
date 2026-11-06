@@ -143,8 +143,10 @@ user settings, and never affect native Ghostty scrollback. Host precision-scroll
 settings and application behavior can still affect TUI distance. These buttons sit above the live
 view on all clients. Wheel and touch gestures only move the local readable view;
 they never request remote scrolling. Each completed remote scroll resets the local
-reader to the top in both directions, including Mac Original Size mode. Follow
-latest remains below the mobile reader.
+reader to the top in both directions, including Mac Original Size mode. On iOS the
+two buttons are a small capsule at the top right of the reader, with **Scrolling…** or
+an error to its left. The reader follows the newest output while its end is in view;
+after you scroll away, an arrow button returns to it and following starts again.
 
 A current Host sends frame-matched boundary state. **Scroll Up** is disabled at
 a known top and **Scroll Down** at a known bottom. Native terminal scrollback can

@@ -104,7 +104,30 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.scrollViews["mirror-live-scroll"].swipeDown()
     app.scrollViews["mirror-live-scroll"].swipeUp()
     XCTAssertTrue(text.exists)
-    XCTAssertTrue(app.buttons["Latest"].isEnabled)
+    // The short screen fits, so its end stays in view and there is nothing to return to.
+    XCTAssertFalse(app.buttons["mirror-latest"].exists)
+  }
+
+  /// The reader follows the newest output while its end is in view. Latest shows only after
+  /// scrolling away, not for a drag down at the end, and a tap returns to the end.
+  @MainActor
+  func testTerminalLatestShowsOnlyAwayFromTheEnd() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let reading = app.scrollViews["mirror-live-scroll"]
+    let latest = app.buttons["mirror-latest"]
+    XCTAssertTrue(reading.waitForExistence(timeout: 10))
+    XCTAssertFalse(latest.exists)
+    reading.swipeUp()
+    XCTAssertFalse(latest.waitForExistence(timeout: 2))
+    reading.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    attach("Terminal away from the end")
+    latest.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: latest)
+    waitForExpectations(timeout: 5)
   }
 
   @MainActor
@@ -715,6 +738,67 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     expectation(
       for: NSPredicate(format: "NOT (value CONTAINS %@)", "Also check the tests"), evaluatedWith: input)
     waitForExpectations(timeout: 5)
+  }
+
+  /// A phone on its side gives the reader no spare height while composing: Latest waits until
+  /// the keyboard is down, then returns to the end.
+  @MainActor
+  func testTerminalLatestHidesWhileComposingOnALandscapePhone() throws {
+    try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Compact height only on iPhone")
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let reading = app.scrollViews["mirror-live-scroll"]
+    let latest = app.buttons["mirror-latest"]
+    XCTAssertTrue(reading.waitForExistence(timeout: 10))
+    reading.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    input.tap()
+    let dismiss = app.buttons["mirror-dismiss-keyboard"]
+    XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+    XCTAssertFalse(latest.exists)
+    attach("Landscape phone composing")
+    dismiss.tap()
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    latest.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: latest)
+    waitForExpectations(timeout: 5)
+    XCUIDevice.shared.orientation = .portrait
+  }
+
+  /// A drag at the local end while a remote scroll is on its way must not turn following back
+  /// on: the result shows the new screen's top with Latest, and History keeps that position.
+  @MainActor
+  func testLocalDragDuringRemoteScrollKeepsTheNewTop() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture",
+      "--mirror-ui-scroll-hold-fixture",
+    ]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let reading = app.scrollViews["mirror-live-scroll"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    scrollUp.tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(identifier: "mirror-scroll-progress").firstMatch
+        .waitForExistence(timeout: 5))
+    reading.swipeUp()
+    releaseHeldScrolls()
+    let top = app.staticTexts["Remote -1 marker 1"]
+    expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: top)
+    waitForExpectations(timeout: 8)
+    XCTAssertTrue(app.buttons["mirror-latest"].waitForExistence(timeout: 5))
+    tapPaneAction(app, "History")
+    XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
+    tapPaneAction(app, "Live Output")
+    XCTAssertTrue(top.waitForExistence(timeout: 5))
+    XCTAssertTrue(top.isHittable)
   }
 
   /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.

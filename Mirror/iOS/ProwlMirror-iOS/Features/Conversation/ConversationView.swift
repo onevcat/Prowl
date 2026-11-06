@@ -63,6 +63,8 @@ struct ConversationView: View {
       .padding(.vertical, 12)
     }
     .scrollPosition($position)
+    // The composer area is a bar; under it the content fades out instead of showing through.
+    .scrollEdgeEffectStyle(.hard, for: .bottom)
     .defaultScrollAnchor(.bottom)
     // While following, growth keeps the end in view in the same layout pass: the snapshot, later
     // batches and new messages land without a visible scroll. Otherwise what is read stays put.
