@@ -122,7 +122,8 @@ struct ComposerBar: View {
   }
 
   private var placeholder: String {
-    session.pane?.agent == nil ? String(localized: "Terminal is read-only here") : String(localized: "Message")
+    if session.pane?.agent != nil { return String(localized: "Message") }
+    return session.supportsShellSend ? String(localized: "Command") : String(localized: "Terminal is read-only here")
   }
 
   private struct Note: Equatable {

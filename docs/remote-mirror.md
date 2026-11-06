@@ -221,11 +221,13 @@ the agent queues it or steers its current turn by its own rules (Claude Code que
 Codex adds it to the running turn). Only a blocked agent, one that waits for an answer to a
 question or permission, refuses the message. The local input protections still apply.
 Host rechecks the exact subscribed pane and lease, plus input protection, before delivery.
-Mobile shell panes are read-only: Host cannot yet verify an empty shell command line,
-so structured shell Send is refused and its capability is not advertised. An idle task
-can still contain an older local draft. Use an Agent Profile for mobile prompts, or
-control the shell on Host. Local CLI `send` and Mac mirror keyboard input retain their
-existing direct-input behavior.
+In a shell pane, the composer runs a command. The Host takes it only while the shell is
+at its prompt: when a program such as `vim`, `less`, `ssh` or a script runs in front of
+the shell, it refuses and names the program. It also refuses while someone types on the
+Mac. It clears the prompt line first (⌃E, ⌃U), so an old draft on the Mac cannot join
+the command; ⌃Y on the Mac brings the draft back. A one-line command is typed; a command
+with several lines is pasted. Local CLI `send` and Mac mirror keyboard input keep their
+direct-input behavior.
 
 Shared Agent input delivery rejects IME composition and recent Host editing. Claude must
 have a recognized empty composer; the dim `Try "…"` hint of a fresh session and the dim
@@ -276,7 +278,8 @@ the Mac. Answered prompts leave one line in the chat. Instructions that Prowl ad
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 The arrow button returns to the newest message after scrolling up. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
-confirm. In Terminal, agent panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return) for TUI menus.
+confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
+TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
 shows under the composer. The prompt panel shows in Chat only; Terminal shows the menu itself. While a message is still on its way to the Mac, the key bar and prompt answers wait.
 The floating composer

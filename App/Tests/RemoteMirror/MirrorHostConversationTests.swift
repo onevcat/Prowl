@@ -316,6 +316,42 @@ struct MirrorHostConversationTests {
         try String(contentsOf: fixture("claude-2.1.318-command-permission.txt"), encoding: .utf8)))
   }
 
+  /// A shell command from a mirror goes to the source, which checks the prompt; the result says
+  /// what was sent, in the shape `send` reports (089 follow-up). Control characters never reach it.
+  @Test(.timeLimit(.minutes(1))) func shellSendGoesToTheSourceAndReportsWhatWasSent() async throws {
+    let fixture = try await Fixture(transcript: [], agent: nil)
+    defer { fixture.tearDown() }
+    fixture.host.commandService = MirrorCommandService(router: CLICommandRouter())
+    fixture.peer.connection.send(.subscribe(.init(paneID: fixture.source.id, representation: .text, intent: .ifFree)))
+    let lease = try #require(await fixture.next()?.subscriptionID)
+    func run(_ text: String) async throws -> MirrorJSON {
+      let request = MirrorCommandRequest(
+        requestID: UUID(), request: .init(command: .send(.init(pane: fixture.source.id, text: text))))
+      fixture.peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
+      while true {
+        let message = try #require(await fixture.next())
+        if case .commandResult(let result) = message, result.commandResponse.requestID == request.requestID {
+          return result.commandResponse.response
+        }
+      }
+    }
+    func field(_ json: MirrorJSON, _ path: String...) -> MirrorJSON? {
+      path.reduce(json) { value, key in
+        guard case .object(let object) = value else { return nil }
+        return object[key]
+      }
+    }
+    let sent = try await run("echo hi")
+    #expect(field(sent, "ok") == .bool(true) && field(sent, "command") == .string("send"))
+    #expect(field(sent, "data", "input", "bytes") == .number(7))
+    #expect(field(sent, "data", "input", "trailing_enter_sent") == .bool(true))
+    fixture.source.shellRefusal = "vim is running in this pane."
+    let refused = try await run("ls")
+    #expect(field(refused, "ok") == .bool(false) && field(refused, "error", "code") == .string("SHELL_REFUSED"))
+    #expect(field(try await run("echo \u{1B}[31mred"), "ok") == .bool(false))
+    #expect(fixture.source.shellLines == ["echo hi", "ls"])
+  }
+
   /// docs-ai 089 S5: only navigation and control keys, at most eight, pass.
   @Test func agentKeysAllowOnlyNavigationAndControlKeys() {
     #expect(MirrorCommandRequest.AgentKeys(pane: "p", keys: ["esc"]).isAllowed)
@@ -441,6 +477,13 @@ struct MirrorHostConversationTests {
       return nil
     }
     func agentState(_ id: UUID) -> PaneAgentState? { state }
+
+    private(set) var shellLines: [String] = []
+    var shellRefusal: String?
+    func sendShellLine(_ text: String, in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
+      shellLines.append(text)
+      return shellRefusal
+    }
 
     func setAgent(_ agent: DetectedAgent?, transcript: URL?) {
       guard let agent else {

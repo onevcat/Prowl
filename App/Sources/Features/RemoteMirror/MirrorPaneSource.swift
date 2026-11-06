@@ -22,9 +22,12 @@ protocol MirrorPaneSource {
   func answerPrompt(
     _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool
   ) async -> MirrorPromptAnswer
-  /// Presses allow-listed keys in an agent pane (docs-ai 089 S5); nil when sent, else why not.
-  /// `isLive` is asked before every key; once it is false, no key goes.
+  /// Presses allow-listed keys in an agent or shell pane (docs-ai 089 S5); nil when sent, else
+  /// why not. `isLive` is asked before every key; once it is false, no key goes.
   func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String?
+  /// Runs `text` as a command in a shell pane at its prompt: clears the line, inserts the text
+  /// and presses Return. Nil when sent, else why not. `isLive` is asked before every step.
+  func sendShellLine(_ text: String, in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String?
 }
 
 struct MirrorTextSnapshot {
@@ -53,6 +56,9 @@ extension MirrorPaneSource {
   func agentState(_ id: UUID) -> PaneAgentState? { nil }
   func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
     String(localized: "This Host cannot press keys from a mirror.")
+  }
+  func sendShellLine(_ text: String, in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
+    String(localized: "This Host cannot run shell commands from a mirror.")
   }
   func answerPrompt(
     _ id: String, choice: Int, in pane: UUID, isLive: @escaping @MainActor () -> Bool

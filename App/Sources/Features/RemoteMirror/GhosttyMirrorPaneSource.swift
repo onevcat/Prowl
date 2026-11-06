@@ -258,14 +258,16 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   private static let maximumPromptKeys = 16
 
-  /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5): agent panes only, one key at a
-  /// time. Before every key the mirror must still own the pane and nobody may be editing on the
-  /// Mac (`MirrorKeyGuard`).
+  /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5), one key at a time. Before
+  /// every key the mirror must still own the pane, nobody may be editing on the Mac
+  /// (`MirrorKeyGuard`), and the pane must still run the agent it ran at the first key, or still
+  /// none: an agent's keys must not reach the shell after it exits, and a shell pane's keys must
+  /// not reach an agent that started since.
   func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String? {
-    guard let surface = view(pane),
-      let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil }),
-      let agent = agentState(pane)?.detectedAgent
-    else { return String(localized: "Keys go only to panes that run an agent.") }
+    guard let surface = view(pane), let state = worktreeState(of: pane) else {
+      return String(localized: "The pane is no longer open on the Mac.")
+    }
+    let agent = agentState(pane)?.detectedAgent
     var guardrail = MirrorKeyGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
@@ -274,9 +276,11 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       if index > 0 { try? await Task.sleep(for: .milliseconds(60)) }
       let partial = index > 0 ? " " + String(localized: "Only the first \(index) keys were pressed.") : ""
       guard isLive() else { return String(localized: "The mirror no longer owns this pane.") + partial }
-      // The agent may have exited; its shell must not get the rest of the keys.
       guard agentState(pane)?.detectedAgent == agent else {
-        return String(localized: "The agent in this pane is no longer running.") + partial
+        return
+          (agent == nil
+          ? String(localized: "An agent started in this pane.")
+          : String(localized: "The agent in this pane is no longer running.")) + partial
       }
       if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
         return refusal + partial
@@ -287,6 +291,63 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
     }
     return nil
+  }
+
+  /// Runs a command from a mirror in a shell pane (docs-ai 089 follow-up): only while the shell
+  /// is at its prompt with nobody editing on the Mac. It clears the line first (Control-E,
+  /// Control-U), so an old draft cannot join the command; the shell keeps the cleared text in
+  /// its kill ring. A one-line command is typed as plain bytes: zsh pushes pasted text onto the
+  /// kill ring too, which would hide the draft from Control-Y. A command with newlines or tabs
+  /// is pasted, so its lines do not run one by one and a tab does not complete.
+  func sendShellLine(_ text: String, in pane: UUID, isLive: @escaping @MainActor () -> Bool) -> String? {
+    guard let surface = view(pane), let state = worktreeState(of: pane) else {
+      return String(localized: "The pane is no longer open on the Mac.")
+    }
+    guard agentState(pane)?.detectedAgent == nil else {
+      return String(localized: "An agent runs in this pane. Send your message to the agent instead.")
+    }
+    var guardrail = MirrorKeyGuard(
+      hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
+      now: ProcessInfo.processInfo.systemUptime)
+    if let refusal = guardrail.refusal { return refusal }
+    func shellRefusal() -> String? {
+      MirrorShellPrompt.refusal(
+        for: surface.bridge.foregroundProcessGroupID().flatMap { ProcessDetection.foregroundJob(processGroupID: $0) })
+    }
+    if let refusal = shellRefusal() { return refusal }
+    let cleared = String(
+      localized: "The prompt line was cleared and nothing ran. ⌃Y on the Mac brings the old text back.")
+    for (index, key) in ["ctrl-e", "ctrl-u"].enumerated() {
+      let note = index > 0 ? " " + cleared : ""
+      guard isLive() else { return String(localized: "The mirror no longer owns this pane.") + note }
+      if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
+        return refusal + note
+      }
+      guard state.sendKeyToken(key, in: pane) else {
+        return String(localized: "The Mac did not accept the key.") + note
+      }
+      guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
+    }
+    guard isLive() else { return String(localized: "The mirror no longer owns this pane.") + " " + cleared }
+    if let refusal = guardrail.check(hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt) {
+      return refusal + " " + cleared
+    }
+    let inserted: Bool
+    if text.contains(where: { $0 == "\n" || $0 == "\r" || $0 == "\t" }) {
+      inserted = state.insertCommittedText(text, in: pane)
+    } else {
+      inserted = (try? write(Data(text.utf8), to: pane)) != nil
+    }
+    guard inserted else { return String(localized: "The Mac did not accept the text.") + " " + cleared }
+    guardrail.noteSent(lastEditingAt: surface.lastEditingAt)
+    guard isLive(), state.submitLine(in: pane) else {
+      return String(localized: "The command is on the prompt line on the Mac but did not run.")
+    }
+    return nil
+  }
+
+  private func worktreeState(of pane: UUID) -> WorktreeTerminalState? {
+    manager.activeWorktreeStates.first { $0.surfaces[pane] != nil }
   }
 
   /// Re-reads the screen until the highlight sits on `expected`, the prompt changes, or about a

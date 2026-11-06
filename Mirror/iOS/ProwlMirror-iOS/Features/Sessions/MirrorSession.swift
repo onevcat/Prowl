@@ -49,8 +49,11 @@ final class MirrorSession: Identifiable {
   private(set) var keyRefusal: String?
   @ObservationIgnored private var sendingKeys = false
 
+  /// The Host presses keys in shell panes too (capability `shell-keys`).
+  private(set) var supportsShellKeys = false
+
   /// The Host and the pane take keys: the key bar shows.
-  var keysAvailable: Bool { status == .live && supportsAgentKeys && pane?.agent != nil }
+  var keysAvailable: Bool { status == .live && supportsAgentKeys && (pane?.agent != nil || supportsShellKeys) }
   /// A key can go now; not while a message may still be being delivered.
   var canSendKeys: Bool { keysAvailable && !isDeliveringMessage }
 
@@ -162,7 +165,8 @@ final class MirrorSession: Identifiable {
   @ObservationIgnored private var pendingScrollState: MirrorMessage.ScrollStatePayload?
   @ObservationIgnored private var pendingScroll: PendingScroll?
   @ObservationIgnored private var scrollTimeout: Task<Void, Never>?
-  @ObservationIgnored private var supportsShellSend = false
+  /// The Host runs commands in shell panes at their prompt (capability `shell-send`).
+  private(set) var supportsShellSend = false
   @ObservationIgnored private var supportsAgentInput = false
   @ObservationIgnored private var pendingCommand: PendingCommand?
   @ObservationIgnored private var commandTimeout: Task<Void, Never>?
@@ -197,7 +201,7 @@ final class MirrorSession: Identifiable {
       case .disconnected: "Connection lost before Host confirmed the command."
       case .timedOut: "Host did not confirm the command in time."
       case .agentInputUnavailable: "Update Host to support interactive Agent input."
-      case .shellUnavailable: "This Host does not support shell submission. Choose an Agent pane."
+      case .shellUnavailable: "Update Prowl on the Mac to run shell commands from here."
       }
     }
   }
@@ -751,6 +755,7 @@ final class MirrorSession: Identifiable {
       supportsConversation = message.capabilities?.contains("conversation-v1") == true
       supportsPromptRespond = message.capabilities?.contains("prompt-respond") == true
       supportsAgentKeys = message.capabilities?.contains("agent-keys") == true
+      supportsShellKeys = message.capabilities?.contains("shell-keys") == true
       if supportsSubmission { querySubmission() }
       panes = message.panes ?? []
       onVerifiedConnection?(configuration)
