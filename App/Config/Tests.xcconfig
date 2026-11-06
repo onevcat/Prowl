@@ -9,3 +9,6 @@ SWIFT_APPROACHABLE_CONCURRENCY = YES
 SWIFT_EMIT_LOC_STRINGS = NO
 SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
 SWIFT_VERSION = 6.0
+
+// Personal settings such as DEVELOPMENT_TEAM; see Config/Local.xcconfig.template.
+#include? "../../Config/Local.xcconfig"

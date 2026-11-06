@@ -1,0 +1,6 @@
+// Copy to Config/Local.xcconfig (ignored by Git) for settings that are yours, not the project's.
+// The Mac app and the iOS mirror targets include it last, so Tuist regeneration keeps it.
+//
+// Your Apple team ID is the OU of your Apple Development certificate (not the ID in parentheses
+// after your name).
+DEVELOPMENT_TEAM = XXXXXXXXXX
