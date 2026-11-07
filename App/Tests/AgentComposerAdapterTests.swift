@@ -87,6 +87,12 @@ struct AgentComposerAdapterTests {
       read("›\u{1B}[2m⠁\u{1B}[22mreview the tests\u{1B}[2m⡀\u{1B}[22m")
         == .draft(.init(text: "review the tests", isComplete: false)))
     #expect(read("›\u{1B}[2m⠁⠂\u{1B}[22m") == .empty)
+    // A box that takes no input (Codex's parent-owned sub-agent view) is never empty, and a dim
+    // paste chip is content like an image (review of #1071, R1).
+    #expect(read("› \u{1B}[2mViewing sub-agent — direct input is disabled\u{1B}[0m") == .unrecognized)
+    #expect(
+      read("› \u{1B}[2m[Pasted Content 12 chars]\u{1B}[0m")
+        == .draft(.init(text: "[Pasted Content 12 chars]", isComplete: false)))
     #expect(read("› ⠁⠂") == .draft(.init(text: "", isComplete: false)))
     // A draft row that mentions paths does not end the box: the footer is the last such row
     // (review R090-005).

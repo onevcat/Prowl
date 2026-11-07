@@ -46,6 +46,13 @@ With dim hints handled (S1), a real draft still only refused `agents.input` and
   complete. Rows keep their text past the two-column margin and interior blank rows, and only a
   one-row draft without a marker is complete, for Codex, Claude and Devin alike.
 
+## After the S1 review (2026-11-08)
+
+The S1 loop found that Codex's dim `Viewing sub-agent — direct input is disabled` notice (a
+parent-owned child view) passed the dim-only rule although typed text is rejected there. The
+Codex adapter reads such a box as `unrecognized` (`isDirectInputDisabled`), and a dim
+`[Pasted Content …]` chip is content like an image (`showsComposerMarker`).
+
 ## Live verification (2026-11-08, separate Debug app)
 
 `agents dispatch` against Claude Code 2.1.319 and Codex 0.167 with a typed draft: `refuse`

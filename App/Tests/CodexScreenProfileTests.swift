@@ -33,11 +33,21 @@ struct CodexScreenProfileTests {
       CodexScreenProfile.composerHasNoDraft(
         styledSnapshot: "› \u{1B}[2mDescribe what to build next\u{1B}[0m" + footer))
     #expect(
-      !CodexScreenProfile.composerHasNoDraft(
-        styledSnapshot: "› Describe what to build next" + footer))
+      !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› Describe what to build next" + footer))
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› \u{1B}[2mhello\u{1B}[0m\nworld" + footer))
+    // A dim paste chip is content, like an image.
     #expect(
       !CodexScreenProfile.composerHasNoDraft(
-        styledSnapshot: "› \u{1B}[2mhello\u{1B}[0m\nworld" + footer))
+        styledSnapshot: "› \u{1B}[2m[Pasted Content 12 chars]\u{1B}[0m" + footer))
+    // Codex 0.167 shows this dim notice while a parent-owned sub-agent view is selected; the box
+    // takes no input there, so it must not pass as empty (review R1).
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(
+        styledSnapshot: "› \u{1B}[2mViewing sub-agent — direct input is disabled\u{1B}[0m" + footer))
+    #expect(
+      !CodexScreenProfile.composerIsEmpty(
+        in: .init(text: "› Viewing sub-agent — direct input is disabled" + footer)))
   }
 
   @Test func formatterPaletteIsNotComposerText() {
@@ -73,8 +83,7 @@ struct CodexScreenProfileTests {
           detection.reason
             == .matched(
               activity == "Working"
-                ? CodexScreenProfile.RuleID.workingFooter
-                : CodexScreenProfile.RuleID.backgroundTerminalFooter
+                ? CodexScreenProfile.RuleID.workingFooter : CodexScreenProfile.RuleID.backgroundTerminalFooter
             )
         )
       }
@@ -98,9 +107,7 @@ struct CodexScreenProfileTests {
   }
 
   @Test func starfieldComposerRejectsDraftsAndAttachments() {
-    for draft in [
-      "my unsent request", "[Image #1]", "[Pasted Content 12 chars]", "hello\nworld", "⠁⠂",
-    ] {
+    for draft in ["my unsent request", "[Image #1]", "[Pasted Content 12 chars]", "hello\nworld", "⠁⠂"] {
       let snapshot = AgentScreenSnapshot(
         text: "⠈  ⠐\n›⠁\(draft)⡀\n  ⠠ ⢀\n  gpt-6-astra medium · Context 0% used")
       #expect(!CodexScreenProfile.composerIsEmpty(in: snapshot))
@@ -141,10 +148,7 @@ struct CodexScreenProfileTests {
     }
     #expect(
       !CodexScreenProfile.composerIsEmpty(
-        in: .init(
-          text:
-            "› Ask Codex to do anything\n  gpt-5.6 · ~/work\n  ? for shortcuts\n  ? for shortcuts"))
-    )
+        in: .init(text: "› Ask Codex to do anything\n  gpt-5.6 · ~/work\n  ? for shortcuts\n  ? for shortcuts")))
   }
 
   @Test func detailRowsBetweenLiveFooterAndComposerKeepWorking() {
@@ -230,10 +234,8 @@ struct CodexScreenProfileTests {
         CodexScreenProfile.RuleID.backgroundTerminalFooter
       ),
       "codex/0.158.0/blocked/folder-trust.txt": .matched(CodexScreenProfile.RuleID.directoryTrust),
-      "codex/0.158.0/idle/agents-hint-composer.txt": .matched(
-        CodexScreenProfile.RuleID.emptyComposer),
-      "codex/0.158.0/working/tip-below-footer.txt": .matched(
-        CodexScreenProfile.RuleID.workingFooter),
+      "codex/0.158.0/idle/agents-hint-composer.txt": .matched(CodexScreenProfile.RuleID.emptyComposer),
+      "codex/0.158.0/working/tip-below-footer.txt": .matched(CodexScreenProfile.RuleID.workingFooter),
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .codex }
 

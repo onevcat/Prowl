@@ -60,9 +60,7 @@ enum CodexScreenProfile {
   /// Only the live bottom composer, followed by Codex's status line, is evidence.
   /// Historical prompts and arbitrary footer text must not authorize delivery.
   nonisolated static func composerIsEmpty(in snapshot: AgentScreenSnapshot) -> Bool {
-    let lines = snapshot.lines.map {
-      codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces)
-    }
+    let lines = snapshot.lines.map { codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces) }
     guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
     let contents = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
     // Codex renders these hints in an empty composer; wrapped drafts are rejected above.
@@ -97,7 +95,8 @@ enum CodexScreenProfile {
   /// The live composer at the delivery boundary (docs-ai 090): the last `›` row and the rows up
   /// to the status footer. The prompt row showing only dim text after `›` is Codex's placeholder,
   /// whatever the words, which the formatter's dim SGR attribute tells from an identically worded
-  /// draft; an image marker is never a hint. Rows between the prompt and the footer continue a
+  /// draft; an image or paste chip is never a hint, and the dim notice of a box that takes no
+  /// input (a parent-owned sub-agent view) is unrecognized. Rows between the prompt and the footer continue a
   /// draft: their text is kept as shown, past the box's two-column margin, with interior blank
   /// rows, but a soft wrap and a newline look the same, so only a one-row draft is complete. The
   /// status footer is the last row that looks like one, so a draft row that mentions a path
@@ -111,6 +110,7 @@ enum CodexScreenProfile {
       let footer = lines.indices.dropFirst(prompt + 1).last(where: { isStatusFooterRow(lines[$0]) })
     else { return .unrecognized }
     let row = styled.rows[prompt]
+    guard !isDirectInputDisabled(row.text) else { return .unrecognized }
     let cleaned = codexLineWithoutStarfield(row.text)
     guard let marker = cleaned.unicodeScalars.firstIndex(of: "›") else { return .unrecognized }
     let offset = cleaned.unicodeScalars.distance(from: cleaned.unicodeScalars.startIndex, to: marker) + 1
@@ -118,16 +118,15 @@ enum CodexScreenProfile {
     var continuation = styled.rows[(prompt + 1)..<footer].map { continuationRowText($0.text) }
     while continuation.last?.isEmpty == true { continuation.removeLast() }
     while continuation.first?.isEmpty == true { continuation.removeFirst() }
-    let hasImage = row.text.contains("[Image #")
+    let hasMarker = showsComposerMarker(row.text)
     // Stars are decoration only while dim; typed braille is content the cleaning would lose.
     let stars = zip(row.text.unicodeScalars, row.dim).filter { (0x2800...0x28FF).contains($0.0.value) }
     let typedStars = stars.contains { !$0.1 }
-    if continuation.isEmpty, !hasImage, !typedStars, first.isEmpty || row.showsOnlyDimText(from: offset) {
+    if continuation.isEmpty, !hasMarker, !typedStars, first.isEmpty || row.showsOnlyDimText(from: offset) {
       return .empty
     }
     let text = ([first] + continuation).joined(separator: "\n")
-    let isComplete =
-      continuation.isEmpty && !hasImage && stars.isEmpty && !text.contains("[Pasted Content")
+    let isComplete = continuation.isEmpty && !hasMarker && stars.isEmpty
     return .draft(.init(text: text, isComplete: isComplete))
   }
 
@@ -163,6 +162,17 @@ enum CodexScreenProfile {
   /// not a second readiness state machine.
   nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
     composerReading(styledSnapshot: styledSnapshot) == .empty
+  }
+
+  /// Codex collapses an image or a long paste into a chip; whatever its styling, it is content.
+  nonisolated static func showsComposerMarker(_ text: String) -> Bool {
+    text.contains("[Image #") || text.contains("[Pasted Content")
+  }
+
+  /// Codex 0.167 shows `Viewing sub-agent — direct input is disabled` dim in the box while a
+  /// parent-owned child thread is selected; text typed there is rejected, not queued.
+  nonisolated static func isDirectInputDisabled(_ text: String) -> Bool {
+    text.contains("direct input is disabled")
   }
 
   /// Codex's status line below the composer: model and context, or the working directory.
