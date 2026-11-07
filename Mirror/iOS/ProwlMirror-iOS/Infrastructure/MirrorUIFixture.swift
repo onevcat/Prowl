@@ -351,6 +351,38 @@
           case .agentsInput where CommandLine.arguments.contains("--mirror-ui-hold-input"):
             // No receipt: the message stays in flight, so a test can check the sending state.
             return
+          case .agentsInput(let input) where CommandLine.arguments.contains("--mirror-ui-refuse-input-draft"):
+            // The Mac's input box holds a draft (docs-ai 090): refused until the message asks to
+            // replace it, then delivered with the stashed draft in the receipt.
+            if input.onDraft == "replace" {
+              payload = .object([
+                "ok": .bool(true), "command": .string("agents.input"),
+                "data": .object([
+                  "input": .object([
+                    "bytes": .number(Double(input.prompt.utf8.count)), "trailing_enter_sent": .bool(true),
+                    "replaced_draft": .object([
+                      "text": .string("review the tests"), "is_complete": .bool(true), "recovery": .string("stash"),
+                    ]),
+                  ])
+                ]),
+              ])
+            } else {
+              payload = .object([
+                "ok": .bool(false), "command": .string("agents.input"),
+                "error": .object([
+                  "code": .string("DISPATCH_TARGET_BUSY"),
+                  "message": .string(
+                    "Claude has an existing draft or attachment (“review the tests”). Clear it on Host before dispatching."),
+                  "details": .object([
+                    "input": .object([
+                      "reason": .string("draft"),
+                      "draft": .object(["text": .string("review the tests"), "is_complete": .bool(true)]),
+                      "replaceable": .bool(true), "recovery": .string("stash"),
+                    ])
+                  ]),
+                ]),
+              ])
+            }
           case .agentsInput where CommandLine.arguments.contains("--mirror-ui-refuse-input"):
             payload = .object([
               "ok": .bool(false), "command": .string("agents.input"),

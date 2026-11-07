@@ -21,7 +21,13 @@ struct ComposerBar: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let note {
+      if let hostDraft = session.hostDraft {
+        hostDraftCard(hostDraft)
+          .padding(.horizontal, 12).padding(.vertical, 10)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .accessibilityIdentifier("composer-draft-card")
+      } else if let note {
         // On glass, like the field: the chat scrolls behind this area, and bare text over it
         // reads as overlapping rows.
         Text(note.text)
@@ -101,6 +107,7 @@ struct ComposerBar: View {
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
     .animation(.snappy, value: note)
+    .animation(.snappy, value: session.hostDraft)
     .animation(.snappy, value: showsStop)
     .animation(.snappy, value: isSending)
     .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
@@ -108,6 +115,48 @@ struct ComposerBar: View {
         .accessibilityIdentifier("mirror-stop-confirm")
     } message: {
       Text("Prowl presses Escape in the pane on the Mac, which interrupts the current turn.")
+    }
+  }
+
+  /// The Mac's input box holds a draft, so the message was not sent: the person decides on the
+  /// phone (docs-ai 090). Replace clears it there first (Claude Code stashes it, ⌃S on the Mac
+  /// brings it back); Bring Here puts its text in front of this message to merge them.
+  private func hostDraftCard(_ hostDraft: MirrorHostDraft) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("The input box on the Mac still holds a draft, so your message was not sent:")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(hostDraft.excerpt)
+        .font(.caption.monospaced())
+        .lineLimit(3)
+        .textSelection(.enabled)
+        .accessibilityIdentifier("composer-draft-text")
+      if !hostDraft.isComplete {
+        Text("Part of it is an attachment or a collapsed paste the screen does not show.")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+      HStack(spacing: 8) {
+        if hostDraft.replaceable {
+          Button("Replace and Send") { session.replaceHostDraftAndSend() }
+            .buttonStyle(.borderedProminent)
+            .disabled(!session.canSubmit)
+            .accessibilityIdentifier("mirror-replace-draft")
+            .help(
+              hostDraft.recovery == "stash"
+                ? "Stash the draft on the Mac (⌃S there brings it back) and send your message"
+                : "Clear the draft on the Mac and send your message")
+        }
+        Button("Bring Draft Here") { session.bringHostDraftHere() }
+          .disabled(!hostDraft.isComplete)
+          .accessibilityIdentifier("mirror-bring-draft")
+          .help("Put the Mac's draft in front of your message so you can merge them; sending then replaces it on the Mac")
+        Button("Cancel") { session.dismissHostDraft() }
+          .accessibilityIdentifier("mirror-dismiss-draft")
+          .help("Keep your message here and leave the draft on the Mac")
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
     }
   }
 
@@ -151,6 +200,12 @@ struct ComposerBar: View {
     {
       let problem = submission.outcome.status == .rejected || submission.outcome.status == .unknown
       return Note(text: submission.outcome.detail, isProblem: problem)
+    }
+    // A message that replaced a draft on the Mac says where that draft went, until the next one.
+    if let submission = session.submission, submission.outcome.status == .accepted,
+      submission.outcome.replacedDraft != nil, session.draft.isEmpty
+    {
+      return Note(text: submission.outcome.detail, isProblem: false)
     }
     guard session.status == .live else { return nil }
     if let refusal = session.keyRefusal { return Note(text: refusal, isProblem: true) }

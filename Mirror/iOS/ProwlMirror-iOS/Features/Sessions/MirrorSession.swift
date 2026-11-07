@@ -259,8 +259,13 @@ final class MirrorSession: Identifiable {
     let runID: UUID
     let draftRevision: UUID
     let configuration: MirrorSavedConnection
+    /// `replace` when the Host may clear a draft in the agent's input box first (docs-ai 090).
+    let onDraft: String?
     var outcome: MirrorDeliveryOutcome
   }
+
+  /// The person chose to bring the Mac's draft into this composer; the next send replaces it.
+  @ObservationIgnored private var replacesHostDraftOnNextSend = false
 
   var canSubmit: Bool {
     status == .live && supportsSubmission && !isComposing
@@ -536,11 +541,12 @@ final class MirrorSession: Identifiable {
     pending?.continuation.resume(with: result)
   }
 
-  func submitDraft() {
+  func submitDraft(onDraft: String? = nil) {
     guard canSubmit, let pane, let hostRunID, let subscriptionID else { return }
+    let policy = onDraft ?? (replacesHostDraftOnNextSend ? MirrorHostDraft.replace : nil)
     let request = Submission(
       id: UUID(), text: draft, paneID: pane.id, runID: hostRunID,
-      draftRevision: draftRevision, configuration: configuration,
+      draftRevision: draftRevision, configuration: configuration, onDraft: policy,
       outcome: .init(status: .pending, detail: "Sending…"))
     submission = request
     Task { await routeSubmission(request, lease: subscriptionID) }
@@ -557,7 +563,7 @@ final class MirrorSession: Identifiable {
       let listing = try await command(.list(.init()))
       guard status == .live, subscriptionID == lease, submission?.id == request.id else { return }
       let input = try MirrorInputRoute.command(
-        listing: listing, paneID: request.paneID, text: request.text)
+        listing: listing, paneID: request.paneID, text: request.text, onDraft: request.onDraft)
       if case .agentsInput = input, !supportsAgentInput { throw CommandFailure.agentInputUnavailable }
       if case .send = input, !supportsShellSend { throw CommandFailure.shellUnavailable }
       send(
@@ -583,12 +589,17 @@ final class MirrorSession: Identifiable {
         struct Input: Decodable {
           let bytes: Int
           let trailing_enter_sent: Bool
+          let replaced_draft: MirrorHostDraft.Replaced?
         }
         let input: Input?
       }
       struct Failure: Decodable {
+        struct Details: Decodable {
+          let input: MirrorHostDraft.Refusal?
+        }
         let code: String
         let message: String
+        let details: Details?
       }
       let ok: Bool
       let command: String?
@@ -602,13 +613,17 @@ final class MirrorSession: Identifiable {
     if result.ok, ["send", "agents.input"].contains(result.command ?? ""), let input = result.data?.input,
       input.bytes == current.text.utf8.count, input.trailing_enter_sent
     {
+      let replaced = input.replaced_draft.map(MirrorHostDraft.init)
       current.outcome = .init(
-        status: .accepted, detail: "Sent. Agent completion is separate.")
+        status: .accepted, detail: replaced?.sentNote ?? "Sent. Agent completion is separate.",
+        replacedDraft: replaced)
+      replacesHostDraftOnNextSend = false
       if current.draftRevision == draftRevision { draft = "" }
     } else if let error = result.error,
       !["REMOTE_COMMAND_UNCONFIRMED", "DISPATCH_FAILED", "SEND_FAILED"].contains(error.code)
     {
-      current.outcome = .init(status: .rejected, detail: error.message)
+      let hostDraft = (error.details?.input).flatMap(MirrorHostDraft.init)
+      current.outcome = .init(status: .rejected, detail: error.message, hostDraft: hostDraft)
     } else {
       current.outcome = .init(
         status: .unknown, detail: "Delivery is unconfirmed. Check Host before sending again.")
@@ -626,6 +641,33 @@ final class MirrorSession: Identifiable {
 
   func acknowledgeUnknownSubmission() {
     guard submission?.outcome.status == .unknown else { return }
+    submission = nil
+  }
+
+  /// The draft the Mac refused the last message for, while that refusal is shown.
+  var hostDraft: MirrorHostDraft? {
+    guard let submission, submission.outcome.status == .rejected else { return nil }
+    return submission.outcome.hostDraft
+  }
+
+  /// Sends the refused message again and lets the Host clear the Mac's draft first (docs-ai 090).
+  func replaceHostDraftAndSend() {
+    guard let hostDraft, hostDraft.replaceable, canSubmit else { return }
+    submitDraft(onDraft: MirrorHostDraft.replace)
+  }
+
+  /// Puts the Mac's draft in front of this composer's text so the person can merge them; the
+  /// next send then replaces the draft on the Mac.
+  func bringHostDraftHere() {
+    guard let hostDraft, hostDraft.isComplete else { return }
+    let mine = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    draft = mine.isEmpty ? hostDraft.text : hostDraft.text + "\n" + mine
+    replacesHostDraftOnNextSend = hostDraft.replaceable
+    submission = nil
+  }
+
+  func dismissHostDraft() {
+    guard hostDraft != nil else { return }
     submission = nil
   }
 
@@ -947,4 +989,67 @@ nonisolated struct MirrorDeliveryOutcome: Equatable, Sendable {
   enum Status: String, Sendable { case pending, accepted, rejected, unknown }
   let status: Status
   let detail: String
+  /// With `rejected`: the draft in the agent's input box on the Mac that refused the message.
+  var hostDraft: MirrorHostDraft? = nil
+  /// With `accepted`: the draft the Host cleared from the Mac's input box before delivering.
+  var replacedDraft: MirrorHostDraft? = nil
+}
+
+/// A draft in the agent's input box on the Mac, as the Host reports it (docs-ai 090).
+nonisolated struct MirrorHostDraft: Equatable, Sendable {
+  static let replace = "replace"
+
+  struct Refusal: Decodable {
+    struct Draft: Decodable {
+      let text: String
+      let is_complete: Bool
+    }
+    let reason: String
+    let draft: Draft?
+    let replaceable: Bool
+    let recovery: String?
+  }
+  struct Replaced: Decodable {
+    let text: String
+    let is_complete: Bool
+    let recovery: String?
+  }
+
+  let text: String
+  /// False when a collapsed paste or an image marker hides content, so the text cannot be
+  /// carried into this composer.
+  let isComplete: Bool
+  /// Whether the Host can clear it before delivering (`on_draft: replace`).
+  let replaceable: Bool
+  /// `stash` when the same key on the Mac brings it back; nil when it would be gone.
+  let recovery: String?
+
+  init(text: String, isComplete: Bool, replaceable: Bool, recovery: String?) {
+    self.text = text
+    self.isComplete = isComplete
+    self.replaceable = replaceable
+    self.recovery = recovery
+  }
+
+  init?(_ refusal: Refusal) {
+    guard refusal.reason == "draft", let draft = refusal.draft else { return nil }
+    self.init(text: draft.text, isComplete: draft.is_complete, replaceable: refusal.replaceable, recovery: refusal.recovery)
+  }
+
+  init(_ replaced: Replaced) {
+    self.init(text: replaced.text, isComplete: replaced.is_complete, replaceable: true, recovery: replaced.recovery)
+  }
+
+  /// The start of the draft on one line.
+  var excerpt: String {
+    let collapsed = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return collapsed.count > 80 ? String(collapsed.prefix(80)) + "…" : collapsed
+  }
+
+  /// What a receipt says after the Host replaced this draft.
+  var sentNote: String {
+    recovery == "stash"
+      ? String(localized: "Sent. The draft on the Mac was stashed; ⌃S there brings it back.")
+      : String(localized: "Sent. The draft on the Mac was cleared: “\(excerpt)”")
+  }
 }
