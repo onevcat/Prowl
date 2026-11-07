@@ -13,6 +13,12 @@ nonisolated enum ClaudeRuntimeDecoder {
     let status: String
     let updatedAt: Double
     let statusUpdatedAt: Double
+    /// Set on a background job's record (`kind: "bg"`).
+    let jobId: String?
+    /// Set on a pane's record after its conversation moved into the background job with this id.
+    let parkedJobId: String?
+    /// An idle process that `claude daemon` keeps ready for the next job.
+    let spare: Bool?
   }
 
   static func decode(_ data: Data, process: LocalProcessGeneration) throws -> AgentNativeSnapshot {
@@ -25,11 +31,12 @@ nonisolated enum ClaudeRuntimeDecoder {
   }
 
   /// The record's session when it belongs to `process`: the same pid and OS start second,
-  /// an interactive Darwin kind, a UUID session id, and an absolute cwd. The status fields
-  /// are not consulted, so a status this decoder does not know still yields the identity
-  /// (the session resolver reads it through `ClaudeSessionRegistry`, docs-ai 079.004).
+  /// an interactive or background-job Darwin kind, a UUID session id, and an absolute cwd.
+  /// The status fields are not consulted, so a status this decoder does not know still yields
+  /// the identity (the session resolver reads it through `ClaudeSessionRegistry`, docs-ai 079.004).
   static func sessionID(_ record: Record, process: LocalProcessGeneration) -> String? {
-    guard record.pid == process.pid, record.kind == "interactive", record.pidDomain == "darwin",
+    guard record.pid == process.pid, record.kind == "interactive" || record.kind == "bg",
+      record.pidDomain == "darwin",
       UUID(uuidString: record.sessionId) != nil, record.cwd.hasPrefix("/"),
       let start = processStart(record),
       start.timeIntervalSince1970 == floor(process.startedAt.timeIntervalSince1970)

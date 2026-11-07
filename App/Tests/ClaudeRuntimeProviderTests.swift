@@ -8,12 +8,16 @@ struct ClaudeRuntimeProviderTests {
   private let session = "d5afa682-cb4a-4d23-95a0-16a4bb621be6"
   private let start = Date(timeIntervalSince1970: 1_789_402_075.4)
 
-  private func record(status: String = "idle", pid: Int = 42) throws -> Data {
-    try JSONSerialization.data(withJSONObject: [
-      "pid": pid, "sessionId": session, "cwd": "/tmp/experiment", "kind": "interactive",
+  private func record(
+    status: String = "idle", pid: Int = 42, sessionID: String? = nil, kind: String = "interactive",
+    updatedAt: Double = 1_789_402_087_000, extra: [String: Any] = [:]
+  ) throws -> Data {
+    let base: [String: Any] = [
+      "pid": pid, "sessionId": sessionID ?? session, "cwd": "/tmp/experiment", "kind": kind,
       "pidDomain": "darwin", "procStart": "Mon Sep 14 16:07:55 2026", "status": status,
-      "updatedAt": 1_789_402_087_000, "statusUpdatedAt": 1_789_402_087_000,
-    ])
+      "updatedAt": updatedAt, "statusUpdatedAt": updatedAt,
+    ]
+    return try JSONSerialization.data(withJSONObject: base.merging(extra) { _, new in new })
   }
 
   @Test func nativeStatesMapRegistryStatuses() throws {
@@ -133,5 +137,38 @@ struct ClaudeRuntimeProviderTests {
       Issue.record("Dead PID retained authority")
       return
     }
+  }
+
+  /// A pane whose conversation moved into a background job reports the job's status: the
+  /// pane's own record stays `idle` for as long as the job runs. When the job's record goes
+  /// away, the pane's own record applies again even though it is older than the job's.
+  @Test func parkedPaneReportsTheBackgroundJobsStatus() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root.appending(path: "sessions"), withIntermediateDirectories: true)
+    let job = "2ee704b0-df65-4bd5-a89e-5d947adad4d6"
+    try record(extra: ["parkedJobId": "6cad4515"]).write(to: root.appending(path: "sessions/42.json"))
+    let jobURL = root.appending(path: "sessions/77.json")
+    try record(
+      status: "busy", pid: 77, sessionID: job, kind: "bg", updatedAt: 1_789_402_099_000,
+      extra: ["jobId": "6cad4515"]
+    ).write(to: jobURL)
+    let process = LocalProcessGeneration(pid: 42, startedAt: start)
+    let provider = ClaudeRuntimeProvider(processStart: { _ in self.start }, diagnostic: { _ in })
+
+    guard case .native(let parked) = await provider.sample(process: process, configRoot: root).last else {
+      Issue.record("Missing native snapshot for the parked pane")
+      return
+    }
+    #expect(parked.state == .working)
+    #expect(parked.sessionID == job)
+
+    try FileManager.default.removeItem(at: jobURL)
+    guard case .native(let own) = await provider.sample(process: process, configRoot: root).last else {
+      Issue.record("The pane's own record did not apply after the job ended")
+      return
+    }
+    #expect(own.state == .idle)
+    #expect(own.sessionID == session)
   }
 }
