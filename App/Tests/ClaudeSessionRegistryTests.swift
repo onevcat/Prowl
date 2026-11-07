@@ -19,13 +19,15 @@ struct ClaudeSessionRegistryTests {
     procStart: String = "Mon Sep 14 16:07:55 2026",
     kind: String = "interactive",
     cwd: String = "/tmp/experiment",
-    status: String = "idle"
+    status: String = "idle",
+    extra: [String: Any] = [:]
   ) throws -> Data {
-    try JSONSerialization.data(withJSONObject: [
+    let base: [String: Any] = [
       "pid": pid, "sessionId": sessionID, "cwd": cwd, "kind": kind, "pidDomain": "darwin",
       "procStart": procStart, "status": status,
       "updatedAt": 1_789_402_087_000, "statusUpdatedAt": 1_789_402_087_000,
-    ])
+    ]
+    return try JSONSerialization.data(withJSONObject: base.merging(extra) { _, new in new })
   }
 
   private func makeRoot(_ name: String) throws -> URL {
@@ -79,6 +81,77 @@ struct ClaudeSessionRegistryTests {
     // A status the native decoder does not know still carries the identity.
     try registry(sessionID: sessionA, status: "future-state").write(to: url)
     #expect(ClaudeSessionRegistry.session(root: root, pid: 42, processStartedAt: start)?.id == sessionA)
+  }
+
+  /// Claude Code can move the pane's conversation into a background job that `claude daemon`
+  /// runs outside the pane's process tree. The pane's own record keeps the pre-move session
+  /// and names the job in `parkedJobId`; the job's live record names the current session, and
+  /// follows `/clear` inside the job.
+  @Test func parkedPaneFollowsTheLiveRecordOfItsBackgroundJob() throws {
+    let root = try makeRoot("parked")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let sessionC = "8f0c1d2e-3a4b-4c5d-9e6f-7a8b9c0d1e2f"
+    try registry(sessionID: sessionA, extra: ["parkedJobId": "6cad4515"])
+      .write(to: root.appending(path: "sessions/42.json"))
+    // An idle spare of the daemon and another pane's job do not speak for this pane.
+    try registry(sessionID: sessionC, pid: 70, kind: "bg", extra: ["jobId": "b999959b", "spare": true])
+      .write(to: root.appending(path: "sessions/70.json"))
+    try registry(sessionID: sessionC, pid: 71, kind: "bg", extra: ["jobId": "aaaa0000"])
+      .write(to: root.appending(path: "sessions/71.json"))
+    let jobURL = root.appending(path: "sessions/77.json")
+    try registry(sessionID: sessionB, pid: 77, kind: "bg", cwd: "/tmp/job", extra: ["jobId": "6cad4515"])
+      .write(to: jobURL)
+    let project = root.appending(path: "projects/-tmp-job")
+    try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+    let transcript = project.appending(path: "\(sessionB).jsonl")
+    try Data("{}\n".utf8).write(to: transcript)
+
+    let alive: @Sendable (pid_t) -> Date? = { _ in self.start }
+    let session = ClaudeSessionRegistry.session(root: root, pid: 42, processStartedAt: start, processStart: alive)
+    #expect(session?.id == sessionB)
+    #expect(session?.confidence == .exact)
+    #expect(session?.transcriptPath?.resolvingSymlinksInPath() == transcript.resolvingSymlinksInPath())
+
+    // `/clear` inside the job keeps the job id and rotates the session.
+    try registry(sessionID: sessionC, pid: 77, kind: "bg", cwd: "/tmp/job", extra: ["jobId": "6cad4515"])
+      .write(to: jobURL)
+    let rotated = ClaudeSessionRegistry.session(root: root, pid: 42, processStartedAt: start, processStart: alive)
+    #expect(rotated?.id == sessionC)
+    #expect(rotated?.transcriptPath == nil)
+  }
+
+  /// Without a live record of the parked job (the job ended, its pid was reused, or only a
+  /// spare carries the id), the pane's own record applies.
+  @Test func parkedPaneKeepsItsOwnRecordWithoutALiveJob() throws {
+    let root = try makeRoot("parked-gone")
+    defer { try? FileManager.default.removeItem(at: root) }
+    try registry(sessionID: sessionA, extra: ["parkedJobId": "6cad4515"])
+      .write(to: root.appending(path: "sessions/42.json"))
+    let jobURL = root.appending(path: "sessions/77.json")
+    let paneStart = start
+    let alive: @Sendable (pid_t) -> Date? = { _ in paneStart }
+    let jobDead: @Sendable (pid_t) -> Date? = { $0 == 42 ? paneStart : nil }
+    let jobReused: @Sendable (pid_t) -> Date? = { $0 == 42 ? paneStart : paneStart.addingTimeInterval(5) }
+
+    #expect(
+      ClaudeSessionRegistry.session(root: root, pid: 42, processStartedAt: start, processStart: alive)?.id
+        == sessionA)
+    try registry(sessionID: sessionB, pid: 77, kind: "bg", extra: ["jobId": "6cad4515"]).write(to: jobURL)
+    for processStart in [jobDead, jobReused] {
+      let session = ClaudeSessionRegistry.session(
+        root: root, pid: 42, processStartedAt: start, processStart: processStart)
+      #expect(session?.id == sessionA)
+    }
+    for data in [
+      try registry(sessionID: sessionB, pid: 77, kind: "bg", extra: ["jobId": "6cad4515", "spare": true]),
+      try registry(sessionID: sessionB, pid: 78, kind: "bg", extra: ["jobId": "6cad4515"]),
+      try registry(sessionID: sessionB, pid: 77, kind: "interactive", extra: ["jobId": "6cad4515"]),
+    ] {
+      try data.write(to: jobURL)
+      #expect(
+        ClaudeSessionRegistry.session(root: root, pid: 42, processStartedAt: start, processStart: alive)?.id
+          == sessionA)
+    }
   }
 
   @Test func claudeProfileReadsTheRegistryUnderTheHomeAndUnderARelocatedRoot() throws {

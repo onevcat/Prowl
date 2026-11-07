@@ -182,28 +182,83 @@ nonisolated enum GrokActiveSessions {
 /// so the claim is checked against the live process's start second; the transcript path
 /// is reported once the first prompt has created it.
 nonisolated enum ClaudeSessionRegistry {
+  /// The record that speaks for a pane's process, and the process that owns it.
+  struct Resolved {
+    let record: ClaudeRuntimeDecoder.Record
+    let process: LocalProcessGeneration
+  }
+
   static func session(
     root: URL,
     pid: pid_t,
     processStartedAt: Date,
+    processStart: (pid_t) -> Date? = { ProcessDetection.processStartDate(pid: $0) },
     fileManager: FileManager = .default
   ) -> AgentSession? {
-    guard let handle = try? FileHandle(forReadingFrom: root.appending(path: "sessions/\(pid).json")) else {
-      return nil
-    }
-    defer { try? handle.close() }
-    guard let data = try? handle.read(upToCount: 65_537),
-      let record = try? ClaudeRuntimeDecoder.record(data),
-      let id = ClaudeRuntimeDecoder.sessionID(
-        record, process: LocalProcessGeneration(pid: pid, startedAt: processStartedAt))
+    guard
+      let resolved = try? current(
+        root: root, process: LocalProcessGeneration(pid: pid, startedAt: processStartedAt),
+        processStart: processStart, fileManager: fileManager),
+      let id = ClaudeRuntimeDecoder.sessionID(resolved.record, process: resolved.process)
     else { return nil }
     let transcript = root.appending(
-      path: "projects/\(AgentSessionProfile.alphanumericDashed(record.cwd))/\(id).jsonl")
+      path: "projects/\(AgentSessionProfile.alphanumericDashed(resolved.record.cwd))/\(id).jsonl")
     return AgentSession(
       id: id,
       transcriptPath: fileManager.fileExists(atPath: transcript.path) ? transcript : nil,
       source: .processLog,
       confidence: .exact
     )
+  }
+
+  /// The pane process's own record, or the record of the background job it was moved into.
+  /// Claude Code can move a conversation into a background job that `claude daemon` runs
+  /// outside the pane's process tree. The pane's process stays as the job's viewer, and its
+  /// own record keeps the session and status from before the move, with `parkedJobId` naming
+  /// the job. The job's live record then names the current session (it follows `/clear` inside
+  /// the job) and status. Without such a record (the job ended), the pane's own record applies.
+  /// Throws when the pane's own record cannot be read or decoded; the caller checks that it
+  /// belongs to `process`.
+  static func current(
+    root: URL,
+    process: LocalProcessGeneration,
+    processStart: (pid_t) -> Date?,
+    fileManager: FileManager = .default
+  ) throws -> Resolved {
+    let sessions = root.appending(path: "sessions")
+    let record = try ClaudeRuntimeDecoder.record(read(sessions.appending(path: "\(process.pid).json")))
+    let own = Resolved(record: record, process: process)
+    guard let jobID = record.parkedJobId, ClaudeRuntimeDecoder.sessionID(record, process: process) != nil else {
+      return own
+    }
+    return parkedJob(jobID, in: sessions, excluding: process.pid, processStart: processStart, fileManager: fileManager)
+      ?? own
+  }
+
+  private static func parkedJob(
+    _ jobID: String, in sessions: URL, excluding panePID: pid_t, processStart: (pid_t) -> Date?,
+    fileManager: FileManager
+  ) -> Resolved? {
+    let names = (try? fileManager.contentsOfDirectory(atPath: sessions.path)) ?? []
+    var best: Resolved?
+    for name in names where name.hasSuffix(".json") {
+      guard let pid = pid_t(name.dropLast(5)), pid != panePID,
+        let record = try? ClaudeRuntimeDecoder.record(read(sessions.appending(path: name))),
+        record.kind == "bg", record.jobId == jobID, record.spare != true,
+        let startedAt = processStart(pid)
+      else { continue }
+      let process = LocalProcessGeneration(pid: pid, startedAt: startedAt)
+      guard ClaudeRuntimeDecoder.sessionID(record, process: process) != nil,
+        best.map({ record.updatedAt > $0.record.updatedAt }) ?? true
+      else { continue }
+      best = Resolved(record: record, process: process)
+    }
+    return best
+  }
+
+  private static func read(_ url: URL) throws -> Data {
+    let handle = try FileHandle(forReadingFrom: url)
+    defer { try? handle.close() }
+    return try handle.read(upToCount: 65_537) ?? Data()
   }
 }

@@ -7,6 +7,8 @@ actor ClaudeRuntimeProvider {
   private let diagnostic: @Sendable (String) -> Void
   private let time: @Sendable () -> TimeInterval
   private var lastUpdatedAt: Double?
+  /// The process whose record was last published: the pane's, or its background job's.
+  private var lastSource: LocalProcessGeneration?
   private var lastFailureAt: [String: TimeInterval] = [:]
   private var failed = false
 
@@ -28,15 +30,20 @@ actor ClaudeRuntimeProvider {
     }
     let root = configRoot ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
     do {
-      let handle = try FileHandle(forReadingFrom: root.appending(path: "sessions/\(process.pid).json"))
-      defer { try? handle.close() }
-      let data = try handle.read(upToCount: 65_537) ?? Data()
-      let record = try ClaudeRuntimeDecoder.record(data)
-      let snapshot = try ClaudeRuntimeDecoder.snapshot(record, process: process)
+      // A job's record speaks only after the pane's own record was checked against `process`.
+      let resolved = try ClaudeSessionRegistry.current(root: root, process: process, processStart: processStart)
+      let record = resolved.record
+      let snapshot = try ClaudeRuntimeDecoder.snapshot(record, process: resolved.process)
       guard processStart(process.pid) == process.startedAt else {
         lastUpdatedAt = nil
         report("processChanged")
         return [.unavailable]
+      }
+      // Records of different processes have unrelated clocks: a switch between the pane's
+      // record and its job's record starts a new sequence.
+      if lastSource != resolved.process {
+        lastSource = resolved.process
+        lastUpdatedAt = nil
       }
       guard lastUpdatedAt.map({ record.updatedAt >= $0 }) ?? true else {
         report("olderSnapshot")
