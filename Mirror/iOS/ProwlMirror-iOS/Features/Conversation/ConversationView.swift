@@ -4,6 +4,9 @@ import SwiftUI
 /// each run of tool calls folded into one quiet row between them.
 struct ConversationView: View {
   @Bindable var session: MirrorSession
+  /// A phone on its side has no reader left above the composer while the keyboard is up: Latest
+  /// would sit under the navigation bar, so it waits until the keyboard is down.
+  var showsLatest = true
   /// The chat keeps its end in view as content arrives. Only the person's own scrolling changes
   /// it, to whether the end is in view when they let go; content that grows (a snapshot that
   /// arrives late, rows that size themselves) never turns it off.
@@ -69,8 +72,9 @@ struct ConversationView: View {
       .frame(maxWidth: .infinity)
     }
     .scrollPosition($position)
-    // The composer area is a bar; under it the content fades out instead of showing through.
-    .scrollEdgeEffectStyle(.hard, for: .bottom)
+    // The composer is the only thing in the bar: a soft fade under it leaves the chat its height,
+    // with no band behind the floating field.
+    .scrollEdgeEffectStyle(.soft, for: .bottom)
     .defaultScrollAnchor(.bottom)
     // While following, growth keeps the end in view in the same layout pass: the snapshot, later
     // batches and new messages land without a visible scroll. Otherwise what is read stays put.
@@ -112,24 +116,23 @@ struct ConversationView: View {
         userScrolls = false
       }
     }
-    // An inset, not an overlay: it sits above the pane's floating composer.
+    // An inset, not an overlay: it sits above the pane's floating composer, at its trailing edge,
+    // in one row with the pane's Hide Keyboard.
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      if !follows {
+      if showsLatest, !follows {
         Button {
           follows = true
           userScrolls = false
           jumpPending = true
           withAnimation { position.scrollTo(edge: .bottom) }
         } label: {
-          Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
+          MirrorFloatingIcon(systemName: "arrow.down")
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .padding(.bottom, 8)
+        .mirrorFloatingButton()
         .accessibilityLabel("Latest")
         .accessibilityIdentifier("conversation-latest")
         .help("Scroll to the newest message")
-        .transition(.scale.combined(with: .opacity))
+        .mirrorFloatingRow(.trailing, maxWidth: Self.readableWidth + 8)
       }
     }
     .animation(.snappy, value: follows)

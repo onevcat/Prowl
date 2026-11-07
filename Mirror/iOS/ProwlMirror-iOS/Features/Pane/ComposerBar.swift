@@ -15,8 +15,8 @@ struct ComposerBar: View {
     session.canStopAgent && session.draft.isEmpty
   }
   private var isSending: Bool { session.submission?.outcome.status == .pending }
-  /// The measured width of the trailing buttons; the Hide Keyboard symbol grows with Dynamic
-  /// Type, so a constant reservation overlaps the text at accessibility sizes.
+  /// The measured width of the trailing buttons; Send and Stop grow with Dynamic Type up to a
+  /// limit, so a constant reservation overlaps the text at accessibility sizes.
   @State private var controlsWidth: CGFloat = 34
 
   var body: some View {
@@ -38,20 +38,6 @@ struct ComposerBar: View {
           .padding(.vertical, 8)
           .frame(maxWidth: .infinity, alignment: .leading)
           .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-      }
-      if isEditing {
-        // Above the field's trailing corner, away from Send and Stop: a tap meant to close the
-        // keyboard must never stop the agent.
-        Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isEditing = false }
-          .labelStyle(.iconOnly)
-          .font(.body.weight(.medium))
-          .padding(4)
-          .buttonStyle(.glass)
-          .buttonBorderShape(.circle)
-          .frame(maxWidth: .infinity, alignment: .trailing)
-          .accessibilityIdentifier("mirror-dismiss-keyboard")
-          .help("Hide the keyboard")
-          .transition(.scale.combined(with: .opacity))
       }
       // The text view sits directly in the VStack so it is proposed a definite width; a
       // UITextView in an HStack gets a nil width during measurement and never grows.
@@ -117,7 +103,6 @@ struct ComposerBar: View {
     .animation(.snappy, value: note)
     .animation(.snappy, value: showsStop)
     .animation(.snappy, value: isSending)
-    .animation(.snappy, value: isEditing)
     .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
       Button("Stop", role: .destructive) { session.sendKeys(["esc"]) }
         .accessibilityIdentifier("mirror-stop-confirm")

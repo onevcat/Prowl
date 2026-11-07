@@ -52,6 +52,10 @@ struct PaneView: View {
   }
 
   private var compactWhileComposing: Bool { isComposing && verticalSizeClass == .compact }
+  /// The composer's width; the floating buttons line up with its edges.
+  private var barWidth: CGFloat {
+    session.mode == .conversation ? ConversationView.readableWidth + 8 : .infinity
+  }
 
   /// The menu the agent waits on: Chat reads it from the conversation, Terminal from the Host's
   /// `screenPrompt` (docs-ai 089 S4).
@@ -62,11 +66,29 @@ struct PaneView: View {
   var body: some View {
     Group {
       switch session.mode {
-      case .conversation: ConversationView(session: session)
+      case .conversation: ConversationView(session: session, showsLatest: !compactWhileComposing)
       case .screen: ScreenView(session: session, showsControls: !compactWhileComposing)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // Floats over the reader at the composer's leading edge, in one row with the reader's Latest
+    // at the trailing edge; neither takes height from the reader. A phone on its side has no
+    // reader left above the composer, so the button moves to the navigation bar there.
+    .overlay(alignment: .bottom) {
+      if isComposing, !compactWhileComposing {
+        Button {
+          isComposing = false
+        } label: {
+          MirrorFloatingIcon(systemName: "keyboard.chevron.compact.down")
+        }
+        .mirrorFloatingButton()
+        .accessibilityLabel("Hide Keyboard")
+        .accessibilityIdentifier("mirror-dismiss-keyboard")
+        .help("Hide the keyboard")
+        .mirrorFloatingRow(.leading, maxWidth: barWidth)
+      }
+    }
+    .animation(.snappy, value: isComposing)
     .safeAreaInset(edge: .top, spacing: 0) {
       if let problem = connectionProblem {
         MirrorPaneConnectionBanner(problem: problem, session: session)
@@ -93,7 +115,7 @@ struct PaneView: View {
         ComposerBar(session: session, isEditing: $isComposing)
       }
       .animation(.snappy, value: openPrompt?.id)
-      .frame(maxWidth: session.mode == .conversation ? ConversationView.readableWidth + 8 : .infinity)
+      .frame(maxWidth: barWidth)
       .padding(.horizontal, 12)
       .padding(.bottom, 6)
       .frame(maxWidth: .infinity)
@@ -107,6 +129,9 @@ struct PaneView: View {
         }
       }
       ToolbarItemGroup(placement: .topBarTrailing) {
+        if compactWhileComposing {
+          hideKeyboardButton
+        }
         if chatAvailable || session.mode == .conversation {
           Button {
             userChoseMode = true
@@ -137,6 +162,14 @@ struct PaneView: View {
         session.switchMode(.conversation)
       }
     }
+  }
+
+  /// Away from Send and Stop: a tap meant to close the keyboard must never stop the agent.
+  private var hideKeyboardButton: some View {
+    Button("Hide Keyboard", systemImage: "keyboard.chevron.compact.down") { isComposing = false }
+      .labelStyle(.iconOnly)
+      .accessibilityIdentifier("mirror-dismiss-keyboard")
+      .help("Hide the keyboard")
   }
 
   private var location: String {
@@ -276,5 +309,36 @@ extension MirrorSession.Status {
     case .disconnected, .takenOver, .hostStopped, .paneClosed, .incompatible: .red
     case .connecting, .choosingPane, .subscribing: .secondary
     }
+  }
+}
+
+/// The symbol of a floating button in one square for every symbol, so the round buttons in a row
+/// have the same size whatever their symbols' own widths.
+struct MirrorFloatingIcon: View {
+  let systemName: String
+  @ScaledMetric(relativeTo: .body) private var side: CGFloat = 28
+
+  var body: some View {
+    Image(systemName: systemName)
+      .font(.body.weight(.semibold))
+      .frame(width: side, height: side)
+  }
+}
+
+extension View {
+  /// A round glass button that floats over the reader, just above the composer: Hide Keyboard and
+  /// Latest.
+  func mirrorFloatingButton() -> some View {
+    buttonStyle(.glass).buttonBorderShape(.circle)
+  }
+
+  /// Places a floating button at one edge of the composer, which is `maxWidth` wide (the chat's
+  /// readable width, or the full width) with the pane's margins.
+  func mirrorFloatingRow(_ edge: HorizontalAlignment, maxWidth: CGFloat) -> some View {
+    frame(maxWidth: maxWidth, alignment: Alignment(horizontal: edge, vertical: .center))
+      .padding(.horizontal, 12)
+      .padding(.bottom, 8)
+      .frame(maxWidth: .infinity)
+      .transition(.scale(scale: 0.6, anchor: UnitPoint(x: edge == .leading ? 0 : 1, y: 1)).combined(with: .opacity))
   }
 }
