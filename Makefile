@@ -409,7 +409,7 @@ export-archive: # Export xarchive
 archive-mirror-ios: # Archive the iOS mirror app and export an IPA to build/mirror-ios without uploading
 	@"$(CURRENT_MAKEFILE_DIR)/scripts/release-mirror-ios.sh" --export-only
 
-testflight-mirror-ios: # Archive the iOS mirror app and upload it to App Store Connect for TestFlight
+testflight-mirror-ios: # Archive the iOS mirror app and publish it to TestFlight with asc
 	@"$(CURRENT_MAKEFILE_DIR)/scripts/release-mirror-ios.sh"
 
 test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app

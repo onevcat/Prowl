@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
-# Archive the iOS mirror app (Prowl Mirror) and upload it to App Store Connect for TestFlight.
+# Archive the iOS mirror app (Prowl Mirror) and publish it to TestFlight.
 #
 # Usage: ./scripts/release-mirror-ios.sh [--export-only]
 #
 #   --export-only   Archive and export an IPA to build/mirror-ios/export without uploading.
 #
+# xcodebuild archives and exports the IPA. `asc` (https://asccli.sh) uploads it, waits for
+# App Store Connect to process it, writes the What to Test notes, and adds it to a beta group.
+# `asc` uses its own credentials (`asc auth login`); xcodebuild signs with the Apple ID that is
+# signed in to Xcode, and creates the distribution certificate and profile when they are missing.
+#
 # Versioning follows the Mac app's CalVer: MARKETING_VERSION is the local date (YYYY.M.D) and
 # CURRENT_PROJECT_VERSION is the local time (YYYYMMDDHHMM), so each upload gets a larger build.
 # The values go to xcodebuild only; nothing is committed or tagged.
 #
-# Signing uses Xcode automatic signing with the team from Config/Local.xcconfig. Xcode creates the
-# distribution certificate and the provisioning profile when they are missing.
-#
-# Environment variables (environment or Config/Secrets.env):
-#   MIRROR_IOS_VERSION     Overrides the marketing version (YYYY.M.D)
-#   MIRROR_IOS_BUILD       Overrides the build number (integer)
-#   MIRROR_IOS_TEAM_ID     Overrides DEVELOPMENT_TEAM from Config/Local.xcconfig
-#   PROWL_ASC_KEY_ID       App Store Connect API key ID
-#   PROWL_ASC_ISSUER_ID    App Store Connect API key issuer ID
-#   PROWL_ASC_KEY_PATH     Path to the AuthKey_<KEY_ID>.p8 file
-#   The three PROWL_ASC_* values are optional. Without them, xcodebuild uses the Apple ID that
-#   is signed in to Xcode (Settings > Accounts).
+# Environment variables:
+#   MIRROR_IOS_VERSION           Overrides the marketing version (YYYY.M.D)
+#   MIRROR_IOS_BUILD             Overrides the build number (integer)
+#   MIRROR_IOS_TEAM_ID           Overrides DEVELOPMENT_TEAM from Config/Local.xcconfig
+#   MIRROR_IOS_ASC_APP_ID        App Store Connect app ID (default: Prowl Mirror)
+#   MIRROR_IOS_TESTFLIGHT_GROUP  Beta group names or IDs, comma-separated (default: Internal);
+#                                empty uploads the build without adding it to a group
+#   MIRROR_IOS_TEST_NOTES        What to Test notes (default: the commit and the recent
+#                                commits that changed the mirror client)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -40,19 +42,17 @@ case "${1:-}" in
   *) die "unknown argument: $1 (usage: $0 [--export-only])" ;;
 esac
 
-if [[ -f "$PROJECT_DIR/Config/Secrets.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$PROJECT_DIR/Config/Secrets.env"
-  set +a
-fi
-
 PROJECT="$PROJECT_DIR/Mirror/iOS/ProwlMirror-iOS.xcodeproj"
 SCHEME="ProwlMirror-iOS"
 OUTPUT_DIR="$PROJECT_DIR/build/mirror-ios"
 ARCHIVE_PATH="$OUTPUT_DIR/ProwlMirror-iOS.xcarchive"
 EXPORT_PATH="$OUTPUT_DIR/export"
 EXPORT_OPTIONS="$OUTPUT_DIR/ExportOptions.plist"
+IPA_PATH="$EXPORT_PATH/ProwlMirror-iOS.ipa"
+APP_ID="${MIRROR_IOS_ASC_APP_ID:-6831901271}"
+GROUP="${MIRROR_IOS_TESTFLIGHT_GROUP-Internal}"
+# The sources that go into the app; the notes list the commits that changed them.
+CLIENT_PATHS=(Mirror/iOS Mirror/Shared Mirror/Fixtures)
 
 # ── Preflight ────────────────────────────────────────────────────────────────
 
@@ -69,20 +69,11 @@ BUILD="${MIRROR_IOS_BUILD:-$(date +%Y%m%d%H%M)}"
 [[ "$VERSION" =~ ^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]] || die "MIRROR_IOS_VERSION must be YYYY.M.D, got $VERSION"
 [[ "$BUILD" =~ ^[0-9]+$ ]] || die "MIRROR_IOS_BUILD must be an integer, got $BUILD"
 
-AUTH_ARGS=()
-if [[ -n "${PROWL_ASC_KEY_ID:-}${PROWL_ASC_ISSUER_ID:-}${PROWL_ASC_KEY_PATH:-}" ]]; then
-  [[ -n "${PROWL_ASC_KEY_ID:-}" && -n "${PROWL_ASC_ISSUER_ID:-}" && -n "${PROWL_ASC_KEY_PATH:-}" ]] \
-    || die "set all of PROWL_ASC_KEY_ID, PROWL_ASC_ISSUER_ID and PROWL_ASC_KEY_PATH, or none of them"
-  KEY_PATH="${PROWL_ASC_KEY_PATH/#\~/$HOME}"
-  [[ -f "$KEY_PATH" ]] || die "PROWL_ASC_KEY_PATH does not exist: $KEY_PATH"
-  AUTH_ARGS=(
-    -authenticationKeyPath "$KEY_PATH"
-    -authenticationKeyID "$PROWL_ASC_KEY_ID"
-    -authenticationKeyIssuerID "$PROWL_ASC_ISSUER_ID"
-  )
-  log "authentication: App Store Connect API key $PROWL_ASC_KEY_ID"
-else
-  log "authentication: the Apple ID signed in to Xcode"
+if [[ "$UPLOAD" -eq 1 ]]; then
+  command -v asc >/dev/null || die "asc is not installed; run: brew install asc"
+  # Fail before the archive, not after it.
+  asc apps view --id "$APP_ID" --output json >/dev/null 2>&1 \
+    || die "asc cannot read app $APP_ID; check \`asc auth status\` and MIRROR_IOS_ASC_APP_ID"
 fi
 
 log "generating the project"
@@ -101,7 +92,7 @@ TEAM_ID="$(
 
 log "version $VERSION ($BUILD), team $TEAM_ID, commit $COMMIT"
 
-# ── Archive ──────────────────────────────────────────────────────────────────
+# ── Archive and export ───────────────────────────────────────────────────────
 
 rm -rf "$ARCHIVE_PATH" "$EXPORT_PATH"
 mkdir -p "$OUTPUT_DIR"
@@ -109,17 +100,13 @@ mkdir -p "$OUTPUT_DIR"
 log "archiving"
 if ! xcodebuild archive \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-  -destination "generic/platform=iOS" -archivePath "$ARCHIVE_PATH" \
-  -allowProvisioningUpdates ${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"} \
+  -destination "generic/platform=iOS" -archivePath "$ARCHIVE_PATH" -allowProvisioningUpdates \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
   ${TEAM_ARGS[@]+"${TEAM_ARGS[@]}"} \
   2>&1 | tee "$OUTPUT_DIR/archive.log" | mise exec -- xcsift -qw --format toon; then
   die "archive failed; see $OUTPUT_DIR/archive.log"
 fi
 
-# ── Export or upload ─────────────────────────────────────────────────────────
-
-if [[ "$UPLOAD" -eq 1 ]]; then DESTINATION="upload"; else DESTINATION="export"; fi
 cat >"$EXPORT_OPTIONS" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -128,7 +115,7 @@ cat >"$EXPORT_OPTIONS" <<EOF
   <key>method</key>
   <string>app-store-connect</string>
   <key>destination</key>
-  <string>$DESTINATION</string>
+  <string>export</string>
   <key>teamID</key>
   <string>$TEAM_ID</string>
   <key>signingStyle</key>
@@ -141,16 +128,41 @@ cat >"$EXPORT_OPTIONS" <<EOF
 </plist>
 EOF
 
-if [[ "$UPLOAD" -eq 1 ]]; then log "uploading to App Store Connect"; else log "exporting the IPA"; fi
+log "exporting the IPA"
 if ! xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" -exportPath "$EXPORT_PATH" -exportOptionsPlist "$EXPORT_OPTIONS" \
-  -allowProvisioningUpdates ${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"} \
+  -allowProvisioningUpdates \
   2>&1 | tee "$OUTPUT_DIR/export.log" | mise exec -- xcsift -qw --format toon; then
   die "export failed; see $OUTPUT_DIR/export.log"
 fi
+[[ -f "$IPA_PATH" ]] || die "the export did not write $IPA_PATH"
 
-if [[ "$UPLOAD" -eq 1 ]]; then
-  log "uploaded $VERSION ($BUILD) from $COMMIT; TestFlight shows it after App Store Connect processes it"
-else
-  log "exported $VERSION ($BUILD) from $COMMIT to $EXPORT_PATH"
+if [[ "$UPLOAD" -eq 0 ]]; then
+  log "exported $VERSION ($BUILD) from $COMMIT to $IPA_PATH"
+  exit 0
 fi
+
+# ── Publish to TestFlight ────────────────────────────────────────────────────
+
+if [[ -n "${MIRROR_IOS_TEST_NOTES:-}" ]]; then
+  NOTES="$MIRROR_IOS_TEST_NOTES"
+else
+  NOTES="Commit $COMMIT
+
+Recent changes:
+$(git log -n 15 --no-merges --format='- %s' HEAD -- "${CLIENT_PATHS[@]}")"
+fi
+# App Store Connect limits What to Test to 4000 characters.
+NOTES="${NOTES:0:4000}"
+
+PUBLISH_ARGS=(--app "$APP_ID" --ipa "$IPA_PATH" --version "$VERSION" --wait --output table)
+if [[ -n "$GROUP" ]]; then
+  PUBLISH_ARGS+=(--group "$GROUP" --test-notes "$NOTES" --locale en-US)
+  log "uploading and adding the build to TestFlight group(s): $GROUP"
+else
+  PUBLISH_ARGS+=(--upload-only)
+  log "uploading without a TestFlight group"
+fi
+asc publish testflight "${PUBLISH_ARGS[@]}" || die "asc publish testflight failed"
+
+log "published $VERSION ($BUILD) from $COMMIT to TestFlight"

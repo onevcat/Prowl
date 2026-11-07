@@ -141,12 +141,17 @@ tests are separate from real Agent/cross-device acceptance.
 
 ## TestFlight
 
-`make testflight-mirror-ios` archives the Release build and uploads it to App Store Connect;
-`make archive-mirror-ios` stops after it exports the IPA to `build/mirror-ios/export`. Both
-need a clean working tree and the signing team in `Config/Local.xcconfig`
-(`MIRROR_IOS_TEAM_ID` overrides it). Xcode automatic signing creates the distribution
-certificate and profile. Authentication uses the `PROWL_ASC_*` API key in
-`Config/Secrets.env` when it is set, and the Apple ID signed in to Xcode otherwise.
+`make testflight-mirror-ios` archives the Release build, exports the IPA, and publishes it
+with [`asc`](https://asccli.sh): it uploads the build, waits for App Store Connect to process
+it, writes the What to Test notes (the commit and the recent changes to the client), and adds
+it to the `Internal` beta group. `make archive-mirror-ios` stops after it exports the IPA to
+`build/mirror-ios/export`.
+
+Both need a clean working tree and the signing team in `Config/Local.xcconfig`
+(`MIRROR_IOS_TEAM_ID` overrides it). xcodebuild signs with the Apple ID signed in to Xcode
+and creates the distribution certificate and profile. `asc` uses its own API key
+(`asc auth login`). `MIRROR_IOS_TESTFLIGHT_GROUP` selects other groups (empty uploads
+without a group), and `MIRROR_IOS_TEST_NOTES` replaces the notes.
 
 The version follows the Mac app's CalVer and is not committed: the marketing version is the
 local date (`YYYY.M.D`) and the build number is the local time (`YYYYMMDDHHMM`), so every upload
