@@ -99,16 +99,22 @@ struct AgentDetectionDiagnostic {
   }
 
   var summary: String {
-    let processSummary =
-      job?.processes
-      .map { "\($0.ref):\($0.argv0 ?? $0.name)" }
-      .joined(separator: ",") ?? "none"
+    func list(_ processes: [ForegroundProcess]) -> String {
+      processes.isEmpty
+        ? "none" : processes.map { "\($0.ref):\($0.argv0 ?? $0.name)" }.joined(separator: ",")
+    }
+    let processSummary = job.map { list($0.processes) } ?? "none"
+    // A launcher-hosted agent is identified from outside the job, so without this
+    // the identified pid matches nothing in the listing — and this summary is the
+    // only record of a pane that lost its agent.
+    let hostedSummary = job.map { list($0.hosted) } ?? "none"
     return [
       "tab=\(tabId.rawValue.uuidString.prefix(8))",
       "childPID=\(childPID.map(String.init) ?? "nil")",
       "ptyPGID=\(processGroupID.map(String.init) ?? "nil")",
       "fgPGID=\(job.map { String($0.processGroupID) } ?? "nil")",
       "processes=\(processSummary)",
+      "hosted=\(hostedSummary)",
       "identified=\(identified.map { "\($0.agent.rawValue)(\($0.name)):\($0.process.ref)" } ?? "nil")",
       "launch=\(identified.map { String(describing: $0.launchProcess) } ?? "nil")",
       "retained=\(retainedAgent?.rawValue ?? "nil")",
