@@ -16,15 +16,20 @@ struct MirrorCommandTransportTests {
       if case .list = request.request.command {
         let listing: MirrorJSON = .object([
           "ok": .bool(true),
-          "data": .object(["items": .array([
-            .object([
-              "pane": .object(["id": .string(channel.pane.id.uuidString), "agent": .null]),
-              "task": .object(["status": .string("idle")]),
+          "data": .object([
+            "items": .array([
+              .object([
+                "pane": .object(["id": .string(channel.pane.id.uuidString), "agent": .null]),
+                "task": .object(["status": .string("idle")]),
+              ])
             ])
-          ])]),
+          ]),
         ])
-        channel.onMessage?(.commandResult(.init(commandResponse: .init(
-          requestID: request.requestID, response: listing))))
+        channel.onMessage?(
+          .commandResult(
+            .init(
+              commandResponse: .init(
+                requestID: request.requestID, response: listing))))
       } else {
         channel.respond(request.requestID, success: false)
       }
@@ -36,7 +41,9 @@ struct MirrorCommandTransportTests {
     for await _ in changes.stream {
       let finished = withObservationTracking {
         session.submission?.outcome.status == .rejected
-      } onChange: { changes.continuation.yield(()) }
+      } onChange: {
+        changes.continuation.yield(())
+      }
       if finished { break }
     }
     #expect(channel.commands.count == 1)
@@ -110,16 +117,23 @@ struct MirrorCommandTransportTests {
     session.draft = "hello"
     session.submitDraft()
     let first = await channel.nextInput()
-    guard case .agentsInput(let firstInput) = first.request.command else { return Issue.record("expected agent input") }
+    guard case .agentsInput(let firstInput) = first.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
     #expect(firstInput.onDraft == nil)
     channel.refuseForDraft(first.requestID)
     #expect(session.submission?.outcome.status == .rejected)
-    #expect(session.hostDraft == .init(text: "review the tests", isComplete: true, replaceable: true, recovery: "stash"))
+    #expect(
+      session.hostDraft == .init(text: "review the tests", isComplete: true, replaceable: true, recovery: "stash"))
     #expect(session.draft == "hello")
 
     session.replaceHostDraftAndSend()
     let second = await channel.nextInput()
-    guard case .agentsInput(let secondInput) = second.request.command else { return Issue.record("expected agent input") }
+    guard case .agentsInput(let secondInput) = second.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
     #expect(secondInput.onDraft == "replace")
     #expect(secondInput.prompt == "hello")
     channel.respondReplaced(second.requestID)
@@ -133,7 +147,8 @@ struct MirrorCommandTransportTests {
     session.draft = "next"
     session.submitDraft()
     guard case .agentsInput(let third) = await channel.nextInput().request.command else {
-      return Issue.record("expected agent input")
+      Issue.record("expected agent input")
+      return
     }
     #expect(third.onDraft == nil)
   }
@@ -152,7 +167,8 @@ struct MirrorCommandTransportTests {
     #expect(session.submission == nil && session.hostDraft == nil)
     session.submitDraft()
     guard case .agentsInput(let merged) = await channel.nextInput().request.command else {
-      return Issue.record("expected agent input")
+      Issue.record("expected agent input")
+      return
     }
     #expect(merged.onDraft == "replace")
     #expect(merged.prompt == "review the tests\nhello")
@@ -243,7 +259,9 @@ struct MirrorCommandTransportTests {
     for await _ in changes.stream {
       let finished = withObservationTracking {
         session.submission?.outcome.status == .rejected
-      } onChange: { changes.continuation.yield(()) }
+      } onChange: {
+        changes.continuation.yield(())
+      }
       if finished { break }
     }
     #expect(channel.commands.count == 1)
@@ -433,12 +451,16 @@ struct MirrorCommandTransportTests {
         success
         ? .object([
           "ok": .bool(true), "command": .string("agents.input"),
-          "data": .object(["input": .object([
-            "bytes": .number(Double(commands.first(where: { $0.requestID == id }).map {
-              if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
-              return 0
-            } ?? 0)), "trailing_enter_sent": .bool(true),
-          ])]),
+          "data": .object([
+            "input": .object([
+              "bytes": .number(
+                Double(
+                  commands.first(where: { $0.requestID == id }).map {
+                    if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+                    return 0
+                  } ?? 0)), "trailing_enter_sent": .bool(true),
+            ])
+          ]),
         ])
         : .object([
           "ok": .bool(false),
@@ -470,10 +492,11 @@ struct MirrorCommandTransportTests {
     }
     /// Delivered after the Host stashed the Mac's draft.
     func respondReplaced(_ id: UUID) {
-      let bytes = commands.first(where: { $0.requestID == id }).map {
-        if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
-        return 0
-      } ?? 0
+      let bytes =
+        commands.first(where: { $0.requestID == id }).map {
+          if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+          return 0
+        } ?? 0
       onMessage?(
         .commandResult(
           .init(

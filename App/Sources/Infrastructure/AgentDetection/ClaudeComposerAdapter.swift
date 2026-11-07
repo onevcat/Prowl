@@ -2,8 +2,9 @@ import Foundation
 
 /// Claude Code's input box (verified 2.1.319, docs-ai 090): a dim hint of any wording reads as
 /// empty, a collapsed paste or image marker is a draft the screen cannot carry, and Control-S
-/// (`chat:stash`) moves a draft aside, also while a turn runs; Control-S on the empty box brings
-/// it back.
+/// (`chat:stash`) moves a typed draft or a collapsed paste aside, also while a turn runs;
+/// Control-S on the empty box brings it back. An image attachment is not verified with
+/// Control-S and keeps refusing.
 nonisolated struct ClaudeComposerAdapter: AgentComposerAdapter {
   let agent = DetectedAgent.claude
   let name = "Claude"
@@ -14,7 +15,9 @@ nonisolated struct ClaudeComposerAdapter: AgentComposerAdapter {
       return .unrecognized
     }
     guard !contents.isEmpty else { return .empty }
-    return .draft(.init(text: contents, isComplete: !ClaudeScreenProfile.showsAttachmentMarker(contents)))
+    // Rows are joined with newlines, which a soft wrap in the box does not have.
+    let isComplete = !contents.contains("\n") && !ClaudeScreenProfile.showsAttachmentMarker(contents)
+    return .draft(.init(text: contents, isComplete: isComplete))
   }
 
   func pasteConfirmation(for purpose: AgentLinePurpose) -> AgentPasteConfirmation? {

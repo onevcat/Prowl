@@ -848,7 +848,8 @@ struct AgentDispatchCommandHandlerTests {
 
   /// The draft policy reaches the protection and the delivery; a draft refusal carries the
   /// box's contents, and a replaced delivery reports the draft it cleared (docs-ai 090).
-  @Test func draftPolicyReachesProtectionAndDeliveryAndTheirDetailsReachTheCaller() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func draftPolicyReachesProtectionAndDeliveryAndTheirDetailsReachTheCaller() async throws {
     let target = resolvedTarget()
     var policies: [AgentDraftPolicy] = []
     let draft = AgentComposerDraftPayload(text: "git push", isComplete: true)

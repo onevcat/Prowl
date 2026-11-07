@@ -6,6 +6,12 @@ import ProwlCLIShared
 /// the box after every key, and stops as soon as it reads empty; the box is never typed into
 /// unless that re-read confirms it. Like `AgentPromptDelivery`, it observes the screen through
 /// closures so the sequencing is testable with a `TestClock`.
+///
+/// Local activity is detected two ways. The editing stamp moves only for typed text and
+/// deletions (`TerminalEditingActivity`), never for Prowl's own control keys, so any change to
+/// it is someone typing on the Mac. The input generation counts every key, Prowl's own included:
+/// it is recorded right after each own key, before any suspension, and any later change is
+/// someone else's key (history, control keys) that may have replaced the box.
 @MainActor
 struct AgentComposerClearing {
   struct Observation: Equatable {
@@ -13,6 +19,8 @@ struct AgentComposerClearing {
     let reading: AgentComposerReading?
     let hasMarkedText: Bool
     let editingRevision: TimeInterval?
+    /// The surface's input count (`GhosttySurfaceView.inputGeneration`).
+    var inputGeneration: UInt64?
   }
 
   enum Outcome: Equatable {
@@ -61,34 +69,45 @@ struct AgentComposerClearing {
       presses = Self.maximumPresses(forLines: draft.text.split(separator: "\n", omittingEmptySubsequences: false).count)
     }
     guard let start = observe() else { return .refused(gone) }
-    var guardrail = AgentKeySequenceGuard(
+    let guardrail = AgentKeySequenceGuard(
       hasMarkedText: start.hasMarkedText, lastEditingAt: start.editingRevision, now: now())
     if let refusal = guardrail.refusal { return .refused(AgentInputRefusal(refusal, details: .init(reason: .editing))) }
     var pressed = 0
     var current = start
+    var ownGeneration = start.inputGeneration
     while current.reading != .empty, pressed < presses {
-      if let refusal = guardrail.checkRefusal(
-        hasMarkedText: current.hasMarkedText, lastEditingAt: current.editingRevision)
-      {
+      if let refusal = localActivity(in: current, guardrail: guardrail, ownGeneration: ownGeneration) {
         return .refused(partial(refusal, pressed: pressed))
       }
       guard !Task.isCancelled, press(key) else {
         return .refused(partial(AgentInputRefusal("The Mac did not accept the key."), pressed: pressed))
       }
       pressed += 1
+      // Prowl's own key is the only input since the check above: record it before anything can
+      // suspend, so every later observation is compared against it instead of adopted.
       guard let afterPress = observe() else { return .refused(gone) }
-      guardrail.noteSent(lastEditingAt: afterPress.editingRevision)
+      ownGeneration = afterPress.inputGeneration
+      let before = current.reading
       current = afterPress
-      // Give the key time to reach the agent and the screen time to show the result.
-      for _ in 0..<Self.settlePolls where current.reading == afterPress.reading {
+      // Give the key time to reach the agent and the screen time to show the result: poll until
+      // the box reads differently, or the budget for this key runs out.
+      var polls = 0
+      while current.reading == before, polls < Self.settlePolls {
+        polls += 1
         do {
           try await clock.sleep(for: Self.settleInterval)
         } catch {
           return .refused(partial(cancelled, pressed: pressed))
         }
-        guard let settled = observe() else { return .refused(gone) }
-        current = settled
+        guard let next = observe() else { return .refused(gone) }
+        current = next
+        if let refusal = localActivity(in: current, guardrail: guardrail, ownGeneration: ownGeneration) {
+          return .refused(partial(refusal, pressed: pressed))
+        }
       }
+    }
+    if let refusal = localActivity(in: current, guardrail: guardrail, ownGeneration: ownGeneration) {
+      return .refused(partial(refusal, pressed: pressed))
     }
     guard current.reading == .empty else {
       return .refused(
@@ -98,6 +117,23 @@ struct AgentComposerClearing {
           details: .init(reason: .clearing, draft: draft.payload, replaceable: false, recovery: plan.recovery)))
     }
     return .cleared(.init(text: draft.text, isComplete: draft.isComplete, recovery: plan.recovery))
+  }
+
+  /// Someone typed on the Mac (the editing stamp or an input method), or some key other than
+  /// Prowl's own reached the pane since the last own key.
+  private func localActivity(
+    in observation: Observation, guardrail: AgentKeySequenceGuard, ownGeneration: UInt64?
+  ) -> AgentInputRefusal? {
+    if let refusal = guardrail.checkRefusal(
+      hasMarkedText: observation.hasMarkedText, lastEditingAt: observation.editingRevision)
+    {
+      return refusal
+    }
+    guard observation.inputGeneration == ownGeneration else {
+      return AgentInputRefusal(
+        String(localized: "Someone pressed a key in this pane on the Mac."), details: .init(reason: .editing))
+    }
+    return nil
   }
 
   private var gone: AgentInputRefusal { AgentInputRefusal("The target terminal is no longer available.") }

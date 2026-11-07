@@ -98,7 +98,9 @@ enum CodexScreenProfile {
   /// to the status footer. The prompt row showing only dim text after `›` is Codex's placeholder,
   /// whatever the words, which the formatter's dim SGR attribute tells from an identically worded
   /// draft; an image marker is never a hint. Rows between the prompt and the footer continue a
-  /// draft. No footer, or an unreadable snapshot, is an unrecognized box.
+  /// draft: their text is kept as shown, past the box's two-column margin, with interior blank
+  /// rows, but a soft wrap and a newline look the same, so only a one-row draft is complete. No
+  /// footer, or an unreadable snapshot, is an unrecognized box.
   nonisolated static func composerReading(styledSnapshot: String) -> AgentComposerReading {
     guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return .unrecognized }
     let lines = styled.rows.map { codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces) }
@@ -108,12 +110,43 @@ enum CodexScreenProfile {
     else { return .unrecognized }
     let row = styled.rows[prompt]
     let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
-    let first = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
-    let continuation = lines[(prompt + 1)..<footer].filter { !$0.isEmpty }
+    let first = composerRowText(row.text, after: marker, in: row.text.unicodeScalars)
+    var continuation = styled.rows[(prompt + 1)..<footer].map { continuationRowText($0.text) }
+    while continuation.last?.isEmpty == true { continuation.removeLast() }
+    while continuation.first?.isEmpty == true { continuation.removeFirst() }
     let hasImage = row.text.contains("[Image #")
     if continuation.isEmpty, !hasImage, first.isEmpty || row.showsOnlyDimText(from: offset) { return .empty }
     let text = ([first] + continuation).joined(separator: "\n")
-    return .draft(.init(text: text, isComplete: !hasImage && !text.contains("[Pasted Content")))
+    let isComplete = continuation.isEmpty && !hasImage && !text.contains("[Pasted Content")
+    return .draft(.init(text: text, isComplete: isComplete))
+  }
+
+  /// The prompt row's text after `›` and its one separating space, trailing blanks dropped.
+  nonisolated private static func composerRowText(
+    _ text: String, after marker: String.UnicodeScalarView.Index, in scalars: String.UnicodeScalarView
+  ) -> String {
+    var start = scalars.index(after: marker)
+    if start < scalars.endIndex, scalars[start] == " " { start = scalars.index(after: start) }
+    return trimmingTrailingWhitespace(String(scalars[start...]))
+  }
+
+  /// A continuation row past the two-column margin that aligns it under the prompt's text, with
+  /// its own indentation kept.
+  nonisolated private static func continuationRowText(_ text: String) -> String {
+    let cleaned = codexLineWithoutStarfield(text)
+    var start = cleaned.startIndex
+    for _ in 0..<2 where start < cleaned.endIndex && cleaned[start] == " " {
+      start = cleaned.index(after: start)
+    }
+    return trimmingTrailingWhitespace(String(cleaned[start...]))
+  }
+
+  nonisolated private static func trimmingTrailingWhitespace(_ text: String) -> String {
+    var end = text.endIndex
+    while end > text.startIndex, text[text.index(before: end)].isWhitespace {
+      end = text.index(before: end)
+    }
+    return String(text[..<end])
   }
 
   /// `composerReading(styledSnapshot:)` reads empty. Read only at the public delivery boundary,

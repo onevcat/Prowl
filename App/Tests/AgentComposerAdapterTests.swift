@@ -16,6 +16,17 @@ struct AgentComposerAdapterTests {
     #expect(ClaudeComposerAdapter().clearPlan == .stash(key: "ctrl-s"))
     #expect(CodexComposerAdapter().clearPlan == .killLines(key: "ctrl-u"))
     #expect(DevinComposerAdapter().clearPlan == .unsupported)
+    // Stashing or killing an image attachment is unverified; a collapsed text paste is not.
+    let image = AgentComposerDraft(text: "see [Image #1]", isComplete: false)
+    let paste = AgentComposerDraft(text: "[Pasted text #1 +9 lines]", isComplete: false)
+    #expect(ClaudeComposerAdapter().clearPlan(for: image) == .unsupported)
+    #expect(ClaudeComposerAdapter().clearPlan(for: paste) == .stash(key: "ctrl-s"))
+    #expect(CodexComposerAdapter().clearPlan(for: image) == .unsupported)
+    let lines = AgentComposerDraft(text: "l1\nl2", isComplete: false)
+    #expect(CodexComposerAdapter().clearPlan(for: lines) == .killLines(key: "ctrl-u"))
+    let imagePlan = ClaudeComposerAdapter().clearPlan(for: image)
+    let imageRefusal = AgentInputRefusal.draft(image, agentName: "Claude", plan: imagePlan)
+    #expect(imageRefusal.details?.replaceable == false && imageRefusal.details?.recovery == nil)
     #expect(AgentComposerClearPlan.stash(key: "ctrl-s").recovery == .stash)
     #expect(AgentComposerClearPlan.killLines(key: "ctrl-u").recovery == nil)
     #expect(!AgentComposerClearPlan.unsupported.isSupported)
@@ -36,6 +47,10 @@ struct AgentComposerAdapterTests {
     #expect(
       read("❯ run the tests", styled: "❯ run the tests")
         == .draft(.init(text: "run the tests", isComplete: true)))
+    // A draft over several rows cannot tell a soft wrap from a newline, so it is not complete.
+    #expect(
+      read("❯ run the\n  tests", styled: "❯ run the\n  tests")
+        == .draft(.init(text: "run the\n  tests", isComplete: false)))
     #expect(
       read("❯ [Pasted text #1 +9 lines]", styled: "❯ [Pasted text #1 +9 lines]")
         == .draft(.init(text: "[Pasted text #1 +9 lines]", isComplete: false)))
@@ -59,7 +74,13 @@ struct AgentComposerAdapterTests {
     #expect(
       read("› Ask Codex to do anything")
         == .draft(.init(text: "Ask Codex to do anything", isComplete: true)))
-    #expect(read("› l1\n  l2\n  l3") == .draft(.init(text: "l1\nl2\nl3", isComplete: true)))
+    // Rows keep their indentation past the two-column margin and interior blank rows; a draft
+    // over several rows cannot tell a soft wrap from a newline, so it is not complete.
+    #expect(read("› l1\n  l2\n  l3") == .draft(.init(text: "l1\nl2\nl3", isComplete: false)))
+    #expect(
+      read("› if ready:\n      run()\n\n  print(1)\n")
+        == .draft(.init(text: "if ready:\n    run()\n\nprint(1)", isComplete: false)))
+    #expect(read("›   indented") == .draft(.init(text: "  indented", isComplete: true)))
     #expect(
       read("› \u{1B}[2m[Image #1]\u{1B}[0m") == .draft(.init(text: "[Image #1]", isComplete: false))
     )
@@ -93,7 +114,9 @@ struct AgentComposerAdapterTests {
     let draft = AgentScreenSnapshot(text: "────────\n❭ first line\nsecond line\n────────\nstatus")
     #expect(
       adapter.read(draft) { nil }
-        == .draft(.init(text: "first line\nsecond line", isComplete: true)))
+        == .draft(.init(text: "first line\nsecond line", isComplete: false)))
+    let oneRow = AgentScreenSnapshot(text: "────────\n❭ next prompt\n────────\nstatus")
+    #expect(adapter.read(oneRow) { nil } == .draft(.init(text: "next prompt", isComplete: true)))
     #expect(adapter.read(.init(text: "❭ 1 Yes\n↑↓ select · esc cancel")) { nil } == .unrecognized)
     #expect(styledReads == 0)
   }

@@ -23,11 +23,15 @@ nonisolated enum AgentPasteConfirmation: Equatable, Sendable {
 /// Text in an agent's input box, as the screen shows it.
 nonisolated struct AgentComposerDraft: Equatable, Sendable {
   let text: String
-  /// False when a marker stands for content the screen does not show (a collapsed paste, an
-  /// image), so the text cannot be carried elsewhere.
+  /// True only when `text` is the draft exactly: one screen row with no marker. A draft that
+  /// spans rows cannot tell a soft wrap from a newline, and a marker (a collapsed paste, an
+  /// image) stands for content the screen does not show, so neither can be carried elsewhere.
   let isComplete: Bool
 
   var payload: AgentComposerDraftPayload { .init(text: text, isComplete: isComplete) }
+
+  /// An image attachment chip (`[Image #1]`), which Claude Code and Codex render alike.
+  var showsImage: Bool { text.contains(/\[Image #\d+\]/) }
 }
 
 /// What an agent's input box shows, read at the delivery boundary.
@@ -67,7 +71,11 @@ nonisolated protocol AgentComposerAdapter: Sendable {
   /// The box as the screen shows it. `styledSnapshot` is read only when the plain text cannot
   /// tell a dim hint from a typed draft.
   func read(_ snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?) -> AgentComposerReading
+  /// The verified way to empty the box of a typed draft.
   var clearPlan: AgentComposerClearPlan { get }
+  /// The way to empty the box of this draft: `clearPlan`, or `unsupported` for content the key
+  /// has not been verified against (an image attachment).
+  func clearPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan
   /// The agent loses an Enter that arrives before it accepts the pasted text.
   var dropsEarlyEnter: Bool { get }
   /// Nil means type the line and press Enter on the same main-actor turn.
@@ -78,6 +86,11 @@ nonisolated protocol AgentComposerAdapter: Sendable {
 
 nonisolated extension AgentComposerAdapter {
   var dropsEarlyEnter: Bool { false }
+
+  /// Stashing or killing an image attachment is unverified for every agent (docs-ai 090).
+  func clearPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan {
+    draft.showsImage ? .unsupported : clearPlan
+  }
 
   func confirmsPaste(_ composer: String, text: String) -> Bool {
     AgentComposerEcho.matchesExactly(composer, text: text)

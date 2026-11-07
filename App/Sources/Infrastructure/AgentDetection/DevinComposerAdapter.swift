@@ -11,7 +11,9 @@ nonisolated struct DevinComposerAdapter: AgentComposerAdapter {
 
   func read(_ snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?) -> AgentComposerReading {
     guard let contents = DevinScreenProfile.composerContents(in: snapshot) else { return .unrecognized }
-    return contents.isEmpty ? .empty : .draft(.init(text: contents, isComplete: true))
+    guard !contents.isEmpty else { return .empty }
+    // Rows are joined with newlines, which a soft wrap in the box does not have.
+    return .draft(.init(text: contents, isComplete: !contents.contains("\n")))
   }
 
   func pasteConfirmation(for purpose: AgentLinePurpose) -> AgentPasteConfirmation? {

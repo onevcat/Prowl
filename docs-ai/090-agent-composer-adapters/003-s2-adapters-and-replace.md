@@ -32,6 +32,20 @@ With dim hints handled (S1), a real draft still only refused `agents.input` and
   stash, kill-line loop and cap, local typing mid-sequence, unsupported, gone screen), updated
   delivery and dispatch handler tests, CLI wire/parsing/renderer/schema tests.
 
+## Review round 1 (2026-11-08)
+
+- R090-001: the clearing poll adopted every observed editing stamp as its own baseline, so local
+  typing during the settle wait could pass the guard. Own-key provenance (editing stamp and
+  input generation) is now recorded synchronously after each press and every later observation
+  is checked against it, including the one that first reads empty. Tests cover typing during the
+  wait and a local key coinciding with the empty reading.
+- R090-002: image attachments were advertised as replaceable. `clearPlan(for:)` returns
+  `unsupported` for an `[Image #N]` draft on every adapter; a collapsed text paste stays
+  replaceable (verified with ⌃S).
+- R090-003: Codex continuation rows lost indentation and blank rows while the draft was marked
+  complete. Rows keep their text past the two-column margin and interior blank rows, and only a
+  one-row draft without a marker is complete, for Codex, Claude and Devin alike.
+
 ## Refs
 
 PR (S2), docs-ai 090 plan.

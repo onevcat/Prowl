@@ -132,7 +132,9 @@ struct ComposerBar: View {
         .textSelection(.enabled)
         .accessibilityIdentifier("composer-draft-text")
       if !hostDraft.isComplete {
-        Text("Part of it is an attachment or a collapsed paste the screen does not show.")
+        Text(
+          "The screen does not show it exactly (several lines, an attachment, or a collapsed paste), so it cannot be brought here."
+        )
           .font(.caption2)
           .foregroundStyle(.secondary)
       }

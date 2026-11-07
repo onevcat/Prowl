@@ -159,9 +159,10 @@ The payload takes an optional `on_draft` (`refuse`, the default, or `replace`; d
 A draft or an attachment in the agent's input box refuses under `refuse` with
 `DISPATCH_TARGET_BUSY` and `error.details.input`: `reason` (`draft`, `unrecognized`,
 `editing`, `composing`, or `clearing` when a replacement did not leave the box empty),
-`draft` (`text` as the screen shows it, `is_complete` false when a collapsed paste or an
-image marker hides content), `replaceable`, and `recovery` (`stash` when the agent brings the
-draft back with the same key). Under `replace`, a replaceable draft is cleared the agent's own
+`draft` (`text` as the screen shows it; `is_complete` only for one screen row without a
+marker, since several rows cannot tell a soft wrap from a newline and a collapsed paste or an
+image marker hides content), `replaceable` (false for an image attachment, whose clearing is
+unverified), and `recovery` (`stash` when the agent brings the draft back with the same key). Under `replace`, a replaceable draft is cleared the agent's own
 way first — Claude Code's ⌃S stash, Codex's ⌃U line kills — under the same key guard as
 `agentKeys`, and the box is re-read as empty before the text goes in; a dim hint is never a
 draft. A Host that does not know `on_draft` ignores it and refuses drafts as before.

@@ -49,10 +49,10 @@ extension WorktreeTerminalState {
           else { return nil }
           return .init(
             reading: self.composerReading(of: surface, adapter: adapter), hasMarkedText: surface.hasMarkedText(),
-            editingRevision: surface.lastEditingAt)
+            editingRevision: surface.lastEditingAt, inputGeneration: surface.inputGeneration)
         },
         press: { [weak self] in self?.sendKeyToken($0, in: surfaceID) == true },
-        plan: adapter.clearPlan, agentName: adapter.name)
+        plan: adapter.clearPlan(for: draft), agentName: adapter.name)
       switch await clearing.clear(draft) {
       case .cleared(let payload): replaced = payload
       case .refused(let refusal): return .refused(refusal)
@@ -71,7 +71,8 @@ extension WorktreeTerminalState {
           AgentInputRefusal(
             "\(adapter.name) still shows a draft after clearing. Check the pane on the Mac before retrying.",
             details: .init(
-              reason: .clearing, draft: draft.payload, replaceable: false, recovery: adapter.clearPlan.recovery)))
+              reason: .clearing, draft: draft.payload, replaceable: false,
+              recovery: adapter.clearPlan(for: draft).recovery)))
       }
     }
     switch await deliverLine(text, surface: surface, surfaceID: surfaceID, purpose: .dispatch, isLive: isLive) {
@@ -176,8 +177,9 @@ extension WorktreeTerminalState {
       {
         return nil
       }
-      if policy == .replace, adapter.clearPlan.isSupported { return nil }
-      return .draft(draft, agentName: adapter.name, plan: adapter.clearPlan)
+      let plan = adapter.clearPlan(for: draft)
+      if policy == .replace, plan.isSupported { return nil }
+      return .draft(draft, agentName: adapter.name, plan: plan)
     }
   }
 
