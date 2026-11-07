@@ -5,6 +5,10 @@ CURRENT_PROJECT_VERSION = 1
 DEVELOPMENT_TEAM =
 ENABLE_PREVIEWS = YES
 GENERATE_INFOPLIST_FILE = YES
+INFOPLIST_KEY_CFBundleDisplayName = Prowl Mirror
+// The app uses only the TLS and CryptoKit encryption that iOS provides, which is exempt.
+INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.developer-tools
 INFOPLIST_KEY_NSCameraUsageDescription = Scan a Prowl Host pairing code to connect.
 INFOPLIST_KEY_NSLocalNetworkUsageDescription = Connect to your Prowl Host to mirror terminal panes.
 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
