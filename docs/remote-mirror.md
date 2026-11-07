@@ -235,12 +235,14 @@ shell that takes bracketed paste. Local CLI `send` and Mac mirror keyboard input
 direct-input behavior.
 
 Shared Agent input delivery rejects IME composition and recent Host editing. Claude must
-have a recognized empty composer; the dim `Try "…"` hint of a fresh session and the dim
-queued messages hint of a running turn count as empty. It inserts text, waits up to two seconds for the paste echo, and only then sends
+have a recognized empty composer; a dim hint in it counts as empty whatever its words: the
+`Try "…"` hint of a fresh session, the prompt suggestion Claude Code shows after a turn, and the
+queued messages hint of a running turn. It inserts text, waits up to two seconds for the paste echo, and only then sends
 Enter, provided the surface/Agent/edit revision is unchanged. The echo may wrap anywhere,
 also between two CJK characters; only spaces inside a row must match. Codex has an explicit
-idle-composer rule. For both, the delivery boundary checks formatter dim styling so a
-hint is not confused with an identically worded draft. When an earlier delivery left
+idle-composer rule. For both, the delivery boundary reads the formatter's dim styling, not the
+hint's wording, so a rotating placeholder stays a hint and an identically worded draft stays a
+draft; an image or paste marker is a draft whatever its styling. When an earlier delivery left
 its text in the composer without Enter, the same request gets Enter alone instead of a second
 copy, but only for exactly that text and only while nobody has edited the composer since. A draft
 that merely looks the same on screen (a collapsed paste marker, whitespace) is not trusted. Unknown layouts, other drafts and attachments refuse delivery,

@@ -60,17 +60,10 @@ enum CodexScreenProfile {
   /// Only the live bottom composer, followed by Codex's status line, is evidence.
   /// Historical prompts and arbitrary footer text must not authorize delivery.
   nonisolated static func composerIsEmpty(in snapshot: AgentScreenSnapshot) -> Bool {
-    let lines = snapshot.lines.map { codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces) }
-    guard let prompt = lines.lastIndex(where: isCodexPromptLine) else { return false }
-    let suffix = lines.dropFirst(prompt + 1).filter { !$0.isEmpty }
-    // Codex 0.158 adds a shortcut hint row below the status line.
-    guard suffix.count == 1 || (suffix.count == 2 && isShortcutHintRow(suffix[1])),
-      let footer = suffix.first,
-      footer.contains(" · "),
-      footer.contains("Context ") || footer.contains("context left") || footer.contains("~/")
-        || footer.contains("/"),
-      !footer.contains("esc to interrupt"), !footer.contains("[Image #")
-    else { return false }
+    let lines = snapshot.lines.map {
+      codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces)
+    }
+    guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
     let contents = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
     // Codex renders these hints in an empty composer; wrapped drafts are rejected above.
     // A braille-only draft is indistinguishable from stars without styled evidence.
@@ -84,19 +77,44 @@ enum CodexScreenProfile {
       ].contains(contents)
   }
 
+  /// The prompt row of the live composer: the last `›` row, followed only by the status line
+  /// and the optional shortcut hint row. A wrapped draft or a menu puts other rows there.
+  nonisolated private static func liveComposerPromptIndex(in lines: [String]) -> Int? {
+    guard let prompt = lines.lastIndex(where: isCodexPromptLine) else { return nil }
+    let suffix = lines.dropFirst(prompt + 1).filter { !$0.isEmpty }
+    // Codex 0.158 adds a shortcut hint row below the status line.
+    guard suffix.count == 1 || (suffix.count == 2 && isShortcutHintRow(suffix[1])),
+      let footer = suffix.first,
+      footer.contains(" · "),
+      footer.contains("Context ") || footer.contains("context left") || footer.contains("~/")
+        || footer.contains("/"),
+      !footer.contains("esc to interrupt"), !footer.contains("[Image #")
+    else { return nil }
+    return prompt
+  }
+
   nonisolated private static func isShortcutHintRow(_ line: String) -> Bool {
     (line.contains(" for shortcuts") || line.contains(" for agents"))
       && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
-  /// The formatter's dim SGR attribute distinguishes hints from identically worded drafts.
+  /// Whether the live composer holds nothing typed: its prompt row shows only dim text after
+  /// `›`, which is how Codex renders its placeholder, whatever the words. The formatter's dim
+  /// SGR attribute tells it from an identically worded draft; an image marker is never a hint.
   /// This is read only at the public delivery boundary, not a second readiness state machine.
   nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
-    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot), composerIsEmpty(in: styled.plain),
-      let row = styled.rows.last(where: { isCodexPromptLine($0.text) }),
-      let prompt = row.text.unicodeScalars.firstIndex(of: "›")
-    else { return false }
-    let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: prompt) + 1
+    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return false }
+    let lines = styled.rows.map {
+      codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces)
+    }
+    guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
+    let row = styled.rows[prompt]
+    guard !row.text.contains("[Image #"), let marker = row.text.unicodeScalars.firstIndex(of: "›")
+    else {
+      return false
+    }
+    let offset =
+      row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
     return row.showsOnlyDimText(from: offset)
   }
 

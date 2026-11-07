@@ -425,8 +425,8 @@ evidence (including a runtime `needs-input` the screen does not show) is refused
 `DISPATCH_TARGET_BUSY` rather than having text merged into its running turn. The pane's input
 must be clear as well: a draft or attachment in the agent's input box, text being composed
 with an input method, or a local edit within the last two seconds is refused with the same
-code before anything is typed. The dim `Try "…"` hint Claude Code shows in a fresh, empty
-composer is not a draft. One pending
+code before anything is typed. A dim hint in the input box is not a draft, whatever it says:
+Claude Code's `Try "…"` hint and its prompt suggestion after a turn, Codex's placeholder. One pending
 dispatch per pane: while a record is pending, a second `dispatch` fails with
 `DISPATCH_PENDING` and never overwrites it; complete, abandon, or lose the previous record
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
