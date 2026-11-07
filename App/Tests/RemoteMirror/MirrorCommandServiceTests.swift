@@ -148,14 +148,40 @@ struct MirrorCommandServiceTests {
     #expect(handler.count == 1)
   }
 
+  /// The mirror's `on_draft` reaches the CLI router as `DispatchInput.onDraft` (docs-ai 090),
+  /// and a request without it still means `refuse`.
+  @Test func draftPolicyReachesTheRouterAsOnDraft() async throws {
+    let handler = DispatchHandler()
+    let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
+    let pane = UUID()
+    let replace = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(command: .agentsInput(.init(pane: pane.uuidString, prompt: "hello", onDraft: "replace"))))
+    #expect(try await service.execute(replace).response.decode(CommandResponse.self).ok)
+    #expect(handler.onDraft == .replace)
+    let plain = MirrorCommandRequest(
+      requestID: UUID(), request: .init(command: .agentsInput(.init(pane: pane.uuidString, prompt: "hello"))))
+    #expect(try await service.execute(plain).response.decode(CommandResponse.self).ok)
+    #expect(handler.onDraft == nil)
+    // The wire key is `on_draft`, as the iOS client and `DispatchInput` write it.
+    let json = try JSONEncoder().encode(MirrorCommandRequest.Dispatch(pane: "p", prompt: "x", onDraft: "replace"))
+    #expect(String(bytes: json, encoding: .utf8)?.contains("\"on_draft\":\"replace\"") == true)
+    let decoded = try JSONDecoder().decode(
+      MirrorCommandRequest.Dispatch.self, from: Data(#"{"pane":"p","prompt":"x"}"#.utf8))
+    #expect(decoded.onDraft == nil)
+  }
+
   private final class DispatchHandler: CommandHandler {
     var count = 0
     var prompt: String?
+    var onDraft: AgentDraftPolicy?
     func handle(envelope: CommandEnvelope) async -> CommandResponse {
       count += 1
       await Task.yield()
       switch envelope.command {
-      case .agentsInput(let input), .agentsDispatch(let input): prompt = input.prompt
+      case .agentsInput(let input), .agentsDispatch(let input):
+        prompt = input.prompt
+        onDraft = input.onDraft
       default: break
       }
       return CommandResponse(

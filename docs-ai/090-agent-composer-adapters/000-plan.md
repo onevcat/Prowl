@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-07 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #1071 (S1), #1072 (S2 + S3, stacked on #1071) |
 | **Related** | [064.014 re-dispatch](../064-agent-completion-signals/014-re-dispatch.md), [089 S6 input while working](../089-mirror-ios-redesign/008-s6-input-while-working.md), [089 S5 terminal keys](../089-mirror-ios-redesign/007-s5-terminal-keys.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md`, `docs/components/cli.md` |
 
 ## Background
@@ -116,10 +116,10 @@ policy.
 
 | Slice | Scope | PR |
 | --- | --- | --- |
-| S1 | Dim-only hints for Claude and Codex | |
-| S2 | Adapters, clearing executor, `on_draft`, structured refusal, CLI flag | |
-| S3 | iOS confirmation card and notes | |
-| S4 | Docs (ships with S2 and S3) | |
+| S1 | Dim-only hints for Claude and Codex | #1071 |
+| S2 | Adapters, clearing executor, `on_draft`, structured refusal, CLI flag | #1072 |
+| S3 | iOS confirmation card and notes | #1072 (same PR as S2: the card needs the wire change) |
+| S4 | Docs (ships with S2 and S3) | #1072 |
 
 ## Alternatives & decisions
 
