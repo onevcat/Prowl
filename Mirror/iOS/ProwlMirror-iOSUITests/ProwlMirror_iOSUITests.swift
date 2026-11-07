@@ -445,6 +445,40 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(last.isHittable)
   }
 
+  /// Hide Keyboard and Latest float in one row above the field: Hide Keyboard at its leading
+  /// edge, Latest at its trailing edge.
+  @MainActor
+  func testHideKeyboardAndLatestShareOneRowAboveTheField() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let last = lastChatEntry(app)
+    XCTAssertTrue(last.waitForExistence(timeout: 10))
+    let scroll = app.descendants(matching: .any).matching(identifier: "conversation-scroll").firstMatch
+    let latest = app.buttons["conversation-latest"]
+    scroll.swipeDown(velocity: .fast)
+    XCTAssertTrue(latest.waitForExistence(timeout: 5))
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    input.tap()
+    let dismiss = app.buttons["mirror-dismiss-keyboard"]
+    XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+    // Let the keyboard and the row settle before measuring.
+    expectation(
+      for: NSPredicate { _, _ in abs(dismiss.frame.midY - latest.frame.midY) < 2 }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+    attach("Hide Keyboard and Latest")
+    XCTAssertLessThan(dismiss.frame.maxX, latest.frame.minX)
+    XCTAssertLessThan(abs(dismiss.frame.minX - input.frame.minX), 24)
+    // The text view ends before Send; Send marks the field's trailing edge.
+    XCTAssertLessThan(abs(latest.frame.maxX - app.buttons["mirror-send"].frame.maxX), 24)
+    XCTAssertLessThanOrEqual(latest.frame.maxY, input.frame.minY)
+    dismiss.tap()
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: dismiss)
+    waitForExpectations(timeout: 5)
+    XCTAssertTrue(latest.exists)
+  }
+
   /// A refused message explains why above the field, on its own background, not over the chat.
   @MainActor
   func testRefusedMessageExplainsAboveTheField() {

@@ -122,7 +122,8 @@ struct ScreenView: View {
           scrollControls
         }
       }
-      // An inset, not an overlay: it sits above the pane's composer and key bar.
+      // An inset, not an overlay: it sits above the pane's composer and key bar, at their trailing
+      // edge, in one row with the pane's Hide Keyboard.
       .safeAreaInset(edge: .bottom, spacing: 0) {
         // A phone on its side drops it while composing, as the remote scroll row: the reader has
         // no height to spare, and the arrow would be pushed into the navigation bar.
@@ -135,14 +136,12 @@ struct ScreenView: View {
           } label: {
             Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
           }
-          .buttonStyle(.glass)
-          .buttonBorderShape(.circle)
-          .padding(.bottom, 8)
+          .mirrorFloatingButton()
           .disabled(session.isScrolling)
           .accessibilityLabel("Latest")
           .accessibilityIdentifier("mirror-latest")
           .help("Follow the newest output")
-          .transition(.scale.combined(with: .opacity))
+          .mirrorFloatingRow(.trailing, maxWidth: .infinity)
         }
       }
       .animation(.snappy, value: session.followsLatest)

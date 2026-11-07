@@ -291,7 +291,8 @@ as the dispatch completion protocol, fold under **Prowl instructions** in your m
 On a wide screen such as an iPad, the chat and its composer keep a readable column in the
 middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows
 only after you scroll away from the end and returns to the newest message. While you type, the
-Hide Keyboard button floats above the composer. While the agent works and the
+Hide Keyboard button shows too. Both float above the composer in one row, Hide Keyboard at the
+left edge and the arrow at the right edge. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
 confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
 TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
