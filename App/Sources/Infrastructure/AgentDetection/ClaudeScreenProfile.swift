@@ -62,9 +62,7 @@ enum ClaudeScreenProfile {
   ) -> String? {
     guard let contents = composerContents(in: snapshot) else { return nil }
     guard !contents.isEmpty else { return "" }
-    guard let styled = styledSnapshot().flatMap(composerContents(styledSnapshot:)) else {
-      return nil
-    }
+    guard let styled = styledSnapshot().flatMap(composerContents(styledSnapshot:)) else { return nil }
     return styled.isEmpty ? "" : contents
   }
 
@@ -81,9 +79,7 @@ enum ClaudeScreenProfile {
     guard !contents.isEmpty, !showsAttachmentMarker(contents) else { return contents }
     let prompt = styled.rows[rows.lowerBound]
     let scalars = prompt.text.unicodeScalars
-    let afterPrompt =
-      scalars.firstIndex(of: "❯").map { scalars.distance(from: scalars.startIndex, to: $0) + 1 }
-      ?? 0
+    let afterPrompt = scalars.firstIndex(of: "❯").map { scalars.distance(from: scalars.startIndex, to: $0) + 1 } ?? 0
     let onlyHint =
       prompt.showsOnlyDimText(from: afterPrompt)
       && styled.rows[rows.dropFirst()].allSatisfy { $0.showsOnlyDimText() }
@@ -98,9 +94,7 @@ enum ClaudeScreenProfile {
 
   /// The prompt row through the last row before the closing border.
   nonisolated private static func composerRows(in lines: [String]) -> Range<Int>? {
-    guard
-      let prompt = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("❯") }
-      ),
+    guard let prompt = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("❯") }),
       prompt > 0, isBoxBorderLine(lines[prompt - 1]),
       let end = lines.indices.dropFirst(prompt + 1).first(where: { isBoxBorderLine(lines[$0]) })
     else { return nil }
@@ -119,8 +113,7 @@ enum ClaudeScreenProfile {
     let regions = ClaudeScreenRegions(snapshot: snapshot)
     guard hasBlockedPrompt(regions) else { return nil }
     let lines =
-      regions.currentInteractionLines.isEmpty
-      ? Array(snapshot.lines.suffix(18)) : regions.currentInteractionLines
+      regions.currentInteractionLines.isEmpty ? Array(snapshot.lines.suffix(18)) : regions.currentInteractionLines
     return lines.joined(separator: "\n").trimmingCharacters(in: .newlines)
   }
 
@@ -320,9 +313,7 @@ private struct ClaudeScreenRegions: Sendable {
         .split(separator: "\n")
         .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
         .trimmingCharacters(in: .whitespaces)
-        .range(
-          of: #"(Jump to bottom|[1-9][0-9]* new messages?) \(click\) ↓"#,
-          options: .regularExpression) != nil
+        .range(of: #"(Jump to bottom|[1-9][0-9]* new messages?) \(click\) ↓"#, options: .regularExpression) != nil
   }
 
   nonisolated private static func liveStatusBlock(_ rows: [String]) -> ArraySlice<String> {
@@ -347,9 +338,7 @@ private struct ClaudeScreenRegions: Sendable {
   // chrome row above it is a "❯" head. Anything else on top — a "⏺" block, a
   // border, or non-queued chrome such as a quoted spinner — means the prose
   // is transcript text, which still ends the block.
-  nonisolated private static func queuedMessageHeadIndex(above proseIndex: Int, in rows: [String])
-    -> Int?
-  {
+  nonisolated private static func queuedMessageHeadIndex(above proseIndex: Int, in rows: [String]) -> Int? {
     var index = proseIndex
     while index > rows.startIndex {
       let row = rows[index - 1]

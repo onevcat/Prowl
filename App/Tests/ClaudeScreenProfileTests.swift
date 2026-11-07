@@ -8,11 +8,8 @@ struct ClaudeScreenProfileTests {
       let screen = AgentScreenSnapshot(text: "──────── Title ─\n❯ " + draft + "\n────────\nstatus")
       #expect(ClaudeScreenProfile.composerContents(in: screen) == draft)
     }
-    #expect(
-      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) == nil
-    )
-    #expect(
-      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
+    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) == nil)
+    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
   }
 
   /// Claude Code shows dim hints in an empty box: `Try "…"` in a fresh session and, since
@@ -20,9 +17,7 @@ struct ClaudeScreenProfileTests {
   /// `script -F`: `❯\u{A0}\u{1B}[2m找到 build-app 的定义并读一下\u{1B}[22m`). Only the dim
   /// rendering tells a hint from the same words typed by the user.
   @Test func dimHintsReadAsAnEmptyComposerWhateverTheirWords() {
-    func screen(_ composer: String) -> String {
-      "────────\r\n" + composer + "\r\n────────\r\n  status"
-    }
+    func screen(_ composer: String) -> String { "────────\r\n" + composer + "\r\n────────\r\n  status" }
     let hint = "❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m"
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(hint)) == "")
     let wrappedHint = "❯\u{A0}\u{1B}[2mTry \"write a test for\r\n  Example.swift\"\u{1B}[22m"
@@ -37,14 +32,12 @@ struct ClaudeScreenProfileTests {
       ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ 找到 build-app 的定义并读一下"))
         == "找到 build-app 的定义并读一下")
     #expect(
-      ClaudeScreenProfile.composerContents(
-        styledSnapshot: screen("❯ \u{1B}[2mTry \"a\"\u{1B}[22m b\""))
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2mTry \"a\"\u{1B}[22m b\""))
         == "Try \"a\" b\"")
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ ")) == "")
     // An attachment or paste marker stands for content, whatever its styling.
     #expect(
-      ClaudeScreenProfile.composerContents(
-        styledSnapshot: screen("❯ \u{1B}[2m[Image #1]\u{1B}[22m")) == "[Image #1]")
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2m[Image #1]\u{1B}[22m")) == "[Image #1]")
     #expect(
       ClaudeScreenProfile.composerContents(
         styledSnapshot: screen("❯ \u{1B}[2m[Pasted text #1 +20 lines]\u{1B}[22m"))
@@ -55,27 +48,21 @@ struct ClaudeScreenProfileTests {
         styledSnapshot: screen("❯\u{A0}[Pasted\u{1B}[1Ctext\u{1B}[1C#1\u{1B}[1C+9\u{1B}[1Clines]"))
         == "[Pasted text #1 +9 lines]")
     // An unreadable snapshot or an unrecognized box is not an empty composer.
-    #expect(
-      ClaudeScreenProfile.composerContents(styledSnapshot: "\u{1B}]unterminated" + screen(hint))
-        == nil)
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "\u{1B}]unterminated" + screen(hint)) == nil)
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: "❯ old transcript") == nil)
   }
 
   /// While a turn runs with a message queued, Claude Code 2.1.318 shows a dim hint in the empty
   /// composer (captured 2026-11-06); a person can add another message there (089 S6).
   @Test func dimQueuedMessagesHintReadsAsAnEmptyComposer() {
-    func screen(_ composer: String) -> String {
-      "────────\r\n" + composer + "\r\n────────\r\n  status"
-    }
+    func screen(_ composer: String) -> String { "────────\r\n" + composer + "\r\n────────\r\n  status" }
     let hint = "\u{1B}[38;5;246m❯ \u{1B}[2m\u{1B}[39mPress up to edit queued messages\u{1B}[0m"
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(hint)) == "")
     #expect(
-      ClaudeScreenProfile.composerContents(
-        styledSnapshot: screen("❯ Press up to edit queued messages"))
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ Press up to edit queued messages"))
         == "Press up to edit queued messages")
     var styledReads = 0
-    let plain = AgentScreenSnapshot(
-      text: "────────\n❯ Press up to edit queued messages\n────────\n  status")
+    let plain = AgentScreenSnapshot(text: "────────\n❯ Press up to edit queued messages\n────────\n  status")
     let contents = ClaudeScreenProfile.composerContents(in: plain) {
       styledReads += 1
       return screen(hint)
@@ -100,12 +87,11 @@ struct ClaudeScreenProfileTests {
     #expect(
       read(plain: "❯ [Pasted text #1 +9 lines]", styled: screen("❯ [Pasted text #1 +9 lines]"))
         == "[Pasted text #1 +9 lines]")
-    #expect(
-      read(plain: "❯ run the\n  tests", styled: screen("❯ run the\n  tests")) == "run the\n  tests")
+    #expect(read(plain: "❯ run the\n  tests", styled: screen("❯ run the\n  tests")) == "run the\n  tests")
     #expect(
       read(
-        plain: "❯ Try \"fix lint errors\"",
-        styled: screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m")) == "")
+        plain: "❯ Try \"fix lint errors\"", styled: screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m"))
+        == "")
     #expect(
       read(
         plain: "❯ 找到 build-app 的定义并读一下",
@@ -116,9 +102,7 @@ struct ClaudeScreenProfileTests {
     #expect(read(plain: "❯ draft", styled: "\u{1B}]unterminated") == nil)
     #expect(styledReads == 6)
     #expect(
-      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) {
-        screen("❯ ")
-      } == nil)
+      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) { screen("❯ ") } == nil)
     #expect(styledReads == 6)
   }
 
@@ -217,8 +201,7 @@ struct ClaudeScreenProfileTests {
       "claude/2.1.266/working/titled-border-spinner.txt": .matched(
         ClaudeScreenProfile.RuleID.spinner
       ),
-      "claude/2.1.317/idle/startup-hint-composer.txt": .matched(
-        ClaudeScreenProfile.RuleID.idleComposer),
+      "claude/2.1.317/idle/startup-hint-composer.txt": .matched(ClaudeScreenProfile.RuleID.idleComposer),
       "claude/2.1.319/idle/cjk-wrapped-draft.txt": .noRuleMatched,
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .claude }

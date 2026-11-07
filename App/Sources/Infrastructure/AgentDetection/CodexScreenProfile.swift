@@ -60,9 +60,7 @@ enum CodexScreenProfile {
   /// Only the live bottom composer, followed by Codex's status line, is evidence.
   /// Historical prompts and arbitrary footer text must not authorize delivery.
   nonisolated static func composerIsEmpty(in snapshot: AgentScreenSnapshot) -> Bool {
-    let lines = snapshot.lines.map {
-      codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces)
-    }
+    let lines = snapshot.lines.map { codexLineWithoutStarfield($0).trimmingCharacters(in: .whitespaces) }
     guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
     let contents = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
     // Codex renders these hints in an empty composer; wrapped drafts are rejected above.
@@ -104,17 +102,13 @@ enum CodexScreenProfile {
   /// This is read only at the public delivery boundary, not a second readiness state machine.
   nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
     guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return false }
-    let lines = styled.rows.map {
-      codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces)
-    }
+    let lines = styled.rows.map { codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces) }
     guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
     let row = styled.rows[prompt]
-    guard !row.text.contains("[Image #"), let marker = row.text.unicodeScalars.firstIndex(of: "›")
-    else {
+    guard !row.text.contains("[Image #"), let marker = row.text.unicodeScalars.firstIndex(of: "›") else {
       return false
     }
-    let offset =
-      row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
+    let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
     return row.showsOnlyDimText(from: offset)
   }
 
