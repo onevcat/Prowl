@@ -35,7 +35,7 @@ Success returns `target`, completed `receipt`, and `replayed`. The immutable rec
 ## Re-dispatch into an existing pane
 
 ```bash
-prowl agents dispatch <pN|pane-uuid> --prompt - [--json]
+prowl agents dispatch <pN|pane-uuid> --prompt - [--on-draft refuse|replace] [--json]
 ```
 
 The pane is resolved once to the immutable target snapshot. `--prompt` accepts only `-` and
@@ -62,12 +62,23 @@ Checks run in this order, before any text is typed:
    when the budget expires. A working or blocked detector state without
    such evidence, or a runtime `needs-input` level, refuses immediately.
    `error.details.observation` and `signals` carry the evidence.
+4. `DISPATCH_TARGET_BUSY` when the agent's input box is not clear, with
+   `error.details.input` (docs-ai 090): `reason` is `draft` (text or an attachment, with
+   `draft.text` as the screen shows it and `draft.is_complete` false when a collapsed paste or
+   image marker hides content), `unrecognized` (the box could not be read), `editing` (a local
+   edit in the last two seconds), `composing` (an input method), or `clearing` (a replacement
+   left the box non-empty); `replaceable` and `recovery` (`stash`) say what `--on-draft
+   replace` would do. A dim hint in the box is never a draft. Under `--on-draft replace`
+   (`on_draft` on the wire; absent means `refuse`), a replaceable draft is cleared by the
+   agent's `AgentComposerAdapter` plan — Claude Code ⌃S stash, Codex ⌃U line kills — under the
+   key-sequence guard, and the box must re-read as empty before the paste.
 
 Then one main-actor step issues the record and binds it to the pane's *current* evidence
 epoch — never a new one, so the generation that will report the receipt is the one already
 proven for the pane — and the rendered text (`[Prowl] ` + prompt + the versioned completion
 protocol) is inserted and submitted. A delivery failure cancels the issuance. Success returns
-`target` and the pending `dispatch` record with the `create` shape; the id never appears in the
+`target` and the pending `dispatch` record with the `create` shape, plus `replaced_draft`
+(`text`, `is_complete`, `recovery`) when a draft was cleared first; the id never appears in the
 typed text.
 
 Every later rule is unchanged: `agents wait --dispatch`, `dispatch-abandon`,

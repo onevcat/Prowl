@@ -75,16 +75,35 @@ public struct DispatchCompleteInput: Codable, Sendable {
 /// already runs in an existing pane. The prompt reaches the runtime through the pane's
 /// input path as one bracketed paste followed by Enter, so newlines and tabs survive but
 /// every other control character would be stripped or reinterpreted before delivery.
+/// What a delivery does when the agent's input box already holds a draft (docs-ai 090).
+public enum AgentDraftPolicy: String, Codable, Sendable, CaseIterable {
+  /// Refuse with `DISPATCH_TARGET_BUSY` and the draft in `error.details.input`.
+  case refuse
+  /// Clear the draft the agent's own way (Claude stashes it with ⌃S, Codex kills the lines with
+  /// ⌃U), verify the box is empty, then deliver. Refused when the agent has no verified way.
+  case replace
+}
+
 public struct DispatchInput: Codable, Sendable, Equatable {
   public static let maximumPromptUTF8ByteCount = CreateLaunchInput.maximumPromptUTF8ByteCount
 
   public let pane: String
   public let prompt: String
+  /// Nil means `refuse`.
+  public let onDraft: AgentDraftPolicy?
 
-  public init(pane: String, prompt: String) {
+  enum CodingKeys: String, CodingKey {
+    case pane, prompt
+    case onDraft = "on_draft"
+  }
+
+  public init(pane: String, prompt: String, onDraft: AgentDraftPolicy? = nil) {
     self.pane = pane
     self.prompt = prompt
+    self.onDraft = onDraft
   }
+
+  public var draftPolicy: AgentDraftPolicy { onDraft ?? .refuse }
 
   public var validationErrorMessage: String? {
     guard !pane.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

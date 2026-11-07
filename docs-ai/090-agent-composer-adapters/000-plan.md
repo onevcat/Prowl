@@ -137,3 +137,4 @@ policy.
 
 ## Amendments
 - Updated 2026-11-07: S1 dim-only hints for Claude and Codex — see [002-s1-dim-hints.md](002-s1-dim-hints.md)
+- Updated 2026-11-08: S2 adapters, clearing executor, `on_draft` and structured refusals — see [003-s2-adapters-and-replace.md](003-s2-adapters-and-replace.md)

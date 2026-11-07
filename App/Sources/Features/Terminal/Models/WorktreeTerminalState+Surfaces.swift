@@ -12,8 +12,9 @@ enum SplitCreationError: Error, Equatable, Sendable {
 }
 
 extension WorktreeTerminalState {
-  /// Types `text` into an agent pane and presses Enter. `AgentComposerProfile` decides, per runtime
-  /// and purpose, whether Enter waits for the paste echo. `isLive` is checked again before Enter.
+  /// Types `text` into an agent pane and presses Enter. The agent's `AgentComposerAdapter`
+  /// decides, per purpose, whether Enter waits for the paste echo. `isLive` is checked again
+  /// before Enter.
   func submitAgentLine(
     _ text: String, surfaceID: UUID, purpose: AgentLinePurpose,
     isLive: @escaping @MainActor () -> Bool = { true }
@@ -22,10 +23,72 @@ extension WorktreeTerminalState {
     if purpose == .dispatch, dispatchInputProtection(surfaceID: surfaceID, delivering: text) != nil {
       return .notInserted
     }
+    return await deliverLine(text, surface: surface, surfaceID: surfaceID, purpose: purpose, isLive: isLive)
+  }
+
+  /// `agents.input` and `agents dispatch` (docs-ai 090): the input box must be clear, or, under
+  /// `replace`, hold a draft the agent can clear. That draft is stashed or killed the agent's own
+  /// way and the box re-read as empty before the line goes in; the receipt carries the draft.
+  func deliverAgentInput(
+    _ text: String, surfaceID: UUID, policy: AgentDraftPolicy,
+    isLive: @escaping @MainActor () -> Bool = { true }
+  ) async -> AgentLineOutcome {
+    guard isLive(), let surface = surfaces[surfaceID] else { return .notInserted }
+    if let refusal = dispatchInputProtection(surfaceID: surfaceID, delivering: text, policy: policy) {
+      return .refused(refusal)
+    }
+    var replaced: AgentReplacedDraftPayload?
+    if policy == .replace, let adapter = composerAdapter(for: surfaceID),
+      case .draft(let draft)? = composerReading(of: surface, adapter: adapter),
+      !resumesUnsentLine(text, composer: draft.text, surfaceID: surfaceID, surface: surface, adapter: adapter)
+    {
+      let clearing = AgentComposerClearing(
+        observe: { [weak self, weak surface] in
+          guard isLive(), let self, let surface, self.surfaces[surfaceID] === surface,
+            self.composerAdapter(for: surfaceID)?.agent == adapter.agent
+          else { return nil }
+          return .init(
+            reading: self.composerReading(of: surface, adapter: adapter), hasMarkedText: surface.hasMarkedText(),
+            editingRevision: surface.lastEditingAt)
+        },
+        press: { [weak self] in self?.sendKeyToken($0, in: surfaceID) == true },
+        plan: adapter.clearPlan, agentName: adapter.name)
+      switch await clearing.clear(draft) {
+      case .cleared(let payload): replaced = payload
+      case .refused(let refusal): return .refused(refusal)
+      }
+      // The clearing's own keys moved the local editing stamp, which its guard checked after
+      // every key; only an input method and the box itself are checked again here.
+      guard isLive(), surfaces[surfaceID] === surface else { return .notInserted }
+      if surface.hasMarkedText() {
+        return .refused(
+          AgentInputRefusal(
+            "Host is composing text with an input method. Finish editing before dispatching.",
+            details: .init(reason: .composing)))
+      }
+      guard composerReading(of: surface, adapter: adapter) == .empty else {
+        return .refused(
+          AgentInputRefusal(
+            "\(adapter.name) still shows a draft after clearing. Check the pane on the Mac before retrying.",
+            details: .init(
+              reason: .clearing, draft: draft.payload, replaceable: false, recovery: adapter.clearPlan.recovery)))
+      }
+    }
+    switch await deliverLine(text, surface: surface, surfaceID: surfaceID, purpose: .dispatch, isLive: isLive) {
+    case .submitted: return .submitted(replacedDraft: replaced)
+    case .notInserted: return .notInserted
+    case .notSubmitted: return .notSubmitted
+    }
+  }
+
+  private func deliverLine(
+    _ text: String, surface: GhosttySurfaceView, surfaceID: UUID, purpose: AgentLinePurpose,
+    isLive: @escaping @MainActor () -> Bool
+  ) async -> AgentLineSubmission {
     let agent = surfaceAgentStates[surfaceID]?.detectedAgent
-    guard let profile = agent.flatMap(AgentComposerProfile.init(agent:)),
-      let confirmation = profile.pasteConfirmation(for: purpose),
-      confirmation == .required || composerContents(of: surface, profile: profile) == ""
+    guard let adapter = agent.flatMap(AgentComposerAdapters.adapter(for:)),
+      let confirmation = adapter.pasteConfirmation(for: purpose),
+      confirmation == .required || composerReading(of: surface, adapter: adapter) == .empty
     else { return submitDirectly(text, surfaceID: surfaceID, isLive: isLive) }
     let delivery = AgentPromptDelivery(
       observe: { [weak self, weak surface] in
@@ -33,13 +96,13 @@ extension WorktreeTerminalState {
           self.surfaceAgentStates[surfaceID]?.detectedAgent == agent
         else { return nil }
         return .init(
-          composer: self.composerContents(of: surface, profile: profile),
+          composer: self.composerText(of: surface, adapter: adapter),
           editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText(),
           inputGeneration: surface.inputGeneration)
       },
       insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
       submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
-      profile: profile, unsent: unsentAgentLines[surfaceID],
+      adapter: adapter, unsent: unsentAgentLines[surfaceID],
       // The text may stay in the box. Remember exactly what Prowl left, so a retry of the same
       // text can press Enter instead of refusing it as someone's draft.
       onUnsent: { [weak self] in self?.unsentAgentLines[surfaceID] = $0 })
@@ -55,28 +118,43 @@ extension WorktreeTerminalState {
     return submitLine(in: surfaceID) ? .submitted : .notSubmitted
   }
 
-  /// The input box text: empty when there is no draft, nil when no input box is recognized.
-  private func composerContents(of surface: GhosttySurfaceView, profile: AgentComposerProfile) -> String? {
-    switch profile {
-    case .claude:
-      // Claude renders the hint of an empty composer dim; only that hint is read with styles.
-      surface.readActiveContentsForCLI().flatMap {
-        ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: $0)) {
-          surface.readStyledSnapshotForCLI()
-        }
-      }
-    case .devin:
-      surface.readActiveContentsForCLI().flatMap {
-        DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: $0))
-      }
+  private func composerAdapter(for surfaceID: UUID) -> (any AgentComposerAdapter)? {
+    surfaceAgentStates[surfaceID]?.detectedAgent.flatMap(AgentComposerAdapters.adapter(for:))
+  }
+
+  /// The input box as the adapter reads it; nil when the screen cannot be read.
+  private func composerReading(
+    of surface: GhosttySurfaceView, adapter: any AgentComposerAdapter
+  ) -> AgentComposerReading? {
+    surface.readActiveContentsForCLI().map { contents in
+      adapter.read(AgentScreenSnapshot(text: contents)) { surface.readStyledSnapshotForCLI() }
     }
+  }
+
+  /// The input box text: empty when there is no draft, nil when no input box is recognized.
+  private func composerText(of surface: GhosttySurfaceView, adapter: any AgentComposerAdapter) -> String? {
+    switch composerReading(of: surface, adapter: adapter) {
+    case .empty?: ""
+    case .draft(let draft)?: draft.text
+    case .unrecognized?, nil: nil
+    }
+  }
+
+  private func resumesUnsentLine(
+    _ text: String, composer: String, surfaceID: UUID, surface: GhosttySurfaceView, adapter: any AgentComposerAdapter
+  ) -> Bool {
+    unsentAgentLines[surfaceID]?.resumes(
+      text, composer: composer, inputGeneration: surface.inputGeneration, adapter: adapter) == true
   }
 
   /// Why `text` cannot go into the agent's input box now, or nil. Pass `text` so a box that
   /// already holds it (an earlier delivery left it without Enter) does not count as a draft.
-  func dispatchInputProtection(surfaceID: UUID, delivering text: String? = nil) -> String? {
+  /// Under `replace`, a draft the agent can clear is not a refusal either: the delivery clears it.
+  func dispatchInputProtection(
+    surfaceID: UUID, delivering text: String? = nil, policy: AgentDraftPolicy = .refuse
+  ) -> AgentInputRefusal? {
     guard let surface = surfaces[surfaceID] else {
-      return "The target terminal is no longer available."
+      return AgentInputRefusal("The target terminal is no longer available.")
     }
     if let refusal = AgentDispatchInputProtection.refusal(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
@@ -84,26 +162,23 @@ extension WorktreeTerminalState {
     {
       return refusal
     }
-    let agent = surfaceAgentStates[surfaceID]?.detectedAgent
-    if let profile = agent.flatMap(AgentComposerProfile.init(agent:)) {
-      guard let draft = composerContents(of: surface, profile: profile) else {
-        return "The \(profile.name) input area could not be verified. Check Host before dispatching."
-      }
-      if let refusal = profile.draftRefusal(
-        draft, delivering: text, unsent: unsentAgentLines[surfaceID], inputGeneration: surface.inputGeneration)
+    guard let adapter = composerAdapter(for: surfaceID) else { return nil }
+    switch composerReading(of: surface, adapter: adapter) {
+    case .unrecognized?, nil:
+      return AgentInputRefusal(
+        "The \(adapter.name) input area could not be verified. Check Host before dispatching.",
+        details: .init(reason: .unrecognized))
+    case .empty?:
+      return nil
+    case .draft(let draft)?:
+      if let text,
+        resumesUnsentLine(text, composer: draft.text, surfaceID: surfaceID, surface: surface, adapter: adapter)
       {
-        return refusal
+        return nil
       }
+      if policy == .replace, adapter.clearPlan.isSupported { return nil }
+      return .draft(draft, agentName: adapter.name, plan: adapter.clearPlan)
     }
-    if agent == .codex {
-      guard let text = surface.readStyledSnapshotForCLI(),
-        CodexScreenProfile.composerHasNoDraft(styledSnapshot: text)
-      else {
-        return
-          "Codex has a draft, attachment, or an unrecognized input area. Check Host before dispatching."
-      }
-    }
-    return nil
   }
 
   func confirmCloseIfNeeded(

@@ -88,7 +88,7 @@ See [agents-signal.md](agents-signal.md).
 ## Agent dispatch grammar
 
 ```bash
-prowl agents dispatch <pN|pane-uuid> --prompt -
+prowl agents dispatch <pN|pane-uuid> --prompt - [--on-draft <refuse|replace>]
 prowl agents dispatch-complete --outcome <succeeded|failed> --summary <text>
 prowl agents dispatch-abandon --dispatch <id> --reason <text>
 prowl agents wait --dispatch <id> [--timeout <1...600>] [--include-screen <1...200>]
@@ -98,7 +98,8 @@ prowl agents wait <pN|pane-uuid> --until <idle|blocked|changed|exit> [--timeout 
 
 `agents dispatch` requires a pane-only target and `--prompt -`: the prompt is piped UTF-8
 stdin up to 256 KiB, CRLF-normalized, trailing newlines dropped, non-empty, and free of
-control characters other than newline and tab. `dispatch-complete` takes no id; it forwards
+control characters other than newline and tab. `--on-draft` defaults to `refuse`; only
+`replace` is sent on the wire (`on_draft`). `dispatch-complete` takes no id; it forwards
 a launch-scoped `PROWL_DISPATCH_ID` only when present. See [agents-wait.md](agents-wait.md).
 
 ## Canvas grammar

@@ -67,6 +67,28 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
   struct Dispatch: Codable, Equatable, Sendable {
     let pane: String
     let prompt: String
+    /// `refuse` (nil) or `replace` (docs-ai 090); `DispatchInput` decodes it as `on_draft`.
+    let onDraft: String?
+
+    init(pane: String, prompt: String, onDraft: String? = nil) {
+      self.pane = pane
+      self.prompt = prompt
+      self.onDraft = onDraft
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: MirrorDispatchCodingKeys.self)
+      pane = try container.decode(String.self, forKey: .pane)
+      prompt = try container.decode(String.self, forKey: .prompt)
+      onDraft = try container.decodeIfPresent(String.self, forKey: .onDraft)
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: MirrorDispatchCodingKeys.self)
+      try container.encode(pane, forKey: .pane)
+      try container.encode(prompt, forKey: .prompt)
+      try container.encodeIfPresent(onDraft, forKey: .onDraft)
+    }
   }
 
   struct Empty: Codable, Equatable, Sendable {}
@@ -93,6 +115,11 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     let profile: String
     let prompt: String?
   }
+}
+
+private enum MirrorDispatchCodingKeys: String, CodingKey {
+  case pane, prompt
+  case onDraft = "on_draft"
 }
 
 nonisolated struct MirrorCommandResponse: Codable, Sendable {

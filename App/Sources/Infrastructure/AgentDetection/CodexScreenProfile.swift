@@ -84,11 +84,7 @@ enum CodexScreenProfile {
     let suffix = lines.dropFirst(prompt + 1).filter { !$0.isEmpty }
     // Codex 0.158 adds a shortcut hint row below the status line.
     guard suffix.count == 1 || (suffix.count == 2 && isShortcutHintRow(suffix[1])),
-      let footer = suffix.first,
-      footer.contains(" · "),
-      footer.contains("Context ") || footer.contains("context left") || footer.contains("~/")
-        || footer.contains("/"),
-      !footer.contains("esc to interrupt"), !footer.contains("[Image #")
+      let footer = suffix.first, isStatusFooterRow(footer)
     else { return nil }
     return prompt
   }
@@ -98,24 +94,39 @@ enum CodexScreenProfile {
       && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
-  /// Whether the live composer holds nothing typed: its prompt row shows only dim text after
-  /// `›`, which is how Codex renders its placeholder, whatever the words. The formatter's dim
-  /// SGR attribute tells it from an identically worded draft; an image marker is never a hint.
-  /// This is read only at the public delivery boundary, not a second readiness state machine.
-  nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
-    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return false }
-    let lines = styled.rows.map {
-      codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces)
-    }
-    guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
+  /// The live composer at the delivery boundary (docs-ai 090): the last `›` row and the rows up
+  /// to the status footer. The prompt row showing only dim text after `›` is Codex's placeholder,
+  /// whatever the words, which the formatter's dim SGR attribute tells from an identically worded
+  /// draft; an image marker is never a hint. Rows between the prompt and the footer continue a
+  /// draft. No footer, or an unreadable snapshot, is an unrecognized box.
+  nonisolated static func composerReading(styledSnapshot: String) -> AgentComposerReading {
+    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return .unrecognized }
+    let lines = styled.rows.map { codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces) }
+    guard let prompt = lines.lastIndex(where: isCodexPromptLine),
+      let footer = lines.indices.dropFirst(prompt + 1).first(where: { isStatusFooterRow(lines[$0]) }),
+      let marker = styled.rows[prompt].text.unicodeScalars.firstIndex(of: "›")
+    else { return .unrecognized }
     let row = styled.rows[prompt]
-    guard !row.text.contains("[Image #"), let marker = row.text.unicodeScalars.firstIndex(of: "›")
-    else {
-      return false
-    }
-    let offset =
-      row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
-    return row.showsOnlyDimText(from: offset)
+    let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
+    let first = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
+    let continuation = lines[(prompt + 1)..<footer].filter { !$0.isEmpty }
+    let hasImage = row.text.contains("[Image #")
+    if continuation.isEmpty, !hasImage, first.isEmpty || row.showsOnlyDimText(from: offset) { return .empty }
+    let text = ([first] + continuation).joined(separator: "\n")
+    return .draft(.init(text: text, isComplete: !hasImage && !text.contains("[Pasted Content")))
+  }
+
+  /// `composerReading(styledSnapshot:)` reads empty. Read only at the public delivery boundary,
+  /// not a second readiness state machine.
+  nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
+    composerReading(styledSnapshot: styledSnapshot) == .empty
+  }
+
+  /// Codex's status line below the composer: model and context, or the working directory.
+  nonisolated private static func isStatusFooterRow(_ line: String) -> Bool {
+    line.contains(" · ")
+      && (line.contains("Context ") || line.contains("context left") || line.contains("~/") || line.contains("/"))
+      && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
   /// Raw current interaction text for an actionable blocked screen. This deliberately

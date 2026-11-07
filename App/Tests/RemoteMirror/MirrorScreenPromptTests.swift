@@ -134,7 +134,7 @@ struct MirrorScreenPromptTests {
   }
 
   @Test func theKeyGuardAllowsItsOwnKeysButNotLocalEditing() {
-    var guardrail = MirrorKeyGuard(hasMarkedText: false, lastEditingAt: 10, now: 100)
+    var guardrail = AgentKeySequenceGuard(hasMarkedText: false, lastEditingAt: 10, now: 100)
     #expect(guardrail.refusal == nil)
     // The operation's own key moves the editing stamp; that is not a competing edit.
     guardrail.noteSent(lastEditingAt: 101)
@@ -143,7 +143,7 @@ struct MirrorScreenPromptTests {
     #expect(guardrail.check(hasMarkedText: false, lastEditingAt: 102) != nil)
     #expect(guardrail.check(hasMarkedText: true, lastEditingAt: 101) != nil)
     // Recent local editing before the first key refuses at once.
-    #expect(MirrorKeyGuard(hasMarkedText: false, lastEditingAt: 99.5, now: 100).refusal != nil)
+    #expect(AgentKeySequenceGuard(hasMarkedText: false, lastEditingAt: 99.5, now: 100).refusal != nil)
   }
 
   @Test func numberedProseAndBrokenMenusAreNotPrompts() {

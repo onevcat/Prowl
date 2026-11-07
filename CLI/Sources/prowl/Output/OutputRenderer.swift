@@ -361,11 +361,29 @@ enum OutputRenderer {
   }
 
   static func dispatchText(_ payload: AgentDispatchCommandPayload) -> String {
-    [
+    var lines = [
       "Dispatched \(payload.dispatch.id) (\(payload.dispatch.state.rawValue))",
       "  pane: \(payload.target.pane.id)",
       "  created: \(payload.dispatch.createdAt)",
-    ].joined(separator: "\n")
+    ]
+    if let replaced = payload.replacedDraft {
+      lines.append("  replaced draft: \(draftExcerpt(replaced.text))" + recoveryNote(replaced.recovery))
+    }
+    return lines.joined(separator: "\n")
+  }
+
+  /// The start of a draft on one line, so a refusal or receipt shows what was in the way.
+  static func draftExcerpt(_ text: String) -> String {
+    let collapsed = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    let excerpt = collapsed.count > 60 ? collapsed.prefix(60) + "…" : collapsed[...]
+    return "“\(excerpt)”"
+  }
+
+  static func recoveryNote(_ recovery: AgentDraftRecovery?) -> String {
+    switch recovery {
+    case .stash: " (stashed; Control-S in the pane brings it back)"
+    case nil: " (cleared)"
+    }
   }
 
   static func dispatchCompleteText(_ payload: DispatchCompleteCommandPayload) -> String {
@@ -416,6 +434,12 @@ enum OutputRenderer {
         lines.append(
           "  observation: \(observation.status.rawValue) [\(observation.confidence)] via \(observation.source)"
         )
+      }
+      if let input = details.input {
+        lines.append("  input: \(input.reason.rawValue)" + (input.replaceable ? " (--on-draft replace clears it)" : ""))
+        if let draft = input.draft {
+          lines.append("  draft: \(draftExcerpt(draft.text))" + (draft.isComplete ? "" : " (partly hidden on screen)"))
+        }
       }
       return lines.joined(separator: "\n")
     }

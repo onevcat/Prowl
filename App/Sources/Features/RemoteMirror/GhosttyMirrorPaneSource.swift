@@ -209,7 +209,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     guard let surface = view(pane),
       let state = manager.activeWorktreeStates.first(where: { $0.surfaceAgentStates[pane] != nil })
     else { return closed }
-    var guardrail = MirrorKeyGuard(
+    var guardrail = AgentKeySequenceGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
     if let refusal = guardrail.refusal { return .refused(code: "HOST_EDITING", message: refusal) }
@@ -269,7 +269,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   /// Presses keys from a mirror's key bar or Stop (docs-ai 089 S5), one key at a time. Before
   /// every key the mirror must still own the pane, nobody may be editing on the Mac
-  /// (`MirrorKeyGuard`), and the pane must still run the agent it ran at the first key, or still
+  /// (`AgentKeySequenceGuard`), and the pane must still run the agent it ran at the first key, or still
   /// none: an agent's keys must not reach the shell after it exits, and a shell pane's keys must
   /// not reach an agent that started since.
   func pressKeys(_ keys: [String], in pane: UUID, isLive: @escaping @MainActor () -> Bool) async -> String? {
@@ -277,7 +277,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       return String(localized: "The pane is no longer open on the Mac.")
     }
     let agent = agentState(pane)?.detectedAgent
-    var guardrail = MirrorKeyGuard(
+    var guardrail = AgentKeySequenceGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
     if let refusal = guardrail.refusal { return refusal }
@@ -316,7 +316,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     guard agentState(pane)?.detectedAgent == nil else {
       return String(localized: "An agent runs in this pane. Send your message to the agent instead.")
     }
-    var guardrail = MirrorKeyGuard(
+    var guardrail = AgentKeySequenceGuard(
       hasMarkedText: surface.hasMarkedText(), lastEditingAt: surface.lastEditingAt,
       now: ProcessInfo.processInfo.systemUptime)
     if let refusal = guardrail.refusal { return refusal }

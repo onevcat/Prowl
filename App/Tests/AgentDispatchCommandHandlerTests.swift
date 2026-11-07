@@ -9,7 +9,8 @@ import Testing
 struct AgentDispatchCommandHandlerTests {
   @Test func nativeIdleSupportsHeuristicReadinessAndBusyVetoesOldCompletion() {
     var agent = agentEntry(surfaceID: UUID(), status: .idle)
-    agent.stateDecision = AgentStateDecision(state: .idle, reason: .native(.idle), logSessionID: "session")
+    agent.stateDecision = AgentStateDecision(
+      state: .idle, reason: .native(.idle), logSessionID: "session")
     let current = AgentConditionSnapshot(
       agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
       screenDetection: .init(state: .unknown, reason: .noRuleMatched))
@@ -51,23 +52,27 @@ struct AgentDispatchCommandHandlerTests {
     var agent = agentEntry(surfaceID: UUID(), status: .idle)
     agent.stateDecision = completed
     let current = AgentConditionSnapshot(
-      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty, screenDetection: screen
+    )
     #expect(AgentConditionEvidence.normalizedState(current) == "idle")
     // Log-backed detector evidence still follows the existing stabilization policy.
     #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
     let corroborated = AgentConditionSnapshot(
-      agent: agent, signal: turnEnded, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+      agent: agent, signal: turnEnded, revision: 1, isLive: true, signals: .empty,
+      screenDetection: screen)
     #expect(AgentConditionEvidence.idleVerdict(for: corroborated) == .idle)
 
     let expired = machine.receive(.tick, now: 2 + machine.activityWindow + 1)
     #expect(expired.reason == .fallback(.retainedCompletion))
     agent.stateDecision = expired
     let stale = AgentConditionSnapshot(
-      agent: agent, signal: nil, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+      agent: agent, signal: nil, revision: 2, isLive: true, signals: .empty, screenDetection: screen
+    )
     #expect(AgentConditionEvidence.normalizedState(stale) == "unknown")
     #expect(AgentConditionEvidence.idleVerdict(for: stale) == .busy("unknown"))
     let staleSignal = AgentConditionSnapshot(
-      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty,
+      screenDetection: screen)
     #expect(AgentConditionEvidence.idleVerdict(for: staleSignal) == .settling("unknown"))
   }
 
@@ -109,7 +114,8 @@ struct AgentDispatchCommandHandlerTests {
         createdAt: Self.start,
         completedAt: Self.start
       ),
-      binding: AgentDispatchBinding(surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
+      binding: AgentDispatchBinding(
+        surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
     )
     let handler = AgentDispatchCompleteCommandHandler(
       resolveCaller: { _ in caller },
@@ -123,12 +129,14 @@ struct AgentDispatchCommandHandlerTests {
     )
 
     let missingContext = await handler.handle(
-      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done")))
+      envelope: envelope(
+        .agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done")))
     )
     #expect(missingContext.error?.code == CLIErrorCode.dispatchContextRequired)
 
     let response = await handler.handle(
-      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done"))),
+      envelope: envelope(
+        .agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done"))),
       context: CLICommandContext(callerProcessID: 123)
     )
     #expect(response.ok)
@@ -144,8 +152,10 @@ struct AgentDispatchCommandHandlerTests {
     let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
     let target = makeTarget(paneID: caller.surfaceID.uuidString)
     let current = AgentDispatchSnapshot(
-      record: .completed(id: "d2", outcome: .failed, summary: "No", createdAt: Self.start, completedAt: Self.start),
-      binding: AgentDispatchBinding(surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
+      record: .completed(
+        id: "d2", outcome: .failed, summary: "No", createdAt: Self.start, completedAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
     )
     var completedSurfaces: [UUID] = []
     let handler = AgentDispatchCompleteCommandHandler(
@@ -157,7 +167,8 @@ struct AgentDispatchCommandHandlerTests {
     )
     for launchID in ["d1", nil] {
       let response = await handler.handle(
-        envelope: envelope(.agentsDispatchComplete(.init(dispatchID: launchID, outcome: .failed, summary: "No"))),
+        envelope: envelope(
+          .agentsDispatchComplete(.init(dispatchID: launchID, outcome: .failed, summary: "No"))),
         context: CLICommandContext(callerProcessID: 123)
       )
       #expect(response.ok)
@@ -180,11 +191,13 @@ struct AgentDispatchCommandHandlerTests {
       intercept: { surfaceID in
         #expect(surfaceID == caller.surfaceID)
         return CommandError(
-          code: CLIErrorCode.workflowDeliveryRequired, message: "deliver with prowl workflow deliver -")
+          code: CLIErrorCode.workflowDeliveryRequired,
+          message: "deliver with prowl workflow deliver -")
       }
     )
     let response = await handler.handle(
-      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: nil, outcome: .succeeded, summary: "Done"))),
+      envelope: envelope(
+        .agentsDispatchComplete(.init(dispatchID: nil, outcome: .succeeded, summary: "Done"))),
       context: CLICommandContext(callerProcessID: 123)
     )
     #expect(response.ok == false)
@@ -207,7 +220,8 @@ struct AgentDispatchCommandHandlerTests {
         complete: { _, _, _ in .failure(error) }
       )
       let response = await handler.handle(
-        envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .failed, summary: "No"))),
+        envelope: envelope(
+          .agentsDispatchComplete(.init(dispatchID: "d1", outcome: .failed, summary: "No"))),
         context: CLICommandContext(callerProcessID: 123)
       )
       #expect(response.error?.code == code)
@@ -246,21 +260,29 @@ struct AgentDispatchCommandHandlerTests {
       return .failure(.notFound("unused"))
     })
     for prompt in ["", "   \n", "bad\u{1B}[201~", "bell\u{07}", "cr\r\n"] {
-      let response = await handler.handle(envelope: envelope(.agentsDispatch(.init(pane: "p7", prompt: prompt))))
-      #expect(response.error?.code == CLIErrorCode.invalidArgument, "prompt: \(prompt.debugDescription)")
+      let response = await handler.handle(
+        envelope: envelope(.agentsDispatch(.init(pane: "p7", prompt: prompt))))
+      #expect(
+        response.error?.code == CLIErrorCode.invalidArgument, "prompt: \(prompt.debugDescription)")
     }
     #expect(resolved == 0)
     #expect(DispatchInput(pane: "p7", prompt: "line one\n\tline two").validationErrorMessage == nil)
   }
 
   @Test func dispatchMapsTargetResolutionFailures() async {
-    let notFound = AgentDispatchCommandHandler(resolveTarget: { _ in .failure(.notFound("No pane p9.")) })
+    let notFound = AgentDispatchCommandHandler(resolveTarget: { _ in
+      .failure(.notFound("No pane p9."))
+    })
     let response = await notFound.handle(envelope: dispatch(pane: "p9"))
     #expect(response.error?.code == CLIErrorCode.targetNotFound)
     #expect(response.error?.message == "No pane p9.")
 
-    let notUnique = AgentDispatchCommandHandler(resolveTarget: { _ in .failure(.notUnique("Ambiguous.")) })
-    #expect(await notUnique.handle(envelope: dispatch(pane: "p9")).error?.code == CLIErrorCode.targetNotUnique)
+    let notUnique = AgentDispatchCommandHandler(resolveTarget: { _ in
+      .failure(.notUnique("Ambiguous."))
+    })
+    #expect(
+      await notUnique.handle(envelope: dispatch(pane: "p9")).error?.code
+        == CLIErrorCode.targetNotUnique)
   }
 
   @Test func dispatchRefusesWhileThePaneHoldsAPendingRecordAndNeverIssuesAnother() async throws {
@@ -293,7 +315,9 @@ struct AgentDispatchCommandHandlerTests {
     let target = resolvedTarget()
     let absent = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      conditionSnapshot: { _ in .init(agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty) }
+      conditionSnapshot: { _ in
+        .init(agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty)
+      }
     )
     let notFound = await absent.handle(envelope: dispatch(pane: target.paneID))
     #expect(notFound.error?.code == CLIErrorCode.agentNotFound)
@@ -303,9 +327,13 @@ struct AgentDispatchCommandHandlerTests {
 
     let closed = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      conditionSnapshot: { _ in .init(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty) }
+      conditionSnapshot: { _ in
+        .init(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
+      }
     )
-    #expect(await closed.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.agentGone)
+    #expect(
+      await closed.handle(envelope: dispatch(pane: target.paneID)).error?.code
+        == CLIErrorCode.agentGone)
   }
 
   @Test func dispatchRefusesARemoteAgentBeforeTypingAnything() async throws {
@@ -313,15 +341,17 @@ struct AgentDispatchCommandHandlerTests {
     var remote = snapshot(target, status: .idle, signal: turnEnded)
     var entry = try #require(remote.agent)
     entry.remote = RemoteAgentContext(
-      connection: ConnectionKey(user: "dev", hostname: "box"), correlation: .correlated, confirmedAt: Self.start,
+      connection: ConnectionKey(user: "dev", hostname: "box"), correlation: .correlated,
+      confirmedAt: Self.start,
       now: Self.start)
     remote = AgentConditionSnapshot(
-      agent: entry, signal: remote.signal, revision: remote.revision, isLive: true, signals: remote.signals)
+      agent: entry, signal: remote.signal, revision: remote.revision, isLive: true,
+      signals: remote.signals)
     var issued = 0
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       // An unverifiable composer must not mask the reason.
-      inputProtection: { _, _ in "The input area could not be verified." },
+      inputProtection: { _, _, _ in AgentInputRefusal("The input area could not be verified.") },
       conditionSnapshot: { _ in remote },
       issueDispatch: { _ in
         issued += 1
@@ -341,12 +371,13 @@ struct AgentDispatchCommandHandlerTests {
         issued += 1
         return .failure(.surfacePending)
       },
-      deliverPrompt: { _, text in
+      deliverPrompt: { _, text, _ in
         delivered.append(text)
-        return true
+        return .submitted(replacedDraft: nil)
       }
     )
-    let sent = await input.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    let sent = await input.handle(
+      envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
     #expect(sent.ok)
     #expect(delivered == ["hello"])
     #expect(issued == 0)
@@ -363,14 +394,16 @@ struct AgentDispatchCommandHandlerTests {
       BusyCase(status: .working, signal: nil, label: "working"),
       BusyCase(status: .blocked, signal: nil, label: "blocked"),
       BusyCase(status: .blocked, signal: turnEnded, label: "blocked despite an old turn-ended"),
-      BusyCase(status: .idle, signal: needsInput, label: "runtime needs-input while the screen looks idle"),
+      BusyCase(
+        status: .idle, signal: needsInput, label: "runtime needs-input while the screen looks idle"),
     ]
     for busy in cases {
       var issued = 0
       let handler = AgentDispatchCommandHandler(
         resolveTarget: { _ in .success(target) },
         conditionSnapshot: { _ in
-          self.snapshot(target, status: busy.status, signal: busy.signal, channels: [self.liveClaudeChannel])
+          self.snapshot(
+            target, status: busy.status, signal: busy.signal, channels: [self.liveClaudeChannel])
         },
         issueDispatch: { _ in
           issued += 1
@@ -387,7 +420,7 @@ struct AgentDispatchCommandHandlerTests {
     }
   }
 
-  @Test func dispatchWithCorroboratedTurnEndedIssuesBindsThenDeliversPrefixedProtocol() async throws {
+  @Test func dispatchWithCorroboratedTurnEndedIssuesBindsThenDeliversTheProtocol() async throws {
     let target = resolvedTarget()
     let issued = AgentDispatchSnapshot(
       record: .pending(id: "d7", createdAt: Self.start),
@@ -399,22 +432,24 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: { _ in
-        self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+        self.snapshot(
+          target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
       issueDispatch: { resolved in
         lifecycle.append("issue:\(resolved.paneID)")
         return .success(issued)
       },
-      deliverPrompt: { _, text in
+      deliverPrompt: { _, text, _ in
         lifecycle.append("deliver")
         delivered = text
-        return true
+        return .submitted(replacedDraft: nil)
       },
       cancelDispatch: { lifecycle.append("cancel:\($0)") },
       now: { Self.start }
     )
     let response = await handler.handle(
-      envelope: envelope(.agentsDispatch(.init(pane: target.paneID, prompt: "Round two: re-review the diff.")))
+      envelope: envelope(
+        .agentsDispatch(.init(pane: target.paneID, prompt: "Round two: re-review the diff.")))
     )
     #expect(response.ok)
     #expect(response.command == "agents.dispatch")
@@ -426,9 +461,11 @@ struct AgentDispatchCommandHandlerTests {
     #expect(payload.target == TabTarget(from: target))
 
     let text = try #require(delivered)
-    #expect(text == AgentDispatchPrompt.renderInjected(userPrompt: "Round two: re-review the diff."))
+    #expect(
+      text == AgentDispatchPrompt.renderInjected(userPrompt: "Round two: re-review the diff."))
     #expect(text.hasPrefix("[Prowl] Round two: re-review the diff.\n"))
-    #expect(text.contains("Prowl dispatch completion protocol v\(AgentDispatchPrompt.protocolVersion)"))
+    #expect(
+      text.contains("Prowl dispatch completion protocol v\(AgentDispatchPrompt.protocolVersion)"))
     #expect(text.contains("prowl agents dispatch-complete --outcome succeeded|failed"))
     #expect(!text.contains("d7"))
   }
@@ -442,12 +479,13 @@ struct AgentDispatchCommandHandlerTests {
     var issued = false
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      inputProtection: { _, _ in
+      inputProtection: { _, _, _ in
         checks += 1
-        return checks == 2 ? "Host started editing" : nil
+        return checks == 2 ? AgentInputRefusal("Host started editing") : nil
       },
       conditionSnapshot: { _ in
-        self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+        self.snapshot(
+          target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
       issueDispatch: { _ in
         issued = true
@@ -467,15 +505,16 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: { _ in
-        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+        self.snapshot(
+          target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
       issueDispatch: { _ in
         issued = true
         return .failure(.bindingMissing)
       },
-      deliverPrompt: { _, _ in
+      deliverPrompt: { _, _, _ in
         delivered = true
-        return true
+        return .submitted(replacedDraft: nil)
       },
       clock: clock)
     let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
@@ -501,12 +540,13 @@ struct AgentDispatchCommandHandlerTests {
       conditionSnapshot: { _ in
         reads += 1
         return self.snapshot(
-          target, status: reads > 3 ? .done : .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+          target, status: reads > 3 ? .done : .working, signal: self.turnEnded,
+          channels: [self.liveClaudeChannel])
       },
       issueDispatch: { _ in .success(issued) },
-      deliverPrompt: { _, _ in
+      deliverPrompt: { _, _, _ in
         delivered += 1
-        return true
+        return .submitted(replacedDraft: nil)
       },
       clock: clock,
       now: { Self.start }
@@ -525,7 +565,8 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: { _ in
-        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+        self.snapshot(
+          target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
       issueDispatch: { _ in
         issued += 1
@@ -558,7 +599,7 @@ struct AgentDispatchCommandHandlerTests {
         return self.snapshot(target, status: .idle, signal: nil)
       },
       issueDispatch: { _ in .success(issued) },
-      deliverPrompt: { _, _ in true },
+      deliverPrompt: { _, _, _ in .submitted(replacedDraft: nil) },
       clock: clock,
       now: { Self.start }
     )
@@ -607,7 +648,7 @@ struct AgentDispatchCommandHandlerTests {
         self.snapshot(target, status: .idle, signal: nil, channels: [self.liveClaudeChannel])
       },
       issueDispatch: { _ in .success(issued) },
-      deliverPrompt: { _, _ in true },
+      deliverPrompt: { _, _, _ in .submitted(replacedDraft: nil) },
       clock: clock,
       now: { Self.start }
     )
@@ -636,14 +677,18 @@ struct AgentDispatchCommandHandlerTests {
       conditionSnapshot: idle,
       issueDispatch: { _ in .failure(.surfacePending) }
     )
-    #expect(await raced.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.dispatchPending)
+    #expect(
+      await raced.handle(envelope: dispatch(pane: target.paneID)).error?.code
+        == CLIErrorCode.dispatchPending)
 
     let unbound = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: idle,
       issueDispatch: { _ in .failure(.bindingMissing) }
     )
-    #expect(await unbound.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.dispatchFailed)
+    #expect(
+      await unbound.handle(envelope: dispatch(pane: target.paneID)).error?.code
+        == CLIErrorCode.dispatchFailed)
 
     var cancelled: [String] = []
     let undeliverable = AgentDispatchCommandHandler(
@@ -654,10 +699,11 @@ struct AgentDispatchCommandHandlerTests {
           AgentDispatchSnapshot(
             record: .pending(id: "d10", createdAt: Self.start),
             binding: AgentDispatchBinding(
-              surfaceID: self.surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+              surfaceID: self.surfaceID(of: target), target: TabTarget(from: target),
+              evidenceEpoch: UUID())
           ))
       },
-      deliverPrompt: { _, _ in false },
+      deliverPrompt: { _, _, _ in .notSubmitted },
       cancelDispatch: { cancelled.append($0) }
     )
     let response = await undeliverable.handle(envelope: dispatch(pane: target.paneID))
@@ -667,7 +713,8 @@ struct AgentDispatchCommandHandlerTests {
 
   @Test func interactiveInputIgnoresPendingWithoutMutatingItOrInjectingProtocol() async throws {
     let target = resolvedTarget()
-    let pending = AgentDispatchSnapshot(record: .pending(id: "old-task", createdAt: Self.start), binding: nil)
+    let pending = AgentDispatchSnapshot(
+      record: .pending(id: "old-task", createdAt: Self.start), binding: nil)
     var delivered: [String] = []
     var issued = 0
     var cancelled = 0
@@ -678,13 +725,14 @@ struct AgentDispatchCommandHandlerTests {
         issued += 1
         return .failure(.surfacePending)
       },
-      deliverPrompt: { _, text in
+      deliverPrompt: { _, text, _ in
         delivered.append(text)
-        return true
+        return .submitted(replacedDraft: nil)
       },
       cancelDispatch: { _ in cancelled += 1 })
     for text in ["你好\nsecond line", "follow-up"] {
-      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      let response = await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
       #expect(response.ok)
       #expect(response.command == "agents.input")
       struct Payload: Decodable { let input: SendInputInfo }
@@ -711,26 +759,32 @@ struct AgentDispatchCommandHandlerTests {
       let handler = AgentDispatchCommandHandler(
         resolveTarget: { _ in .success(target) },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
-        deliverPrompt: { _, text in
+        deliverPrompt: { _, text, _ in
           delivered.append(text)
-          return true
+          return .submitted(replacedDraft: nil)
         })
-      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
+      let response = await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
       #expect(response.ok)
       #expect(delivered == ["also"])
     }
-    for (status, signal) in [(AgentDisplayState.blocked, AgentSignal?.none), (.blocked, needsInput)] {
+    for (status, signal) in [
+      (AgentDisplayState.blocked, AgentSignal?.none), (.blocked, needsInput),
+    ] {
       var calls = 0
       // A menu on screen also hides the composer; the person gets the reason that applies.
       let handler = AgentDispatchCommandHandler(
         resolveTarget: { _ in .success(target) },
-        inputProtection: { _, _ in "The Claude input area could not be verified." },
+        inputProtection: { _, _, _ in
+          AgentInputRefusal("The Claude input area could not be verified.")
+        },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: signal) },
-        deliverPrompt: { _, _ in
+        deliverPrompt: { _, _, _ in
           calls += 1
-          return true
+          return .submitted(replacedDraft: nil)
         })
-      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
+      let response = await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "also"))))
       #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
       #expect(response.error?.message.contains("waits for an answer") == true)
       #expect(calls == 0)
@@ -751,13 +805,14 @@ struct AgentDispatchCommandHandlerTests {
     var checked: [String] = []
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      inputProtection: { _, text in
+      inputProtection: { _, text, _ in
         checked.append(text)
-        return "stop"
+        return AgentInputRefusal("stop")
       },
       conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) })
     _ = await handler.handle(envelope: dispatch(pane: target.paneID))
-    _ = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    _ = await handler.handle(
+      envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
     #expect(checked.count == 2)
     #expect(checked.first == AgentDispatchPrompt.renderInjected(userPrompt: "Round two."))
     #expect(checked.last == "hello")
@@ -766,17 +821,20 @@ struct AgentDispatchCommandHandlerTests {
   @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
     let target = resolvedTarget()
     for (status, protection, delivered) in [
-      (AgentDisplayState.working, String?.none, false), (.idle, "Local draft", false), (.idle, nil, false),
+      (AgentDisplayState.working, String?.none, false), (.idle, "Local draft", false),
+      (.idle, nil, false),
     ] {
       var calls = 0
       let handler = AgentDispatchCommandHandler(
-        resolveTarget: { _ in .success(target) }, inputProtection: { _, _ in protection },
+        resolveTarget: { _ in .success(target) },
+        inputProtection: { _, _, _ in protection.map { AgentInputRefusal($0) } },
         conditionSnapshot: { _ in self.snapshot(target, status: status, signal: self.turnEnded) },
-        deliverPrompt: { _, _ in
+        deliverPrompt: { _, _, _ in
           calls += 1
-          return delivered
+          return delivered ? .submitted(replacedDraft: nil) : .notSubmitted
         })
-      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+      let response = await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
       #expect(!response.ok)
       if protection == nil {
         #expect(response.error?.code == CLIErrorCode.sendFailed)
@@ -786,6 +844,73 @@ struct AgentDispatchCommandHandlerTests {
         #expect(calls == 0)
       }
     }
+  }
+
+  /// The draft policy reaches the protection and the delivery; a draft refusal carries the
+  /// box's contents, and a replaced delivery reports the draft it cleared (docs-ai 090).
+  @Test func draftPolicyReachesProtectionAndDeliveryAndTheirDetailsReachTheCaller() async throws {
+    let target = resolvedTarget()
+    var policies: [AgentDraftPolicy] = []
+    let draft = AgentComposerDraftPayload(text: "git push", isComplete: true)
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      inputProtection: { _, _, policy in
+        policies.append(policy)
+        guard policy == .refuse else { return nil }
+        return AgentInputRefusal(
+          "Claude has an existing draft.",
+          details: .init(reason: .draft, draft: draft, replaceable: true, recovery: .stash))
+      },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      deliverPrompt: { _, _, policy in
+        policies.append(policy)
+        let replaced: AgentReplacedDraftPayload? =
+          policy == .replace ? .init(text: "git push", isComplete: true, recovery: .stash) : nil
+        return .submitted(replacedDraft: replaced)
+      })
+    let refused = await handler.handle(
+      envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    #expect(refused.error?.code == CLIErrorCode.dispatchTargetBusy)
+    let details = try #require(refused.error?.details).decode(as: AgentDispatchErrorDetails.self)
+    #expect(
+      details.input == .init(reason: .draft, draft: draft, replaceable: true, recovery: .stash))
+    #expect(policies == [.refuse])
+
+    policies = []
+    let replaced = await handler.handle(
+      envelope: envelope(
+        .agentsInput(.init(pane: target.paneID, prompt: "hello", onDraft: .replace))))
+    #expect(replaced.ok)
+    let payload = try #require(replaced.data).decode(as: ReplacedInputPayload.self)
+    #expect(
+      payload.input.replacedDraft == .init(text: "git push", isComplete: true, recovery: .stash))
+    #expect(policies == [.replace, .replace])
+
+    // A refusal from the delivery itself (the box did not read empty after clearing) cancels
+    // the issued dispatch and still carries the details.
+    var cancelled: [String] = []
+    let issued = AgentDispatchSnapshot(
+      record: .pending(id: "d9", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: self.surfaceID(of: target), target: TabTarget(from: target),
+        evidenceEpoch: UUID()))
+    let late = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      issueDispatch: { _ in .success(issued) },
+      deliverPrompt: { _, _, _ in
+        .refused(
+          AgentInputRefusal(
+            "Claude still shows a draft after clearing.",
+            details: .init(reason: .clearing, draft: draft, replaceable: false, recovery: .stash)))
+      },
+      cancelDispatch: { cancelled.append($0) })
+    let lateRefusal = await late.handle(envelope: dispatch(pane: target.paneID))
+    #expect(lateRefusal.error?.code == CLIErrorCode.dispatchTargetBusy)
+    let lateDetails = try #require(lateRefusal.error?.details).decode(
+      as: AgentDispatchErrorDetails.self)
+    #expect(lateDetails.input?.reason == .clearing)
+    #expect(cancelled == ["d9"])
   }
 
   @Test func concurrentInteractiveAndAutomatedInputsCannotInterleave() async {
@@ -799,13 +924,14 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
-      deliverPrompt: { _, _ in
+      deliverPrompt: { _, _, _ in
         started.continuation.yield(())
         for await _ in release.stream { break }
-        return true
+        return .submitted(replacedDraft: nil)
       })
     let first = Task {
-      await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "one"))))
+      await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "one"))))
     }
     for await _ in started.stream { break }
     let second = await handler.handle(envelope: dispatch(pane: target.paneID))
@@ -820,22 +946,27 @@ struct AgentDispatchCommandHandlerTests {
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
       conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
-      deliverPrompt: { _, _ in
+      deliverPrompt: { _, _, _ in
         calls += 1
-        return true
+        return .submitted(replacedDraft: nil)
       })
     for text in ["", "   ", "escape\u{1b}"] {
-      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      let response = await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
       #expect(response.error?.code == CLIErrorCode.invalidArgument)
     }
     let task = Task {
       withUnsafeCurrentTask { $0?.cancel() }
-      return await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+      return await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
     }
     #expect(await task.value.ok == false)
     #expect(calls == 0)
     // Cancellation must release the per-pane in-flight guard.
-    #expect(await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "retry")))).ok)
+    #expect(
+      await handler.handle(
+        envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "retry")))
+      ).ok)
     #expect(calls == 1)
   }
 
@@ -949,8 +1080,20 @@ struct AgentDispatchCommandHandlerTests {
   }
 
   /// The idle wait counts the ticks it waited, so ticks until it returns keep its result.
-  private func drive(_ task: Task<CommandResponse, Never>, _ clock: TestClock<Duration>) async -> CommandResponse {
+  private func drive(_ task: Task<CommandResponse, Never>, _ clock: TestClock<Duration>) async
+    -> CommandResponse
+  {
     await advance(clock, by: .milliseconds(200), until: task)
       ?? CommandResponse(ok: false, command: "agents.dispatch", schemaVersion: "")
   }
+}
+
+/// `data.input` of an `agents.input` receipt, as far as the replaced draft goes.
+private struct ReplacedInputPayload: Decodable {
+  let input: ReplacedInput
+}
+
+private struct ReplacedInput: Decodable {
+  let replacedDraft: AgentReplacedDraftPayload?
+  enum CodingKeys: String, CodingKey { case replacedDraft = "replaced_draft" }
 }

@@ -16,6 +16,16 @@ struct AgentsDispatchCommand: ParsableCommand {
   @Option(name: .long, help: "Prompt source; the only supported value is '-' for piped stdin.")
   var prompt: String
 
+  @Option(
+    name: .customLong("on-draft"),
+    help: ArgumentHelp(
+      "What to do when the agent's input box already holds a draft.",
+      discussion:
+        "refuse (default) fails with DISPATCH_TARGET_BUSY and the draft in error.details.input; "
+        + "replace clears it the agent's own way (Claude Code stashes it with Control-S, Codex kills "
+        + "the lines with Control-U), verifies the box is empty, and then delivers."))
+  var onDraft: AgentDraftPolicy = .refuse
+
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
@@ -65,7 +75,7 @@ struct AgentsDispatchCommand: ParsableCommand {
     guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw ExitError(code: CLIErrorCode.emptyInput, message: "The dispatch prompt is empty.")
     }
-    let input = DispatchInput(pane: pane, prompt: prompt)
+    let input = DispatchInput(pane: pane, prompt: prompt, onDraft: onDraft == .refuse ? nil : onDraft)
     if let message = input.validationErrorMessage {
       throw ExitError(code: CLIErrorCode.invalidArgument, message: message)
     }
@@ -82,3 +92,5 @@ struct AgentsDispatchCommand: ParsableCommand {
       && Int(digits).map({ $0 > 0 }) == true
   }
 }
+
+extension AgentDraftPolicy: ExpressibleByArgument {}
