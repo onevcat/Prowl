@@ -348,6 +348,9 @@
               "ok": .bool(true), "command": .string("agent.keys"),
               "data": .object(["keys": .array(input.keys.map { .string($0) })]),
             ])
+          case .agentsInput where CommandLine.arguments.contains("--mirror-ui-hold-input"):
+            // No receipt: the message stays in flight, so a test can check the sending state.
+            return
           case .agentsInput where CommandLine.arguments.contains("--mirror-ui-refuse-input"):
             payload = .object([
               "ok": .bool(false), "command": .string("agents.input"),

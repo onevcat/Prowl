@@ -90,9 +90,10 @@ permit structured Shell submission because it cannot confirm that the Shell inpu
 is empty; the composer says so for a shell pane. Host validates the pane lease,
 readiness, drafts and IME/editing activity. Input delivery is not Agent completion.
 Messages also go to a working agent, which queues them or steers its turn as it does for
-keyboard input on the Mac; only an agent that waits for an answer refuses them. A pending or unknown receipt shows
-the submitted text with **Check Receipt** and **I've Checked**; the draft is preserved
-and commands are never automatically replayed.
+keyboard input on the Mac; only an agent that waits for an answer refuses them. While a
+message is in flight, Send shows a spinner and nothing else in the composer changes. An
+unknown receipt shows the submitted text with **Check Receipt** and **I've Checked**; the
+draft is preserved and commands are never automatically replayed.
 
 The composer is one line when unfocused, expands while editing, then scrolls at its
 height limit. Send is explicit; Return inserts a newline. Two physical Returns

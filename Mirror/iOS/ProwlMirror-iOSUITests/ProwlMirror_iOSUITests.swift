@@ -464,6 +464,28 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Refused message")
   }
 
+  /// A message in flight turns Send into a spinner and adds nothing above the field, so the chat
+  /// does not jump for each message.
+  @MainActor
+  func testMessageInFlightKeepsTheLayout() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-hold-input"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    input.typeText("Run the tests again")
+    let send = app.buttons["mirror-send"]
+    send.tap()
+    expectation(for: NSPredicate(format: "label == %@", "Sending"), evaluatedWith: send)
+    waitForExpectations(timeout: 5)
+    XCTAssertFalse(send.isEnabled)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch.exists)
+    XCTAssertFalse(app.buttons["Check Receipt"].exists)
+    attach("Message in flight")
+  }
+
   /// On a wide screen the chat keeps a readable column, and the composer lines up with it.
   @MainActor
   func testChatKeepsAReadableColumnOnIPad() throws {

@@ -270,12 +270,6 @@ final class MirrorSession: Identifiable {
       && draft.utf8.count <= MirrorWire.maximumInput
   }
 
-  var submissionHint: String {
-    if let submission, submission.outcome.status != .accepted { return submission.outcome.detail }
-    if !supportsSubmission { return "This Host has not enabled message submission for this pane." }
-    if status != .live { return "Reconnect to the pane before sending." }
-    return "Host checks Agent readiness when you send."
-  }
   var followsLatest = true
   var onVerifiedConnection: ((MirrorSavedConnection) -> Void)?
   @ObservationIgnored private var transport: (any MirrorTransport)?
@@ -547,7 +541,7 @@ final class MirrorSession: Identifiable {
     let request = Submission(
       id: UUID(), text: draft, paneID: pane.id, runID: hostRunID,
       draftRevision: draftRevision, configuration: configuration,
-      outcome: .init(status: .pending, detail: "Host is checking readiness and sending…"))
+      outcome: .init(status: .pending, detail: "Sending…"))
     submission = request
     Task { await routeSubmission(request, lease: subscriptionID) }
     let clock = clock

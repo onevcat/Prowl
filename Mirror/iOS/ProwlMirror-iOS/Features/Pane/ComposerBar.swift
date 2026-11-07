@@ -3,6 +3,8 @@ import SwiftUI
 /// One composer for both views (docs-ai 089 S2): a floating glass field with the send button
 /// inside. Send goes through `agents.input`. A note appears only when the Host will do
 /// something other than deliver now, and a receipt never locks the field without a way out.
+/// A message in flight only turns Send into a spinner: it takes a moment, and a note or the
+/// receipt controls would push the chat up and back for each message.
 struct ComposerBar: View {
   @Bindable var session: MirrorSession
   @Binding var isEditing: Bool
@@ -12,6 +14,7 @@ struct ComposerBar: View {
   private var showsStop: Bool {
     session.canStopAgent && session.draft.isEmpty
   }
+  private var isSending: Bool { session.submission?.outcome.status == .pending }
   /// The measured width of the trailing buttons; the Hide Keyboard symbol grows with Dynamic
   /// Type, so a constant reservation overlaps the text at accessibility sizes.
   @State private var controlsWidth: CGFloat = 34
@@ -30,7 +33,7 @@ struct ComposerBar: View {
           .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
           .accessibilityIdentifier("composer-note")
       }
-      if session.submission?.outcome.status == .unknown || session.submission?.outcome.status == .pending {
+      if session.submission?.outcome.status == .unknown {
         receiptControls
           .padding(.vertical, 8)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,16 +87,23 @@ struct ComposerBar: View {
               Button {
                 session.submitDraft()
               } label: {
-                Image(systemName: "arrow.up")
-                  .font(.body.weight(.bold))
-                  // The circle is a fixed 32 points; a larger glyph spills out of it.
-                  .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-                  .foregroundStyle(.white)
-                  .frame(width: 32, height: 32)
-                  .background(session.canSubmit ? Color.accentColor : Color(.systemGray3), in: Circle())
+                Group {
+                  if isSending {
+                    ProgressView().tint(.white).controlSize(.small)
+                  } else {
+                    Image(systemName: "arrow.up")
+                      .font(.body.weight(.bold))
+                      // The circle is a fixed 32 points; a larger glyph spills out of it.
+                      .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                  }
+                }
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(
+                  session.canSubmit || isSending ? Color.accentColor : Color(.systemGray3), in: Circle())
               }
               .disabled(!session.canSubmit)
-              .accessibilityLabel("Send")
+              .accessibilityLabel(isSending ? "Sending" : "Send")
               .accessibilityIdentifier("mirror-send")
               .help("Send the message to the agent on the Host")
             }
@@ -106,6 +116,7 @@ struct ComposerBar: View {
     }
     .animation(.snappy, value: note)
     .animation(.snappy, value: showsStop)
+    .animation(.snappy, value: isSending)
     .animation(.snappy, value: isEditing)
     .confirmationDialog("Stop the agent?", isPresented: $confirmsStop, titleVisibility: .visible) {
       Button("Stop", role: .destructive) { session.sendKeys(["esc"]) }
@@ -146,11 +157,13 @@ struct ComposerBar: View {
     let isProblem: Bool
   }
 
-  /// Only what changes the outcome: a receipt that is not a plain success, a refused key, or a
+  /// Only what changes the outcome: a receipt that is refused or unconfirmed, a refused key, or a
   /// pane that does not take messages. A working agent takes a message as typed on the Mac: it
   /// queues or steers it by its own rules (docs-ai 089 S6), so that needs no note.
   private var note: Note? {
-    if let submission = session.submission, submission.outcome.status != .accepted {
+    if let submission = session.submission, submission.outcome.status != .accepted,
+      submission.outcome.status != .pending
+    {
       let problem = submission.outcome.status == .rejected || submission.outcome.status == .unknown
       return Note(text: submission.outcome.detail, isProblem: problem)
     }
