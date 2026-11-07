@@ -139,6 +139,20 @@ shows the Hosts screen with one fake Host whose roster serves the same fixture p
 `--mirror-ui-launch-fixture` opens the New Agent Pane form alone. Component and socket
 tests are separate from real Agent/cross-device acceptance.
 
+## TestFlight
+
+`make testflight-mirror-ios` archives the Release build and uploads it to App Store Connect;
+`make archive-mirror-ios` stops after it exports the IPA to `build/mirror-ios/export`. Both
+need a clean working tree and the signing team in `Config/Local.xcconfig`
+(`MIRROR_IOS_TEAM_ID` overrides it). Xcode automatic signing creates the distribution
+certificate and profile. Authentication uses the `PROWL_ASC_*` API key in
+`Config/Secrets.env` when it is set, and the Apple ID signed in to Xcode otherwise.
+
+The version follows the Mac app's CalVer and is not committed: the marketing version is the
+local date (`YYYY.M.D`) and the build number is the local time (`YYYYMMDDHHMM`), so every upload
+has a larger build number. Set `MIRROR_IOS_VERSION` or `MIRROR_IOS_BUILD` to override them.
+The script prints the commit of each build; add it to the TestFlight notes.
+
 See the shared [wire contract](../../docs/remote-mirror-wire.md) and
 `ThirdPartyNotices/` for source/license notices.
 
