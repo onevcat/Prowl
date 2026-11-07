@@ -37,7 +37,7 @@
 
     /// With `--mirror-ui-scroll-hold-fixture`, the fixture Host confirms a scroll only when the UI
     /// test posts this Darwin notification, so the test can check the loading state at any speed.
-    static let releaseScrollNotification = "com.awhisper.ProwlMirror-iOS.ui-fixture.release-scroll"
+    static let releaseScrollNotification = "com.onevcat.prowl.mirror.ui-fixture.release-scroll"
     private static var holdsScroll: Bool {
       CommandLine.arguments.contains("--mirror-ui-scroll-hold-fixture")
     }

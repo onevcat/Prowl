@@ -826,7 +826,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   private func releaseHeldScrolls() {
     CFNotificationCenterPostNotification(
       CFNotificationCenterGetDarwinNotifyCenter(),
-      CFNotificationName("com.awhisper.ProwlMirror-iOS.ui-fixture.release-scroll" as CFString), nil, nil,
+      CFNotificationName("com.onevcat.prowl.mirror.ui-fixture.release-scroll" as CFString), nil, nil,
       true)
   }
 }

@@ -93,7 +93,7 @@ TEST_SIGNING_ARGS := CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-all test-app test-mirror-ios test-mirror-ios-unit test-mirror-android test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive archive-mirror-ios testflight-mirror-ios format format-changed format-lint lint check test test-all test-app test-mirror-ios test-mirror-ios-unit test-mirror-android test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
 .PHONY: test-agent-contracts _test-agent-contract-codex _test-agent-contract-export
 
 help:  # Display this help.
@@ -405,6 +405,12 @@ archive: ensure-ghostty embed-cli embed-docs embed-skills ensure-project # Archi
 
 export-archive: # Export xarchive
 	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/Prowl.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
+
+archive-mirror-ios: # Archive the iOS mirror app and export an IPA to build/mirror-ios without uploading
+	@"$(CURRENT_MAKEFILE_DIR)/scripts/release-mirror-ios.sh" --export-only
+
+testflight-mirror-ios: # Archive the iOS mirror app and upload it to App Store Connect for TestFlight
+	@"$(CURRENT_MAKEFILE_DIR)/scripts/release-mirror-ios.sh"
 
 test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 

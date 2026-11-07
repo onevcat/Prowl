@@ -3,7 +3,7 @@ Native iOS mirror client for Prowl, supporting iPhone and iPad
 
 Migrated from `Awhisper/ProwlMirror-iPad` at commit `2b8e237` into this repository.
 The source snapshot retains its notices; the original repository and history remain
-available separately. The app now uses `com.awhisper.ProwlMirror-iOS`, so it installs
+available separately. The app now uses `com.onevcat.prowl.mirror`, so it installs
 alongside the old app and does not automatically migrate its saved connections.
 
 ## Flow
@@ -138,6 +138,20 @@ DEBUG-only launch arguments supply deterministic UI data without a Host or an Ag
 shows the Hosts screen with one fake Host whose roster serves the same fixture pane;
 `--mirror-ui-launch-fixture` opens the New Agent Pane form alone. Component and socket
 tests are separate from real Agent/cross-device acceptance.
+
+## TestFlight
+
+`make testflight-mirror-ios` archives the Release build and uploads it to App Store Connect;
+`make archive-mirror-ios` stops after it exports the IPA to `build/mirror-ios/export`. Both
+need a clean working tree and the signing team in `Config/Local.xcconfig`
+(`MIRROR_IOS_TEAM_ID` overrides it). Xcode automatic signing creates the distribution
+certificate and profile. Authentication uses the `PROWL_ASC_*` API key in
+`Config/Secrets.env` when it is set, and the Apple ID signed in to Xcode otherwise.
+
+The version follows the Mac app's CalVer and is not committed: the marketing version is the
+local date (`YYYY.M.D`) and the build number is the local time (`YYYYMMDDHHMM`), so every upload
+has a larger build number. Set `MIRROR_IOS_VERSION` or `MIRROR_IOS_BUILD` to override them.
+The script prints the commit of each build; add it to the TestFlight notes.
 
 See the shared [wire contract](../../docs/remote-mirror-wire.md) and
 `ThirdPartyNotices/` for source/license notices.
