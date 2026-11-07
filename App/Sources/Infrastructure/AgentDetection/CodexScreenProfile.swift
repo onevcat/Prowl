@@ -96,20 +96,33 @@ enum CodexScreenProfile {
       && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
-  /// Whether the live composer holds nothing typed: its prompt row shows only dim text after
-  /// `›`, which is how Codex renders its placeholder, whatever the words. The formatter's dim
-  /// SGR attribute tells it from an identically worded draft; an image marker is never a hint.
-  /// This is read only at the public delivery boundary, not a second readiness state machine.
+  /// Whether the live composer holds nothing typed and takes input: its prompt row shows only
+  /// dim text after `›`, which is how Codex renders its placeholder, whatever the words. The
+  /// formatter's dim SGR attribute tells it from an identically worded draft; an image or paste
+  /// marker is never a hint, and the dim notice of a composer that takes no input (a parent-owned
+  /// sub-agent view) is not an empty box either. This is read only at the public delivery
+  /// boundary, not a second readiness state machine.
   nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
     guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return false }
     let lines = styled.rows.map { codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces) }
     guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
     let row = styled.rows[prompt]
-    guard !row.text.contains("[Image #"), let marker = row.text.unicodeScalars.firstIndex(of: "›") else {
-      return false
-    }
+    guard !showsComposerMarker(row.text), !isDirectInputDisabled(row.text),
+      let marker = row.text.unicodeScalars.firstIndex(of: "›")
+    else { return false }
     let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
     return row.showsOnlyDimText(from: offset)
+  }
+
+  /// Codex collapses an image or a long paste into a chip; whatever its styling, it is content.
+  nonisolated static func showsComposerMarker(_ text: String) -> Bool {
+    text.contains("[Image #") || text.contains("[Pasted Content")
+  }
+
+  /// Codex 0.167 shows `Viewing sub-agent — direct input is disabled` dim in the box while a
+  /// parent-owned child thread is selected; text typed there is rejected, not queued.
+  nonisolated static func isDirectInputDisabled(_ text: String) -> Bool {
+    text.contains("direct input is disabled")
   }
 
   /// Raw current interaction text for an actionable blocked screen. This deliberately

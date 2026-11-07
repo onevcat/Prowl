@@ -36,6 +36,18 @@ struct CodexScreenProfileTests {
       !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› Describe what to build next" + footer))
     #expect(
       !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› \u{1B}[2mhello\u{1B}[0m\nworld" + footer))
+    // A dim paste chip is content, like an image.
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(
+        styledSnapshot: "› \u{1B}[2m[Pasted Content 12 chars]\u{1B}[0m" + footer))
+    // Codex 0.167 shows this dim notice while a parent-owned sub-agent view is selected; the box
+    // takes no input there, so it must not pass as empty (review R1).
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(
+        styledSnapshot: "› \u{1B}[2mViewing sub-agent — direct input is disabled\u{1B}[0m" + footer))
+    #expect(
+      !CodexScreenProfile.composerIsEmpty(
+        in: .init(text: "› Viewing sub-agent — direct input is disabled" + footer)))
   }
 
   @Test func formatterPaletteIsNotComposerText() {
