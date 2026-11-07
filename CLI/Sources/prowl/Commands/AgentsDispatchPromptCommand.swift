@@ -22,8 +22,9 @@ struct AgentsDispatchCommand: ParsableCommand {
       "What to do when the agent's input box already holds a draft.",
       discussion:
         "refuse (default) fails with DISPATCH_TARGET_BUSY and the draft in error.details.input; "
-        + "replace clears it the agent's own way (Claude Code stashes it with Control-S, Codex kills "
-        + "the lines with Control-U), verifies the box is empty, and then delivers."))
+        + "replace clears it the agent's own way (Claude Code stashes it with Control-S and brings it "
+        + "back after the message, Codex kills the lines with Control-U), verifies the box is empty, "
+        + "and then delivers."))
   var onDraft: AgentDraftPolicy = .refuse
 
   @OptionGroup var options: GlobalOptions

@@ -26,6 +26,8 @@ struct ComposerBar: View {
           .padding(.horizontal, 12).padding(.vertical, 10)
           .frame(maxWidth: .infinity, alignment: .leading)
           .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          // A container, so the card's identifier does not replace its children's.
+          .accessibilityElement(children: .contain)
           .accessibilityIdentifier("composer-draft-card")
       } else if let note {
         // On glass, like the field: the chat scrolls behind this area, and bare text over it
@@ -119,8 +121,8 @@ struct ComposerBar: View {
   }
 
   /// The Mac's input box holds a draft, so the message was not sent: the person decides on the
-  /// phone (docs-ai 090). Replace clears it there first (Claude Code stashes it, ⌃S on the Mac
-  /// brings it back); Bring Here puts its text in front of this message to merge them.
+  /// phone (docs-ai 090). Replace clears it there first (Claude Code stashes it and brings it back
+  /// after the message is sent); Bring Here puts its text in front of this message to merge them.
   private func hostDraftCard(_ hostDraft: MirrorHostDraft) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text("The input box on the Mac still holds a draft, so your message was not sent:")
@@ -146,7 +148,7 @@ struct ComposerBar: View {
             .accessibilityIdentifier("mirror-replace-draft")
             .help(
               hostDraft.recovery == "stash"
-                ? "Stash the draft on the Mac (⌃S there brings it back) and send your message"
+                ? "Set the draft aside on the Mac, send your message, and let the Mac bring the draft back"
                 : "Clear the draft on the Mac and send your message")
         }
         Button("Bring Draft Here") { session.bringHostDraftHere() }

@@ -46,6 +46,14 @@ With dim hints handled (S1), a real draft still only refused `agents.input` and
   complete. Rows keep their text past the two-column margin and interior blank rows, and only a
   one-row draft without a marker is complete, for Codex, Claude and Devin alike.
 
+## Live verification (2026-11-08, separate Debug app)
+
+`agents dispatch` against Claude Code 2.1.319 and Codex 0.167 with a typed draft: `refuse`
+returns `DISPATCH_TARGET_BUSY` with `details.input` (Claude `recovery: stash`, Codex none),
+`--on-draft replace` delivers and reports `replaced_draft`. Claude Code puts the stashed draft
+back in the box by itself once the delivered message is sent; ⌃S toggles it. Codex shows the
+placeholder again. Results on PR #1072.
+
 ## Refs
 
 PR (S2), docs-ai 090 plan.

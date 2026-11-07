@@ -81,6 +81,19 @@ struct AgentComposerAdapterTests {
       read("› if ready:\n      run()\n\n  print(1)\n")
         == .draft(.init(text: "if ready:\n    run()\n\nprint(1)", isComplete: false)))
     #expect(read("›   indented") == .draft(.init(text: "  indented", isComplete: true)))
+    // Astra's dim stars around a one-row draft are decoration, never text to carry over, and
+    // a star next to a word cannot be told from a space (review R090-004).
+    #expect(
+      read("›\u{1B}[2m⠁\u{1B}[22mreview the tests\u{1B}[2m⡀\u{1B}[22m")
+        == .draft(.init(text: "review the tests", isComplete: false)))
+    #expect(read("›\u{1B}[2m⠁⠂\u{1B}[22m") == .empty)
+    #expect(read("› ⠁⠂") == .draft(.init(text: "", isComplete: false)))
+    // A draft row that mentions paths does not end the box: the footer is the last such row
+    // (review R090-005).
+    #expect(
+      read("› Compare these files:\n  src/main.swift · /tmp/old.swift\n  other.swift")
+        == .draft(
+          .init(text: "Compare these files:\nsrc/main.swift · /tmp/old.swift\nother.swift", isComplete: false)))
     #expect(
       read("› \u{1B}[2m[Image #1]\u{1B}[0m") == .draft(.init(text: "[Image #1]", isComplete: false))
     )

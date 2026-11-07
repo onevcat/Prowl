@@ -1049,7 +1049,7 @@ nonisolated struct MirrorHostDraft: Equatable, Sendable {
   /// What a receipt says after the Host replaced this draft.
   var sentNote: String {
     recovery == "stash"
-      ? String(localized: "Sent. The draft on the Mac was stashed; ⌃S there brings it back.")
+      ? String(localized: "Sent. The draft on the Mac was stashed and is back in its input box.")
       : String(localized: "Sent. The draft on the Mac was cleared: “\(excerpt)”")
   }
 }

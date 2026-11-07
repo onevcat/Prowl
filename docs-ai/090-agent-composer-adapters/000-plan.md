@@ -60,7 +60,7 @@ reset for the capture.
 
 | Agent | Key | Idle | Running turn | Multi-line / paste marker | Recovery |
 | --- | --- | --- | --- | --- | --- |
-| Claude 2.1.319 | Ctrl+S (`chat:stash`) | clears, `› stashed` chip | clears, turn continues | whole `[Pasted text #N]` stashed | Ctrl+S again restores |
+| Claude 2.1.319 | Ctrl+S (`chat:stash`) | clears, `› stashed` chip | clears, turn continues | whole `[Pasted text #N]` stashed | comes back by itself after the next message is sent; Ctrl+S toggles it |
 | Claude | Esc Esc | clears | Esc interrupts the turn | untested | Up recalls |
 | Claude | Ctrl+C | clears | interrupts the turn | untested | Up recalls |
 | Codex 0.167 | Ctrl+U | clears one line (two presses per line with its newline) | clears, turn continues | repeat until empty | Ctrl+Y restores the last kill only |

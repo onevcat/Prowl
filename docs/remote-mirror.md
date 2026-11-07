@@ -251,7 +251,8 @@ and the refusal quotes the start of the draft.
 A draft someone left in the Agent's input box refuses the message, and the refusal carries
 the draft's text and whether the Host could replace it (`on_draft`, docs-ai 090). On request,
 the Host clears a replaceable draft the Agent's own way before the paste: Claude Code stashes
-it with ⌃S, and ⌃S on the empty box on the Mac brings it back; Codex kills its lines with ⌃U.
+it with ⌃S and puts it back in the box by itself after the message is sent (⌃S toggles it);
+Codex kills its lines with ⌃U.
 Every key goes under the same guard as the mirror's other keys, the box is re-read as empty
 before the text goes in, and the receipt names the replaced draft. Devin drafts and a box that
 does not read empty after clearing keep refusing.
@@ -315,8 +316,8 @@ under both views sends through `agents.input`; a note appears only when the Host
 something or a receipt needs a look. While the agent works, Send still delivers: the agent
 gets the message as if it was typed on the Mac. When a draft in the agent's input box on the
 Mac refuses the message, a card above the composer shows that draft and asks what to do:
-**Replace and Send** has the Host clear it first (Claude Code stashes it, and ⌃S on the Mac
-brings it back; Codex's lines are cut) and then sends; **Bring Draft Here** puts the draft's
+**Replace and Send** has the Host clear it first (Claude Code stashes it and puts it back after
+the message is sent; Codex's lines are cut) and then sends; **Bring Draft Here** puts the draft's
 text in front of the message so both can be merged and sent together, which then replaces the
 draft on the Mac; **Cancel** keeps the message on the phone. A draft the screen cannot carry (an
 image, a collapsed paste) can only be replaced or left. After a replacement, the receipt note

@@ -381,7 +381,8 @@ enum OutputRenderer {
 
   static func recoveryNote(_ recovery: AgentDraftRecovery?) -> String {
     switch recovery {
-    case .stash: " (stashed; Control-S in the pane brings it back)"
+    case .stash:
+      " (stashed; the agent puts it back in the input box after the message)"
     case nil: " (cleared)"
     }
   }

@@ -431,8 +431,9 @@ code before anything is typed, with the reason and the draft's text in `.error.d
 (`reason`, `draft.text`, `draft.is_complete`, `replaceable`, `recovery`). A dim hint in the
 input box is not a draft, whatever it says: Claude Code's `Try "…"` hint and its prompt
 suggestion after a turn, Codex's placeholder. With `--on-draft replace`, a draft the agent can
-clear is cleared the agent's own way before the paste — Claude Code stashes it with ⌃S (⌃S on
-the empty box brings it back), Codex kills its lines with ⌃U — under the same guard as other
+clear is cleared the agent's own way before the paste — Claude Code stashes it with ⌃S and puts
+it back in the box by itself after the message is sent (⌃S toggles it), Codex kills its lines
+with ⌃U — under the same guard as other
 keys Prowl presses, and the box is re-read as empty first; the receipt then carries
 `data.replaced_draft`. Devin drafts, attachments the agent cannot stash, and a box that does not
 read empty after clearing still refuse. One pending

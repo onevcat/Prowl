@@ -125,7 +125,8 @@ final class DispatchOutputRendererTests: XCTestCase {
     XCTAssertEqual(
       OutputRenderer.dispatchText(replaced),
       "Dispatched d3 (pending)\n  pane: pane\n  created: 2026-11-07T02:00:00.000Z\n  replaced draft: “"
-        + String(repeating: "长", count: 60) + "…” (stashed; Control-S in the pane brings it back)"
+        + String(repeating: "长", count: 60)
+        + "…” (stashed; the agent puts it back in the input box after the message)"
     )
   }
 
