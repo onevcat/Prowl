@@ -134,7 +134,7 @@ struct ScreenView: View {
             jumpPending = true
             withAnimation { position.scrollTo(edge: .bottom) }
           } label: {
-            Image(systemName: "arrow.down").font(.body.weight(.semibold)).padding(4)
+            MirrorFloatingIcon(systemName: "arrow.down")
           }
           .mirrorFloatingButton()
           .disabled(session.isScrolling)

@@ -76,11 +76,16 @@ struct PaneView: View {
     // reader left above the composer, so the button moves to the navigation bar there.
     .overlay(alignment: .bottom) {
       if isComposing, !compactWhileComposing {
-        hideKeyboardButton
-          .font(.body.weight(.medium))
-          .padding(4)
-          .mirrorFloatingButton()
-          .mirrorFloatingRow(.leading, maxWidth: barWidth)
+        Button {
+          isComposing = false
+        } label: {
+          MirrorFloatingIcon(systemName: "keyboard.chevron.compact.down")
+        }
+        .mirrorFloatingButton()
+        .accessibilityLabel("Hide Keyboard")
+        .accessibilityIdentifier("mirror-dismiss-keyboard")
+        .help("Hide the keyboard")
+        .mirrorFloatingRow(.leading, maxWidth: barWidth)
       }
     }
     .animation(.snappy, value: isComposing)
@@ -304,6 +309,19 @@ extension MirrorSession.Status {
     case .disconnected, .takenOver, .hostStopped, .paneClosed, .incompatible: .red
     case .connecting, .choosingPane, .subscribing: .secondary
     }
+  }
+}
+
+/// The symbol of a floating button in one square for every symbol, so the round buttons in a row
+/// have the same size whatever their symbols' own widths.
+struct MirrorFloatingIcon: View {
+  let systemName: String
+  @ScaledMetric(relativeTo: .body) private var side: CGFloat = 28
+
+  var body: some View {
+    Image(systemName: systemName)
+      .font(.body.weight(.semibold))
+      .frame(width: side, height: side)
   }
 }
 

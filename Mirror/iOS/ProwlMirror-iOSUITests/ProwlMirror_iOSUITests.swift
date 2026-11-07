@@ -445,8 +445,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(last.isHittable)
   }
 
-  /// Hide Keyboard and Latest float in one row above the field: Hide Keyboard at its leading
-  /// edge, Latest at its trailing edge.
+  /// Hide Keyboard and Latest float in one row above the field, with the same size: Hide Keyboard
+  /// at its leading edge, Latest at its trailing edge.
   @MainActor
   func testHideKeyboardAndLatestShareOneRowAboveTheField() {
     let app = XCUIApplication()
@@ -469,6 +469,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     waitForExpectations(timeout: 5)
     attach("Hide Keyboard and Latest")
     XCTAssertLessThan(dismiss.frame.maxX, latest.frame.minX)
+    XCTAssertEqual(dismiss.frame.size.width, latest.frame.size.width, accuracy: 0.5)
+    XCTAssertEqual(dismiss.frame.size.height, latest.frame.size.height, accuracy: 0.5)
     XCTAssertLessThan(abs(dismiss.frame.minX - input.frame.minX), 24)
     // The text view ends before Send; Send marks the field's trailing edge.
     XCTAssertLessThan(abs(latest.frame.maxX - app.buttons["mirror-send"].frame.maxX), 24)
