@@ -52,28 +52,31 @@ enum ClaudeScreenProfile {
     composerRows(in: snapshot.lines).map { composerText(rows: $0, in: snapshot.lines) }
   }
 
-  /// `composerContents(in:)` with the styled snapshot read only when the plain text has the shape
-  /// of the empty-composer hint. A draft stays on the plain screen, which joins soft-wrapped rows
-  /// the way the paste confirmation compares tokens; the styled snapshot keeps every physical row
-  /// apart and is needed only to tell the dim hint from the same words typed by the user.
+  /// `composerContents(in:)` with the styled snapshot read whenever the plain text shows
+  /// anything, to tell a dim hint from a typed draft. A draft stays on the plain screen, which
+  /// joins soft-wrapped rows the way the paste confirmation compares tokens; the styled snapshot
+  /// keeps every physical row apart and only decides whether the box is empty. Nil when the box
+  /// is unrecognized or the styles cannot be read.
   nonisolated static func composerContents(
     in snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?
   ) -> String? {
     guard let contents = composerContents(in: snapshot) else { return nil }
-    guard isEmptyComposerHint(contents) else { return contents }
-    return styledSnapshot().flatMap(composerContents(styledSnapshot:))
+    guard !contents.isEmpty else { return "" }
+    guard let styled = styledSnapshot().flatMap(composerContents(styledSnapshot:)) else { return nil }
+    return styled.isEmpty ? "" : contents
   }
 
-  /// `composerContents(in:)` read from a VT snapshot, where the hint an empty composer shows
-  /// before the first message (`Try "…"`, Claude Code 2.1.29x and later) reads as empty. Only
-  /// the dim rendering tells the hint from the same words typed by the user, and an attachment
-  /// marker is never the hint, so both conditions are required.
+  /// `composerContents(in:)` read from a VT snapshot, where a hint Claude Code shows in an empty
+  /// box reads as empty: `Try "…"` before the first message, the prompt suggestion after a turn
+  /// (2.1.29x and later), and the queued messages hint while a turn runs. Only the dim rendering
+  /// tells a hint from the same words typed by the user, whatever the hint says; an attachment
+  /// marker is never a hint.
   nonisolated static func composerContents(styledSnapshot: String) -> String? {
     guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return nil }
     let lines = styled.rows.map(\.text)
     guard let rows = composerRows(in: lines) else { return nil }
     let contents = composerText(rows: rows, in: lines)
-    guard isEmptyComposerHint(contents) else { return contents }
+    guard !contents.isEmpty, !showsAttachmentMarker(contents) else { return contents }
     let prompt = styled.rows[rows.lowerBound]
     let scalars = prompt.text.unicodeScalars
     let afterPrompt = scalars.firstIndex(of: "❯").map { scalars.distance(from: scalars.startIndex, to: $0) + 1 } ?? 0
@@ -83,11 +86,10 @@ enum ClaudeScreenProfile {
     return onlyHint ? "" : contents
   }
 
-  /// The dim hints of an empty composer: `Try "…"` before the first message, and the queued
-  /// messages hint while a running turn holds queued input.
-  nonisolated private static func isEmptyComposerHint(_ contents: String) -> Bool {
-    let collapsed = contents.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    return collapsed.wholeMatch(of: /Try ".+"/) != nil || collapsed == "Press up to edit queued messages"
+  /// Claude collapses an image or a long paste into a marker (`[Image #1]`,
+  /// `[Pasted text #1 +9 lines]`); whatever its styling, it stands for content.
+  nonisolated static func showsAttachmentMarker(_ contents: String) -> Bool {
+    contents.contains(/\[(Image #\d+|Pasted text #\d+ \+\d+ lines)\]/)
   }
 
   /// The prompt row through the last row before the closing border.

@@ -12,23 +12,36 @@ struct ClaudeScreenProfileTests {
     #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
   }
 
-  @Test func dimStartupHintReadsAsAnEmptyComposer() {
+  /// Claude Code shows dim hints in an empty box: `Try "…"` in a fresh session and, since
+  /// 2.1.29x, a prompt suggestion after a turn in its own words (captured 2026-11-07 with
+  /// `script -F`: `❯\u{A0}\u{1B}[2m找到 build-app 的定义并读一下\u{1B}[22m`). Only the dim
+  /// rendering tells a hint from the same words typed by the user.
+  @Test func dimHintsReadAsAnEmptyComposerWhateverTheirWords() {
     func screen(_ composer: String) -> String { "────────\r\n" + composer + "\r\n────────\r\n  status" }
     let hint = "❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m"
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(hint)) == "")
     let wrappedHint = "❯\u{A0}\u{1B}[2mTry \"write a test for\r\n  Example.swift\"\u{1B}[22m"
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(wrappedHint)) == "")
-    // The same words typed by the user are not dim; dim text that is not the hint, and typed
-    // text next to a hint, stay drafts.
+    let suggestion = "❯\u{A0}\u{1B}[2m找到 build-app 的定义并读一下\u{1B}[22m"
+    #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen(suggestion)) == "")
+    // The same words typed by the user are not dim; typed text next to a hint stays a draft.
     #expect(
       ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ Try \"fix lint errors\""))
         == "Try \"fix lint errors\"")
     #expect(
-      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2m[Image #1]\u{1B}[22m")) == "[Image #1]")
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ 找到 build-app 的定义并读一下"))
+        == "找到 build-app 的定义并读一下")
     #expect(
       ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2mTry \"a\"\u{1B}[22m b\""))
         == "Try \"a\" b\"")
     #expect(ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ ")) == "")
+    // An attachment or paste marker stands for content, whatever its styling.
+    #expect(
+      ClaudeScreenProfile.composerContents(styledSnapshot: screen("❯ \u{1B}[2m[Image #1]\u{1B}[22m")) == "[Image #1]")
+    #expect(
+      ClaudeScreenProfile.composerContents(
+        styledSnapshot: screen("❯ \u{1B}[2m[Pasted text #1 +20 lines]\u{1B}[22m"))
+        == "[Pasted text #1 +20 lines]")
     // Claude positions the words of a paste marker, so the formatter encodes the gaps as CUF.
     #expect(
       ClaudeScreenProfile.composerContents(
@@ -58,9 +71,10 @@ struct ClaudeScreenProfileTests {
     #expect(styledReads == 1)
   }
 
-  @Test func styledSnapshotIsReadOnlyForTheHint() {
+  /// The styled snapshot only decides whether the box is empty; a draft's text comes from the
+  /// plain screen, which joins soft-wrapped rows the way the paste confirmation expects.
+  @Test func styledSnapshotDecidesOnlyWhetherTheBoxIsEmpty() {
     func screen(_ composer: String) -> String { "────────\n" + composer + "\n────────\n  status" }
-    let dimHint = screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m")
     var styledReads = 0
     func read(plain: String, styled: String?) -> String? {
       ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: screen(plain))) {
@@ -68,21 +82,28 @@ struct ClaudeScreenProfileTests {
         return styled
       }
     }
-    // A draft and an empty box come from the plain screen, which joins soft-wrapped rows the way
-    // the paste confirmation expects; the styled snapshot keeps every physical row apart.
-    #expect(read(plain: "❯ [Pasted text #1 +9 lines]", styled: dimHint) == "[Pasted text #1 +9 lines]")
-    #expect(read(plain: "❯ ", styled: dimHint) == "")
-    #expect(read(plain: "❯ Try", styled: dimHint) == "Try")
+    #expect(read(plain: "❯ ", styled: nil) == "")
     #expect(styledReads == 0)
-    // Only the hint shape consults the styles, and an unreadable styled snapshot is unverifiable.
-    #expect(read(plain: "❯ Try \"fix lint errors\"", styled: dimHint) == "")
     #expect(
-      read(plain: "❯ Try \"fix lint errors\"", styled: screen("❯ Try \"fix lint errors\"")) == "Try \"fix lint errors\""
-    )
+      read(plain: "❯ [Pasted text #1 +9 lines]", styled: screen("❯ [Pasted text #1 +9 lines]"))
+        == "[Pasted text #1 +9 lines]")
+    #expect(read(plain: "❯ run the\n  tests", styled: screen("❯ run the\n  tests")) == "run the\n  tests")
+    #expect(
+      read(
+        plain: "❯ Try \"fix lint errors\"", styled: screen("❯\u{A0}\u{1B}[2mTry \"fix lint errors\"\u{1B}[22m"))
+        == "")
+    #expect(
+      read(
+        plain: "❯ 找到 build-app 的定义并读一下",
+        styled: screen("❯\u{A0}\u{1B}[2m找到 build-app 的定义并读一下\u{1B}[22m")) == "")
+    #expect(styledReads == 4)
+    // Without readable styles a non-empty box cannot be verified either way.
     #expect(read(plain: "❯ Try \"fix lint errors\"", styled: nil) == nil)
-    #expect(styledReads == 3)
-    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) { dimHint } == nil)
-    #expect(styledReads == 3)
+    #expect(read(plain: "❯ draft", styled: "\u{1B}]unterminated") == nil)
+    #expect(styledReads == 6)
+    #expect(
+      ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) { screen("❯ ") } == nil)
+    #expect(styledReads == 6)
   }
 
   @Test func scrolledTranscriptRetainsTheLastLiveState() {
