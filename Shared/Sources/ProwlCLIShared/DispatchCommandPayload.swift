@@ -316,32 +316,117 @@ public struct AgentSignalsPayload: Codable, Equatable, Sendable {
 public struct AgentDispatchCommandPayload: Codable, Equatable, Sendable {
   public let target: TabTarget
   public let dispatch: DispatchPendingRecord
+  /// The draft the delivery cleared first, under `on_draft: replace`.
+  public let replacedDraft: AgentReplacedDraftPayload?
 
-  public init(target: TabTarget, dispatch: DispatchPendingRecord) {
+  enum CodingKeys: String, CodingKey {
+    case target, dispatch
+    case replacedDraft = "replaced_draft"
+  }
+
+  public init(target: TabTarget, dispatch: DispatchPendingRecord, replacedDraft: AgentReplacedDraftPayload? = nil) {
     self.target = target
     self.dispatch = dispatch
+    self.replacedDraft = replacedDraft
   }
 }
 
-/// Governed `error.details` for a refused `agents.dispatch`: `record` carries the pane's
-/// current pending dispatch (`DISPATCH_PENDING`); `observation` and `signals` carry the
-/// evidence that made the pane busy or agent-less.
+/// How a draft Prowl cleared from an agent's input box comes back on the Mac (docs-ai 090).
+public enum AgentDraftRecovery: String, Codable, Equatable, Sendable {
+  /// The agent stashed it; the same key on an empty box restores it (Claude Code ⌃S).
+  case stash
+}
+
+/// Text in an agent's input box, as the screen shows it. `isComplete` is false when a marker
+/// stands for content the screen does not show (a collapsed paste, an image).
+public struct AgentComposerDraftPayload: Codable, Equatable, Sendable {
+  public let text: String
+  public let isComplete: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case text
+    case isComplete = "is_complete"
+  }
+
+  public init(text: String, isComplete: Bool) {
+    self.text = text
+    self.isComplete = isComplete
+  }
+}
+
+/// Why the agent's input box could not take the text (`error.details.input`). `draft` is set
+/// for `reason: draft`; `replaceable` says whether `on_draft: replace` would clear it, and
+/// `recovery` how it would come back on the Mac.
+public struct AgentInputRefusalDetails: Codable, Equatable, Sendable {
+  public enum Reason: String, Codable, Equatable, Sendable {
+    /// Text or an attachment in the box.
+    case draft
+    /// The box could not be recognized on screen.
+    case unrecognized
+    /// Someone edited on the Mac in the last two seconds.
+    case editing
+    /// An input method is composing text on the Mac.
+    case composing
+    /// `replace` was requested but the box did not read empty after clearing.
+    case clearing
+  }
+
+  public let reason: Reason
+  public let draft: AgentComposerDraftPayload?
+  public let replaceable: Bool
+  public let recovery: AgentDraftRecovery?
+
+  public init(
+    reason: Reason, draft: AgentComposerDraftPayload? = nil, replaceable: Bool = false,
+    recovery: AgentDraftRecovery? = nil
+  ) {
+    self.reason = reason
+    self.draft = draft
+    self.replaceable = replaceable
+    self.recovery = recovery
+  }
+}
+
+/// The draft a delivery cleared under `on_draft: replace`, with how it comes back on the Mac.
+public struct AgentReplacedDraftPayload: Codable, Equatable, Sendable {
+  public let text: String
+  public let isComplete: Bool
+  public let recovery: AgentDraftRecovery?
+
+  enum CodingKeys: String, CodingKey {
+    case text, recovery
+    case isComplete = "is_complete"
+  }
+
+  public init(text: String, isComplete: Bool, recovery: AgentDraftRecovery?) {
+    self.text = text
+    self.isComplete = isComplete
+    self.recovery = recovery
+  }
+}
+
+/// Governed `error.details` for a refused `agents.dispatch` or `agents.input`: `record` carries
+/// the pane's current pending dispatch (`DISPATCH_PENDING`); `observation` and `signals` carry
+/// the evidence that made the pane busy or agent-less; `input` says why the input box refused.
 public struct AgentDispatchErrorDetails: Codable, Equatable, Sendable {
   public let target: TabTarget
   public let record: DispatchRecordPayload?
   public let observation: AgentWaitObservation?
   public let signals: AgentSignalsPayload?
+  public let input: AgentInputRefusalDetails?
 
   public init(
     target: TabTarget,
     record: DispatchRecordPayload? = nil,
     observation: AgentWaitObservation? = nil,
-    signals: AgentSignalsPayload? = nil
+    signals: AgentSignalsPayload? = nil,
+    input: AgentInputRefusalDetails? = nil
   ) {
     self.target = target
     self.record = record
     self.observation = observation
     self.signals = signals
+    self.input = input
   }
 }
 

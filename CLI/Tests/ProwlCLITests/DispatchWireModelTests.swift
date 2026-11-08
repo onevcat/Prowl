@@ -14,6 +14,26 @@ final class DispatchWireModelTests: XCTestCase {
     XCTAssertEqual(actual, input)
   }
 
+  func testDraftPolicyIsAnOptionalAdditiveField() throws {
+    let replace = DispatchInput(pane: "p7", prompt: "hello", onDraft: .replace)
+    let replaceJSON = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(replace)) as? [String: Any])
+    XCTAssertEqual(replaceJSON["on_draft"] as? String, "replace")
+    XCTAssertEqual(try JSONDecoder().decode(DispatchInput.self, from: JSONEncoder().encode(replace)), replace)
+
+    let plain = DispatchInput(pane: "p7", prompt: "hello")
+    let plainJSON = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(plain)) as? [String: Any])
+    XCTAssertNil(plainJSON["on_draft"])
+    XCTAssertEqual(plain.draftPolicy, .refuse)
+
+    let legacy = try JSONDecoder().decode(DispatchInput.self, from: Data(#"{"pane":"p7","prompt":"hello"}"#.utf8))
+    XCTAssertNil(legacy.onDraft)
+    XCTAssertEqual(legacy.draftPolicy, .refuse)
+    XCTAssertThrowsError(
+      try JSONDecoder().decode(DispatchInput.self, from: Data(#"{"pane":"p7","prompt":"hello","on_draft":"merge"}"#.utf8)))
+  }
+
   func testDispatchCommandsRoundTripWithStableNames() throws {
     let commands: [Command] = [
       .agentsDispatch(DispatchInput(pane: "p7", prompt: "Round two.\nRe-review the diff.")),

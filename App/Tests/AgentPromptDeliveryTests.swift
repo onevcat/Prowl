@@ -2,6 +2,7 @@ import AppKit
 import Clocks
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 import Testing
 
 @testable import Prowl
@@ -12,27 +13,35 @@ struct AgentPromptDeliveryTests {
     #expect(
       AgentPromptDelivery.confirmsPaste(
         "run CBA7CC1B-\nCDB8 --invocation\n2", text: "run CBA7CC1B-CDB8 --invocation 2",
-        profile: .devin))
+        adapter: DevinComposerAdapter()))
     #expect(
-      !AgentPromptDelivery.confirmsPaste("run CBA7CC1B- CDB8", text: "run CBA7CC1B-CDB8", profile: .devin))
+      !AgentPromptDelivery.confirmsPaste(
+        "run CBA7CC1B- CDB8", text: "run CBA7CC1B-CDB8", adapter: DevinComposerAdapter()))
     #expect(
-      !AgentPromptDelivery.confirmsPaste("run CBA7CC1B-\nOTHER", text: "run CBA7CC1B-CDB8", profile: .devin))
+      !AgentPromptDelivery.confirmsPaste(
+        "run CBA7CC1B-\nOTHER", text: "run CBA7CC1B-CDB8", adapter: DevinComposerAdapter()))
     #expect(
-      !AgentPromptDelivery.confirmsPaste("[Pasted text #1 +20 lines]", text: "hello", profile: .devin))
+      !AgentPromptDelivery.confirmsPaste(
+        "[Pasted text #1 +20 lines]", text: "hello", adapter: DevinComposerAdapter()))
   }
   @Test func onlyRuntimesThatDropEarlyEnterWaitOutsideDispatch() {
-    #expect(AgentComposerProfile(agent: .codex) == nil)
-    #expect(AgentComposerProfile(agent: .pi) == nil)
-    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .dispatch) == .required)
-    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .workflowMessage) == nil)
-    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .send) == nil)
-    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .dispatch) == .required)
-    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .workflowMessage) == .required)
+    #expect(AgentComposerAdapters.adapter(for: .pi) == nil)
+    let codex = CodexComposerAdapter()
+    #expect(codex.pasteConfirmation(for: .dispatch) == nil)
+    #expect(codex.pasteConfirmation(for: .send) == nil)
+    let claude = ClaudeComposerAdapter()
+    #expect(claude.pasteConfirmation(for: .dispatch) == .required)
+    #expect(claude.pasteConfirmation(for: .workflowMessage) == nil)
+    #expect(claude.pasteConfirmation(for: .send) == nil)
+    let devin = DevinComposerAdapter()
+    #expect(devin.pasteConfirmation(for: .dispatch) == .required)
+    #expect(devin.pasteConfirmation(for: .workflowMessage) == .required)
+    #expect(devin.dropsEarlyEnter && !claude.dropsEarlyEnter && !codex.dropsEarlyEnter)
   }
 
   /// `prowl send` must still answer Devin menus and append to drafts, where the input box is not empty.
   @Test func devinSendWaitsOnlyForAnEmptyComposer() {
-    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .send) == .whenComposerIsEmpty)
+    #expect(DevinComposerAdapter().pasteConfirmation(for: .send) == .whenComposerIsEmpty)
   }
 
   @Test func runFenceAfterPastePreventsEnter() async {
@@ -78,9 +87,14 @@ struct AgentPromptDeliveryTests {
       "这是第三条复现消息，故意写得比上一条更长一些，长到在这个宽度的输入框里一定会在两个汉字之间折成两行显示，"
       + "但是又不会长到被收成粘贴占位符，请只回复明白两个字。"
     #expect(composer.contains("\n"))
-    #expect(AgentPromptDelivery.confirmsPaste(composer, text: text, profile: .claude))
-    #expect(!AgentPromptDelivery.confirmsPaste(composer, text: text + "多", profile: .claude))
-    #expect(!AgentPromptDelivery.confirmsPaste("这是 一段\n  中文", text: "这是一段中文", profile: .claude))
+    #expect(
+      AgentPromptDelivery.confirmsPaste(composer, text: text, adapter: ClaudeComposerAdapter()))
+    #expect(
+      !AgentPromptDelivery.confirmsPaste(
+        composer, text: text + "多", adapter: ClaudeComposerAdapter()))
+    #expect(
+      !AgentPromptDelivery.confirmsPaste(
+        "这是 一段\n  中文", text: "这是一段中文", adapter: ClaudeComposerAdapter()))
   }
 
   /// Only the line Prowl itself left unsent, with no input since, goes in with Enter alone. A
@@ -89,9 +103,15 @@ struct AgentPromptDeliveryTests {
   @Test func onlyProwlsOwnUnsentLineIsSubmittedAsIs() async {
     var inserted: [String] = []
     var submitted = 0
-    func delivery(_ composer: String, unsent: AgentUnsentLine?, generation: UInt64 = 5) -> AgentPromptDelivery {
+    func delivery(_ composer: String, unsent: AgentUnsentLine?, generation: UInt64 = 5)
+      -> AgentPromptDelivery
+    {
       AgentPromptDelivery(
-        observe: { .init(composer: composer, editingRevision: nil, hasMarkedText: false, inputGeneration: generation) },
+        observe: {
+          .init(
+            composer: composer, editingRevision: nil, hasMarkedText: false,
+            inputGeneration: generation)
+        },
         insert: {
           inserted.append($0)
           return true
@@ -99,14 +119,15 @@ struct AgentPromptDeliveryTests {
         submit: {
           submitted += 1
           return true
-        }, profile: .claude, unsent: unsent)
+        }, adapter: ClaudeComposerAdapter(), unsent: unsent)
     }
     let text = "请只回复明白两个字。"
     let left = AgentUnsentLine(text: text, inputGeneration: 5)
     #expect(await delivery("请只回复明白两个\n  字。", unsent: left).deliver(text) == .submitted)
     #expect(inserted.isEmpty && submitted == 1)
     // Any input since Prowl left it, such as ⌃U or a history key.
-    #expect(await delivery("请只回复明白两个\n  字。", unsent: left, generation: 6).deliver(text) == .notInserted)
+    #expect(
+      await delivery("请只回复明白两个\n  字。", unsent: left, generation: 6).deliver(text) == .notInserted)
     // Someone's own paste: the marker hides its content.
     let marker = "[Pasted text #1 +20 lines]"
     #expect(await delivery(marker, unsent: nil).deliver("Only reply hello") == .notInserted)
@@ -115,7 +136,8 @@ struct AgentPromptDeliveryTests {
     #expect(await delivery(marker, unsent: pasted).deliver("first\nsecond") == .submitted)
     // A different request whose text only differs in whitespace.
     let spaced = AgentUnsentLine(text: "exactly 'a  b'", inputGeneration: 5)
-    #expect(await delivery("exactly 'a b'", unsent: spaced).deliver("exactly 'a b'") == .notInserted)
+    #expect(
+      await delivery("exactly 'a b'", unsent: spaced).deliver("exactly 'a b'") == .notInserted)
     #expect(inserted.isEmpty && submitted == 2)
   }
 
@@ -132,28 +154,34 @@ struct AgentPromptDeliveryTests {
       observe: {
         defer { step += 1 }
         switch step {
-        case 0: return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
-        case 1: return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
+        case 0:
+          return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
+        case 1:
+          return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
         // Someone replaced the box on the Mac while Prowl waited for the echo.
-        default: return .init(composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3)
+        default:
+          return .init(
+            composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3)
         }
       },
       insert: { _ in true },
       submit: {
         submitted += 1
         return true
-      }, clock: clock, profile: .claude, onUnsent: { recorded = $0 })
+      }, clock: clock, adapter: ClaudeComposerAdapter(), onUnsent: { recorded = $0 })
     let task = Task { await first.deliver(text) }
     await clock.advance(by: .milliseconds(100))
     #expect(await task.value == .notSubmitted)
     #expect(recorded == AgentUnsentLine(text: text, inputGeneration: 2))
     let retry = AgentPromptDelivery(
-      observe: { .init(composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3) },
+      observe: {
+        .init(composer: marker, editingRevision: 3, hasMarkedText: false, inputGeneration: 3)
+      },
       insert: { _ in true },
       submit: {
         submitted += 1
         return true
-      }, profile: .claude, unsent: recorded)
+      }, adapter: ClaudeComposerAdapter(), unsent: recorded)
     #expect(await retry.deliver(text) == .notInserted)
     #expect(submitted == 0)
   }
@@ -168,18 +196,21 @@ struct AgentPromptDeliveryTests {
       observe: {
         defer { step += 1 }
         switch step {
-        case 0: return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
-        case 1: return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
+        case 0:
+          return .init(composer: "", editingRevision: 1, hasMarkedText: false, inputGeneration: 1)
+        case 1:
+          return .init(composer: "", editingRevision: 2, hasMarkedText: false, inputGeneration: 2)
         default:
           return .init(
-            composer: "[Pasted text #2 +9 lines]", editingRevision: 2, hasMarkedText: false, inputGeneration: 3)
+            composer: "[Pasted text #2 +9 lines]", editingRevision: 2, hasMarkedText: false,
+            inputGeneration: 3)
         }
       },
       insert: { _ in true },
       submit: {
         submitted += 1
         return true
-      }, clock: clock, profile: .claude)
+      }, clock: clock, adapter: ClaudeComposerAdapter())
     let task = Task { await delivery.deliver("first\nsecond") }
     await clock.advance(by: .milliseconds(100))
     #expect(await task.value == .notSubmitted)
@@ -198,22 +229,32 @@ struct AgentPromptDeliveryTests {
     #expect(view.inputGeneration == start + 2)
   }
 
-  @Test func aDraftRefusalQuotesTheDraftUnlessItIsProwlsOwnUnsentLine() {
-    let profile = AgentComposerProfile.claude
+  @Test func aDraftRefusalQuotesTheDraftAndSaysWhetherItCanBeReplaced() {
+    let claude = ClaudeComposerAdapter()
     let left = AgentUnsentLine(text: "hello", inputGeneration: 5)
-    #expect(profile.draftRefusal("", delivering: "hello", unsent: nil, inputGeneration: 5) == nil)
-    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, inputGeneration: 5) == nil)
-    #expect(profile.draftRefusal("hel\n  lo", delivering: "hello", unsent: left, inputGeneration: 6) != nil)
-    #expect(profile.draftRefusal("hello", delivering: "hello", unsent: nil, inputGeneration: 5) != nil)
+    #expect(left.resumes("hello", composer: "hel\n  lo", inputGeneration: 5, adapter: claude))
+    #expect(!left.resumes("hello", composer: "hel\n  lo", inputGeneration: 6, adapter: claude))
     #expect(
-      profile.draftRefusal(
-        "[Pasted text #1 +20 lines]", delivering: "Only reply hello", unsent: nil, inputGeneration: 5)
-        != nil)
-    let refusal = profile.draftRefusal(
-      "git push --force origin main", delivering: "hello", unsent: nil, inputGeneration: 5)
-    #expect(refusal?.contains("git push --force") == true)
+      !left.resumes(
+        "Only reply hello", composer: "[Pasted text #1 +20 lines]", inputGeneration: 5,
+        adapter: claude))
+
+    let refusal = AgentInputRefusal.draft(
+      .init(text: "git push --force origin main", isComplete: true), agentName: "Claude",
+      plan: claude.clearPlan)
+    #expect(refusal.message.contains("git push --force"))
+    #expect(refusal.details?.reason == .draft)
+    #expect(refusal.details?.replaceable == true)
+    #expect(refusal.details?.recovery == .stash)
+    #expect(refusal.details?.draft == .init(text: "git push --force origin main", isComplete: true))
     let long = String(repeating: "长", count: 80)
-    #expect((profile.draftRefusal(long, delivering: nil, unsent: nil, inputGeneration: nil)?.count ?? 0) < 160)
+    let truncated = AgentInputRefusal.draft(
+      .init(text: long, isComplete: true), agentName: "Codex", plan: .killLines(key: "ctrl-u"))
+    #expect(truncated.message.count < 160)
+    #expect(truncated.details?.replaceable == true && truncated.details?.recovery == nil)
+    let fixed = AgentInputRefusal.draft(
+      .init(text: "draft", isComplete: true), agentName: "Devin", plan: .unsupported)
+    #expect(fixed.details?.replaceable == false)
   }
 
   /// Keys that clear, recall or submit a line count as input, though they are not editing keys
@@ -225,8 +266,10 @@ struct AgentPromptDeliveryTests {
     func press(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) throws {
       let event = try #require(
         NSEvent.keyEvent(
-          with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
-          characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+          with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
+          context: nil,
+          characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
+          keyCode: keyCode))
       view.keyDown(with: event)
     }
     let start = view.inputGeneration
@@ -340,7 +383,8 @@ struct AgentPromptDeliveryTests {
     #expect(await delivery.deliver("hello") == .notInserted)
     #expect(!inserted)
     #expect(
-      AgentPromptDelivery.confirmsPaste("[Pasted text #1 +20 lines]", text: "first\nsecond", profile: .claude))
+      AgentPromptDelivery.confirmsPaste(
+        "[Pasted text #1 +20 lines]", text: "first\nsecond", adapter: ClaudeComposerAdapter()))
     #expect(!AgentPromptDelivery.confirmsPaste("hello extra", text: "hello"))
     #expect(!AgentPromptDelivery.confirmsPaste("[Image #1]", text: "hello"))
   }

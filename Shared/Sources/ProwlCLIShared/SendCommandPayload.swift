@@ -125,19 +125,26 @@ public struct SendInputInfo: Codable, Sendable {
   public let characters: Int
   public let bytes: Int
   public let trailingEnterSent: Bool
+  /// `agents.input` only: the draft the delivery cleared first, under `on_draft: replace`.
+  public let replacedDraft: AgentReplacedDraftPayload?
 
   enum CodingKeys: String, CodingKey {
     case source
     case characters
     case bytes
     case trailingEnterSent = "trailing_enter_sent"
+    case replacedDraft = "replaced_draft"
   }
 
-  public init(source: String, characters: Int, bytes: Int, trailingEnterSent: Bool) {
+  public init(
+    source: String, characters: Int, bytes: Int, trailingEnterSent: Bool,
+    replacedDraft: AgentReplacedDraftPayload? = nil
+  ) {
     self.source = source
     self.characters = characters
     self.bytes = bytes
     self.trailingEnterSent = trailingEnterSent
+    self.replacedDraft = replacedDraft
   }
 }
 

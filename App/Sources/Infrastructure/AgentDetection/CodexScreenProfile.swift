@@ -82,11 +82,7 @@ enum CodexScreenProfile {
     let suffix = lines.dropFirst(prompt + 1).filter { !$0.isEmpty }
     // Codex 0.158 adds a shortcut hint row below the status line.
     guard suffix.count == 1 || (suffix.count == 2 && isShortcutHintRow(suffix[1])),
-      let footer = suffix.first,
-      footer.contains(" · "),
-      footer.contains("Context ") || footer.contains("context left") || footer.contains("~/")
-        || footer.contains("/"),
-      !footer.contains("esc to interrupt"), !footer.contains("[Image #")
+      let footer = suffix.first, isStatusFooterRow(footer)
     else { return nil }
     return prompt
   }
@@ -96,22 +92,76 @@ enum CodexScreenProfile {
       && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
-  /// Whether the live composer holds nothing typed and takes input: its prompt row shows only
-  /// dim text after `›`, which is how Codex renders its placeholder, whatever the words. The
-  /// formatter's dim SGR attribute tells it from an identically worded draft; an image or paste
-  /// marker is never a hint, and the dim notice of a composer that takes no input (a parent-owned
-  /// sub-agent view) is not an empty box either. This is read only at the public delivery
-  /// boundary, not a second readiness state machine.
-  nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
-    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return false }
+  /// The live composer at the delivery boundary (docs-ai 090): the last `›` row and the rows up
+  /// to the status footer. The prompt row showing only dim text after `›` is Codex's placeholder,
+  /// whatever the words, which the formatter's dim SGR attribute tells from an identically worded
+  /// draft; an image or paste chip is never a hint, and the dim notice of a box that takes no
+  /// input (a parent-owned sub-agent view) is unrecognized. Rows between the prompt and the footer continue a
+  /// draft: their text is kept as shown, past the box's two-column margin, with interior blank
+  /// rows, but a soft wrap and a newline look the same, so only a one-row draft is complete. The
+  /// status footer is the last row that looks like one, so a draft row that mentions a path
+  /// does not end the box early. Astra's dim braille stars around the text are dropped; a row
+  /// that showed them is not complete either, since a star next to a word cannot be told from
+  /// a space. No footer, or an unreadable snapshot, is an unrecognized box.
+  nonisolated static func composerReading(styledSnapshot: String) -> AgentComposerReading {
+    guard let styled = StyledScreenSnapshot(styledSnapshot: styledSnapshot) else { return .unrecognized }
     let lines = styled.rows.map { codexLineWithoutStarfield($0.text).trimmingCharacters(in: .whitespaces) }
-    guard let prompt = liveComposerPromptIndex(in: lines) else { return false }
+    guard let prompt = lines.lastIndex(where: isCodexPromptLine),
+      let footer = lines.indices.dropFirst(prompt + 1).last(where: { isStatusFooterRow(lines[$0]) })
+    else { return .unrecognized }
     let row = styled.rows[prompt]
-    guard !showsComposerMarker(row.text), !isDirectInputDisabled(row.text),
-      let marker = row.text.unicodeScalars.firstIndex(of: "›")
-    else { return false }
-    let offset = row.text.unicodeScalars.distance(from: row.text.unicodeScalars.startIndex, to: marker) + 1
-    return row.showsOnlyDimText(from: offset)
+    guard !isDirectInputDisabled(row.text) else { return .unrecognized }
+    let cleaned = codexLineWithoutStarfield(row.text)
+    guard let marker = cleaned.unicodeScalars.firstIndex(of: "›") else { return .unrecognized }
+    let offset = cleaned.unicodeScalars.distance(from: cleaned.unicodeScalars.startIndex, to: marker) + 1
+    let first = composerRowText(cleaned, after: marker, in: cleaned.unicodeScalars)
+    var continuation = styled.rows[(prompt + 1)..<footer].map { continuationRowText($0.text) }
+    while continuation.last?.isEmpty == true { continuation.removeLast() }
+    while continuation.first?.isEmpty == true { continuation.removeFirst() }
+    let hasMarker = showsComposerMarker(row.text)
+    // Stars are decoration only while dim; typed braille is content the cleaning would lose.
+    let stars = zip(row.text.unicodeScalars, row.dim).filter { (0x2800...0x28FF).contains($0.0.value) }
+    let typedStars = stars.contains { !$0.1 }
+    if continuation.isEmpty, !hasMarker, !typedStars, first.isEmpty || row.showsOnlyDimText(from: offset) {
+      return .empty
+    }
+    let text = ([first] + continuation).joined(separator: "\n")
+    let isComplete = continuation.isEmpty && !hasMarker && stars.isEmpty
+    return .draft(.init(text: text, isComplete: isComplete))
+  }
+
+  /// The prompt row's text after `›` and its one separating space, trailing blanks dropped.
+  nonisolated private static func composerRowText(
+    _ text: String, after marker: String.UnicodeScalarView.Index, in scalars: String.UnicodeScalarView
+  ) -> String {
+    var start = scalars.index(after: marker)
+    if start < scalars.endIndex, scalars[start] == " " { start = scalars.index(after: start) }
+    return trimmingTrailingWhitespace(String(scalars[start...]))
+  }
+
+  /// A continuation row past the two-column margin that aligns it under the prompt's text, with
+  /// its own indentation kept.
+  nonisolated private static func continuationRowText(_ text: String) -> String {
+    let cleaned = codexLineWithoutStarfield(text)
+    var start = cleaned.startIndex
+    for _ in 0..<2 where start < cleaned.endIndex && cleaned[start] == " " {
+      start = cleaned.index(after: start)
+    }
+    return trimmingTrailingWhitespace(String(cleaned[start...]))
+  }
+
+  nonisolated private static func trimmingTrailingWhitespace(_ text: String) -> String {
+    var end = text.endIndex
+    while end > text.startIndex, text[text.index(before: end)].isWhitespace {
+      end = text.index(before: end)
+    }
+    return String(text[..<end])
+  }
+
+  /// `composerReading(styledSnapshot:)` reads empty. Read only at the public delivery boundary,
+  /// not a second readiness state machine.
+  nonisolated static func composerHasNoDraft(styledSnapshot: String) -> Bool {
+    composerReading(styledSnapshot: styledSnapshot) == .empty
   }
 
   /// Codex collapses an image or a long paste into a chip; whatever its styling, it is content.
@@ -123,6 +173,13 @@ enum CodexScreenProfile {
   /// parent-owned child thread is selected; text typed there is rejected, not queued.
   nonisolated static func isDirectInputDisabled(_ text: String) -> Bool {
     text.contains("direct input is disabled")
+  }
+
+  /// Codex's status line below the composer: model and context, or the working directory.
+  nonisolated private static func isStatusFooterRow(_ line: String) -> Bool {
+    line.contains(" · ")
+      && (line.contains("Context ") || line.contains("context left") || line.contains("~/") || line.contains("/"))
+      && !line.contains("esc to interrupt") && !line.contains("[Image #")
   }
 
   /// Raw current interaction text for an actionable blocked screen. This deliberately

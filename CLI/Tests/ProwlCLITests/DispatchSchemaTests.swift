@@ -58,12 +58,24 @@ final class DispatchSchemaTests: XCTestCase {
     let extraData =
       #"{"ok":true,"command":"agents.dispatch","schema_version":"prowl.cli.agents.dispatch.v1","data":{"target":"# + target
       + #","dispatch":{"id":"d2","state":"pending","created_at":"2026-08-29T02:00:00.000Z"},"delivered":true}}"#
+    let draft =
+      #"{"ok":false,"command":"agents.dispatch","schema_version":"prowl.cli.agents.dispatch.v1","error":{"code":"DISPATCH_TARGET_BUSY","message":"Draft.","details":{"target":"# + target
+      + #","input":{"reason":"draft","draft":{"text":"git push","is_complete":true},"replaceable":true,"recovery":"stash"}}}}"#
+    let replaced =
+      #"{"ok":true,"command":"agents.dispatch","schema_version":"prowl.cli.agents.dispatch.v1","data":{"target":"# + target
+      + #","dispatch":{"id":"d2","state":"pending","created_at":"2026-08-29T02:00:00.000Z"},"replaced_draft":{"text":"git push","is_complete":true,"recovery":"stash"}}}"#
+    let unknownReason =
+      #"{"ok":false,"command":"agents.dispatch","schema_version":"prowl.cli.agents.dispatch.v1","error":{"code":"DISPATCH_TARGET_BUSY","message":"Draft.","details":{"target":"# + target
+      + #","input":{"reason":"merged","replaceable":false}}}}"#
 
     try assertValid(success)
     try assertValid(pending)
     try assertValid(busy)
+    try assertValid(draft)
+    try assertValid(replaced)
     try assertInvalid(unknown)
     try assertInvalid(extraData)
+    try assertInvalid(unknownReason)
   }
 
   func testSchemaRejectsCrossVariantFieldsAndUnknownWaitDetails() throws {

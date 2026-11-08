@@ -500,6 +500,32 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Refused message")
   }
 
+  /// A draft in the Mac's input box turns the refusal into a decision: the card shows the draft
+  /// and Replace sends the message with the draft stashed on the Mac (docs-ai 090).
+  @MainActor
+  func testDraftOnTheMacOffersReplaceAndBringHere() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-refuse-input-draft"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    input.typeText("Run the tests again")
+    app.buttons["mirror-send"].tap()
+    let card = app.descendants(matching: .any).matching(identifier: "composer-draft-card").firstMatch
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["composer-draft-text"].label.contains("review the tests"))
+    XCTAssertTrue(app.buttons["mirror-bring-draft"].isEnabled)
+    attach("Draft on the Mac")
+    app.buttons["mirror-replace-draft"].tap()
+    let note = app.descendants(matching: .any).matching(identifier: "composer-note").firstMatch
+    XCTAssertTrue(note.waitForExistence(timeout: 5))
+    XCTAssertTrue(note.label.contains("stashed"))
+    XCTAssertFalse(card.exists)
+    attach("Replaced and sent")
+  }
+
   /// A message in flight turns Send into a spinner and adds nothing above the field, so the chat
   /// does not jump for each message.
   @MainActor

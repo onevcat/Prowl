@@ -407,7 +407,9 @@ EOF
 ```
 
 `--prompt -` reads the prompt from piped stdin (up to 256 KiB of UTF-8; newlines and tabs are
-allowed, other control characters are rejected with `INVALID_ARGUMENT`). Prowl creates a new
+allowed, other control characters are rejected with `INVALID_ARGUMENT`). `--on-draft replace`
+lets the dispatch clear a draft someone left in the agent's input box first (see below); the
+default `refuse` reports it instead. Prowl creates a new
 pending `data.dispatch` bound to the pane and its current agent generation, then types the
 prompt plus the same completion protocol a launch appends — as one bracketed paste followed by
 Enter, prefixed with `[Prowl] ` so the origin is visible — through the pane's input path.
@@ -425,8 +427,16 @@ evidence (including a runtime `needs-input` the screen does not show) is refused
 `DISPATCH_TARGET_BUSY` rather than having text merged into its running turn. The pane's input
 must be clear as well: a draft or attachment in the agent's input box, text being composed
 with an input method, or a local edit within the last two seconds is refused with the same
-code before anything is typed. A dim hint in the input box is not a draft, whatever it says:
-Claude Code's `Try "…"` hint and its prompt suggestion after a turn, Codex's placeholder. One pending
+code before anything is typed, with the reason and the draft's text in `.error.details.input`
+(`reason`, `draft.text`, `draft.is_complete`, `replaceable`, `recovery`). A dim hint in the
+input box is not a draft, whatever it says: Claude Code's `Try "…"` hint and its prompt
+suggestion after a turn, Codex's placeholder. With `--on-draft replace`, a draft the agent can
+clear is cleared the agent's own way before the paste — Claude Code stashes it with ⌃S and puts
+it back in the box by itself after the message is sent (⌃S toggles it), Codex kills its lines
+with ⌃U — under the same guard as other
+keys Prowl presses, and the box is re-read as empty first; the receipt then carries
+`data.replaced_draft`. Devin drafts, attachments the agent cannot stash, and a box that does not
+read empty after clearing still refuse. One pending
 dispatch per pane: while a record is pending, a second `dispatch` fails with
 `DISPATCH_PENDING` and never overwrites it; complete, abandon, or lose the previous record
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
@@ -1055,7 +1065,7 @@ Follow the returned self-initiated delivery instruction to submit the briefing.
 | `DISPATCH_NOT_FOUND` | No dispatch record matches `--dispatch`, or `dispatch-complete` ran in a pane that never held one; records are memory-only and reset on app restart. |
 | `DISPATCH_CONTEXT_REQUIRED` | `dispatch-complete` ran from a process outside any Prowl pane (tmux/detached wrapper, another terminal), so no pane could own the receipt. |
 | `DISPATCH_PENDING` | `agents dispatch` refused: the pane already holds a pending dispatch (`.error.details.record`). Wait for it, or `dispatch-abandon` it, before dispatching again. |
-| `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`), or its input is not clear (a draft or attachment, input-method composition, a local edit in the last two seconds). Wait for `--until idle` or clear the input on Host, then retry. |
+| `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`), or its input is not clear (`.error.details.input`: a draft or attachment with its text, input-method composition, a local edit in the last two seconds). Wait for `--until idle`, clear the input on Host, or pass `--on-draft replace` for a `replaceable` draft, then retry. |
 | `DISPATCH_ALREADY_TERMINAL` | `dispatch-abandon` targeted a record that already completed, was abandoned, or is gone. |
 | `DISPATCH_FAILED` / `DISPATCH_ABANDONED` / `DISPATCH_NEEDS_INPUT` / `DISPATCH_INCOMPLETE` | `agents wait --dispatch` structured outcomes; `.error.details` retains the record, target, and evidence (see **Dispatch completion and waiting**). |
 | `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow deliver` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |

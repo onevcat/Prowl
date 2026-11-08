@@ -67,6 +67,19 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
   struct Dispatch: Codable, Equatable, Sendable {
     let pane: String
     let prompt: String
+    /// Nil (`refuse`) or `replace`: clear a draft in the agent's input box first (docs-ai 090).
+    let onDraft: String?
+
+    enum CodingKeys: String, CodingKey {
+      case pane, prompt
+      case onDraft = "on_draft"
+    }
+
+    init(pane: String, prompt: String, onDraft: String? = nil) {
+      self.pane = pane
+      self.prompt = prompt
+      self.onDraft = onDraft
+    }
   }
 
   struct Empty: Codable, Equatable, Sendable {}

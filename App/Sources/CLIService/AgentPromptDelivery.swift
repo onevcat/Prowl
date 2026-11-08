@@ -1,15 +1,5 @@
 import Foundation
-
-/// Why Prowl submits a line into an agent pane. The purpose decides how strictly the paste is confirmed.
-nonisolated enum AgentLinePurpose: Sendable {
-  /// `prowl agents dispatch`: refuses drafts and recent edits, then confirms every readable paste.
-  case dispatch
-  /// A workflow message: waits for the paste echo only where an early Enter is lost.
-  case workflowMessage
-  /// `prowl send` with Enter. It must still type into menus and after drafts, so it waits for
-  /// the paste echo only where an early Enter is lost and the input box is empty.
-  case send
-}
+import ProwlCLIShared
 
 /// Text Prowl inserted into an agent's input box and could not submit, because its echo could
 /// not be confirmed in time. Only this text, with no input of any kind since the insertion
@@ -30,61 +20,6 @@ nonisolated enum AgentLineSubmission: Equatable, Sendable {
   case notSubmitted
 }
 
-/// An agent input box that Prowl can read from the screen.
-nonisolated enum AgentComposerProfile: Equatable, Sendable {
-  case claude
-  case devin
-
-  enum PasteConfirmation: Equatable, Sendable {
-    /// Wait for the paste echo; fail when it cannot be confirmed.
-    case required
-    /// Wait for the paste echo when the input box is visible and empty; otherwise type directly.
-    case whenComposerIsEmpty
-  }
-
-  init?(agent: DetectedAgent) {
-    switch agent {
-    case .claude: self = .claude
-    case .devin: self = .devin
-    default: return nil
-    }
-  }
-
-  var name: String {
-    switch self {
-    case .claude: "Claude"
-    case .devin: "Devin"
-    }
-  }
-
-  /// Devin loses an Enter that arrives before it accepts the pasted draft.
-  var dropsEarlyEnter: Bool { self == .devin }
-
-  /// Nil when the input box can take `text`: it is empty, or it holds the line Prowl left there
-  /// unsent (`unsent`), which is exactly `text` with no input since (`inputGeneration`).
-  /// Otherwise why not, with the start of the draft so the person sees what is in the way.
-  func draftRefusal(
-    _ draft: String, delivering text: String?, unsent: AgentUnsentLine?, inputGeneration: UInt64?
-  ) -> String? {
-    if draft.isEmpty { return nil }
-    if let text, let unsent, unsent.resumes(text, composer: draft, inputGeneration: inputGeneration, profile: self) {
-      return nil
-    }
-    let collapsed = draft.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    let excerpt = collapsed.count > 40 ? collapsed.prefix(40) + "…" : collapsed[...]
-    return "\(name) has an existing draft or attachment (“\(excerpt)”). Clear it on Host before dispatching."
-  }
-
-  /// Nil means type the line and press Enter on the same main-actor turn.
-  func pasteConfirmation(for purpose: AgentLinePurpose) -> PasteConfirmation? {
-    switch purpose {
-    case .dispatch: .required
-    case .workflowMessage: dropsEarlyEnter ? .required : nil
-    case .send: dropsEarlyEnter ? .whenComposerIsEmpty : nil
-    }
-  }
-}
-
 /// Paste/submit sequencing. This observes the composer, not Agent idleness.
 @MainActor
 struct AgentPromptDelivery {
@@ -100,7 +35,7 @@ struct AgentPromptDelivery {
   let insert: @MainActor (String) -> Bool
   let submit: @MainActor () -> Bool
   var clock: any Clock<Duration> = ContinuousClock()
-  var profile: AgentComposerProfile?
+  var adapter: (any AgentComposerAdapter)?
   /// The line Prowl left unsent in this input box, if any.
   var unsent: AgentUnsentLine?
   /// Called when the inserted text may stay in the box without Enter, with the input state right
@@ -112,7 +47,7 @@ struct AgentPromptDelivery {
     // An earlier delivery left exactly this text without Enter and nobody edited since: press
     // Enter instead of inserting it twice.
     if let composer = before.composer, !composer.isEmpty, let unsent,
-      unsent.resumes(text, composer: composer, inputGeneration: before.inputGeneration, profile: profile)
+      unsent.resumes(text, composer: composer, inputGeneration: before.inputGeneration, adapter: adapter)
     {
       return submit() ? .submitted : .notSubmitted
     }
@@ -132,45 +67,20 @@ struct AgentPromptDelivery {
       guard !Task.isCancelled, let current = observe(), !current.hasMarkedText,
         current.editingRevision == pasted.editingRevision, current.inputGeneration == pasted.inputGeneration
       else { return leftUnsent() }
-      if let composer = current.composer, Self.confirmsPaste(composer, text: text, profile: profile) {
+      if let composer = current.composer, Self.confirmsPaste(composer, text: text, adapter: adapter) {
         return submit() ? .submitted : leftUnsent()
       }
     }
     return leftUnsent()
   }
 
+  /// Whether the box shows `text` as the agent echoes a paste of it. Without an adapter only the
+  /// same tokens count, whatever the whitespace between them.
   nonisolated static func confirmsPaste(
-    _ composer: String, text: String, profile: AgentComposerProfile? = nil
+    _ composer: String, text: String, adapter: (any AgentComposerAdapter)? = nil
   ) -> Bool {
-    let actual = composer.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    let expected = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    guard !actual.isEmpty, !expected.isEmpty else { return false }
-    if actual == expected { return true }
-    switch profile {
-    case .claude:
-      // Claude collapses multiline pasted content into a numbered marker in its input box, and
-      // wraps text without spaces (CJK) between two characters.
-      return actual.wholeMatch(of: /\[Pasted text #\d+ \+\d+ lines\]/) != nil
-        || matchesRows(of: composer, expected: expected)
-    case .devin:
-      // Devin can wrap inside a token.
-      return matchesRows(of: composer, expected: expected)
-    case nil:
-      return false
-    }
-  }
-
-  /// Only screen row boundaries may omit a space; spaces within a row still have to match the
-  /// inserted text.
-  nonisolated private static func matchesRows(of composer: String, expected: String) -> Bool {
-    var remaining = expected[...]
-    for row in composer.split(separator: "\n") {
-      let segment = row.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-      remaining = remaining.drop(while: \.isWhitespace)
-      guard remaining.hasPrefix(segment) else { return false }
-      remaining = remaining.dropFirst(segment.count)
-    }
-    return remaining.isEmpty
+    guard let adapter else { return AgentComposerEcho.matchesExactly(composer, text: text) }
+    return adapter.confirmsPaste(composer, text: text)
   }
 }
 
@@ -179,9 +89,9 @@ extension AgentUnsentLine {
   /// no input of any kind reached the surface since Prowl inserted it, and the screen still echoes
   /// it.
   nonisolated func resumes(
-    _ requested: String, composer: String, inputGeneration: UInt64?, profile: AgentComposerProfile?
+    _ requested: String, composer: String, inputGeneration: UInt64?, adapter: (any AgentComposerAdapter)?
   ) -> Bool {
     requested == text && inputGeneration == self.inputGeneration
-      && AgentPromptDelivery.confirmsPaste(composer, text: text, profile: profile)
+      && AgentPromptDelivery.confirmsPaste(composer, text: text, adapter: adapter)
   }
 }

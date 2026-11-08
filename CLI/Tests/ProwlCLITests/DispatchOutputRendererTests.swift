@@ -83,6 +83,51 @@ final class DispatchOutputRendererTests: XCTestCase {
       OutputRenderer.errorText(busy, command: "agents.dispatch"),
       "error [DISPATCH_TARGET_BUSY]: Busy.\n  pane: pane\n  observation: working [heuristic] via detection"
     )
+
+    let draft = CommandError(
+      code: "DISPATCH_TARGET_BUSY",
+      message: "Draft.",
+      details: try RawJSON(
+        encoding: AgentDispatchErrorDetails(
+          target: Self.target,
+          input: AgentInputRefusalDetails(
+            reason: .draft, draft: AgentComposerDraftPayload(text: "git push\n  --force", isComplete: true),
+            replaceable: true, recovery: .stash)
+        ))
+    )
+    XCTAssertEqual(
+      OutputRenderer.errorText(draft, command: "agents.dispatch"),
+      "error [DISPATCH_TARGET_BUSY]: Draft.\n  pane: pane\n  input: draft (--on-draft replace clears it)\n"
+        + "  draft: “git push --force”"
+    )
+    let hidden = CommandError(
+      code: "DISPATCH_TARGET_BUSY",
+      message: "Draft.",
+      details: try RawJSON(
+        encoding: AgentDispatchErrorDetails(
+          target: Self.target,
+          input: AgentInputRefusalDetails(
+            reason: .draft, draft: AgentComposerDraftPayload(text: "[Image #1]", isComplete: false),
+            replaceable: false)
+        ))
+    )
+    XCTAssertEqual(
+      OutputRenderer.errorText(hidden, command: "agents.dispatch"),
+      "error [DISPATCH_TARGET_BUSY]: Draft.\n  pane: pane\n  input: draft\n"
+        + "  draft: “[Image #1]” (partly hidden on screen)"
+    )
+
+    let replaced = AgentDispatchCommandPayload(
+      target: Self.target,
+      dispatch: DispatchPendingRecord(id: "d3", createdAt: "2026-11-07T02:00:00.000Z"),
+      replacedDraft: AgentReplacedDraftPayload(text: String(repeating: "长", count: 70), isComplete: true, recovery: .stash)
+    )
+    XCTAssertEqual(
+      OutputRenderer.dispatchText(replaced),
+      "Dispatched d3 (pending)\n  pane: pane\n  created: 2026-11-07T02:00:00.000Z\n  replaced draft: “"
+        + String(repeating: "长", count: 60)
+        + "…” (stashed; the agent puts it back in the input box after the message)"
+    )
   }
 
   func testWaitSuccessRendersModeProvenanceAndSummary() {

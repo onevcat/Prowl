@@ -406,9 +406,9 @@ struct MirrorHostTests {
         issues += 1
         return .failure(.bindingMissing)
       },
-      deliverPrompt: { _, _ in
+      deliverPrompt: { _, _, _ in
         deliveries += 1
-        return true
+        return .submitted(replacedDraft: nil)
       }, clock: clock)
     let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
     host.commandService = service

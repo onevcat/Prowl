@@ -15,10 +15,12 @@ final class AgentDispatchCommandHandler: CommandHandler {
   typealias PendingDispatch = @MainActor (TabResolvedTarget) -> AgentDispatchSnapshot?
   typealias ConditionSnapshotProvider = @MainActor (TabResolvedTarget) -> AgentConditionSnapshot
   typealias IssueDispatch = @MainActor (TabResolvedTarget) -> Result<AgentDispatchSnapshot, AgentDispatchStoreError>
-  typealias DeliverPrompt = @MainActor (TabResolvedTarget, String) async -> Bool
+  /// Delivers the text under the caller's draft policy (docs-ai 090).
+  typealias DeliverPrompt = @MainActor (TabResolvedTarget, String, AgentDraftPolicy) async -> AgentLineOutcome
   /// Why the text cannot go into the pane's input box now, or nil. The text is passed so the box
-  /// may already hold it, left without Enter by an earlier delivery.
-  typealias InputProtection = @MainActor (TabResolvedTarget, String) -> String?
+  /// may already hold it, left without Enter by an earlier delivery; under `replace`, a draft the
+  /// agent can clear is not a refusal.
+  typealias InputProtection = @MainActor (TabResolvedTarget, String, AgentDraftPolicy) -> AgentInputRefusal?
   typealias CancelDispatch = @MainActor (String) -> Void
 
   /// How long the precondition lets the evidence settle before refusing: a runtime
@@ -48,13 +50,13 @@ final class AgentDispatchCommandHandler: CommandHandler {
 
   init(
     resolveTarget: @escaping ResolveTarget,
-    inputProtection: @escaping InputProtection = { _, _ in nil },
+    inputProtection: @escaping InputProtection = { _, _, _ in nil },
     pendingDispatch: @escaping PendingDispatch = { _ in nil },
     conditionSnapshot: @escaping ConditionSnapshotProvider = { _ in
       AgentConditionSnapshot(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
     },
     issueDispatch: @escaping IssueDispatch = { _ in .failure(.bindingMissing) },
-    deliverPrompt: @escaping DeliverPrompt = { _, _ in false },
+    deliverPrompt: @escaping DeliverPrompt = { _, _, _ in .notInserted },
     cancelDispatch: @escaping CancelDispatch = { _ in },
     clock: any Clock<Duration> = ContinuousClock(),
     now: @escaping @MainActor () -> Date = Date.init
@@ -107,7 +109,10 @@ final class AgentDispatchCommandHandler: CommandHandler {
     }
     // Protection checks the text that will actually go in: automation adds its protocol.
     let deliveryText = interactive ? input.prompt : AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)
-    if let refusal = await prepareDelivery(target: target, text: deliveryText, needsReceipt: !interactive) {
+    let policy = input.draftPolicy
+    if let refusal = await prepareDelivery(
+      target: target, text: deliveryText, needsReceipt: !interactive, policy: policy)
+    {
       return refusal
     }
 
@@ -116,7 +121,11 @@ final class AgentDispatchCommandHandler: CommandHandler {
     }
     if interactive {
       // Human input does not assert an outcome for an automation task or create a new one.
-      guard await deliverPrompt(target, deliveryText) else {
+      let replaced: AgentReplacedDraftPayload?
+      switch await deliverPrompt(target, deliveryText, policy) {
+      case .submitted(let replacedDraft): replaced = replacedDraft
+      case .refused(let refusal): return refusalFailure(refusal, target: target)
+      case .notInserted, .notSubmitted:
         return failure(
           code: CLIErrorCode.sendFailed, message: "Input delivery is unconfirmed. Check the pane before retrying.")
       }
@@ -130,20 +139,20 @@ final class AgentDispatchCommandHandler: CommandHandler {
             encoding: Payload(
               input: .init(
                 source: "argument", characters: input.prompt.count, bytes: input.prompt.utf8.count,
-                trailingEnterSent: true))))
+                trailingEnterSent: true, replacedDraft: replaced))))
       } catch {
         return failure(
           code: CLIErrorCode.sendFailed, message: "Input was delivered but its receipt could not be encoded.")
       }
     }
 
-    return await dispatch(input: input, text: deliveryText, target: target)
+    return await dispatch(input: input, text: deliveryText, target: target, policy: policy)
   }
 
   /// `text` is the injected prompt that protection already checked.
-  private func dispatch(input: DispatchInput, text deliveryText: String, target: TabResolvedTarget) async
-    -> CommandResponse
-  {
+  private func dispatch(
+    input: DispatchInput, text deliveryText: String, target: TabResolvedTarget, policy: AgentDraftPolicy
+  ) async -> CommandResponse {
     let issued: AgentDispatchSnapshot
     switch issueDispatch(target) {
     case .success(let snapshot):
@@ -165,7 +174,14 @@ final class AgentDispatchCommandHandler: CommandHandler {
         message: "The dispatch could not be bound to the pane's current agent."
       )
     }
-    guard await deliverPrompt(target, deliveryText) else {
+    let replaced: AgentReplacedDraftPayload?
+    switch await deliverPrompt(target, deliveryText, policy) {
+    case .submitted(let replacedDraft):
+      replaced = replacedDraft
+    case .refused(let refusal):
+      cancelDispatch(issued.record.id)
+      return refusalFailure(refusal, target: target)
+    case .notInserted, .notSubmitted:
       cancelDispatch(issued.record.id)
       return failure(
         code: CLIErrorCode.dispatchFailed,
@@ -180,7 +196,9 @@ final class AgentDispatchCommandHandler: CommandHandler {
         ok: true,
         command: "agents.dispatch",
         schemaVersion: "prowl.cli.agents.dispatch.v1",
-        data: RawJSON(encoding: AgentDispatchCommandPayload(target: TabTarget(from: target), dispatch: record))
+        data: RawJSON(
+          encoding: AgentDispatchCommandPayload(
+            target: TabTarget(from: target), dispatch: record, replacedDraft: replaced))
       )
     } catch {
       return failure(code: CLIErrorCode.dispatchFailed, message: "Failed to encode the dispatch record.")
@@ -201,20 +219,33 @@ final class AgentDispatchCommandHandler: CommandHandler {
     )
   }
 
-  private func prepareDelivery(target: TabResolvedTarget, text: String, needsReceipt: Bool) async -> CommandResponse? {
+  private func prepareDelivery(
+    target: TabResolvedTarget, text: String, needsReceipt: Bool, policy: AgentDraftPolicy
+  ) async -> CommandResponse? {
     // A blocked agent has no composer either, so its reason comes before the composer check.
-    guard needsReceipt else { return humanInputRefusal(target: target) ?? protectionRefusal(target, text: text) }
+    guard needsReceipt else {
+      return humanInputRefusal(target: target) ?? protectionRefusal(target, text: text, policy: policy)
+    }
     if let refusal = remoteAgentRefusal(conditionSnapshot(target), target: target, needsReceipt: needsReceipt) {
       return refusal
     }
     // Code security: do not clear local IME input or append into an actively edited composer.
-    if let refusal = protectionRefusal(target, text: text) { return refusal }
+    if let refusal = protectionRefusal(target, text: text, policy: policy) { return refusal }
     if let refusal = await awaitIdleAgent(target: target, needsReceipt: needsReceipt) { return refusal }
-    return protectionRefusal(target, text: text)
+    return protectionRefusal(target, text: text, policy: policy)
   }
 
-  private func protectionRefusal(_ target: TabResolvedTarget, text: String) -> CommandResponse? {
-    inputProtection(target, text).map { failure(code: CLIErrorCode.dispatchTargetBusy, message: $0) }
+  private func protectionRefusal(
+    _ target: TabResolvedTarget, text: String, policy: AgentDraftPolicy
+  ) -> CommandResponse? {
+    inputProtection(target, text, policy).map { refusalFailure($0, target: target) }
+  }
+
+  /// `DISPATCH_TARGET_BUSY` for an input box that refused, with what it holds in `details.input`.
+  private func refusalFailure(_ refusal: AgentInputRefusal, target: TabResolvedTarget) -> CommandResponse {
+    failure(
+      code: CLIErrorCode.dispatchTargetBusy, message: refusal.message,
+      details: AgentDispatchErrorDetails(target: TabTarget(from: target), input: refusal.details))
   }
 
   /// Human input goes in as typed text, also while the agent works: the agent queues or steers

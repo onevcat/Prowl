@@ -1397,6 +1397,74 @@
         }
       }
     },
+    "agentComposerDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "is_complete"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "is_complete": {
+          "type": "boolean"
+        }
+      }
+    },
+    "agentDraftRecovery": {
+      "enum": [
+        "stash"
+      ]
+    },
+    "agentReplacedDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "is_complete"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "is_complete": {
+          "type": "boolean"
+        },
+        "recovery": {
+          "$ref": "#/$defs/agentDraftRecovery"
+        }
+      }
+    },
+    "agentInputRefusalDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "replaceable"
+      ],
+      "properties": {
+        "reason": {
+          "enum": [
+            "draft",
+            "unrecognized",
+            "editing",
+            "composing",
+            "clearing"
+          ]
+        },
+        "draft": {
+          "$ref": "#/$defs/agentComposerDraft"
+        },
+        "replaceable": {
+          "type": "boolean"
+        },
+        "recovery": {
+          "$ref": "#/$defs/agentDraftRecovery"
+        }
+      }
+    },
     "agentsDispatchData": {
       "type": "object",
       "additionalProperties": false,
@@ -1410,6 +1478,9 @@
         },
         "dispatch": {
           "$ref": "#/$defs/dispatchPendingRecord"
+        },
+        "replaced_draft": {
+          "$ref": "#/$defs/agentReplacedDraft"
         }
       }
     },
@@ -1431,6 +1502,9 @@
         },
         "signals": {
           "$ref": "#/$defs/agentSignals"
+        },
+        "input": {
+          "$ref": "#/$defs/agentInputRefusalDetails"
         }
       }
     },

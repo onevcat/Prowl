@@ -16,15 +16,20 @@ struct MirrorCommandTransportTests {
       if case .list = request.request.command {
         let listing: MirrorJSON = .object([
           "ok": .bool(true),
-          "data": .object(["items": .array([
-            .object([
-              "pane": .object(["id": .string(channel.pane.id.uuidString), "agent": .null]),
-              "task": .object(["status": .string("idle")]),
+          "data": .object([
+            "items": .array([
+              .object([
+                "pane": .object(["id": .string(channel.pane.id.uuidString), "agent": .null]),
+                "task": .object(["status": .string("idle")]),
+              ])
             ])
-          ])]),
+          ]),
         ])
-        channel.onMessage?(.commandResult(.init(commandResponse: .init(
-          requestID: request.requestID, response: listing))))
+        channel.onMessage?(
+          .commandResult(
+            .init(
+              commandResponse: .init(
+                requestID: request.requestID, response: listing))))
       } else {
         channel.respond(request.requestID, success: false)
       }
@@ -36,7 +41,9 @@ struct MirrorCommandTransportTests {
     for await _ in changes.stream {
       let finished = withObservationTracking {
         session.submission?.outcome.status == .rejected
-      } onChange: { changes.continuation.yield(()) }
+      } onChange: {
+        changes.continuation.yield(())
+      }
       if finished { break }
     }
     #expect(channel.commands.count == 1)
@@ -98,6 +105,86 @@ struct MirrorCommandTransportTests {
     channel.respond(await channel.nextInput().requestID, success: false)
     #expect(session.draft == "new draft")
     #expect(session.submission?.outcome.status == .rejected)
+  }
+
+  /// A draft on the Mac refuses the message with its text; Replace sends again with `on_draft`
+  /// and the receipt names the stashed draft (docs-ai 090).
+  @Test func draftRefusalOffersReplaceWhichResendsWithThePolicy() async {
+    let channel = Channel(agent: "claude")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    let first = await channel.nextInput()
+    guard case .agentsInput(let firstInput) = first.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(firstInput.onDraft == nil)
+    channel.refuseForDraft(first.requestID)
+    #expect(session.submission?.outcome.status == .rejected)
+    #expect(
+      session.hostDraft == .init(text: "review the tests", isComplete: true, replaceable: true, recovery: "stash"))
+    #expect(session.draft == "hello")
+
+    session.replaceHostDraftAndSend()
+    let second = await channel.nextInput()
+    guard case .agentsInput(let secondInput) = second.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(secondInput.onDraft == "replace")
+    #expect(secondInput.prompt == "hello")
+    channel.respondReplaced(second.requestID)
+    #expect(session.submission?.outcome.status == .accepted)
+    #expect(session.submission?.outcome.replacedDraft?.recovery == "stash")
+    #expect(session.submission?.outcome.detail.contains("stashed") == true)
+    #expect(session.hostDraft == nil)
+    #expect(session.draft.isEmpty)
+
+    // The next message is an ordinary one again.
+    session.draft = "next"
+    session.submitDraft()
+    guard case .agentsInput(let third) = await channel.nextInput().request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(third.onDraft == nil)
+  }
+
+  @Test func bringingTheDraftHereMergesTextAndMakesTheNextSendReplace() async {
+    let channel = Channel(agent: "claude")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    let first = await channel.nextInput()
+    channel.refuseForDraft(first.requestID)
+    session.bringHostDraftHere()
+    #expect(session.draft == "review the tests\nhello")
+    #expect(session.submission == nil && session.hostDraft == nil)
+    session.submitDraft()
+    guard case .agentsInput(let merged) = await channel.nextInput().request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(merged.onDraft == "replace")
+    #expect(merged.prompt == "review the tests\nhello")
+
+    // A draft the screen cannot carry (a paste marker) cannot be brought over, only replaced or left.
+    let hidden = Channel(agent: "claude")
+    let other = makeSession(hidden)
+    other.connect()
+    other.select(hidden.pane)
+    other.draft = "hi"
+    other.submitDraft()
+    hidden.refuseForDraft(await hidden.nextInput().requestID, isComplete: false)
+    other.bringHostDraftHere()
+    #expect(other.draft == "hi" && other.hostDraft != nil)
+    other.dismissHostDraft()
+    #expect(other.hostDraft == nil && other.draft == "hi")
   }
 
   @Test func disconnectedDispatchQueriesReceiptWithoutResendingText() async {
@@ -172,7 +259,9 @@ struct MirrorCommandTransportTests {
     for await _ in changes.stream {
       let finished = withObservationTracking {
         session.submission?.outcome.status == .rejected
-      } onChange: { changes.continuation.yield(()) }
+      } onChange: {
+        changes.continuation.yield(())
+      }
       if finished { break }
     }
     #expect(channel.commands.count == 1)
@@ -362,18 +451,68 @@ struct MirrorCommandTransportTests {
         success
         ? .object([
           "ok": .bool(true), "command": .string("agents.input"),
-          "data": .object(["input": .object([
-            "bytes": .number(Double(commands.first(where: { $0.requestID == id }).map {
-              if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
-              return 0
-            } ?? 0)), "trailing_enter_sent": .bool(true),
-          ])]),
+          "data": .object([
+            "input": .object([
+              "bytes": .number(
+                Double(
+                  commands.first(where: { $0.requestID == id }).map {
+                    if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+                    return 0
+                  } ?? 0)), "trailing_enter_sent": .bool(true),
+            ])
+          ]),
         ])
         : .object([
           "ok": .bool(false),
           "error": .object(["code": .string("DISPATCH_TARGET_BUSY"), "message": .string("Busy")]),
         ])
       onMessage?(.commandResult(.init(commandResponse: .init(requestID: id, response: json))))
+    }
+    /// The Mac's input box holds a draft (docs-ai 090).
+    func refuseForDraft(_ id: UUID, replaceable: Bool = true, isComplete: Bool = true) {
+      onMessage?(
+        .commandResult(
+          .init(
+            commandResponse: .init(
+              requestID: id,
+              response: .object([
+                "ok": .bool(false),
+                "error": .object([
+                  "code": .string("DISPATCH_TARGET_BUSY"),
+                  "message": .string("Claude has an existing draft or attachment (“review the tests”)."),
+                  "details": .object([
+                    "input": .object([
+                      "reason": .string("draft"),
+                      "draft": .object(["text": .string("review the tests"), "is_complete": .bool(isComplete)]),
+                      "replaceable": .bool(replaceable), "recovery": .string("stash"),
+                    ])
+                  ]),
+                ]),
+              ])))))
+    }
+    /// Delivered after the Host stashed the Mac's draft.
+    func respondReplaced(_ id: UUID) {
+      let bytes =
+        commands.first(where: { $0.requestID == id }).map {
+          if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+          return 0
+        } ?? 0
+      onMessage?(
+        .commandResult(
+          .init(
+            commandResponse: .init(
+              requestID: id,
+              response: .object([
+                "ok": .bool(true), "command": .string("agents.input"),
+                "data": .object([
+                  "input": .object([
+                    "bytes": .number(Double(bytes)), "trailing_enter_sent": .bool(true),
+                    "replaced_draft": .object([
+                      "text": .string("review the tests"), "is_complete": .bool(true), "recovery": .string("stash"),
+                    ]),
+                  ])
+                ]),
+              ])))))
     }
     func start() { onReady?() }
     func close(_ reason: String?) { onClose?(reason) }

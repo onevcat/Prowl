@@ -218,6 +218,17 @@ final class AgentsCommandParsingTests: XCTestCase {
     )
   }
 
+  func testDispatchOnDraftDefaultsToRefuseAndAcceptsReplace() throws {
+    let refuse = try AgentsDispatchCommand.parse(["p7", "--prompt", "-"])
+    XCTAssertEqual(refuse.onDraft, .refuse)
+    XCTAssertNil(try refuse.makeInput(stdinIsTerminal: false, readStdin: { Data("hello".utf8) }).onDraft)
+
+    let replace = try AgentsDispatchCommand.parse(["p7", "--prompt", "-", "--on-draft", "replace"])
+    XCTAssertEqual(replace.onDraft, .replace)
+    XCTAssertEqual(try replace.makeInput(stdinIsTerminal: false, readStdin: { Data("hello".utf8) }).onDraft, .replace)
+    XCTAssertThrowsError(try AgentsDispatchCommand.parse(["p7", "--prompt", "-", "--on-draft", "append"]))
+  }
+
   func testDispatchRequiresExplicitPaneStdinPromptAndBoundedControlFreeText() throws {
     XCTAssertThrowsError(try AgentsDispatchCommand.parse(["main", "--prompt", "-"]))
     XCTAssertThrowsError(try AgentsDispatchCommand.parse(["p7"]))

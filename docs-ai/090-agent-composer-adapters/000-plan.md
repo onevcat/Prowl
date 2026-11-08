@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-07 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #1071 (S1), #1072 (S2 + S3, stacked on #1071) |
 | **Related** | [064.014 re-dispatch](../064-agent-completion-signals/014-re-dispatch.md), [089 S6 input while working](../089-mirror-ios-redesign/008-s6-input-while-working.md), [089 S5 terminal keys](../089-mirror-ios-redesign/007-s5-terminal-keys.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md`, `docs/components/cli.md` |
 
 ## Background
@@ -60,7 +60,7 @@ reset for the capture.
 
 | Agent | Key | Idle | Running turn | Multi-line / paste marker | Recovery |
 | --- | --- | --- | --- | --- | --- |
-| Claude 2.1.319 | Ctrl+S (`chat:stash`) | clears, `› stashed` chip | clears, turn continues | whole `[Pasted text #N]` stashed | Ctrl+S again restores |
+| Claude 2.1.319 | Ctrl+S (`chat:stash`) | clears, `› stashed` chip | clears, turn continues | whole `[Pasted text #N]` stashed | comes back by itself after the next message is sent; Ctrl+S toggles it |
 | Claude | Esc Esc | clears | Esc interrupts the turn | untested | Up recalls |
 | Claude | Ctrl+C | clears | interrupts the turn | untested | Up recalls |
 | Codex 0.167 | Ctrl+U | clears one line (two presses per line with its newline) | clears, turn continues | repeat until empty | Ctrl+Y restores the last kill only |
@@ -116,10 +116,10 @@ policy.
 
 | Slice | Scope | PR |
 | --- | --- | --- |
-| S1 | Dim-only hints for Claude and Codex | |
-| S2 | Adapters, clearing executor, `on_draft`, structured refusal, CLI flag | |
-| S3 | iOS confirmation card and notes | |
-| S4 | Docs (ships with S2 and S3) | |
+| S1 | Dim-only hints for Claude and Codex | #1071 |
+| S2 | Adapters, clearing executor, `on_draft`, structured refusal, CLI flag | #1072 |
+| S3 | iOS confirmation card and notes | #1072 (same PR as S2: the card needs the wire change) |
+| S4 | Docs (ships with S2 and S3) | #1072 |
 
 ## Alternatives & decisions
 
@@ -137,3 +137,5 @@ policy.
 
 ## Amendments
 - Updated 2026-11-07: S1 dim-only hints for Claude and Codex — see [002-s1-dim-hints.md](002-s1-dim-hints.md)
+- Updated 2026-11-08: S2 adapters, clearing executor, `on_draft` and structured refusals — see [003-s2-adapters-and-replace.md](003-s2-adapters-and-replace.md)
+- Updated 2026-11-08: S3 iOS draft card (Replace and Send, Bring Draft Here) — see [004-s3-mirror-confirmation.md](004-s3-mirror-confirmation.md)
