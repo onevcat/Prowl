@@ -1,0 +1,35 @@
+
+❯ Reply with exactly: PHONE-1                                                                      
+
+⏺ PHONE-1
+
+✻ Baked for 4s · done 11:13 PM
+
+❯ draft left on the Mac                                                                            
+  and reply PHONE-2                                                                                
+
+⏺ PHONE-2
+
+✻ Cogitated for 3s · done 11:14 PM
+
+❯ Run exactly this bash command and show its output: find . -name Greeter.swift -not -path         
+  './.git/*' -exec sh -c 'echo "== $1"; cat "$1"' _ {} \;                                          
+
+⏺ Locating and printing Greeter.swift
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ Locate and print Greeter.swift
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ find . -name Greeter.swift -not -path './.git/*' -exec sh -c 'echo "== $1"; cat "$1"' _ {} \;
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ find with '-exec' executes commands or modifies files — cannot be auto-allowed by a
+ │ Bash(find:*) prefix rule
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you
+   3. No
+
+ Esc to cancel · Tab to amend

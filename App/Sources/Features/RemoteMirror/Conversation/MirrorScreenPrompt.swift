@@ -1,7 +1,8 @@
 import Foundation
 
 /// A choice menu an agent shows at the bottom of its screen while it waits for a person
-/// (docs-ai 089 S4): Claude Code's permission and AskUserQuestion dialogs, Codex's approval.
+/// (docs-ai 089 S4): Claude Code's permission and AskUserQuestion dialogs, Codex's approval, and
+/// the folder trust dialog both show before the first turn in a new folder.
 /// Parsed from the visible text only, so it works for any launch and needs no hook content.
 /// The phone answers through it, and the Host re-reads the screen before every key.
 nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
@@ -95,6 +96,7 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     let lines = text.components(separatedBy: "\n").map { line in
       String(line.reversed().drop { $0 == " " }.reversed())
     }
+    if let trust = folderTrust(lines) { return trust }
     guard let (footer, footerless) = menuEnd(lines) else { return nil }
 
     // Walk up from the footer through option rows, their descriptions, blanks and rules.
@@ -140,6 +142,61 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     }
     return MirrorScreenPrompt(
       title: title, detail: detail, options: menu.options, rows: menu.rows, highlighted: highlighted)
+  }
+
+  /// The dialog's heading, then the footer of its menu, per agent.
+  private static let folderTrustDialogs = [
+    (heading: "accessing workspace:", footer: "enter to confirm"),
+    (heading: "folder access", footer: "enter continue"),
+  ]
+  /// An unnumbered menu row, as in Claude Code's folder trust dialog.
+  nonisolated(unsafe) private static let plainRowPattern = #/^\s*(?<marker>[❯›>])?\s*(?<label>\S.*?)\s*$/#
+
+  /// The folder trust dialog Claude Code and Codex show before the first turn in a new folder.
+  /// It is the whole screen, so it is known by its heading, the folder under the heading and
+  /// its footer; its rows may have no numbers (Claude Code) and then get their screen order.
+  /// A dialog that does not show the folder, a row that names trust and one highlighted row
+  /// offers no answers.
+  private static func folderTrust(_ lines: [String]) -> MirrorScreenPrompt? {
+    func text(_ index: Int) -> String { lines[index].trimmingCharacters(in: .whitespaces) }
+    guard let last = lines.indices.last(where: { !text($0).isEmpty }) else { return nil }
+    for dialog in folderTrustDialogs {
+      guard text(last).lowercased().hasPrefix(dialog.footer),
+        let heading = lines[...last].lastIndex(where: {
+          $0.trimmingCharacters(in: .whitespaces).lowercased() == dialog.heading
+        }),
+        let folder = lines[(heading + 1)..<last].first(where: {
+          !$0.trimmingCharacters(in: .whitespaces).isEmpty
+        })?.trimmingCharacters(in: .whitespaces), folder.hasPrefix("/")
+      else { continue }
+      // The rows: the block of lines directly above the footer.
+      var bottom = last - 1
+      while bottom > heading, text(bottom).isEmpty { bottom -= 1 }
+      var top = bottom
+      while top - 1 > heading, !text(top - 1).isEmpty, bottom - top < 3 { top -= 1 }
+      var region = Array(lines[top...bottom])
+      let numbered = region.filter { $0.wholeMatch(of: optionPattern) != nil }
+      if numbered.isEmpty {
+        // Number the rows so they read like every other menu.
+        region = region.enumerated().compactMap { offset, line in
+          guard let match = line.wholeMatch(of: plainRowPattern) else { return nil }
+          return "\(match.marker.map(String.init) ?? " ") \(offset + 1). \(match.label)"
+        }
+      } else {
+        // Codex puts its question directly above the rows; only the rows count.
+        region = numbered
+      }
+      let menu = readOptions(region[...])
+      guard let highlighted = menu.highlighted, (2...4).contains(menu.options.count),
+        menu.options.map(\.number) == Array(1...menu.options.count),
+        region.filter({ $0.wholeMatch(of: optionPattern)?.marker != nil }).count == 1,
+        menu.options.contains(where: { $0.label.lowercased().contains("trust") })
+      else { return nil }
+      let options = menu.options.map { Option(number: $0.number, label: $0.label, detail: nil, isFreeform: false) }
+      return MirrorScreenPrompt(
+        title: "Trust this folder?", detail: folder, options: options, rows: menu.rows, highlighted: highlighted)
+    }
+    return nil
   }
 
   /// Where the menu ends: at its footer near the bottom of the screen, or, for Claude's review
@@ -257,23 +314,59 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     line.trimmingCharacters(in: .whitespaces).isEmpty || isRule(line)
   }
 
-  /// Claude quotes the command under review in `│ …` lines a few rows above the question.
+  /// Claude shows the command under review a few rows above the question, between dashed
+  /// rules: in `│ …` lines, or as plain lines (2.1.322 does both). A `│ …` block under the
+  /// last rule says why the command needs approval. All blocks are the detail, the command
+  /// first; the note alone must never stand for the command.
   private static func quotedDetail(_ lines: [String], above index: Int) -> String? {
+    var blocks: [String] = []
     var quoted: [String] = []
+    var belowRule = false
+    func closeQuoted() {
+      if !quoted.isEmpty { blocks.insert(quoted.joined(separator: " "), at: 0) }
+      quoted = []
+    }
     var cursor = index - 1
-    while cursor >= 0, index - cursor <= 14 {
+    while cursor >= 0, index - cursor <= maximumQuotedLines {
       let trimmed = lines[cursor].trimmingCharacters(in: .whitespaces)
       // The dialog's solid top border: anything above it is the conversation, not the dialog.
       if isBorder(trimmed) { break }
       if trimmed.hasPrefix("│") {
         quoted.insert(trimmed.dropFirst().trimmingCharacters(in: .whitespaces), at: 0)
-      } else if !quoted.isEmpty {
+        belowRule = false
+      } else if isRule(trimmed) {
+        closeQuoted()
+        belowRule = true
+      } else if belowRule, !trimmed.isEmpty, let top = ruleAbove(lines, from: cursor) {
+        // Plain lines between two dashed rules: the command, line by line.
+        blocks.insert(
+          lines[(top + 1)...cursor].map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n"), at: 0)
+        cursor = top
+        continue
+      } else if !quoted.isEmpty || !blocks.isEmpty {
         break
       }
       cursor -= 1
     }
-    return quoted.isEmpty ? nil : quoted.joined(separator: " ")
+    closeQuoted()
+    return blocks.isEmpty ? nil : blocks.joined(separator: "\n")
   }
+
+  /// The dashed rule that opens the block whose last line is `index`, if it is within reach
+  /// and inside the dialog. A script may hold blank lines.
+  private static func ruleAbove(_ lines: [String], from index: Int) -> Int? {
+    var cursor = index - 1
+    while cursor >= 0, index - cursor <= maximumCommandLines {
+      let trimmed = lines[cursor].trimmingCharacters(in: .whitespaces)
+      if isBorder(trimmed) || trimmed.hasPrefix("│") { return nil }
+      if isRule(trimmed) { return cursor }
+      cursor -= 1
+    }
+    return nil
+  }
+
+  /// How far above the question the quoted blocks may reach.
+  private static let maximumQuotedLines = 24
 
   /// The answers a review page is about to submit: the lines between "Review your answers"
   /// and its question, without the `│` and `●` markers.
