@@ -49,6 +49,9 @@ nonisolated enum AgentComposerClearPlan: Equatable, Sendable {
   case stash(key: String)
   /// One key removes the current line; pressed until the box reads empty.
   case killLines(key: String)
+  /// For a draft of one row: one key moves the cursor to the end of the row, the next removes
+  /// the text before the cursor.
+  case killRow(endKey: String, killKey: String)
   /// Not verified for this agent: a draft refuses delivery.
   case unsupported
 
@@ -58,7 +61,7 @@ nonisolated enum AgentComposerClearPlan: Equatable, Sendable {
   var recovery: AgentDraftRecovery? {
     switch self {
     case .stash: .stash
-    case .killLines, .unsupported: nil
+    case .killLines, .killRow, .unsupported: nil
     }
   }
 }
@@ -76,6 +79,9 @@ nonisolated protocol AgentComposerAdapter: Sendable {
   /// The way to empty the box of this draft: `clearPlan`, or `unsupported` for content the key
   /// has not been verified against (an image attachment).
   func clearPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan
+  /// The verified way to remove this draft so that it does not come back (`on_draft: discard`),
+  /// or `unsupported`.
+  func discardPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan
   /// The agent loses an Enter that arrives before it accepts the pasted text.
   var dropsEarlyEnter: Bool { get }
   /// Nil means type the line and press Enter on the same main-actor turn.
@@ -90,6 +96,22 @@ nonisolated extension AgentComposerAdapter {
   /// Stashing or killing an image attachment is unverified for every agent (docs-ai 090).
   func clearPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan {
     draft.showsImage ? .unsupported : clearPlan
+  }
+
+  /// The clear plan when the draft does not come back after it; an agent whose clear plan
+  /// brings the draft back needs its own.
+  func discardPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan {
+    let plan = clearPlan(for: draft)
+    return plan.recovery == nil ? plan : .unsupported
+  }
+
+  /// The plan a delivery uses for `draft` under `policy`; `unsupported` under `refuse`.
+  func plan(for draft: AgentComposerDraft, policy: AgentDraftPolicy) -> AgentComposerClearPlan {
+    switch policy {
+    case .refuse: .unsupported
+    case .replace: clearPlan(for: draft)
+    case .discard: discardPlan(for: draft)
+    }
   }
 
   func confirmsPaste(_ composer: String, text: String) -> Bool {

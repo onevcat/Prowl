@@ -153,7 +153,54 @@ struct MirrorCommandTransportTests {
     #expect(third.onDraft == nil)
   }
 
-  @Test func bringingTheDraftHereMergesTextAndMakesTheNextSendReplace() async {
+  /// Bring Draft Here merges the Mac's draft into the message, so the Host must remove it for
+  /// good: Claude brings a stashed draft back after the message, and the next message from the
+  /// phone was refused again (found in a live run). A receipt for that draft needs no note; a
+  /// receipt for another draft, typed on the Mac in between, says what was cleared.
+  @Test func bringingTheDraftHereMakesTheNextSendDiscardIt() async {
+    let channel = Channel(agent: "claude")
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    channel.refuseForDraft(await channel.nextInput().requestID, discardable: true)
+    #expect(session.hostDraft?.discardable == true)
+    session.bringHostDraftHere()
+    session.submitDraft()
+    let merged = await channel.nextInput()
+    guard case .agentsInput(let input) = merged.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(input.onDraft == "discard")
+    #expect(input.prompt == "review the tests\nhello")
+    channel.respondDiscarded(merged.requestID, text: "review the tests")
+    #expect(session.submission?.outcome.status == .accepted)
+    #expect(session.submission?.outcome.replacedDraft == nil)
+    #expect(session.submission?.outcome.detail == "Sent. Agent completion is separate.")
+
+    // The next message is an ordinary one again.
+    session.draft = "next"
+    session.submitDraft()
+    let next = await channel.nextInput()
+    guard case .agentsInput(let plain) = next.request.command else {
+      Issue.record("expected agent input")
+      return
+    }
+    #expect(plain.onDraft == nil)
+
+    // Someone typed another draft on the Mac before the merged message went: the note names it.
+    channel.refuseForDraft(next.requestID, discardable: true)
+    session.bringHostDraftHere()
+    session.submitDraft()
+    channel.respondDiscarded(await channel.nextInput().requestID, text: "something else")
+    #expect(session.submission?.outcome.replacedDraft?.text == "something else")
+    #expect(session.submission?.outcome.detail.contains("something else") == true)
+  }
+
+  /// A Host from before `discard` does not say `discardable`; the merged message replaces.
+  @Test func bringingTheDraftHereReplacesOnAHostWithoutDiscard() async {
     let channel = Channel(agent: "claude")
     let session = makeSession(channel)
     session.connect()
@@ -469,7 +516,15 @@ struct MirrorCommandTransportTests {
       onMessage?(.commandResult(.init(commandResponse: .init(requestID: id, response: json))))
     }
     /// The Mac's input box holds a draft (docs-ai 090).
-    func refuseForDraft(_ id: UUID, replaceable: Bool = true, isComplete: Bool = true) {
+    func refuseForDraft(
+      _ id: UUID, replaceable: Bool = true, isComplete: Bool = true, discardable: Bool? = nil
+    ) {
+      var input: [String: MirrorJSON] = [
+        "reason": .string("draft"),
+        "draft": .object(["text": .string("review the tests"), "is_complete": .bool(isComplete)]),
+        "replaceable": .bool(replaceable), "recovery": .string("stash"),
+      ]
+      if let discardable { input["discardable"] = .bool(discardable) }
       onMessage?(
         .commandResult(
           .init(
@@ -481,12 +536,30 @@ struct MirrorCommandTransportTests {
                   "code": .string("DISPATCH_TARGET_BUSY"),
                   "message": .string("Claude has an existing draft or attachment (“review the tests”)."),
                   "details": .object([
-                    "input": .object([
-                      "reason": .string("draft"),
-                      "draft": .object(["text": .string("review the tests"), "is_complete": .bool(isComplete)]),
-                      "replaceable": .bool(replaceable), "recovery": .string("stash"),
-                    ])
+                    "input": .object(input)
                   ]),
+                ]),
+              ])))))
+    }
+    /// Delivered after the Host removed the Mac's draft for good (`on_draft: discard`).
+    func respondDiscarded(_ id: UUID, text: String) {
+      let bytes =
+        commands.first(where: { $0.requestID == id }).map {
+          if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+          return 0
+        } ?? 0
+      onMessage?(
+        .commandResult(
+          .init(
+            commandResponse: .init(
+              requestID: id,
+              response: .object([
+                "ok": .bool(true), "command": .string("agents.input"),
+                "data": .object([
+                  "input": .object([
+                    "bytes": .number(Double(bytes)), "trailing_enter_sent": .bool(true),
+                    "replaced_draft": .object(["text": .string(text), "is_complete": .bool(true)]),
+                  ])
                 ]),
               ])))))
     }

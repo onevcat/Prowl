@@ -21,6 +21,19 @@ final class DispatchWireModelTests: XCTestCase {
     XCTAssertEqual(replaceJSON["on_draft"] as? String, "replace")
     XCTAssertEqual(try JSONDecoder().decode(DispatchInput.self, from: JSONEncoder().encode(replace)), replace)
 
+    let discard = DispatchInput(pane: "p7", prompt: "hello", onDraft: .discard)
+    let discardJSON = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(discard)) as? [String: Any])
+    XCTAssertEqual(discardJSON["on_draft"] as? String, "discard")
+    XCTAssertEqual(try JSONDecoder().decode(DispatchInput.self, from: JSONEncoder().encode(discard)), discard)
+
+    // Refusal details from an app that does not know `discard` have no `discardable`.
+    let olderDetails = try JSONDecoder().decode(
+      AgentInputRefusalDetails.self, from: Data(#"{"reason":"draft","replaceable":true,"recovery":"stash"}"#.utf8))
+    XCTAssertFalse(olderDetails.discardable)
+    let details = AgentInputRefusalDetails(reason: .draft, replaceable: true, recovery: .stash, discardable: true)
+    XCTAssertEqual(try JSONDecoder().decode(AgentInputRefusalDetails.self, from: JSONEncoder().encode(details)), details)
+
     let plain = DispatchInput(pane: "p7", prompt: "hello")
     let plainJSON = try XCTUnwrap(
       JSONSerialization.jsonObject(with: JSONEncoder().encode(plain)) as? [String: Any])

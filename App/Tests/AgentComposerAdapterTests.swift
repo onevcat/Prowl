@@ -30,6 +30,21 @@ struct AgentComposerAdapterTests {
     #expect(AgentComposerClearPlan.stash(key: "ctrl-s").recovery == .stash)
     #expect(AgentComposerClearPlan.killLines(key: "ctrl-u").recovery == nil)
     #expect(!AgentComposerClearPlan.unsupported.isSupported)
+    // Discard: a draft that must not come back. Claude's stash returns after the next message,
+    // so it kills one row; Codex's kill already does not come back; an image stays refused.
+    let row = AgentComposerDraft(text: "one row", isComplete: true)
+    #expect(ClaudeComposerAdapter().discardPlan(for: row) == .killRow(endKey: "ctrl-e", killKey: "ctrl-u"))
+    #expect(ClaudeComposerAdapter().discardPlan(for: paste) == .unsupported)
+    #expect(ClaudeComposerAdapter().discardPlan(for: lines) == .unsupported)
+    #expect(CodexComposerAdapter().discardPlan(for: lines) == .killLines(key: "ctrl-u"))
+    #expect(CodexComposerAdapter().discardPlan(for: image) == .unsupported)
+    #expect(DevinComposerAdapter().discardPlan(for: row) == .unsupported)
+    #expect(ClaudeComposerAdapter().plan(for: row, policy: .refuse) == .unsupported)
+    #expect(ClaudeComposerAdapter().plan(for: row, policy: .replace) == .stash(key: "ctrl-s"))
+    #expect(ClaudeComposerAdapter().plan(for: row, policy: .discard).recovery == nil)
+    let refusal = AgentInputRefusal.draft(
+      row, agentName: "Claude", plan: ClaudeComposerAdapter().clearPlan(for: row), discardable: true)
+    #expect(refusal.details?.discardable == true && refusal.details?.recovery == .stash)
   }
 
   @Test func claudeReadsHintsDraftsAndMarkers() {

@@ -13,12 +13,16 @@ nonisolated struct AgentInputRefusal: Equatable, Sendable {
   }
 
   /// A draft someone left in the box, with the start of it so the person sees what is in the way.
-  static func draft(_ draft: AgentComposerDraft, agentName: String, plan: AgentComposerClearPlan) -> AgentInputRefusal {
+  static func draft(
+    _ draft: AgentComposerDraft, agentName: String, plan: AgentComposerClearPlan, discardable: Bool = false
+  ) -> AgentInputRefusal {
     let collapsed = AgentComposerEcho.collapsed(draft.text)
     let excerpt = collapsed.count > 40 ? collapsed.prefix(40) + "…" : collapsed[...]
     return AgentInputRefusal(
       "\(agentName) has an existing draft or attachment (“\(excerpt)”). Clear it on Host before dispatching.",
-      details: .init(reason: .draft, draft: draft.payload, replaceable: plan.isSupported, recovery: plan.recovery))
+      details: .init(
+        reason: .draft, draft: draft.payload, replaceable: plan.isSupported, recovery: plan.recovery,
+        discardable: discardable))
   }
 }
 

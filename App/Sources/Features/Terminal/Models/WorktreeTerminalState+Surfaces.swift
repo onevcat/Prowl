@@ -27,8 +27,9 @@ extension WorktreeTerminalState {
   }
 
   /// `agents.input` and `agents dispatch` (docs-ai 090): the input box must be clear, or, under
-  /// `replace`, hold a draft the agent can clear. That draft is stashed or killed the agent's own
-  /// way and the box re-read as empty before the line goes in; the receipt carries the draft.
+  /// `replace` or `discard`, hold a draft the agent can clear. That draft is stashed or killed the
+  /// agent's own way and the box re-read as empty before the line goes in; the receipt carries
+  /// the draft.
   func deliverAgentInput(
     _ text: String, surfaceID: UUID, policy: AgentDraftPolicy,
     isLive: @escaping @MainActor () -> Bool = { true }
@@ -38,7 +39,7 @@ extension WorktreeTerminalState {
       return .refused(refusal)
     }
     var replaced: AgentReplacedDraftPayload?
-    if policy == .replace, let adapter = composerAdapter(for: surfaceID),
+    if policy != .refuse, let adapter = composerAdapter(for: surfaceID),
       case .draft(let draft)? = composerReading(of: surface, adapter: adapter),
       !resumesUnsentLine(text, composer: draft.text, surfaceID: surfaceID, surface: surface, adapter: adapter)
     {
@@ -52,7 +53,7 @@ extension WorktreeTerminalState {
             editingRevision: surface.lastEditingAt, inputGeneration: surface.inputGeneration)
         },
         press: { [weak self] in self?.sendKeyToken($0, in: surfaceID) == true },
-        plan: adapter.clearPlan(for: draft), agentName: adapter.name)
+        plan: adapter.plan(for: draft, policy: policy), agentName: adapter.name)
       switch await clearing.clear(draft) {
       case .cleared(let payload): replaced = payload
       case .refused(let refusal): return .refused(refusal)
@@ -72,7 +73,7 @@ extension WorktreeTerminalState {
             "\(adapter.name) still shows a draft after clearing. Check the pane on the Mac before retrying.",
             details: .init(
               reason: .clearing, draft: draft.payload, replaceable: false,
-              recovery: adapter.clearPlan(for: draft).recovery)))
+              recovery: adapter.plan(for: draft, policy: policy).recovery)))
       }
     }
     switch await deliverLine(text, surface: surface, surfaceID: surfaceID, purpose: .dispatch, isLive: isLive) {
@@ -177,9 +178,10 @@ extension WorktreeTerminalState {
       {
         return nil
       }
-      let plan = adapter.clearPlan(for: draft)
-      if policy == .replace, plan.isSupported { return nil }
-      return .draft(draft, agentName: adapter.name, plan: plan)
+      if adapter.plan(for: draft, policy: policy).isSupported { return nil }
+      return .draft(
+        draft, agentName: adapter.name, plan: adapter.clearPlan(for: draft),
+        discardable: adapter.discardPlan(for: draft).isSupported)
     }
   }
 
