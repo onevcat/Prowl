@@ -242,4 +242,69 @@ struct MirrorScreenPromptTests {
     #expect(prompt.detail == nil)
     #expect(prompt.id == original.id)
   }
+
+  /// Claude Code 2.1.322 quotes the command and, under a second rule, why it needs approval.
+  /// The person must see the command itself, not only the note (found in a live run: the phone
+  /// showed the note alone).
+  @Test func claudePermissionKeepsTheCommandAboveItsWarning() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.322-command-permission-warning.txt")))
+    #expect(prompt.title == "Do you want to proceed?")
+    #expect(prompt.isPermission)
+    let detail = try #require(prompt.detail).split(separator: "\n")
+    #expect(detail.count == 2)
+    #expect(detail.first?.hasPrefix("find . -name Greeter.swift -not -path './.git/*' -exec sh -c") == true)
+    #expect(detail.first?.hasSuffix(#"_ {} \;"#) == true)
+    #expect(detail.last?.hasPrefix("find with '-exec' executes commands or modifies files") == true)
+    #expect(detail.last?.hasSuffix("by a Bash(find:*) prefix rule") == true)
+    #expect(prompt.options.map(\.number) == [1, 2, 3])
+  }
+
+  /// The same dialog can show the command as plain lines between its dashed rules, with only
+  /// the note quoted (seen live on 2.1.322).
+  @Test func claudePermissionReadsACommandWithoutQuoteMarks() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.322-command-permission-unquoted.txt")))
+    let detail = try #require(prompt.detail).split(separator: "\n")
+    #expect(detail.first == "find . -name a.txt -exec cat {} +")
+    #expect(detail.count == 2 && detail.last?.hasPrefix("find with '-exec' executes commands") == true)
+    #expect(prompt.isPermission && prompt.title == "Do you want to proceed?")
+  }
+
+  /// Claude Code's folder trust dialog has no numbers on its rows; they get their screen order.
+  @Test func claudeFolderTrustGivesItsRowsInScreenOrder() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.322-folder-trust.txt")))
+    #expect(prompt.title == "Trust this folder?")
+    #expect(prompt.detail == "/private/tmp/pm-e2e/Trust3")
+    #expect(prompt.options.map(\.label) == ["No, exit", "Yes, I trust this folder"])
+    #expect(prompt.options.map(\.number) == [1, 2])
+    #expect(prompt.rows == [.option(1), .option(2)])
+    #expect(prompt.highlighted == .option(1))
+    #expect(prompt.nextKey(toward: .option(2)) == "down")
+    #expect(!prompt.isPermission && !prompt.isMultiSelect)
+  }
+
+  /// Codex's folder trust dialog ends far above the bottom of the screen, with its own footer.
+  @Test func codexFolderTrustGivesItsNumberedRows() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/codex-0.167.0-folder-trust.txt")))
+    #expect(prompt.title == "Trust this folder?")
+    #expect(prompt.detail == "/private/tmp/pm-e2e/FengNiao")
+    #expect(prompt.options.map(\.label) == ["Trust and continue", "Back to Agent Command Center"])
+    #expect(prompt.highlighted == .option(1))
+    #expect(prompt.nextKey(toward: .option(1)) == "enter")
+  }
+
+  /// Two folders are two prompts, and a trust dialog without one highlighted row, or one that
+  /// does not name the folder, offers no answers.
+  @Test func folderTrustFailsClosedWhenItCannotBeReadInFull() throws {
+    let text = try Self.screen("MirrorScreenPrompt/claude-2.1.322-folder-trust.txt")
+    let prompt = try #require(MirrorScreenPrompt.parse(text))
+    let other = try #require(MirrorScreenPrompt.parse(text.replacing("/pm-e2e/Trust3", with: "/pm-e2e/Other")))
+    #expect(other.id != prompt.id)
+    #expect(MirrorScreenPrompt.parse(text.replacing("❯ No, exit", with: "  No, exit")) == nil)
+    #expect(MirrorScreenPrompt.parse(text.replacing(" /private/tmp/pm-e2e/Trust3\n", with: "\n")) == nil)
+    #expect(MirrorScreenPrompt.parse(text.replacing("Yes, I trust this folder", with: "Yes, continue")) == nil)
+  }
 }

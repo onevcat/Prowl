@@ -1,0 +1,22 @@
+Last login: Wed Nov 11 23:06:21 on ttys002
+➜  FengNiao git:(master) echo SHELL-OK && ls
+SHELL-OK
+Greeter.swift README.md
+➜  FengNiao git:(master) cd /tmp/pm-e2e/Trust3 && claude
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ /private/tmp/pm-e2e/Trust3
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from
+ your team). If not, take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel

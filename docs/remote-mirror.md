@@ -291,9 +291,11 @@ blocks and tables), and each run of tool calls between two messages as one quiet
 ("6 tool calls", with failures counted in red and the running call shown with a turning
 hourglass while the agent works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
-Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval), a panel
-above the composer shows the question, what it is about (such as the command to approve) and
-the choices; tap one to answer. In a multi-select question, each tap checks or unchecks a box
+Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
+trust question Claude Code and Codex ask before the first turn in a new folder), a panel
+above the composer shows the question, what it is about (the command to approve and, when
+Claude Code gives one, its note on why the command needs approval; the folder for a trust
+question) and the choices; tap one to answer. In a multi-select question, each tap checks or unchecks a box
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
 "Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
 still shows the same question before it presses any key, so a stale tap is refused with a
