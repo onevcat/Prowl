@@ -264,8 +264,10 @@ final class MirrorSession: Identifiable {
     var outcome: MirrorDeliveryOutcome
   }
 
-  /// The person chose to bring the Mac's draft into this composer; the next send replaces it.
-  @ObservationIgnored private var replacesHostDraftOnNextSend = false
+  /// The person brought the Mac's draft into this composer: the next send removes it there
+  /// (`discard`, or `replace` on a Host from before `discard`). Its text is kept to tell when
+  /// the Host removed another draft than the one brought here.
+  @ObservationIgnored private var broughtHostDraft: (policy: String, text: String)?
 
   var canSubmit: Bool {
     status == .live && supportsSubmission && !isComposing
@@ -557,7 +559,7 @@ final class MirrorSession: Identifiable {
 
   func submitDraft(onDraft: String? = nil) {
     guard canSubmit, let pane, let hostRunID, let subscriptionID else { return }
-    let policy = onDraft ?? (replacesHostDraftOnNextSend ? MirrorHostDraft.replace : nil)
+    let policy = onDraft ?? broughtHostDraft?.policy
     let request = Submission(
       id: UUID(), text: draft, paneID: pane.id, runID: hostRunID,
       draftRevision: draftRevision, configuration: configuration, onDraft: policy,
@@ -627,11 +629,14 @@ final class MirrorSession: Identifiable {
     if result.ok, ["send", "agents.input"].contains(result.command ?? ""), let input = result.data?.input,
       input.bytes == current.text.utf8.count, input.trailing_enter_sent
     {
-      let replaced = input.replaced_draft.map(MirrorHostDraft.init)
+      var replaced = input.replaced_draft.map(MirrorHostDraft.init)
+      // The draft the person merged into this message is gone from the Mac as they asked;
+      // only another draft in its place is worth a note.
+      if current.onDraft == MirrorHostDraft.discard, replaced?.text == broughtHostDraft?.text { replaced = nil }
       current.outcome = .init(
         status: .accepted, detail: replaced?.sentNote ?? "Sent. Agent completion is separate.",
         replacedDraft: replaced)
-      replacesHostDraftOnNextSend = false
+      broughtHostDraft = nil
       if current.draftRevision == draftRevision { draft = "" }
     } else if let error = result.error,
       !["REMOTE_COMMAND_UNCONFIRMED", "DISPATCH_FAILED", "SEND_FAILED"].contains(error.code)
@@ -671,12 +676,18 @@ final class MirrorSession: Identifiable {
   }
 
   /// Puts the Mac's draft in front of this composer's text so the person can merge them; the
-  /// next send then replaces the draft on the Mac.
+  /// next send then removes the draft on the Mac, so it is not sent twice.
   func bringHostDraftHere() {
     guard let hostDraft, hostDraft.isComplete else { return }
     let mine = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     draft = mine.isEmpty ? hostDraft.text : hostDraft.text + "\n" + mine
-    replacesHostDraftOnNextSend = hostDraft.replaceable
+    if hostDraft.discardable {
+      broughtHostDraft = (MirrorHostDraft.discard, hostDraft.text)
+    } else if hostDraft.replaceable {
+      broughtHostDraft = (MirrorHostDraft.replace, hostDraft.text)
+    } else {
+      broughtHostDraft = nil
+    }
     submission = nil
   }
 
@@ -1012,6 +1023,7 @@ nonisolated struct MirrorDeliveryOutcome: Equatable, Sendable {
 /// A draft in the agent's input box on the Mac, as the Host reports it (docs-ai 090).
 nonisolated struct MirrorHostDraft: Equatable, Sendable {
   static let replace = "replace"
+  static let discard = "discard"
 
   struct Refusal: Decodable {
     struct Draft: Decodable {
@@ -1022,6 +1034,8 @@ nonisolated struct MirrorHostDraft: Equatable, Sendable {
     let draft: Draft?
     let replaceable: Bool
     let recovery: String?
+    /// Absent on a Host from before `discard`.
+    let discardable: Bool?
   }
   struct Replaced: Decodable {
     let text: String
@@ -1037,17 +1051,22 @@ nonisolated struct MirrorHostDraft: Equatable, Sendable {
   let replaceable: Bool
   /// `stash` when the same key on the Mac brings it back; nil when it would be gone.
   let recovery: String?
+  /// Whether the Host can remove it for good before delivering (`on_draft: discard`).
+  let discardable: Bool
 
-  init(text: String, isComplete: Bool, replaceable: Bool, recovery: String?) {
+  init(text: String, isComplete: Bool, replaceable: Bool, recovery: String?, discardable: Bool = false) {
     self.text = text
     self.isComplete = isComplete
     self.replaceable = replaceable
     self.recovery = recovery
+    self.discardable = discardable
   }
 
   init?(_ refusal: Refusal) {
     guard refusal.reason == "draft", let draft = refusal.draft else { return nil }
-    self.init(text: draft.text, isComplete: draft.is_complete, replaceable: refusal.replaceable, recovery: refusal.recovery)
+    self.init(
+      text: draft.text, isComplete: draft.is_complete, replaceable: refusal.replaceable, recovery: refusal.recovery,
+      discardable: refusal.discardable ?? false)
   }
 
   init(_ replaced: Replaced) {

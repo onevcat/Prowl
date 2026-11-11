@@ -226,6 +226,8 @@ final class AgentsCommandParsingTests: XCTestCase {
     let replace = try AgentsDispatchCommand.parse(["p7", "--prompt", "-", "--on-draft", "replace"])
     XCTAssertEqual(replace.onDraft, .replace)
     XCTAssertEqual(try replace.makeInput(stdinIsTerminal: false, readStdin: { Data("hello".utf8) }).onDraft, .replace)
+    let discard = try AgentsDispatchCommand.parse(["p7", "--prompt", "-", "--on-draft", "discard"])
+    XCTAssertEqual(try discard.makeInput(stdinIsTerminal: false, readStdin: { Data("hello".utf8) }).onDraft, .discard)
     XCTAssertThrowsError(try AgentsDispatchCommand.parse(["p7", "--prompt", "-", "--on-draft", "append"]))
   }
 

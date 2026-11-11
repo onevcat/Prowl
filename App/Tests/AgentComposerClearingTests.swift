@@ -76,6 +76,34 @@ struct AgentComposerClearingTests {
     #expect(screen.pressed == ["ctrl-s"])
   }
 
+  /// Claude's Control-U removes only the text before the cursor, and the cursor can be anywhere
+  /// in the draft (seen live on 2.1.322): the end key goes first, and the box is not expected to
+  /// change after it.
+  @Test(.timeLimit(.minutes(1))) func killRowMovesToTheEndThenKillsAndReportsNoRecovery() async {
+    let clock = TestClock()
+    let draft = AgentComposerDraft(text: "one two three", isComplete: true)
+    let screen = Screen(.draft(draft))
+    screen.responses = [.draft(draft), .empty]
+    let outcome = await clearing(screen, plan: .killRow(endKey: "ctrl-e", killKey: "ctrl-u"), clock: clock)
+      .clear(draft)
+    #expect(outcome == .cleared(.init(text: "one two three", isComplete: true, recovery: nil)))
+    #expect(screen.pressed == ["ctrl-e", "ctrl-u"])
+  }
+
+  /// The end key and the kill key go in one main-actor turn, so nothing can come between them;
+  /// a kill key that leaves the draft is a partial-clear refusal, as for a stash.
+  @Test(.timeLimit(.minutes(1))) func killRowThatLeavesTheDraftRefuses() async {
+    let clock = TestClock()
+    let draft = AgentComposerDraft(text: "one two three", isComplete: true)
+    let screen = Screen(.draft(draft))
+    let plan = AgentComposerClearPlan.killRow(endKey: "ctrl-e", killKey: "ctrl-u")
+    let task = Task { await clearing(screen, plan: plan, clock: clock).clear(draft) }
+    await clock.advance(by: .seconds(2))
+    let refusal = expectRefusal(await task.value)
+    #expect(refusal?.details?.reason == .clearing)
+    #expect(screen.pressed == ["ctrl-e", "ctrl-u"])
+  }
+
   @Test(.timeLimit(.minutes(1))) func aKeyThatDoesNotEmptyTheBoxIsAPartialClearRefusal() async {
     let clock = TestClock()
     let screen = Screen(.draft(.init(text: "hello", isComplete: true)))

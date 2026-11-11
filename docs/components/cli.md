@@ -408,7 +408,8 @@ EOF
 
 `--prompt -` reads the prompt from piped stdin (up to 256 KiB of UTF-8; newlines and tabs are
 allowed, other control characters are rejected with `INVALID_ARGUMENT`). `--on-draft replace`
-lets the dispatch clear a draft someone left in the agent's input box first (see below); the
+lets the dispatch clear a draft someone left in the agent's input box first (see below),
+`--on-draft discard` removes it so that it does not come back, and the
 default `refuse` reports it instead. Prowl creates a new
 pending `data.dispatch` bound to the pane and its current agent generation, then types the
 prompt plus the same completion protocol a launch appends — as one bracketed paste followed by
@@ -428,7 +429,7 @@ evidence (including a runtime `needs-input` the screen does not show) is refused
 must be clear as well: a draft or attachment in the agent's input box, text being composed
 with an input method, or a local edit within the last two seconds is refused with the same
 code before anything is typed, with the reason and the draft's text in `.error.details.input`
-(`reason`, `draft.text`, `draft.is_complete`, `replaceable`, `recovery`). A dim hint in the
+(`reason`, `draft.text`, `draft.is_complete`, `replaceable`, `recovery`, `discardable`). A dim hint in the
 input box is not a draft, whatever it says: Claude Code's `Try "…"` hint and its prompt
 suggestion after a turn, Codex's placeholder. With `--on-draft replace`, a draft the agent can
 clear is cleared the agent's own way before the paste — Claude Code stashes it with ⌃S and puts

@@ -55,19 +55,50 @@ struct AgentComposerClearing {
     self.now = now
   }
 
-  func clear(_ draft: AgentComposerDraft) async -> Outcome {
-    let key: String
+  /// The keys of a plan: an optional key that only moves the cursor (the box reads the same
+  /// after it), then the clearing key and how often it may go.
+  private struct Keys {
+    var cursor: String?
+    let clear: String
     let presses: Int
+  }
+
+  private func keys(for draft: AgentComposerDraft) -> Keys? {
     switch plan {
     case .unsupported:
-      return .refused(.draft(draft, agentName: agentName, plan: plan))
-    case .stash(let stashKey):
-      key = stashKey
-      presses = 1
-    case .killLines(let killKey):
-      key = killKey
-      presses = Self.maximumPresses(forLines: draft.text.split(separator: "\n", omittingEmptySubsequences: false).count)
+      nil
+    case .stash(let key):
+      Keys(clear: key, presses: 1)
+    case .killLines(let key):
+      Keys(
+        clear: key,
+        presses: Self.maximumPresses(
+          forLines: draft.text.split(separator: "\n", omittingEmptySubsequences: false).count))
+    case .killRow(let endKey, let killKey):
+      Keys(cursor: endKey, clear: killKey, presses: 1)
     }
+  }
+
+  /// Presses the cursor key of a draft and takes the observation after it as Prowl's own
+  /// input. Nothing is removed yet, so a refusal here does not say "partly cleared". The
+  /// terminal delivers keys in order: the clearing key follows without a wait.
+  private func moveCursor(
+    _ key: String, current: inout Observation, guardrail: AgentKeySequenceGuard
+  ) -> AgentInputRefusal? {
+    guard current.reading != .empty else { return nil }
+    if let refusal = localActivity(in: current, guardrail: guardrail, ownGeneration: current.inputGeneration) {
+      return refusal
+    }
+    guard !Task.isCancelled, press(key) else { return AgentInputRefusal("The Mac did not accept the key.") }
+    guard let moved = observe() else { return gone }
+    current = moved
+    return nil
+  }
+
+  func clear(_ draft: AgentComposerDraft) async -> Outcome {
+    guard let keys = keys(for: draft) else { return .refused(.draft(draft, agentName: agentName, plan: plan)) }
+    let key = keys.clear
+    let presses = keys.presses
     guard let start = observe() else { return .refused(gone) }
     let guardrail = AgentKeySequenceGuard(
       hasMarkedText: start.hasMarkedText, lastEditingAt: start.editingRevision, now: now())
@@ -75,6 +106,10 @@ struct AgentComposerClearing {
     var pressed = 0
     var current = start
     var ownGeneration = start.inputGeneration
+    if let cursorKey = keys.cursor {
+      if let refusal = moveCursor(cursorKey, current: &current, guardrail: guardrail) { return .refused(refusal) }
+      ownGeneration = current.inputGeneration
+    }
     while current.reading != .empty, pressed < presses {
       if let refusal = localActivity(in: current, guardrail: guardrail, ownGeneration: ownGeneration) {
         return .refused(partial(refusal, pressed: pressed))

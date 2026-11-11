@@ -82,6 +82,11 @@ public enum AgentDraftPolicy: String, Codable, Sendable, CaseIterable {
   /// Clear the draft the agent's own way (Claude stashes it with ⌃S, Codex kills the lines with
   /// ⌃U), verify the box is empty, then deliver. Refused when the agent has no verified way.
   case replace
+  /// Remove the draft so that it does not come back (Claude: ⌃E then ⌃U on a draft of one row,
+  /// instead of the stash that returns after the message; Codex: ⌃U), verify the box is empty,
+  /// then deliver. For a caller that already took the draft's text, such as a mirror that
+  /// merged it into the message. Refused when the agent has no verified way for this draft.
+  case discard
 }
 
 public struct DispatchInput: Codable, Sendable, Equatable {

@@ -1462,6 +1462,9 @@
         },
         "recovery": {
           "$ref": "#/$defs/agentDraftRecovery"
+        },
+        "discardable": {
+          "type": "boolean"
         }
       }
     },

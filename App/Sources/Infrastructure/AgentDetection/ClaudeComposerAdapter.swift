@@ -4,11 +4,18 @@ import Foundation
 /// empty, a collapsed paste or image marker is a draft the screen cannot carry, and Control-S
 /// (`chat:stash`) moves a typed draft or a collapsed paste aside, also while a turn runs;
 /// Control-S on the empty box brings it back. An image attachment is not verified with
-/// Control-S and keeps refusing.
+/// Control-S and keeps refusing. Claude brings a stashed draft back after the next message, so
+/// a draft that must not come back is removed with Control-E then Control-U (verified 2.1.322):
+/// Control-U removes only the text before the cursor, and the cursor can be anywhere. That is
+/// verified for a draft of one row only; the text stays in Claude's kill ring (Control-Y).
 nonisolated struct ClaudeComposerAdapter: AgentComposerAdapter {
   let agent = DetectedAgent.claude
   let name = "Claude"
   let clearPlan = AgentComposerClearPlan.stash(key: "ctrl-s")
+
+  func discardPlan(for draft: AgentComposerDraft) -> AgentComposerClearPlan {
+    draft.isComplete ? .killRow(endKey: "ctrl-e", killKey: "ctrl-u") : .unsupported
+  }
 
   func read(_ snapshot: AgentScreenSnapshot, styledSnapshot: () -> String?) -> AgentComposerReading {
     guard let contents = ClaudeScreenProfile.composerContents(in: snapshot, styledSnapshot: styledSnapshot) else {

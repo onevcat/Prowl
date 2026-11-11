@@ -122,7 +122,8 @@ struct ComposerBar: View {
 
   /// The Mac's input box holds a draft, so the message was not sent: the person decides on the
   /// phone (docs-ai 090). Replace clears it there first (Claude Code stashes it and brings it back
-  /// after the message is sent); Bring Here puts its text in front of this message to merge them.
+  /// after the message is sent); Bring Here puts its text in front of this message to merge them,
+  /// and that message then removes the draft on the Mac for good.
   private func hostDraftCard(_ hostDraft: MirrorHostDraft) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text("The input box on the Mac still holds a draft, so your message was not sent:")
@@ -165,7 +166,7 @@ struct ComposerBar: View {
       Button("Bring Draft Here") { session.bringHostDraftHere() }
         .disabled(!hostDraft.isComplete)
         .accessibilityIdentifier("mirror-bring-draft")
-        .help("Put the Mac's draft in front of your message so you can merge them; sending then replaces it on the Mac")
+        .help("Put the Mac's draft in front of your message so you can merge them; sending then removes it on the Mac")
       Group {
         if compactCancel {
           Button("Cancel", systemImage: "xmark") { session.dismissHostDraft() }.labelStyle(.iconOnly)

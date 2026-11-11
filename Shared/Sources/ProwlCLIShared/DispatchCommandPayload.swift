@@ -316,7 +316,7 @@ public struct AgentSignalsPayload: Codable, Equatable, Sendable {
 public struct AgentDispatchCommandPayload: Codable, Equatable, Sendable {
   public let target: TabTarget
   public let dispatch: DispatchPendingRecord
-  /// The draft the delivery cleared first, under `on_draft: replace`.
+  /// The draft the delivery cleared first, under `on_draft: replace` or `discard`.
   public let replacedDraft: AgentReplacedDraftPayload?
 
   enum CodingKeys: String, CodingKey {
@@ -355,8 +355,9 @@ public struct AgentComposerDraftPayload: Codable, Equatable, Sendable {
 }
 
 /// Why the agent's input box could not take the text (`error.details.input`). `draft` is set
-/// for `reason: draft`; `replaceable` says whether `on_draft: replace` would clear it, and
-/// `recovery` how it would come back on the Mac.
+/// for `reason: draft`; `replaceable` says whether `on_draft: replace` would clear it,
+/// `recovery` how it would come back on the Mac, and `discardable` whether `on_draft: discard`
+/// would remove it for good.
 public struct AgentInputRefusalDetails: Codable, Equatable, Sendable {
   public enum Reason: String, Codable, Equatable, Sendable {
     /// Text or an attachment in the box.
@@ -375,19 +376,32 @@ public struct AgentInputRefusalDetails: Codable, Equatable, Sendable {
   public let draft: AgentComposerDraftPayload?
   public let replaceable: Bool
   public let recovery: AgentDraftRecovery?
+  public let discardable: Bool
 
   public init(
     reason: Reason, draft: AgentComposerDraftPayload? = nil, replaceable: Bool = false,
-    recovery: AgentDraftRecovery? = nil
+    recovery: AgentDraftRecovery? = nil, discardable: Bool = false
   ) {
     self.reason = reason
     self.draft = draft
     self.replaceable = replaceable
     self.recovery = recovery
+    self.discardable = discardable
+  }
+
+  /// An app from before `discard` sends no `discardable`.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    reason = try container.decode(Reason.self, forKey: .reason)
+    draft = try container.decodeIfPresent(AgentComposerDraftPayload.self, forKey: .draft)
+    replaceable = try container.decode(Bool.self, forKey: .replaceable)
+    recovery = try container.decodeIfPresent(AgentDraftRecovery.self, forKey: .recovery)
+    discardable = try container.decodeIfPresent(Bool.self, forKey: .discardable) ?? false
   }
 }
 
-/// The draft a delivery cleared under `on_draft: replace`, with how it comes back on the Mac.
+/// The draft a delivery cleared under `on_draft: replace` or `discard`, with how it comes back
+/// on the Mac (nil: it does not).
 public struct AgentReplacedDraftPayload: Codable, Equatable, Sendable {
   public let text: String
   public let isComplete: Bool

@@ -258,7 +258,9 @@ A draft someone left in the Agent's input box refuses the message, and the refus
 the draft's text and whether the Host could replace it (`on_draft`, docs-ai 090). On request,
 the Host clears a replaceable draft the Agent's own way before the paste: Claude Code stashes
 it with ⌃S and puts it back in the box by itself after the message is sent (⌃S toggles it);
-Codex kills its lines with ⌃U.
+Codex kills its lines with ⌃U. `on_draft: discard` removes the draft so that it does not come
+back: Claude Code gets ⌃E then ⌃U (⌃U alone removes only the text before the cursor), which
+is verified for a draft of one row; Codex's ⌃U already removes it for good.
 Every key goes under the same guard as the mirror's other keys, the box is re-read as empty
 before the text goes in, and the receipt names the replaced draft. Devin drafts and a box that
 does not read empty after clearing keep refusing.
@@ -327,8 +329,10 @@ gets the message as if it was typed on the Mac. When a draft in the agent's inpu
 Mac refuses the message, a card above the composer shows that draft and asks what to do:
 **Replace and Send** has the Host clear it first (Claude Code stashes it and puts it back after
 the message is sent; Codex's lines are cut) and then sends; **Bring Draft Here** puts the draft's
-text in front of the message so both can be merged and sent together, which then replaces the
-draft on the Mac; **Cancel** keeps the message on the phone. A draft the screen cannot carry (an
+text in front of the message so both can be merged and sent together, which then removes the
+draft on the Mac for good (it is part of the message now, so Claude Code must not bring it
+back; a Host from before `discard` stashes it as before); **Cancel** keeps the message on the
+phone. A draft the screen cannot carry (an
 image, a collapsed paste) can only be replaced or left. After a replacement, the receipt note
 says where the draft went.
 
