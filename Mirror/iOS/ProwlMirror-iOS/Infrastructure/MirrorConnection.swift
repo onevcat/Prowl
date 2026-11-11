@@ -18,14 +18,38 @@ final class MirrorConnection {
   private let clock: any Clock<Duration>
   private var becameReady = false
   private let handshakeTimeout: Duration
+  private let isPairing: Bool
 
   init(
     _ connection: NWConnection, clock: any Clock<Duration> = ContinuousClock(),
-    handshakeTimeout: Duration = .seconds(30)
+    handshakeTimeout: Duration = .seconds(30), isPairing: Bool = false
   ) {
     self.connection = connection
     self.clock = clock
     self.handshakeTimeout = handshakeTimeout
+    self.isPairing = isPairing
+  }
+
+  /// The Host rejected this device's saved key: it was revoked there, or the Host's pairings
+  /// were reset.
+  nonisolated static var unrecognizedDevice: String {
+    String(localized: "This Mac no longer recognizes this device. Pair again with Add Host.")
+  }
+
+  /// What to tell the person when the first connection attempt cannot succeed by waiting: the
+  /// Host rejected the key, or nothing listens at the address. Network.framework reports both
+  /// as `waiting` and would try again without end. Nil for a state that may recover, such as a
+  /// network that is not up yet.
+  nonisolated static func failureBeforeReady(_ error: NWError, isPairing: Bool) -> String? {
+    switch error {
+    case .tls:
+      isPairing
+        ? String(localized: "The Mac rejected the pairing code. Check the code, or refresh it on the Mac and try again.")
+        : unrecognizedDevice
+    case .posix(.ECONNREFUSED):
+      String(localized: "Nothing is listening at this address. Check that Host is started on the Mac and that the port is correct.")
+    default: nil
+    }
   }
 
   static func parameters(pairingKey: String) throws -> NWParameters {
@@ -88,7 +112,12 @@ final class MirrorConnection {
           self.close(error.localizedDescription)
         case .cancelled: self.close(nil)
         case .waiting(let error):
-          if self.becameReady { self.close("Connection lost: \(error.localizedDescription)") }
+          if self.becameReady {
+            self.close("Connection lost: \(error.localizedDescription)")
+          } else if let reason = Self.failureBeforeReady(error, isPairing: self.isPairing) {
+            self.onHandshakeFailure?()
+            self.close(reason)
+          }
         default: break
         }
       }

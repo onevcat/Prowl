@@ -53,4 +53,15 @@ struct MirrorNativeTransportTests {
     #expect(frame.text == "思考中\nSwift")
     #expect(frame.subscriptionID == lease)
   }
+
+  /// A rejected key and a refused port end the attempt with what to do; other waiting states
+  /// may recover and are left to the connect timeout.
+  @Test func aRejectedKeyOrARefusedPortFailsWithAReason() {
+    let recognized = MirrorConnection.failureBeforeReady(.tls(errSSLPeerHandshakeFail), isPairing: false)
+    #expect(recognized == "This Mac no longer recognizes this device. Pair again with Add Host.")
+    let pairing = MirrorConnection.failureBeforeReady(.tls(errSSLPeerHandshakeFail), isPairing: true)
+    #expect(pairing?.hasPrefix("The Mac rejected the pairing code.") == true)
+    #expect(MirrorConnection.failureBeforeReady(.posix(.ECONNREFUSED), isPairing: false)?.contains("listening") == true)
+    #expect(MirrorConnection.failureBeforeReady(.posix(.ENETDOWN), isPairing: false) == nil)
+  }
 }

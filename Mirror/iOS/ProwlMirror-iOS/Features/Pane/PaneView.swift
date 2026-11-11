@@ -13,6 +13,7 @@ struct PaneView: View {
   @State private var isComposing = false
   @Environment(MirrorHostSessions.self) private var sessions
   @Environment(\.verticalSizeClass) private var verticalSizeClass
+  @Environment(\.scenePhase) private var scenePhase
 
   /// A pane reached from the roster; `session` is a fresh, unopened connection to its Host.
   init(route: MirrorPaneRoute, session: MirrorSession) {
@@ -52,6 +53,8 @@ struct PaneView: View {
   }
 
   private var compactWhileComposing: Bool { isComposing && verticalSizeClass == .compact }
+  /// The height of the floating button row, less the gap the chat already leaves at its end.
+  @ScaledMetric(relativeTo: .body) private var floatingRowHeight: CGFloat = 36
   /// The composer's width; the floating buttons line up with its edges.
   private var barWidth: CGFloat {
     session.mode == .conversation ? ConversationView.readableWidth + 8 : .infinity
@@ -66,7 +69,10 @@ struct PaneView: View {
   var body: some View {
     Group {
       switch session.mode {
-      case .conversation: ConversationView(session: session, showsLatest: !compactWhileComposing)
+      case .conversation:
+        ConversationView(
+          session: session, showsLatest: !compactWhileComposing,
+          endClearance: isComposing && !compactWhileComposing ? floatingRowHeight : 0)
       case .screen: ScreenView(session: session, showsControls: !compactWhileComposing)
       }
     }
@@ -152,7 +158,19 @@ struct PaneView: View {
       if launched { session.expectAgent(of: pane) }
       session.open(pane, mode: pane.conversation == .available ? .conversation : .screen)
     }
-    .onDisappear { if opensOnAppear { session.disconnect() } }
+    .onDisappear {
+      guard opensOnAppear else { return }
+      session.disconnect()
+      if let host { sessions.existing(for: host)?.paneReleased(pane.id) }
+    }
+    // The roster connection pauses with the app (`MirrorHostSessions`); so does this pane's.
+    .onChange(of: scenePhase) { _, phase in
+      switch phase {
+      case .background: session.suspend()
+      case .active: session.foreground()
+      default: break
+      }
+    }
     .onChange(of: rosterPane) { _, current in
       if let current { session.refreshDescriptor(current) }
     }
@@ -177,7 +195,8 @@ struct PaneView: View {
   }
 
   private var connectionProblem: MirrorPaneConnectionBanner.Problem? {
-    switch session.status {
+    if session.isSuspended { return nil }
+    return switch session.status {
     case .live, .connecting, .subscribing, .choosingPane: nil
     case .takenOver: .takenOver
     case .disconnected, .hostStopped, .paneClosed, .incompatible: .lost(session.status.label)

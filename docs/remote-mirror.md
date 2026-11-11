@@ -55,8 +55,14 @@ Host stop/start and App restart. They do not discover a changed IP address. On i
 a paired Host stays in the Hosts list with its credential and reconnects without a
 code; **Rename** changes the name shown on the phone, **Forget** removes the entry and
 its credential, and a Host that no longer recognizes the device needs a new pairing
-through **Add Host**. A new Host or revoked device requires a fresh pairing window. Old
-experiment keys are not migrated.
+through **Add Host**. The Agents screen then says so at once and stops trying by itself,
+because the Host stops answering an address after 12 rejected attempts in a minute; pairing
+again from **Add Host** connects without a restart of the app. A wrong pairing code and an
+address where nothing listens fail at once too, with the reason. A new Host or revoked
+device requires a fresh pairing window. Old experiment keys are not migrated. When the app
+goes to the background, an open pane closes its mirror so the Host frees the pane; when the
+app comes back, the pane connects again by itself and a message still in flight is checked
+with its receipt.
 
 The Host section lists paired devices with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
@@ -299,13 +305,14 @@ question) and the choices; tap one to answer. In a multi-select question, each t
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
 "Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
 still shows the same question before it presses any key, so a stale tap is refused with a
-reason, and typed answers stay on the Mac. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
+reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 On a wide screen such as an iPad, the chat and its composer keep a readable column in the
 middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows
 only after you scroll away from the end and returns to the newest message. While you type, the
 Hide Keyboard button shows too. Both float above the composer in one row, Hide Keyboard at the
-left edge and the arrow at the right edge. While the agent works and the
+left edge and the arrow at the right edge; the chat leaves room under its last message so the
+button does not cover it. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
 confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
 TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.

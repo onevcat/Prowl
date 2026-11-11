@@ -37,6 +37,6 @@ final class MirrorHostSessions {
   }
 
   func resumeAll() {
-    for session in sessions.values where session.status != .ready { session.retry() }
+    for session in sessions.values where session.status != .ready && session.retriesAutomatically { session.retry() }
   }
 }

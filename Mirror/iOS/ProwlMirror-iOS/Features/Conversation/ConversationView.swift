@@ -7,6 +7,9 @@ struct ConversationView: View {
   /// A phone on its side has no reader left above the composer while the keyboard is up: Latest
   /// would sit under the navigation bar, so it waits until the keyboard is down.
   var showsLatest = true
+  /// Room under the last row for a button that floats over the end of the chat (Hide Keyboard),
+  /// so it never covers the newest text.
+  var endClearance: CGFloat = 0
   /// The chat keeps its end in view as content arrives. Only the person's own scrolling changes
   /// it, to whether the end is in view when they let go; content that grows (a snapshot that
   /// arrives late, rows that size themselves) never turns it off.
@@ -62,7 +65,7 @@ struct ConversationView: View {
           .accessibilityElement(children: .combine)
           .accessibilityIdentifier("conversation-working")
         }
-        Color.clear.frame(height: 1).id("conversation-bottom")
+        Color.clear.frame(height: 1 + endClearance).id("conversation-bottom")
       }
       // A readable column on a wide screen; the scroll view stays full width, so a drag in the
       // margins still scrolls.
