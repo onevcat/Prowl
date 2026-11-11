@@ -78,7 +78,8 @@ final class MirrorRemoteConnection: MirrorTransport {
       let peer = MirrorConnection(
         NWConnection(
           host: .init(configuration.address),
-          port: .init(rawValue: configuration.port)!, using: parameters))
+          port: .init(rawValue: configuration.port)!, using: parameters),
+        isPairing: configuration.credential == nil)
       connection = peer
       peer.onMessage = { [weak self] in self?.receive($0) }
       peer.onClose = { [weak self] reason in

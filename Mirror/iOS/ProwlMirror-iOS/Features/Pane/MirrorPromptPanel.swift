@@ -44,13 +44,16 @@ struct MirrorPromptPanel: View {
         Text(title).font(.headline).fixedSize(horizontal: false, vertical: true)
       }
       if let detail = prompt.detail?.text, !detail.isEmpty {
-        Text(detail)
-          .font(.footnote.monospaced())
-          .foregroundStyle(.secondary)
-          .lineLimit(3)
-          .padding(.horizontal, 10).padding(.vertical, 6)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        // The whole detail, never a cut one: a person approves a command by what they read
+        // here. A long one scrolls inside its box so the answers stay on screen.
+        ScrollView {
+          detailText(detail)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { detailContentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(detailContentHeight, detailHeight))
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityIdentifier("prompt-detail")
       }
       VStack(spacing: 6) {
         ForEach(prompt.choices ?? [], id: \.id) { choice in
@@ -75,6 +78,21 @@ struct MirrorPromptPanel: View {
     .animation(.snappy, value: answer)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("prompt-panel")
+  }
+
+  /// About seven lines of the detail's type; it grows with Dynamic Type.
+  @ScaledMetric(relativeTo: .footnote) private var detailHeight: CGFloat = 132
+  /// The detail's own height; the box is as tall as the text up to `detailHeight`.
+  @State private var detailContentHeight: CGFloat = 0
+
+  private func detailText(_ detail: String) -> some View {
+    Text(detail)
+      .font(.footnote.monospaced())
+      .foregroundStyle(.secondary)
+      .textSelection(.enabled)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.horizontal, 10).padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func choiceButton(_ choice: MirrorConversationEvent.Choice) -> some View {

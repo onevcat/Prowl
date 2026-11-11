@@ -12,7 +12,7 @@ nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Senda
   let id: UUID
   let title: String
   let directory: String
-  let busy: Bool
+  var busy: Bool
   var projectName: String?
   var subtitle: String?
   var role: String?

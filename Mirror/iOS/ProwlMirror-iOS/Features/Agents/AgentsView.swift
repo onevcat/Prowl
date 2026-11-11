@@ -98,7 +98,7 @@ struct AgentsView: View {
     .task(id: reconnectKey) {
       // A Host that went away (restart, sleep, network change) is tried again while the list is
       // on screen, so the person does not have to find Retry.
-      guard case .failed = session.status else { return }
+      guard case .failed = session.status, session.retriesAutomatically else { return }
       try? await Task.sleep(for: .seconds(5))
       guard !Task.isCancelled, case .failed = session.status else { return }
       session.retry()

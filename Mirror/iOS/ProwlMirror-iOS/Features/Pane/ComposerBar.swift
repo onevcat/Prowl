@@ -140,28 +140,44 @@ struct ComposerBar: View {
           .font(.caption2)
           .foregroundStyle(.secondary)
       }
-      HStack(spacing: 8) {
-        if hostDraft.replaceable {
-          Button("Replace and Send") { session.replaceHostDraftAndSend() }
-            .buttonStyle(.borderedProminent)
-            .disabled(!session.canSubmit)
-            .accessibilityIdentifier("mirror-replace-draft")
-            .help(
-              hostDraft.recovery == "stash"
-                ? "Set the draft aside on the Mac, send your message, and let the Mac bring the draft back"
-                : "Clear the draft on the Mac and send your message")
-        }
-        Button("Bring Draft Here") { session.bringHostDraftHere() }
-          .disabled(!hostDraft.isComplete)
-          .accessibilityIdentifier("mirror-bring-draft")
-          .help("Put the Mac's draft in front of your message so you can merge them; sending then replaces it on the Mac")
-        Button("Cancel") { session.dismissHostDraft() }
-          .accessibilityIdentifier("mirror-dismiss-draft")
-          .help("Keep your message here and leave the draft on the Mac")
+      // One row of whole labels; a narrow phone gives Cancel its symbol instead of wrapping a label.
+      ViewThatFits(in: .horizontal) {
+        hostDraftActions(hostDraft, compactCancel: false)
+        hostDraftActions(hostDraft, compactCancel: true)
       }
       .buttonStyle(.bordered)
       .controlSize(.small)
     }
+  }
+
+  private func hostDraftActions(_ hostDraft: MirrorHostDraft, compactCancel: Bool) -> some View {
+    HStack(spacing: 8) {
+      if hostDraft.replaceable {
+        Button("Replace and Send") { session.replaceHostDraftAndSend() }
+          .buttonStyle(.borderedProminent)
+          .disabled(!session.canSubmit)
+          .accessibilityIdentifier("mirror-replace-draft")
+          .help(
+            hostDraft.recovery == "stash"
+              ? "Set the draft aside on the Mac, send your message, and let the Mac bring the draft back"
+              : "Clear the draft on the Mac and send your message")
+      }
+      Button("Bring Draft Here") { session.bringHostDraftHere() }
+        .disabled(!hostDraft.isComplete)
+        .accessibilityIdentifier("mirror-bring-draft")
+        .help("Put the Mac's draft in front of your message so you can merge them; sending then replaces it on the Mac")
+      Group {
+        if compactCancel {
+          Button("Cancel", systemImage: "xmark") { session.dismissHostDraft() }.labelStyle(.iconOnly)
+        } else {
+          Button("Cancel") { session.dismissHostDraft() }
+        }
+      }
+      .accessibilityIdentifier("mirror-dismiss-draft")
+      .help("Keep your message here and leave the draft on the Mac")
+    }
+    .lineLimit(1)
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   private var receiptControls: some View {

@@ -33,12 +33,22 @@ final class MirrorHostSession {
   /// Called once the Host verified the device; carries the credential-bearing configuration.
   var onVerified: ((MirrorSavedConnection) -> Void)?
 
+  /// False when another attempt cannot help: the Host rejected this device's key. The Host
+  /// counts each rejected attempt against this address and stops answering it after 12 in a
+  /// minute, which would shut out a new pairing too.
+  var retriesAutomatically: Bool {
+    if case .failed(let reason) = status { return reason != MirrorConnection.unrecognizedDevice }
+    return true
+  }
+
   var supportsConversation: Bool { capabilities.contains("conversation-v1") }
   var supportsLaunch: Bool { capabilities.contains("launch-profile") }
   var supportsShellLaunch: Bool { capabilities.contains("launch-shell") }
 
   @ObservationIgnored private var transport: (any MirrorTransport)?
   @ObservationIgnored private var generation = UUID()
+  /// The pane this device just stopped mirroring, and how many rosters may still call it busy.
+  @ObservationIgnored private var releasedPane: (id: UUID, rosters: Int)?
   @ObservationIgnored private var refreshTask: Task<Void, Never>?
   @ObservationIgnored private var pendingCommands: [UUID: PendingCommand] = [:]
   @ObservationIgnored private var connectTimeout: Task<Void, Never>?
@@ -152,6 +162,15 @@ final class MirrorHostSession {
     send(.list)
   }
 
+  /// This device closed its mirror of `id`. The Host may answer a roster request before it has
+  /// seen that connection end, and the row would say "Mirrored elsewhere" about this device.
+  /// The next rosters do not mark the pane busy; one asked for now replaces them soon.
+  func paneReleased(_ id: UUID) {
+    releasedPane = (id, 2)
+    if let index = panes.firstIndex(where: { $0.id == id }), panes[index].busy { panes[index].busy = false }
+    refresh()
+  }
+
   /// Runs one Host command; several may be in flight, each correlated by its request ID.
   func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
     guard status == .ready, transport != nil else { throw CommandFailure.unavailable }
@@ -200,7 +219,12 @@ final class MirrorHostSession {
   private func receive(_ message: MirrorMessage) {
     switch message.kind {
     case .panes:
-      panes = (message.panes ?? []).sorted { ($0.projectName ?? "", $0.title) < ($1.projectName ?? "", $1.title) }
+      var listed = (message.panes ?? []).sorted { ($0.projectName ?? "", $0.title) < ($1.projectName ?? "", $1.title) }
+      if let released = releasedPane {
+        if let index = listed.firstIndex(where: { $0.id == released.id }) { listed[index].busy = false }
+        releasedPane = released.rosters > 1 ? (released.id, released.rosters - 1) : nil
+      }
+      panes = listed
       capabilities = Set(message.capabilities ?? [])
       hostRunID = message.hostRunID
       if let name = message.hostName { hostName = name }

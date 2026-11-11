@@ -276,6 +276,8 @@ final class MirrorSession: Identifiable {
   }
 
   var followsLatest = true
+  /// The connection is closed only because the app is in the background; not a problem to show.
+  private(set) var isSuspended = false
   var onVerifiedConnection: ((MirrorSavedConnection) -> Void)?
   @ObservationIgnored private var transport: (any MirrorTransport)?
   @ObservationIgnored private var subscriptionID: UUID?
@@ -303,6 +305,7 @@ final class MirrorSession: Identifiable {
   func connect() {
     guard transport == nil else { return }
     userDisconnected = false
+    isSuspended = false
     error = nil
     status = .connecting
     supportsLaunch = false
@@ -445,8 +448,19 @@ final class MirrorSession: Identifiable {
     connect()
   }
 
+  /// The app left the foreground. iOS stops the socket soon after, and the Host would keep the
+  /// pane for a mirror that is gone. Closing now frees the pane, and `foreground()` connects
+  /// again when the person comes back.
+  func suspend() {
+    guard !userDisconnected, transport != nil else { return }
+    disconnect()
+    userDisconnected = false
+    isSuspended = true
+  }
+
   func foreground() {
     guard !userDisconnected else { return }
+    isSuspended = false
     if status == .disconnected {
       retry()
     } else if status == .live, supportsRefresh, let subscriptionID {

@@ -210,6 +210,46 @@ struct MirrorSessionTests {
     #expect(transport.starts == 1)
   }
 
+  /// Going to the background closes the pane's connection so the Host frees the pane; coming
+  /// back connects and subscribes again without a tap, and no problem shows in between.
+  @Test func backgroundClosesTheMirrorAndForegroundOpensItAgain() {
+    let transport = FakeTransport()
+    let session = makeSession(transport)
+    let pane = MirrorPaneDescriptor(id: UUID(), title: "Fixture", directory: "/", busy: false)
+    let listing: MirrorMessage = .panes(.init(panes: [pane], capabilities: ["text-v1"], hostRunID: UUID()))
+    session.connect()
+    transport.onMessage?(listing)
+    session.select(pane)
+    let lease = UUID()
+    transport.onMessage?(.subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: UUID())))
+    transport.onMessage?(.textFrame(.init(sequence: 1, text: "current", subscriptionID: lease)))
+    #expect(session.status == .live && !session.isSuspended)
+
+    session.suspend()
+    #expect(session.status == .disconnected && session.isSuspended)
+
+    session.foreground()
+    #expect(transport.starts == 2)
+    #expect(!session.isSuspended && session.status == .connecting)
+    transport.onMessage?(listing)
+    #expect(session.status == .subscribing)
+    #expect(transport.sent.last?.kind == .subscribe)
+    #expect(session.text == "current")
+  }
+
+  /// A mirror the person disconnected stays closed in the background and after it.
+  @Test func backgroundLeavesAUserDisconnectAlone() {
+    let transport = FakeTransport()
+    let session = makeSession(transport)
+    session.connect()
+    session.disconnect()
+    session.suspend()
+    #expect(!session.isSuspended)
+    session.foreground()
+    #expect(transport.starts == 1)
+    #expect(session.status == .disconnected)
+  }
+
   private func makeSession(_ transport: FakeTransport) -> MirrorSession {
     MirrorSession(
       configuration: .init(
