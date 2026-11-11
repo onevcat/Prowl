@@ -29,6 +29,9 @@ struct MirrorRootView: View {
     .sheet(isPresented: $showsAdd) {
       AddHostView(store: store) { host in
         showsAdd = false
+        // A Host paired again has a new credential; its open roster connection holds the old one.
+        sessions.forget(host.id)
+        sessions.session(for: host).start()
         store.select(host.id)
         path = NavigationPath()
       }

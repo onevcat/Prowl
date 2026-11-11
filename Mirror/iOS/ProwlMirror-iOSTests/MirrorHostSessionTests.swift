@@ -64,6 +64,45 @@ struct MirrorHostSessionTests {
     #expect(session.status == .failed("gone"))
   }
 
+  /// A rejected device key is not tried again by itself: the Host limits rejected attempts for
+  /// each address, and a retry loop would shut out the new pairing (found in a live run).
+  @Test func aRejectedDeviceKeyIsNotRetriedAutomatically() {
+    let channel = Channel()
+    let session = makeSession(channel)
+    defer { session.stop() }
+    session.start()
+    #expect(session.retriesAutomatically)
+    channel.onClose?("Connection lost.")
+    #expect(session.retriesAutomatically)
+    session.retry()
+    channel.onClose?(MirrorConnection.unrecognizedDevice)
+    #expect(session.status == .failed(MirrorConnection.unrecognizedDevice))
+    #expect(!session.retriesAutomatically)
+  }
+
+  /// The Host can list a pane as busy for a moment after this device closed its mirror of it.
+  /// The row must not say "Mirrored elsewhere" about this device; a later roster counts again.
+  @Test func aPaneThisDeviceReleasedIsNotBusyInTheNextRosters() throws {
+    let channel = Channel()
+    let id = UUID()
+    channel.listed = [MirrorPaneDescriptor(id: id, title: "Claude", directory: "/repo", busy: true)]
+    let session = makeSession(channel)
+    defer { session.stop() }
+    session.start()
+    #expect(session.panes.first?.busy == true)
+
+    let lists = channel.sent.count(where: { $0.kind == .list })
+    session.paneReleased(id)
+    // The roster it asks for at once may still be stale; so may one more.
+    #expect(channel.sent.count(where: { $0.kind == .list }) == lists + 1)
+    #expect(session.panes.first?.busy == false)
+    session.refresh()
+    #expect(session.panes.first?.busy == false)
+    // Another device does mirror it: the third roster says so.
+    session.refresh()
+    #expect(session.panes.first?.busy == true)
+  }
+
   private func makeSession(_ channel: Channel, clock: any Clock<Duration> = ContinuousClock()) -> MirrorHostSession {
     MirrorHostSession(
       configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), clock: clock,
@@ -93,6 +132,8 @@ struct MirrorHostSessionTests {
   var onClose: ((String?) -> Void)?
   var verifiedConfiguration: MirrorSavedConnection? { nil }
   var answersReady = true
+  /// The panes the Host lists; nil for one idle Claude pane.
+  var listed: [MirrorPaneDescriptor]?
   private(set) var closed = false
   private(set) var sent: [MirrorMessage] = []
   var commandRequests: [MirrorCommandRequest] { sent.compactMap(\.commandRequest) }
@@ -108,7 +149,9 @@ struct MirrorHostSessionTests {
       id: UUID(), title: "Claude Code · main", directory: "/repo", busy: false, projectName: "Prowl",
       agent: "claude", agentState: .idle, conversation: .pending)
     onMessage?(
-      .panes(.init(panes: [pane], capabilities: ["text-v1", "conversation-v1", "launch-profile"], hostRunID: UUID())))
+      .panes(
+        .init(
+          panes: listed ?? [pane], capabilities: ["text-v1", "conversation-v1", "launch-profile"], hostRunID: UUID())))
   }
 
   func close(_ reason: String?) { closed = true }
