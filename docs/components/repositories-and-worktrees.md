@@ -14,9 +14,6 @@ The left **sidebar** lists your **repositories**, each expandable into its
 added. A worktree is one branch checked out into its own directory, so multiple
 branches are live on disk at once — ideal for giving each agent its own branch.
 
-Use **Toggle Left Sidebar** (`⌘⌃S`) to hide or show it. The toggle stays
-responsive while the animation runs.
-
 Within a repository, worktrees are grouped: **Main** (the repo root), **Pinned**,
 **Pending** (being created), and the rest. Each row shows the name, branch detail,
 an unread-notification bell, and run/agent status.
