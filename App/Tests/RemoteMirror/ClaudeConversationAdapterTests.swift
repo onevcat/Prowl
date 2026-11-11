@@ -58,11 +58,12 @@ struct ClaudeConversationAdapterTests {
       guard case .message(let message)? = events.first(where: { $0.kind == .userMessage })?.payload else { return nil }
       return message.text.text
     }
-    let pasted =
-      "\n\n<pasted_content id=\"4bec\">\n[Prowl] Reply with exactly: D-1\n\n---\nProtocol\n</pasted_content id=\"4bec\">\n"
-    #expect(text(pasted) == "[Prowl] Reply with exactly: D-1\n\n---\nProtocol")
-    let mixed =
-      "see this\n\n<pasted_content id=\"a1\">\nline 1\nline 2\n</pasted_content id=\"a1\">\nand <pasted_content id=\"b2\">\nx\n</pasted_content id=\"b2\">"
+    func block(_ id: String, _ body: String) -> String {
+      "<pasted_content id=\"\(id)\">\n\(body)\n</pasted_content id=\"\(id)\">"
+    }
+    let prompt = "[Prowl] Reply with exactly: D-1\n\n---\nProtocol"
+    #expect(text("\n\n" + block("4bec", prompt) + "\n") == prompt)
+    let mixed = "see this\n\n" + block("a1", "line 1\nline 2") + "\nand " + block("b2", "x")
     #expect(text(mixed) == "see this\n\nline 1\nline 2\nand x")
     // Tags that do not pair up are the person's own text.
     let unpaired = "what does <pasted_content id=\"a1\"> mean?\n</pasted_content id=\"zz\">"
