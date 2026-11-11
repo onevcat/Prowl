@@ -727,6 +727,15 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func setLeftSidebarVisibilityIgnoresNoOpWriteBack() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+
+    await store.send(.setLeftSidebarVisibility(.all))
+    await store.finish()
+  }
+
   @Test(.dependencies) func revealInSidebarForASelectedFolderRevealsIt() async {
     let folder = Repository(
       id: "/tmp/folder-reveal",

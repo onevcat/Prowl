@@ -16,6 +16,9 @@ struct ContentView: View {
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
+  @State private var isApplyingStoreVisibility = false
+  @State private var storeVisibilitySyncTask: Task<Void, Never>?
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
@@ -58,6 +61,15 @@ struct ContentView: View {
       }
     }
     .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
+    .onAppear {
+      columnVisibility = store.leftSidebarVisibility
+    }
+    .onChange(of: store.leftSidebarVisibility) { _, newValue in
+      applyStoreVisibility(newValue)
+    }
+    .onChange(of: columnVisibility) { _, newValue in
+      sendLocalVisibility(newValue)
+    }
     .background {
       if featureFlags.remoteMirror { MirrorRosterDecorationsSync(store: repositoriesStore) }
     }
@@ -268,14 +280,7 @@ struct ContentView: View {
   }
 
   private var mainSplitView: some View {
-    let visibility = Binding<NavigationSplitViewVisibility>(
-      get: { store.leftSidebarVisibility },
-      set: { store.send(.setLeftSidebarVisibility($0)) }
-    )
-    // AppFeature animates the visibility mutation. A view-level .animation on
-    // NavigationSplitView makes it write columnVisibility back during its own
-    // transition, which loops when toggles overlap.
-    return NavigationSplitView(columnVisibility: visibility) {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
     } detail: {
@@ -286,6 +291,25 @@ struct ContentView: View {
       }
     }
     .navigationSplitViewStyle(.automatic)
+  }
+
+  private func applyStoreVisibility(_ newValue: NavigationSplitViewVisibility) {
+    storeVisibilitySyncTask?.cancel()
+    isApplyingStoreVisibility = true
+    withAnimation(.easeOut(duration: 0.2)) {
+      columnVisibility = newValue
+    }
+    storeVisibilitySyncTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(250))
+      guard !Task.isCancelled else { return }
+      isApplyingStoreVisibility = false
+    }
+  }
+
+  private func sendLocalVisibility(_ newValue: NavigationSplitViewVisibility) {
+    guard !isApplyingStoreVisibility else { return }
+    guard newValue != store.leftSidebarVisibility else { return }
+    store.send(.setLeftSidebarVisibility(newValue))
   }
 
   private func toggleLeftSidebar() {
