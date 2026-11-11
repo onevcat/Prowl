@@ -136,6 +136,18 @@ struct AppFeature {
   @Dependency(GitClientDependency.self) var gitClient
   @Dependency(WorkflowRuntimeClient.self) var workflowRuntimeClient
 
+  private func setLeftSidebarVisibility(
+    _ visibility: NavigationSplitViewVisibility,
+    state: inout State
+  ) {
+    // Animate the state mutation, not the split view. A view-level .animation makes
+    // NavigationSplitView write columnVisibility back during its own transition,
+    // which loops when toggles overlap.
+    withAnimation(.easeOut(duration: 0.2)) {
+      state.leftSidebarVisibility = visibility
+    }
+  }
+
   private func archivedAutoDeleteEvaluation(state: State, period: AutoDeletePeriod?) -> Effect<Action> {
     let expired = period.map { state.repositories.expiredArchivedWorktrees(for: $0, now: now) } ?? []
     let spansRepositories = Set(expired.map(\.repository.id)).count > 1
@@ -843,16 +855,18 @@ struct AppFeature {
         )
 
       case .toggleLeftSidebar:
-        state.leftSidebarVisibility =
-          state.leftSidebarVisibility == .detailOnly ? .all : .detailOnly
+        setLeftSidebarVisibility(
+          state.leftSidebarVisibility == .detailOnly ? .all : .detailOnly,
+          state: &state
+        )
         return .none
 
       case .showLeftSidebar:
-        state.leftSidebarVisibility = .all
+        setLeftSidebarVisibility(.all, state: &state)
         return .none
 
       case .setLeftSidebarVisibility(let visibility):
-        state.leftSidebarVisibility = visibility
+        setLeftSidebarVisibility(visibility, state: &state)
         return .none
 
       case .runScript:

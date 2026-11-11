@@ -272,6 +272,9 @@ struct ContentView: View {
       get: { store.leftSidebarVisibility },
       set: { store.send(.setLeftSidebarVisibility($0)) }
     )
+    // AppFeature animates the visibility mutation. A view-level .animation on
+    // NavigationSplitView makes it write columnVisibility back during its own
+    // transition, which loops when toggles overlap.
     return NavigationSplitView(columnVisibility: visibility) {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
@@ -283,7 +286,6 @@ struct ContentView: View {
       }
     }
     .navigationSplitViewStyle(.automatic)
-    .animation(.easeOut(duration: 0.2), value: store.leftSidebarVisibility)
   }
 
   private func toggleLeftSidebar() {

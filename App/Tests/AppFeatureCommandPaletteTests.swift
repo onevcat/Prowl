@@ -693,6 +693,40 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }
 
+  @Test(.dependencies) func rapidLeftSidebarTogglesKeepAlternating() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+
+    await store.send(.toggleLeftSidebar) {
+      $0.leftSidebarVisibility = .detailOnly
+    }
+    await store.send(.toggleLeftSidebar) {
+      $0.leftSidebarVisibility = .all
+    }
+    await store.send(.toggleLeftSidebar) {
+      $0.leftSidebarVisibility = .detailOnly
+    }
+    await store.finish()
+  }
+
+  @Test(.dependencies) func leftSidebarVisibilityWriteBackDoesNotBreakToggle() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+
+    await store.send(.setLeftSidebarVisibility(.automatic)) {
+      $0.leftSidebarVisibility = .automatic
+    }
+    await store.send(.toggleLeftSidebar) {
+      $0.leftSidebarVisibility = .detailOnly
+    }
+    await store.send(.showLeftSidebar) {
+      $0.leftSidebarVisibility = .all
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func revealInSidebarForASelectedFolderRevealsIt() async {
     let folder = Repository(
       id: "/tmp/folder-reveal",
