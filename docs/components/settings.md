@@ -34,6 +34,7 @@ and opens that section's root.
 | **Updates** | Auto-check toggle, "Check for Updates Now". → [updates](updates.md) |
 | **GitHub** | Enable GitHub integration (uses the `gh` CLI). → [github-pull-requests](github-pull-requests.md) |
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
+| **Remote Mirror** | **Enable Remote Mirror** (alpha, off by default). With the switch on: the listener (status, start and stop, **Start listening when Prowl opens**, **Listen on**, **Port**), **Paired Devices**, and **Connect to Another Mac**. → [remote-mirror](../remote-mirror.md) |
 | **Advanced** | Analytics, crash reports. |
 | **Agents → Display** | Active Agents panel auto-show, terminal titles, Shelf status markers, and Agent Island enablement, Monitor, global shortcut, silent opacity, and floating-position reset, and **Detect agents in SSH sessions** (Prowl's own SSH connection; asked at the first `ssh`). → [active-agents](active-agents.md), [agent-island](agent-island.md), [agent-detection](agent-detection.md#remote-agents-over-ssh) |
 | **Agents → Profiles** | Named launch presets for supported agent runtimes (model, effort, execution mode, tab/split placement, extra arguments, opt-in dedicated home for a separate account) with a live launch preview. List order is the recommendation fallback. → [agent-profiles](agent-profiles.md) |

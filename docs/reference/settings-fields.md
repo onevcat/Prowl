@@ -87,6 +87,8 @@ reads have no scheduled removal date.
 | `restoreTerminalLayout` | Bool | `true` | Restore tabs/splits on launch. Replaces `restoreTerminalLayoutOnLaunch`: Prowl ignores the old field, so the setting turns on once for every existing settings file. |
 | `terminalFontSize` | Float32? | `nil` | Remembered terminal font size; `nil` follows Ghostty's `font-size`. A size equal to Ghostty's `font-size` is stored as `nil`, also at launch. |
 | `ghosttyConfigPath` | String? | `nil` | Dedicated Ghostty config file for Prowl; replaces Ghostty's own config files. `nil` = share Ghostty's config. |
+| `remoteMirrorEnabled` | Bool | `false` | The alpha switch of Remote Mirror. While it is off, the Remote Mirror UI is hidden and the listener cannot start. |
+| `remoteMirrorStartsHostOnLaunch` | Bool | `false` | Start the Remote Mirror listener when Prowl opens. It has an effect only while `remoteMirrorEnabled` is on. |
 | `archivedAutoDeletePeriod` | enum? (days) | `nil` | Auto-delete archived worktrees after N days; `nil` = never. |
 | `keybindingUserOverrides` | object | empty | User keyboard-shortcut remappings. |
 | `defaultViewMode` | enum (`normal`/`shelf`/`canvas`) | `normal` | View mode on launch. |

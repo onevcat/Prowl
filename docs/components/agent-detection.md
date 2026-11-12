@@ -400,7 +400,10 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    tracks a rotation too. A transient read failure keeps the last registry identity
    for three poll resolutions before the transcript scan and fingerprint take over
    (`agents read` reports only current evidence meanwhile); they remain the fallback
-   for versions without the registry. Background daemon/remote sessions are not
+   for versions without the registry. When Claude moves the pane's conversation into
+   a background job (the pane's record names it in `parkedJobId`), Prowl reads the
+   live job record for the status and the session; without a live job record, the
+   pane's own record applies. Other background daemon/remote sessions are not
    supported by this adapter. A manually relocated config root must be supplied
    through a Prowl launch profile; shell-only overrides can fall back to screen.
    Claude Code 2.1.295 and later also reports its state through

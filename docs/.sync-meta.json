@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.agents/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "861ed9fbd04262009b0c6520c5cba49249d198f7",
-  "last_synced_date": "2026-11-02",
-  "note": "Terminal layout restore default, agent-name setting, tab icon rules and more verified OSC 7501 producers updated the manual in their PRs; added the Amp idle exception that 47e65cfc left out."
+  "last_synced_commit": "54e22e5456f67f4e3d04a0ce0f1b8b6c3a3dd6b0",
+  "last_synced_date": "2026-11-13",
+  "note": "Remote Mirror alpha, agent input drafts, Dock folder drops and the Agent Island shortcut updated the manual in their PRs; added the Remote Mirror settings section and fields, and the Claude background-job rule."
 }
