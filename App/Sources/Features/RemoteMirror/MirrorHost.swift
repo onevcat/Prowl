@@ -287,7 +287,7 @@ final class MirrorHost {
       try rebuildListener()
     } catch {
       ProwlLogger("RemoteMirror").warning("Host start failed: \(error)")
-      self.error = String(localized: "Cannot start Host: \(error.localizedDescription)")
+      self.error = String(localized: "Cannot start listening: \(error.localizedDescription)")
       isStarting = false
     }
   }

@@ -58,6 +58,8 @@ struct MirrorDeviceRow: View {
           .accessibilityLabel("Disconnect mirror of \(pane.title) from \(device.name)")
           .accessibilityIdentifier("disconnect-mirror-\(pane.id)")
         }
+        // In line with the device name, after the icon column.
+        .padding(.leading, 30)
       }
     }
   }

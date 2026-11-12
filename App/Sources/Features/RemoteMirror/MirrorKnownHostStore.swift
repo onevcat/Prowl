@@ -74,7 +74,7 @@ final class MirrorKnownHostStore {
     } catch {
       ProwlLogger("RemoteMirror").warning("Saved Host import failed: \(error)")
       notice = String(
-        localized: "Previously paired Hosts could not be read. Use Connect to a New Host to continue."
+        localized: "The saved Macs could not be read. Use Connect to a Mac to continue."
       )
     }
   }

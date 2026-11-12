@@ -45,14 +45,14 @@ nonisolated enum MirrorConnectionFailure: Equatable, Sendable {
       return String(localized: "This Host no longer recognizes this Mac. Enter a new pairing code from Host.")
     case .refused:
       return String(
-        localized: "Nothing is listening at \(endpoint). Check that Host is started and the port is correct."
+        localized: "Nothing is listening at \(endpoint). Check that the other Mac is listening and the port is correct."
       )
     case .unreachable:
       return String(localized: "Cannot reach \(endpoint). Check that both Macs are on the same network or VPN.")
     case .unresolvable:
       return String(localized: "Cannot resolve the address \(endpoint). Check the name or use an IP address.")
     case .timedOut:
-      return String(localized: "No response from \(endpoint). Check the address and that Host is started.")
+      return String(localized: "No response from \(endpoint). Check the address and that the other Mac is listening.")
     case .addressInUse, .addressUnavailable, .other:
       return String(localized: "Cannot connect to \(endpoint): \(detail)")
     }
@@ -66,7 +66,7 @@ nonisolated enum MirrorConnectionFailure: Equatable, Sendable {
     case .addressUnavailable:
       String(localized: "This Mac has no network interface with the address \(address).")
     default:
-      String(localized: "Cannot start Host: \(detail)")
+      String(localized: "Cannot start listening: \(detail)")
     }
   }
 

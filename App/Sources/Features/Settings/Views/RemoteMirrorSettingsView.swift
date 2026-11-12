@@ -187,7 +187,7 @@ struct RemoteMirrorSettingsView: View {
     } header: {
       MirrorSettingsHeader(
         title: "Connect to Another Mac",
-        subtitle: "Mirror the Prowl terminals of another Mac in this window.")
+        subtitle: "See and control the Prowl terminals of another Mac from this Mac.")
     }
   }
 
