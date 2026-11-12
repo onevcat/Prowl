@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# A failed assertion must say where it failed: on CI the log is all there is.
+set -E
+trap 'echo "${BASH_SOURCE[0]##*/}:$LINENO: failed: $BASH_COMMAND" >&2' ERR
+
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TEST_ROOT=$(mktemp -d)
 trap 'rm -rf "$TEST_ROOT"' EXIT
@@ -174,6 +178,21 @@ EOF
 
 chmod +x "$BIN"/*
 
+# grep -q that shows what it searched when the pattern is absent. The text is the file in the
+# third argument, or stdin.
+expect_grep() {
+  local flag=$1 pattern=$2 source=${3:-} text
+  if [ -n "$source" ]; then text=$(cat "$source" 2>&1 || true); else text=$(cat); fi
+  if ! grep "$flag" -q -- "$pattern" <<< "$text"; then
+    {
+      echo "${BASH_SOURCE[0]##*/}:${BASH_LINENO[0]}: ${source:-the output} does not contain: $pattern"
+      echo "--- it holds (last 40 lines) ---"
+      tail -n 40 <<< "$text"
+    } >&2
+    exit 1
+  fi
+}
+
 # Runs capture-cpu-spike.sh against the stubs with a one-second sample; extra
 # VAR=value arguments configure the stubs.
 run_spike() {
@@ -210,7 +229,7 @@ assert_snapshot_inside_sample() {
 CALLS="$TEST_ROOT/calls"
 SPIKE_OUTPUT=$(run_spike "$MEASUREMENTS" PROWL_FAKE_CALLS="$CALLS" PERL5LIB="$PERL_LIB" PERL5OPT=-MCallLog)
 test -f "$(spike_dir "$MEASUREMENTS")/panes.json"
-grep -Fq \
+expect_grep -F \
   'pane mix: total=3   visible=2   focused=1   tabs=2   selected_tabs=2   worktrees=2' \
   <<< "$SPIKE_OUTPUT"
 awk '
@@ -233,9 +252,9 @@ STALL_OUTPUT=$(run_spike "$STALL_MEASUREMENTS" PROWL_FAKE_LIST_STALLS=1)
 STALL_ELAPSED=$((SECONDS - STALL_STARTED))
 [ "$STALL_ELAPSED" -lt 10 ] || { echo "stalled prowl list held the spike capture for ${STALL_ELAPSED}s" >&2; exit 1; }
 STALL_DIR=$(spike_dir "$STALL_MEASUREMENTS")
-grep -Fq 'stepTransactionFlush' "$STALL_DIR/sample.txt"
-grep -Fq '"ok":false' "$STALL_DIR/panes.json"
-grep -Fq 'pane mix: CLI unavailable (no answer within 6s)' <<< "$STALL_OUTPUT"
+expect_grep -F 'stepTransactionFlush' "$STALL_DIR/sample.txt"
+expect_grep -F '"ok":false' "$STALL_DIR/panes.json"
+expect_grep -F 'pane mix: CLI unavailable (no answer within 6s)' <<< "$STALL_OUTPUT"
 
 # A slow prowl agents does not hold back the pane snapshot.
 TIMES="$TEST_ROOT/times"
@@ -243,9 +262,9 @@ mkdir -p "$TIMES"
 SLOW_AGENTS_OUTPUT=$(run_spike "$TEST_ROOT/slow-agents-measurements" \
   PROWL_FAKE_AGENTS_STALLS=1 PROWL_FAKE_TIMES_DIR="$TIMES")
 SLOW_AGENTS_DIR=$(spike_dir "$TEST_ROOT/slow-agents-measurements")
-grep -Fq '"ok":false' "$SLOW_AGENTS_DIR/agents.json"
-grep -Fq '"ok":true' "$SLOW_AGENTS_DIR/panes.json"
-grep -Fq 'pane mix: total=3' <<< "$SLOW_AGENTS_OUTPUT"
+expect_grep -F '"ok":false' "$SLOW_AGENTS_DIR/agents.json"
+expect_grep -F '"ok":true' "$SLOW_AGENTS_DIR/panes.json"
+expect_grep -F 'pane mix: total=3' <<< "$SLOW_AGENTS_OUTPUT"
 assert_snapshot_inside_sample "$TIMES"
 
 # A snapshot that arrives after sampling has ended is refused.
@@ -257,8 +276,8 @@ LATE_LIST_DIR=$(spike_dir "$TEST_ROOT/late-list-measurements")
 if grep -Fq '"ok":true' "$LATE_LIST_DIR/panes.json"; then
   assert_snapshot_inside_sample "$LATE_TIMES"
 fi
-grep -Fq '"ok":false' "$LATE_LIST_DIR/panes.json"
-grep -Fq 'pane mix: CLI unavailable (answered after sampling ended)' <<< "$LATE_LIST_OUTPUT"
+expect_grep -F '"ok":false' "$LATE_LIST_DIR/panes.json"
+expect_grep -F 'pane mix: CLI unavailable (answered after sampling ended)' <<< "$LATE_LIST_OUTPUT"
 
 # sample(1) takes time to attach before it samples. Here the fake takes 0.5 s, longer
 # than the query offset, so a prowl list that answers at once does so before sampling
@@ -277,7 +296,7 @@ grep -Fq 'answered before sampling started' "$EARLY_DIR/panes.json" || {
   echo "pane snapshot answered before sampling started was kept: $(tr -d '\n' < "$EARLY_DIR/panes.json" | cut -c1-60)" >&2
   exit 1
 }
-grep -Fq 'pane mix: CLI unavailable (answered before sampling started)' <<< "$EARLY_OUTPUT"
+expect_grep -F 'pane mix: CLI unavailable (answered before sampling started)' <<< "$EARLY_OUTPUT"
 
 # With the same attach delay, a snapshot answered late in the sampling, but still
 # inside it, is kept.
@@ -290,7 +309,7 @@ grep -Fq '"ok":true' "$ATTACH_DIR/panes.json" || {
   echo "pane snapshot answered inside the sample was discarded: $(cat "$ATTACH_DIR/panes.json")" >&2
   exit 1
 }
-grep -Fq 'pane mix: total=3' <<< "$ATTACH_OUTPUT"
+expect_grep -F 'pane mix: total=3' <<< "$ATTACH_OUTPUT"
 assert_snapshot_inside_sample "$ATTACH_TIMES"
 
 # The CLI answers for another app than the sampled one: its socket points elsewhere,
@@ -304,17 +323,17 @@ for file in agents panes; do
     exit 1
   }
 done
-grep -Fq "CLI unavailable (CLI socket $FOREIGN_SOCKET is not served by pid $$)" <<< "$FOREIGN_OUTPUT"
-grep -Fq "pane mix: CLI unavailable (CLI socket $FOREIGN_SOCKET is not served by pid $$)" <<< "$FOREIGN_OUTPUT"
+expect_grep -F "CLI unavailable (CLI socket $FOREIGN_SOCKET is not served by pid $$)" <<< "$FOREIGN_OUTPUT"
+expect_grep -F "pane mix: CLI unavailable (CLI socket $FOREIGN_SOCKET is not served by pid $$)" <<< "$FOREIGN_OUTPUT"
 
 OTHER_OWNER_OUTPUT=$(run_spike "$TEST_ROOT/other-owner-measurements" PROWL_FAKE_SOCKET_OWNER=1)
-grep -Fq 'pane mix: CLI unavailable (CLI socket ' <<< "$OTHER_OWNER_OUTPUT"
-grep -Fq "is not served by pid $$" "$(spike_dir "$TEST_ROOT/other-owner-measurements")/panes.json"
+expect_grep -F 'pane mix: CLI unavailable (CLI socket ' <<< "$OTHER_OWNER_OUTPUT"
+expect_grep -F "is not served by pid $$" "$(spike_dir "$TEST_ROOT/other-owner-measurements")/panes.json"
 
 # A socket override that the sampled process serves is honored.
 OVERRIDE_OUTPUT=$(run_spike "$TEST_ROOT/override-measurements" \
   PROWL_CLI_SOCKET="$FOREIGN_SOCKET" PROWL_FAKE_SERVED_SOCKET="$FOREIGN_SOCKET")
-grep -Fq 'pane mix: total=3' <<< "$OVERRIDE_OUTPUT"
+expect_grep -F 'pane mix: total=3' <<< "$OVERRIDE_OUTPUT"
 
 rm -f "$TEST_ROOT/ps-state"
 MEASURE_OUTPUT=$(
@@ -326,15 +345,15 @@ MEASURE_OUTPUT=$(
 
 MEASURE_DIR=$(find "$MEASUREMENTS" -mindepth 1 -maxdepth 1 -type d ! -name spikes)
 test -f "$MEASURE_DIR/panes.json"
-grep -Fq \
+expect_grep -F \
   'total=3   visible=2   focused=1   tabs=2   selected_tabs=2   worktrees=2' \
   <<< "$MEASURE_OUTPUT"
-grep -Eq '11\.00% +-[[:space:]]+stepTransactionFlush' <<< "$MEASURE_OUTPUT"
-grep -Eq '13\.00% +-[[:space:]]+GraphHost\.flushTransactions\(\)' <<< "$MEASURE_OUTPUT"
-grep -Eq '7\.00% +-[[:space:]]+flushTransactions \(excluding GraphHost\)' <<< "$MEASURE_OUTPUT"
-grep -Eq '17\.00% +-[[:space:]]+addGlyph' <<< "$MEASURE_OUTPUT"
-grep -Eq '19\.00% +-[[:space:]]+rebuildRow' <<< "$MEASURE_OUTPUT"
-grep -Eq '23\.00% +-[[:space:]]+wyhash' <<< "$MEASURE_OUTPUT"
+expect_grep -E '11\.00% +-[[:space:]]+stepTransactionFlush' <<< "$MEASURE_OUTPUT"
+expect_grep -E '13\.00% +-[[:space:]]+GraphHost\.flushTransactions\(\)' <<< "$MEASURE_OUTPUT"
+expect_grep -E '7\.00% +-[[:space:]]+flushTransactions \(excluding GraphHost\)' <<< "$MEASURE_OUTPUT"
+expect_grep -E '17\.00% +-[[:space:]]+addGlyph' <<< "$MEASURE_OUTPUT"
+expect_grep -E '19\.00% +-[[:space:]]+rebuildRow' <<< "$MEASURE_OUTPUT"
+expect_grep -E '23\.00% +-[[:space:]]+wyhash' <<< "$MEASURE_OUTPUT"
 
 # The steady-state profiler does not query a CLI that answers for another app.
 FOREIGN_CALLS="$TEST_ROOT/foreign-calls"
@@ -351,8 +370,8 @@ if grep -q '^prowl ' "$FOREIGN_CALLS"; then
   echo "the steady-state profiler queried a CLI socket that another app serves" >&2
   exit 1
 fi
-grep -Fq "is not served by pid $$" "$FOREIGN_MEASURE_DIR/agents.json"
-grep -Fq "is not served by pid $$" "$FOREIGN_MEASURE_DIR/panes.json"
+expect_grep -F "is not served by pid $$" "$FOREIGN_MEASURE_DIR/agents.json"
+expect_grep -F "is not served by pid $$" "$FOREIGN_MEASURE_DIR/panes.json"
 [ "$(grep -Fc "CLI unavailable (CLI socket $FOREIGN_SOCKET is not served by pid $$)" <<< "$FOREIGN_MEASURE_OUTPUT")" -eq 2 ]
 
 echo 'performance measurement script tests passed'
