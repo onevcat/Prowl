@@ -10,7 +10,7 @@ import Testing
 @MainActor
 struct MirrorHostTests {
   @Test func disabledHostNeverStartsOrGeneratesCredentials() {
-    let host = MirrorHost(source: Source(), enabled: false)
+    let host = MirrorHost(source: Source(), defaults: .mirrorTests, enabled: false)
     host.start()
     #expect(!host.isStarting)
     #expect(!host.isRunning)
@@ -18,11 +18,108 @@ struct MirrorHostTests {
     #expect(host.hostRunID == nil)
   }
 
+  @Test func hostReadsTheSwitchAtEachStart() {
+    enum Failure: Error { case unavailable }
+    var enabled = false
+    var attempts = 0
+    // The identity load fails, so that an allowed start opens no listener.
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: enabled,
+      loadIdentity: {
+        attempts += 1
+        throw Failure.unavailable
+      }, saveIdentity: { _ in })
+    host.start()
+    #expect(attempts == 0)
+    #expect(host.error == nil)
+    enabled = true
+    host.start()
+    #expect(attempts == 1)
+    #expect(host.error != nil)
+  }
+
+  @Test func devicesLoadForSettingsWithoutAStartAndRevokeKeepsTheListenerStopped() {
+    var saved: MirrorHostIdentity? = Self.identity
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true,
+      loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices == Self.identity.devices)
+    #expect(host.hostRunID == nil)
+    host.revoke(Self.identity.devices[0].id)
+    #expect(host.devices.isEmpty)
+    #expect(saved?.devices.isEmpty == true)
+    #expect(!host.isStarting)
+    #expect(!host.isRunning)
+    #expect(host.error == nil)
+  }
+
+  @Test func endpointEditedWhileStoppedIsRestoredWithoutAStart() throws {
+    let suite = "MirrorEndpointTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let first = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(first.address == "0.0.0.0")
+    first.address = "127.0.0.1"
+    first.port = "7999"
+    let second = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(second.address == "127.0.0.1")
+    #expect(second.port == "7999")
+    // A value that cannot start a listener does not replace the saved one.
+    second.port = "port"
+    second.address = "not an address"
+    let third = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(third.address == "127.0.0.1")
+    #expect(third.port == "7999")
+  }
+
+  @Test func failedDeviceReadIsReportedAndCanBeRetriedWithoutAStart() {
+    enum Failure: Error { case locked }
+    var attempts = 0
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true,
+      loadIdentity: {
+        attempts += 1
+        if attempts == 1 { throw Failure.locked }
+        return Self.identity
+      }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices.isEmpty)
+    #expect(host.deviceListError != nil)
+    #expect(host.hostRunID == nil)
+    host.loadDevicesIfNeeded()
+    #expect(host.devices == Self.identity.devices)
+    #expect(host.deviceListError == nil)
+    #expect(host.hostRunID == nil)
+    #expect(!host.isStarting)
+  }
+
+  @Test func missingIdentityIsAnEmptyDeviceListNotAFailure() {
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { nil }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices.isEmpty)
+    #expect(host.deviceListError == nil)
+  }
+
+  @Test func devicesStayUnreadWhileTheSwitchIsOff() {
+    var loads = 0
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: false,
+      loadIdentity: {
+        loads += 1
+        return Self.identity
+      }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(loads == 0)
+    #expect(host.devices.isEmpty)
+  }
+
   @Test func initialHostStartDoesNotRetryIdentityFailure() async {
     enum Failure: Error { case unavailable }
     var attempts = 0
     let host = MirrorHost(
-      source: Source(), enabled: true,
+      source: Source(), defaults: .mirrorTests, enabled: true,
       loadIdentity: {
         attempts += 1
         throw Failure.unavailable
@@ -460,7 +557,8 @@ struct MirrorHostTests {
     let source = Source()
     let clock = TestClock()
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+      source: source, defaults: .mirrorTests, enabled: true, clock: clock, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -527,7 +625,8 @@ struct MirrorHostTests {
     let source = Source()
     source.supportsRemoteScroll = fails
     source.scrollUnavailable = fails
-    let host = MirrorHost(source: source, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+    let host = MirrorHost(
+      source: source, defaults: .mirrorTests, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -556,7 +655,8 @@ struct MirrorHostTests {
 
   @Test(.timeLimit(.minutes(1))) func scrollRejectsStaleLeaseBeforeSendingInput() async throws {
     let source = Source()
-    let host = MirrorHost(source: source, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+    let host = MirrorHost(
+      source: source, defaults: .mirrorTests, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -579,7 +679,8 @@ struct MirrorHostTests {
     source.viewportText = "earlier"
     let clock = TestClock()
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+      source: source, defaults: .mirrorTests, enabled: true, clock: clock, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -628,7 +729,8 @@ struct MirrorHostTests {
   @Test(.timeLimit(.minutes(1))) func textSubscriptionNeverReceivesViewportMetadata() async throws {
     let source = Source()
     source.viewportText = "earlier"
-    let host = MirrorHost(source: source, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+    let host = MirrorHost(
+      source: source, defaults: .mirrorTests, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -650,7 +752,8 @@ struct MirrorHostTests {
     source.unstableCaptures = failures
     let clock = TestClock()
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+      source: source, defaults: .mirrorTests, enabled: true, clock: clock, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -673,7 +776,8 @@ struct MirrorHostTests {
     let source = Source()
     let clock = TestClock()
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+      source: source, defaults: .mirrorTests, enabled: true, clock: clock, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -709,7 +813,8 @@ struct MirrorHostTests {
     source.scrollBounds = .init(atTop: false, atBottom: true)
     let clock = TestClock()
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+      source: source, defaults: .mirrorTests, enabled: true, clock: clock, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }
@@ -762,7 +867,8 @@ struct MirrorHostTests {
   @Test(.timeLimit(.minutes(1))) func sourceWithoutScrollStateIgnoresOptIn() async throws {
     let source = Source()
     source.supportsScrollState = false
-    let host = MirrorHost(source: source, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+    let host = MirrorHost(
+      source: source, defaults: .mirrorTests, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     defer { host.stop() }

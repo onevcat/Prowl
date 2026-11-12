@@ -36,7 +36,7 @@ struct MirrorConnectionFailureTests {
     )
     #expect(
       MirrorConnectionFailure.other("boom").listenerMessage(address: "0.0.0.0", port: "7880").hasPrefix(
-        "Cannot start Host"))
+        "Cannot start listening"))
   }
 }
 

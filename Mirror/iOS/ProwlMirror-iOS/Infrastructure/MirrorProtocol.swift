@@ -76,6 +76,9 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   struct PairRequest: Codable, Sendable {
     let name: String
     let proof: Data
+    /// A display hint for the Host's device list: `ios`, `ipados`, `macos` or `android`. It is
+    /// not part of the proof; the Host ignores a value that it does not know.
+    var platform: String?
   }
   enum Kind: String, Codable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,

@@ -9,6 +9,7 @@ enum SettingsSection: Hashable {
   case advanced
   case github
   case customCommands
+  case remoteMirror
   case agentDisplay
   case profiles
   case workflows

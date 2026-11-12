@@ -16,14 +16,26 @@ final class MirrorHost {
     didSet { updateDeviceActivity() }
   }
   private var devicePaneIDs: [UUID: Set<UUID>] = [:]
-  var address: String
-  var port: String
+  /// Saved at each valid edit, so that a start at launch uses the endpoint shown in Settings
+  /// and never a wider one from an earlier session (docs-ai 091).
+  var address: String {
+    didSet {
+      guard address != oldValue, IPv4Address(address) != nil || IPv6Address(address) != nil else { return }
+      defaults.set(address, forKey: "remoteMirrorHostAddress")
+    }
+  }
+  var port: String {
+    didSet {
+      guard port != oldValue, let number = UInt16(port), number > 0 else { return }
+      defaults.set(port, forKey: "remoteMirrorHostPort")
+    }
+  }
   @ObservationIgnored var commandService: MirrorCommandService?
   @ObservationIgnored private var commandPeers: [UUID: MirrorCommandRequest] = [:]
   @ObservationIgnored private var commandDevices: [UUID: UUID] = [:]
   var onStarted: (() -> Void)?
   var onStopped: (() -> Void)?
-  @ObservationIgnored private let enabled: Bool
+  @ObservationIgnored private let enabled: () -> Bool
   @ObservationIgnored private let source: any MirrorPaneSource
   @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private var listener: NWListener?
@@ -46,6 +58,8 @@ final class MirrorHost {
 
   private(set) var onlineDeviceIDs: Set<UUID> = []
   private(set) var devices: [MirrorPairedDevice] = []
+  /// Set when the saved devices could not be read; an empty `devices` is then not a result.
+  private(set) var deviceListError: String?
   /// The device that completed the current pairing window; cleared when a new code is issued.
   private(set) var lastPairedDevice: MirrorPairedDevice?
   private(set) var pairingExpiresAt: Date?
@@ -135,6 +149,21 @@ final class MirrorHost {
     }
   }
 
+  /// Reads the paired devices for Settings before the first start. It creates no identity.
+  func loadDevicesIfNeeded() {
+    guard enabled(), identity == nil else { return }
+    do {
+      let saved = try loadIdentity()
+      deviceListError = nil
+      guard let saved else { return }
+      identity = saved
+      devices = saved.devices
+    } catch {
+      ProwlLogger("RemoteMirror").warning("Host device list is unavailable: \(error)")
+      deviceListError = String(localized: "Cannot read the paired devices: \(error.localizedDescription)")
+    }
+  }
+
   func revoke(_ deviceID: UUID) {
     guard var next = identity else { return }
     next.devices.removeAll { $0.id == deviceID }
@@ -148,7 +177,8 @@ final class MirrorHost {
       for (peerID, owner) in devicePeers where owner == deviceID {
         peers[peerID]?.close("Device access was revoked.")
       }
-      try rebuildListener()
+      // A stopped listener stays stopped; the next start reads the saved devices.
+      if isRunning || isStarting { try rebuildListener() }
     } catch {
       ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
       self.error = error.localizedDescription
@@ -216,7 +246,8 @@ final class MirrorHost {
   }
 
   init(
-    source: any MirrorPaneSource, defaults: UserDefaults = .standard, enabled: Bool,
+    source: any MirrorPaneSource, defaults: UserDefaults = .standard,
+    enabled: @autoclosure @escaping () -> Bool,
     clock: any Clock<Duration> = ContinuousClock(),
     loadIdentity: @escaping () throws -> MirrorHostIdentity? = {
       try MirrorCredentialVault.load(MirrorHostIdentity.self, account: "host")
@@ -236,8 +267,8 @@ final class MirrorHost {
   }
 
   func start() {
-    // Code security: hidden experimental UI must not leave a reachable listener.
-    guard enabled, !isStarting, !isRunning, listener == nil else { return }
+    // Code security: hidden Mirror UI must not leave a reachable listener.
+    guard enabled(), !isStarting, !isRunning, listener == nil else { return }
     error = nil
     guard let portNumber = UInt16(port), portNumber > 0,
       IPv4Address(address) != nil || IPv6Address(address) != nil
@@ -250,12 +281,13 @@ final class MirrorHost {
       try saveIdentity(saved)
       identity = saved
       devices = saved.devices
+      deviceListError = nil
       hostRunID = UUID()
       isStarting = true
       try rebuildListener()
     } catch {
       ProwlLogger("RemoteMirror").warning("Host start failed: \(error)")
-      self.error = String(localized: "Cannot start Host: \(error.localizedDescription)")
+      self.error = String(localized: "Cannot start listening: \(error.localizedDescription)")
       isStarting = false
     }
   }
@@ -505,7 +537,8 @@ final class MirrorHost {
         }
         let device = MirrorPairedDevice(
           id: UUID(), name: request.name,
-          key: try MirrorAuthentication.randomKey(), pairedAt: Date())
+          key: try MirrorAuthentication.randomKey(), pairedAt: Date(),
+          platform: request.platform.flatMap(MirrorDevicePlatform.init(rawValue:)))
         identity.devices.append(device)
         try saveIdentity(identity)
         self.identity = identity

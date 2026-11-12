@@ -6,7 +6,7 @@ Native clients for Prowl Remote Mirror:
   `Prowl.xcworkspace` in Xcode and select the `ProwlMirror-iOS` scheme.
 - [Android](Android/README.md): phones and tablets; open `Android/` in Android Studio.
 
-Launch the matching Mac Host with `PROWL_REMOTE_MIRROR=1`. Pair via **Start Host →
+In the matching Mac app, turn on **Settings → Remote Mirror → Enable Remote Mirror**. Pair via **Start Host →
 Add a Device**. Both clients follow the shared [wire contract](../docs/remote-mirror-wire.md)
 and [Host behavior](../docs/remote-mirror.md). Upgrade Host and clients together.
 

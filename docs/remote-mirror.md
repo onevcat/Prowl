@@ -1,4 +1,4 @@
-# Remote Mirror (experimental)
+# Remote Mirror (alpha)
 
 Two Prowl apps can view and control the same Host terminal. The Host keyboard stays
 available. Each pane has one remote owner. Explicit **Take Over** replaces that
@@ -8,26 +8,47 @@ it after the list was read; use the explicit **Take Over** action.
 
 ## Enable and pair
 
-Launch the Mac App with `PROWL_REMOTE_MIRROR=1`. The experiment is hidden and cannot
-start a listener otherwise. Hover over the **Remote Mirror** network button to
-preview, or click to keep it open. Under **Host**, pick **Listen on** and a port,
-then **Start Host**. The picker offers all interfaces (`0.0.0.0`), each of this
-Mac's IPv4 interfaces by name, and this Mac only (`127.0.0.1`); a value saved
-from an earlier version appears as **Custom**. The icon is gray when stopped,
-muted blue when listening, and muted green when at least one pane is mirrored.
+Open **Settings → Remote Mirror** and turn on **Enable Remote Mirror**. The switch is off
+by default. While it is off, the Remote Mirror button and the sidebar section are hidden
+and the Host cannot start a listener; turning it off stops the Host and closes all mirrors
+opened from this Mac.
+
+With the switch on, the Settings section has two groups, named by direction:
+
+- **Connect to This Mac**: this Mac is the Host. A paired iPhone or another Mac sees and
+  controls its Prowl terminals. The group holds the listener status, **Start Listening**
+  and **Stop Listening**, **Start listening when Prowl opens** (off by default),
+  **Listen on**, and **Port**. **Paired Devices** below it lists every paired device.
+- **Connect to Another Mac**: this Mac is the client. It lists the saved Macs and
+  **Connect to a Mac…**. After a pane is selected, the main window comes forward (it
+  reopens if it was closed) and shows the mirror.
+
+**Listen on** offers all interfaces (`0.0.0.0`), each of this Mac's IPv4 interfaces by
+name, and this Mac only (`127.0.0.1`); a value saved from an earlier version appears as
+**Custom**. The address and the port can change only while the listener is stopped. A
+valid edit is saved at once, so a start at launch uses the address and port that Settings
+shows.
+
+The **Remote Mirror** network button in the toolbar opens a small panel for the frequent
+actions: hover to preview, or click to keep it open. It shows the listener status,
+**Start Listening** or **Stop Listening**, **Add a Device…**, the devices that are
+connected now with their mirrored panes, and **Remote Mirror Settings…**. The icon is gray
+when stopped, muted blue when listening, and muted green when at least one pane is mirrored.
 A listener is reachable from the local network or a VPN; the internet cannot reach
 it unless a router forwards the port. Without a paired device key or a live pairing
 code, a connection fails during the TLS handshake.
 
-**Add a Device** opens a modal pairing sheet with a 60-second code, a reachable
-Wi-Fi or VPN address and port, and a QR code. **Copy Connection Details** (⌘C)
-copies the address, port, code, and expiry together. When multiple addresses are
+**Add a Device** opens a modal pairing sheet with a 60-second code and a reachable
+Wi-Fi or VPN address and port. A control at the top selects the device to pair: the
+**iPhone** page shows a QR code to scan in Prowl Mirror; the **Mac** page shows
+**Copy Connection Details** (⌘C), which copies the address, port, code, and expiry
+together. When multiple addresses are
 available, choose **Connection address** first. If the listener is restarting, the sheet waits before generating
-its first code; if Host is off, the sheet offers **Start Host**. **Refresh Code**
+its first code; if the listener is off, the sheet offers **Start Listening**. **Refresh Code**
 replaces the code; **Cancel** invalidates an unused code without stopping Host or
 revoking a device that already paired. When a device completes pairing, the sheet
 shows **Paired with** its name and closes by itself. On the other Mac, open
-**Remote Mirror → Client → Connect to a New Host** and enter the address (an IP or a
+**Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…** and enter the address (an IP or a
 host name such as `mini.local`), port, and code. On iOS, **Pair with a Mac** on the
 first launch, or **Add Host…** in the Mac menu, takes the same address, port and code, or
 scans the QR code.
@@ -36,12 +57,11 @@ Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved
 enrollment remains available for Retry if the first runtime connection fails.
 
-On Mac, paired Hosts are listed under **Client** with their name and last
-connection time. This list holds addresses only, stored outside Keychain, so hover
-previews show it without reading credentials. Records written by an earlier
-version are imported from Keychain once, after the first click on the Remote
-Mirror button; if that import fails, a hint keeps **Connect to a New Host**
-available and **Try Again** repeats it. Click **Connect** beside a Host to
+On Mac, paired Hosts are listed under **Connect to Another Mac** with their name and last
+connection time. This list holds addresses only, stored outside Keychain. Records written
+by an earlier version are imported from Keychain once, when the Remote Mirror section of
+Settings first shows with the switch on; if that import fails, a hint keeps
+**Connect to a Mac…** available and **Try Again** repeats it. Click **Connect** beside a Host to
 authenticate and open the pane picker without entering the address or code again.
 The **…** menu offers **Rename…**, a name shown on this Mac only, and **Forget**,
 which removes the saved access. Saved entries do not imply that the Host is
@@ -64,21 +84,27 @@ goes to the background, an open pane closes its mirror so the Host frees the pan
 app comes back, the pane connects again by itself and a message still in flight is checked
 with its receipt.
 
-The Host section lists paired devices with **Connected** and the active mirror
+If the saved devices cannot be read (for example, the keychain is locked), **Paired
+Devices** shows the failure and **Try Again** in place of an empty list.
+**Paired Devices** in Settings lists paired devices, also before the listener starts, with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
 plus mirrored pane names and **Revoke**, which asks for confirmation. Each active
-mirror has a green dot and a red disconnect button. **Disconnect** asks for
+mirror has a green dot and a red disconnect button; the toolbar panel shows the same rows
+for the connected devices, without **Revoke**. **Disconnect** asks for
 confirmation, then disconnects only that mirror. The terminal keeps running,
 other mirrors remain connected, and the device stays paired and can reconnect.
 If that connection has already ended or been replaced, confirmation does nothing. A device
 browsing panes can be connected with zero mirrors.
+Each device shows an iPhone, iPad or Mac icon from the platform that it reported at pairing;
+a device paired by an earlier version shows a generic icon until it pairs again.
 Device labels use the Mac local host name or the iOS system device name; pairing
 does not resolve a DNS name to obtain this label.
 
 Revocation removes the persisted secret and disconnects all connections for that device;
 other devices remain connected. **Revoke All Devices…** asks for confirmation, then
 removes every device's saved authorization, including offline devices, disconnects
-all clients, and invalidates the current pairing code. Host keeps listening and
+all clients, and invalidates the current pairing code. **Revoke** and **Revoke All Devices…**
+do not start a stopped listener. A running Host keeps listening and
 local terminals keep running. Saved client connections cannot reconnect until each
 device pairs again with a fresh code. In the Mac connection form, **Pair Again…**
 shows the code field and bypasses saved access even if the connection error was

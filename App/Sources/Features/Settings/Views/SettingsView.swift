@@ -35,8 +35,10 @@ struct SettingsView: View {
           .tag(SettingsSection.updates)
         Label("GitHub", systemImage: "arrow.triangle.branch")
           .tag(SettingsSection.github)
-        Label("Commands", systemImage: "globe")
+        Label("Commands", systemImage: "command")
           .tag(SettingsSection.customCommands)
+        Label("Remote Mirror", systemImage: "network")
+          .tag(SettingsSection.remoteMirror)
         Label("Advanced", systemImage: "gearshape.2")
           .tag(SettingsSection.advanced)
 
@@ -121,6 +123,11 @@ struct SettingsView: View {
             ProgressView()
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
+        }
+      case .remoteMirror:
+        SettingsDetailView {
+          RemoteMirrorSettingsView(store: settingsStore)
+            .navigationTitle("Remote Mirror")
         }
       case .agentDisplay:
         SettingsDetailView {

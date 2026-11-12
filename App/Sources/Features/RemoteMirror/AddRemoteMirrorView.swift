@@ -29,7 +29,7 @@ struct AddRemoteMirrorView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("Connect to Host").font(.title2.bold())
+      Text("Connect to a Mac").font(.title2.bold())
       if let client, client.isConnected {
         if showsNewPane, let launchModel {
           MirrorNewPaneView(model: launchModel)
@@ -133,9 +133,11 @@ struct AddRemoteMirrorView: View {
   private var form: some View {
     VStack(alignment: .leading, spacing: 16) {
       // Sheets propose no height; without fixedSize multi-line text collapses to one truncated line.
-      Text("Paste connection details from Host into any field below, or enter the address and pairing code manually.")
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+      Text(
+        "Paste the connection details from the other Mac into any field below, or enter the address and pairing code."
+      )
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
       Form {
         TextField("Address", text: connectionField($address), prompt: Text("IP address"))
           .accessibilityIdentifier("remote-mirror-address")
@@ -153,7 +155,7 @@ struct AddRemoteMirrorView: View {
             .focused($codeFocused)
             .disabled(isConnecting)
             .accessibilityIdentifier("remote-mirror-pairing-code")
-          Text("The eight-character code shown on Host under Add a Device.\nIt expires after 60 seconds.")
+          Text("The eight-character code that the other Mac shows under Add a Device.\nIt expires after 60 seconds.")
             .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -172,7 +174,7 @@ struct AddRemoteMirrorView: View {
             requiresNewCode = true
             codeFocused = true
           }
-          .help("Enter a fresh code from Host instead of using saved device access")
+          .help("Enter a new code from the other Mac instead of the saved access")
           .accessibilityIdentifier("remote-mirror-pair-again")
         }
       }

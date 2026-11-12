@@ -11,7 +11,7 @@ The original Gradle project name and application ID are preserved.
 ## Connect
 
 Use a Prowl Host built from the same revision (or a matching Prowl release), with
-`PROWL_REMOTE_MIRROR=1`.
+**Settings → Remote Mirror → Enable Remote Mirror** turned on.
 On Mac: Start Host → Add a Device. On Android: Add Remote Pane → enter IP/port
 and the two halves of the single-use, 60-second code. The default port is 7880. After enrollment, credentials
 are encrypted using Android Keystore and the short code is discarded. Pick a saved

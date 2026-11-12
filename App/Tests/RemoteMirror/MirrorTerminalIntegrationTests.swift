@@ -424,6 +424,23 @@ struct MirrorTerminalIntegrationTests {
     #expect(fixture.host.port != String(port.rawValue))
   }
 
+  @Test(.timeLimit(.minutes(1))) func addingAMirrorAsksTheAppToShowIt() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.startHost()
+    let client = fixture.makeClient()
+    client.connect()
+    try await fixture.wait("pane discovery") { !client.panes.isEmpty || client.error != nil }
+    let pane = try #require(client.panes.first)
+    let store = RemoteMirrorStore(manager: fixture.manager, runtime: fixture.runtime)
+    var requests = 0
+    store.showSelectedMirror = { requests += 1 }
+    #expect(requests == 0)
+    store.add(client, pane: pane)
+    #expect(store.selectedID == client.id)
+    #expect(requests == 1)
+  }
+
   @Test(.timeLimit(.minutes(1))) func viewportRebindsWhenSelectedMirrorChanges() async throws {
     let first = try Fixture()
     defer { first.close() }

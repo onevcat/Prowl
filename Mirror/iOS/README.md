@@ -9,7 +9,7 @@ alongside the old app and does not automatically migrate its saved connections.
 ## Flow
 
 Use a Prowl Host built from the same revision (or a matching Prowl release), with
-`PROWL_REMOTE_MIRROR=1` on Mac. Upgrade both ends together: legacy protocol negotiation, 64-character keys,
+**Settings → Remote Mirror → Enable Remote Mirror** turned on in the Mac app. Upgrade both ends together: legacy protocol negotiation, 64-character keys,
 and mirror-private submission/state messages have been removed.
 
 The app has three levels (docs-ai 088):

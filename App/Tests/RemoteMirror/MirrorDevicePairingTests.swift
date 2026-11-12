@@ -9,6 +9,29 @@ import Testing
 
 @MainActor
 struct MirrorDevicePairingTests {
+  @Test func pairedDevicePlatformIsOptionalAndIgnoresUnknownValues() throws {
+    let device = MirrorPairedDevice(
+      id: UUID(), name: "Phone", key: Data(repeating: 1, count: 32), pairedAt: Date(), platform: .iOS)
+    let data = try JSONEncoder().encode(device)
+    #expect(try JSONDecoder().decode(MirrorPairedDevice.self, from: data) == device)
+    var dictionary = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    dictionary["platform"] = "visionos"
+    let unknown = try JSONSerialization.data(withJSONObject: dictionary)
+    #expect(try JSONDecoder().decode(MirrorPairedDevice.self, from: unknown).platform == nil)
+    dictionary.removeValue(forKey: "platform")
+    let older = try JSONSerialization.data(withJSONObject: dictionary)
+    let decoded = try JSONDecoder().decode(MirrorPairedDevice.self, from: older)
+    #expect(decoded.platform == nil)
+    #expect(decoded.name == "Phone")
+  }
+
+  @Test func pairRequestWithoutPlatformStillDecodes() throws {
+    let json = Data(#"{"name":"Pixel","proof":"AQID"}"#.utf8)
+    let request = try JSONDecoder().decode(MirrorMessage.PairRequest.self, from: json)
+    #expect(request.platform == nil)
+    #expect(request.name == "Pixel")
+  }
+
   @Test(.timeLimit(.minutes(1))) func pairingPersistsReconnectsAndRevokesOnlyItsDevice()
     async throws
   {
@@ -35,6 +58,7 @@ struct MirrorDevicePairingTests {
     defer { first.peer.close() }
     try await first.start(stage: "first pairing")
     #expect(host.devices.count == 1)
+    #expect(host.devices.first?.platform == .macOS)
     #expect(host.lastPairedDevice?.id == host.devices.first?.id)
     #expect(host.pairingKey.isEmpty)
     #expect(first.saved?.pairingKey.isEmpty == true)

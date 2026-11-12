@@ -249,6 +249,27 @@ struct AppFeatureSettingsSelectionTests {
     #expect(shown.value)
   }
 
+  @Test(.dependencies) func openRemoteMirrorSettingsSelectsRemoteMirror() async {
+    let shown = LockIsolated(false)
+    var state = AppFeature.State(settings: SettingsFeature.State())
+    state.settings.selection = .commandLineTool
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.settingsWindowClient.show = {
+        shown.withValue { $0 = true }
+      }
+    }
+
+    await store.send(.openRemoteMirrorSettings)
+    await store.receive(\.settings.setSelection) {
+      $0.settings.selection = .remoteMirror
+    }
+    await store.finish()
+
+    #expect(shown.value)
+  }
+
   @Test(.dependencies) func settingsWorkflowStartKeepsItsWindowAndReturnsToItsDetail() async throws {
     let root = URL(filePath: "/tmp/settings-run")
     let worktree = Worktree(

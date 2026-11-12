@@ -5,13 +5,6 @@ import Testing
 
 @MainActor
 struct FeatureFlagsTests {
-  @Test func remoteMirrorRequiresExplicitOptIn() {
-    for environment in [[:], ["PROWL_REMOTE_MIRROR": "0"], ["PROWL_REMOTE_MIRROR": "true"]] {
-      #expect(!FeatureFlags(environment: environment).remoteMirror)
-    }
-    #expect(FeatureFlags(environment: ["PROWL_REMOTE_MIRROR": "1"]).remoteMirror)
-  }
-
   @Test func workflowUIIsEnabledByDefaultAndCanBeDisabled() {
 
     #expect(FeatureFlags(environment: [:]).workflowUI)

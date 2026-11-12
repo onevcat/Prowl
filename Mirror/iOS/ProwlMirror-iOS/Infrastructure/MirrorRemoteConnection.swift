@@ -140,7 +140,8 @@ final class MirrorRemoteConnection: MirrorTransport {
                 name: name,
                 proof: MirrorAuthentication.proof(
                   key: Data(code.utf8), host: value.hostID,
-                  nonce: value.nonce, purpose: "pair", identity: name))))
+                  nonce: value.nonce, purpose: "pair", identity: name),
+                platform: UIDevice.current.userInterfaceIdiom == .pad ? "ipados" : "ios")))
         }
       case .paired(let credential):
         guard configuration.credential == nil, credential.hostID == challenge?.hostID,
