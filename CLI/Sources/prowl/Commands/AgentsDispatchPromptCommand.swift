@@ -96,4 +96,4 @@ struct AgentsDispatchCommand: ParsableCommand {
   }
 }
 
-extension AgentDraftPolicy: ExpressibleByArgument {}
+extension AgentDraftPolicy: @retroactive ExpressibleByArgument {}
