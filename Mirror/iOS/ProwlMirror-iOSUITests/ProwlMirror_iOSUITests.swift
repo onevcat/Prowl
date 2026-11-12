@@ -774,6 +774,25 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(assistant.waitForExistence(timeout: 10))
   }
 
+  /// A blocked agent whose prompt the Host did not read as a menu: Chat offers the terminal
+  /// screen, where the key bar answers it.
+  @MainActor
+  func testBlockedChatWithoutAPromptPanelLeadsToTheTerminalKeys() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-conversation-fixture", "claude", "--mirror-ui-blocked-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let answer = app.buttons["pane-blocked-terminal"]
+    XCTAssertTrue(answer.waitForExistence(timeout: 10))
+    XCTAssertEqual(app.staticTexts["pane-blocked-text"].label, "Blocked · Waiting for a permission decision")
+    attach("Blocked in Chat")
+    answer.tap()
+    XCTAssertTrue(app.buttons["key-enter"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["pane-blocked-text"].exists)
+    XCTAssertFalse(answer.exists)
+    attach("Blocked in Terminal")
+  }
+
   @MainActor
   func testOnboardingLeadsToPairing() {
     let app = XCUIApplication()
