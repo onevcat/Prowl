@@ -78,6 +78,7 @@ struct SettingsFeature {
     var ghosttyConfigPath: String?
     var remoteAgentDetection: RemoteAgentDetectionConsent
     var remoteMirrorEnabled: Bool
+    var remoteMirrorStartsHostOnLaunch: Bool
     var externalDiffCustomCommand: String
     var detectRepositoryIconsAutomatically: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
@@ -163,6 +164,7 @@ struct SettingsFeature {
       ghosttyConfigPath = settings.ghosttyConfigPath
       remoteAgentDetection = settings.remoteAgentDetection
       remoteMirrorEnabled = settings.remoteMirrorEnabled
+      remoteMirrorStartsHostOnLaunch = settings.remoteMirrorStartsHostOnLaunch
     }
 
     var displayedArchivedAutoDeletePeriod: AutoDeletePeriod? {
@@ -239,6 +241,7 @@ struct SettingsFeature {
       settings.ghosttyConfigPath = ghosttyConfigPath
       settings.remoteAgentDetection = remoteAgentDetection
       settings.remoteMirrorEnabled = remoteMirrorEnabled
+      settings.remoteMirrorStartsHostOnLaunch = remoteMirrorStartsHostOnLaunch
       return settings
     }
   }
@@ -402,6 +405,7 @@ struct SettingsFeature {
         state.ghosttyConfigPath = normalizedSettings.ghosttyConfigPath
         state.remoteAgentDetection = normalizedSettings.remoteAgentDetection
         state.remoteMirrorEnabled = normalizedSettings.remoteMirrorEnabled
+        state.remoteMirrorStartsHostOnLaunch = normalizedSettings.remoteMirrorStartsHostOnLaunch
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 

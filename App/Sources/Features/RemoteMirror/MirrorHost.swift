@@ -135,6 +135,18 @@ final class MirrorHost {
     }
   }
 
+  /// Reads the paired devices for Settings before the first start. It creates no identity.
+  func loadDevicesIfNeeded() {
+    guard enabled(), identity == nil else { return }
+    do {
+      guard let saved = try loadIdentity() else { return }
+      identity = saved
+      devices = saved.devices
+    } catch {
+      ProwlLogger("RemoteMirror").warning("Host device list is unavailable: \(error)")
+    }
+  }
+
   func revoke(_ deviceID: UUID) {
     guard var next = identity else { return }
     next.devices.removeAll { $0.id == deviceID }
@@ -148,7 +160,8 @@ final class MirrorHost {
       for (peerID, owner) in devicePeers where owner == deviceID {
         peers[peerID]?.close("Device access was revoked.")
       }
-      try rebuildListener()
+      // A stopped listener stays stopped; the next start reads the saved devices.
+      if isRunning || isStarting { try rebuildListener() }
     } catch {
       ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
       self.error = error.localizedDescription

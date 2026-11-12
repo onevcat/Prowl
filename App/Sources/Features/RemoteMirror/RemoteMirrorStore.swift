@@ -15,6 +15,9 @@ final class RemoteMirrorStore {
   @ObservationIgnored @Shared(.settingsFile) private var settingsFile
   @ObservationIgnored private var settingsObservation: AnyCancellable?
 
+  /// Opens Settings on the Remote Mirror section; the app sets it.
+  @ObservationIgnored var openSettings: (() -> Void)?
+
   /// The alpha switch in Settings (docs-ai 091). The Mirror UI and the listener follow it.
   var isEnabled: Bool { settingsFile.global.remoteMirrorEnabled }
 
@@ -34,6 +37,12 @@ final class RemoteMirrorStore {
           self.disconnectAll()
         }
       }
+  }
+
+  /// Starts the listener at launch when the user asked for it in Settings.
+  func startHostOnLaunchIfNeeded() {
+    guard isEnabled, settingsFile.global.remoteMirrorStartsHostOnLaunch else { return }
+    host.start()
   }
 
   /// The sidebar's project names, colors and order for the pane roster (docs-ai 089).

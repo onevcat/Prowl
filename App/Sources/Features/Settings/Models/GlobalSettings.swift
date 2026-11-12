@@ -56,6 +56,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   /// The alpha switch of Remote Mirror (docs-ai 091). While it is off, the Mirror UI is hidden
   /// and the listener cannot start.
   var remoteMirrorEnabled: Bool = false
+  /// Start the Mirror listener when the app opens. It has an effect only while the switch is on.
+  var remoteMirrorStartsHostOnLaunch: Bool = false
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -259,6 +261,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encodeIfPresent(ghosttyConfigPath, forKey: .ghosttyConfigPath)
     try container.encode(remoteAgentDetection, forKey: .remoteAgentDetection)
     try container.encode(remoteMirrorEnabled, forKey: .remoteMirrorEnabled)
+    try container.encode(remoteMirrorStartsHostOnLaunch, forKey: .remoteMirrorStartsHostOnLaunch)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -317,6 +320,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case ghosttyConfigPath
     case remoteAgentDetection
     case remoteMirrorEnabled
+    case remoteMirrorStartsHostOnLaunch
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
@@ -417,6 +421,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       ?? true
     remoteAgentDetection = try Self.decodeRemoteAgentDetection(from: container)
     remoteMirrorEnabled = try container.decodeIfPresent(Bool.self, forKey: .remoteMirrorEnabled) ?? false
+    remoteMirrorStartsHostOnLaunch =
+      try container.decodeIfPresent(Bool.self, forKey: .remoteMirrorStartsHostOnLaunch) ?? false
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
     showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar

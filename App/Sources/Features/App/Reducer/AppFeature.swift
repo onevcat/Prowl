@@ -86,6 +86,7 @@ struct AppFeature {
     case launchAgentProfile(AgentProfile.ID)
     case openAgentProfilesSettings
     case openAgentDisplaySettings
+    case openRemoteMirrorSettings
     case remoteAgentConsent(RemoteAgentConsentChoice)
     case openWorkflowSettings
     case openWorkflowDetails(WorkflowStartCatalogItem, worktreeID: Worktree.ID)
@@ -885,6 +886,9 @@ struct AppFeature {
 
       case .openAgentDisplaySettings:
         return openSettingsEffect(selecting: .agentDisplay)
+
+      case .openRemoteMirrorSettings:
+        return openSettingsEffect(selecting: .remoteMirror)
 
       case .remoteAgentConsent(let choice):
         return reduceRemoteAgentConsent(choice, state: &state)

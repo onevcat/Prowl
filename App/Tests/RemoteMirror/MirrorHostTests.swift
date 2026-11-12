@@ -38,6 +38,35 @@ struct MirrorHostTests {
     #expect(host.error != nil)
   }
 
+  @Test func devicesLoadForSettingsWithoutAStartAndRevokeKeepsTheListenerStopped() {
+    var saved: MirrorHostIdentity? = Self.identity
+    let host = MirrorHost(
+      source: Source(), enabled: true,
+      loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices == Self.identity.devices)
+    #expect(host.hostRunID == nil)
+    host.revoke(Self.identity.devices[0].id)
+    #expect(host.devices.isEmpty)
+    #expect(saved?.devices.isEmpty == true)
+    #expect(!host.isStarting)
+    #expect(!host.isRunning)
+    #expect(host.error == nil)
+  }
+
+  @Test func devicesStayUnreadWhileTheSwitchIsOff() {
+    var loads = 0
+    let host = MirrorHost(
+      source: Source(), enabled: false,
+      loadIdentity: {
+        loads += 1
+        return Self.identity
+      }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(loads == 0)
+    #expect(host.devices.isEmpty)
+  }
+
   @Test func initialHostStartDoesNotRetryIdentityFailure() async {
     enum Failure: Error { case unavailable }
     var attempts = 0

@@ -322,6 +322,8 @@ struct ProwlApp: App {
       ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: appStore.state.repositories)
         .filter { $0.host == nil }.map(\.listWorktree)
     }
+    mirrors.openSettings = { appStore.send(.openRemoteMirrorSettings) }
+    mirrors.startHostOnLaunchIfNeeded()
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -1884,6 +1886,7 @@ struct ProwlApp: App {
     }
     Window("Settings", id: WindowID.settings) {
       SettingsView(store: store)
+        .environment(remoteMirror)
         .environment(ghosttyShortcuts)
         .environment(commandKeyObserver)
         .environment(\.resolvedKeybindings, store.resolvedKeybindings)
