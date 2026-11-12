@@ -54,6 +54,53 @@ struct MirrorHostTests {
     #expect(host.error == nil)
   }
 
+  @Test func endpointEditedWhileStoppedIsRestoredWithoutAStart() throws {
+    let suite = "MirrorEndpointTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let first = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(first.address == "0.0.0.0")
+    first.address = "127.0.0.1"
+    first.port = "7999"
+    let second = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(second.address == "127.0.0.1")
+    #expect(second.port == "7999")
+    // A value that cannot start a listener does not replace the saved one.
+    second.port = "port"
+    second.address = "not an address"
+    let third = MirrorHost(source: Source(), defaults: defaults, enabled: true)
+    #expect(third.address == "127.0.0.1")
+    #expect(third.port == "7999")
+  }
+
+  @Test func failedDeviceReadIsReportedAndCanBeRetriedWithoutAStart() {
+    enum Failure: Error { case locked }
+    var attempts = 0
+    let host = MirrorHost(
+      source: Source(), enabled: true,
+      loadIdentity: {
+        attempts += 1
+        if attempts == 1 { throw Failure.locked }
+        return Self.identity
+      }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices.isEmpty)
+    #expect(host.deviceListError != nil)
+    #expect(host.hostRunID == nil)
+    host.loadDevicesIfNeeded()
+    #expect(host.devices == Self.identity.devices)
+    #expect(host.deviceListError == nil)
+    #expect(host.hostRunID == nil)
+    #expect(!host.isStarting)
+  }
+
+  @Test func missingIdentityIsAnEmptyDeviceListNotAFailure() {
+    let host = MirrorHost(source: Source(), enabled: true, loadIdentity: { nil }, saveIdentity: { _ in })
+    host.loadDevicesIfNeeded()
+    #expect(host.devices.isEmpty)
+    #expect(host.deviceListError == nil)
+  }
+
   @Test func devicesStayUnreadWhileTheSwitchIsOff() {
     var loads = 0
     let host = MirrorHost(

@@ -111,7 +111,16 @@ struct RemoteMirrorSettingsView: View {
   private var devicesSection: some View {
     let host = mirrors.host
     return Section {
-      if host.devices.isEmpty {
+      if let failure = host.deviceListError {
+        // A failed read is not an empty list: saved devices can still have access.
+        HStack {
+          Text(failure).foregroundStyle(.red).textSelection(.enabled)
+          Spacer()
+          Button("Try Again") { host.loadDevicesIfNeeded() }
+            .help("Read the paired devices from secure storage again")
+            .accessibilityIdentifier("remote-mirror-retry-device-list")
+        }
+      } else if host.devices.isEmpty {
         Text("No paired devices.").foregroundStyle(.secondary)
       }
       ForEach(host.devices) { device in

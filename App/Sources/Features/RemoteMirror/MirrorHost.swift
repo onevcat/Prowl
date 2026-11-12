@@ -16,8 +16,20 @@ final class MirrorHost {
     didSet { updateDeviceActivity() }
   }
   private var devicePaneIDs: [UUID: Set<UUID>] = [:]
-  var address: String
-  var port: String
+  /// Saved at each valid edit, so that a start at launch uses the endpoint shown in Settings
+  /// and never a wider one from an earlier session (docs-ai 091).
+  var address: String {
+    didSet {
+      guard address != oldValue, IPv4Address(address) != nil || IPv6Address(address) != nil else { return }
+      defaults.set(address, forKey: "remoteMirrorHostAddress")
+    }
+  }
+  var port: String {
+    didSet {
+      guard port != oldValue, let number = UInt16(port), number > 0 else { return }
+      defaults.set(port, forKey: "remoteMirrorHostPort")
+    }
+  }
   @ObservationIgnored var commandService: MirrorCommandService?
   @ObservationIgnored private var commandPeers: [UUID: MirrorCommandRequest] = [:]
   @ObservationIgnored private var commandDevices: [UUID: UUID] = [:]
@@ -46,6 +58,8 @@ final class MirrorHost {
 
   private(set) var onlineDeviceIDs: Set<UUID> = []
   private(set) var devices: [MirrorPairedDevice] = []
+  /// Set when the saved devices could not be read; an empty `devices` is then not a result.
+  private(set) var deviceListError: String?
   /// The device that completed the current pairing window; cleared when a new code is issued.
   private(set) var lastPairedDevice: MirrorPairedDevice?
   private(set) var pairingExpiresAt: Date?
@@ -139,11 +153,14 @@ final class MirrorHost {
   func loadDevicesIfNeeded() {
     guard enabled(), identity == nil else { return }
     do {
-      guard let saved = try loadIdentity() else { return }
+      let saved = try loadIdentity()
+      deviceListError = nil
+      guard let saved else { return }
       identity = saved
       devices = saved.devices
     } catch {
       ProwlLogger("RemoteMirror").warning("Host device list is unavailable: \(error)")
+      deviceListError = String(localized: "Cannot read the paired devices: \(error.localizedDescription)")
     }
   }
 
@@ -264,6 +281,7 @@ final class MirrorHost {
       try saveIdentity(saved)
       identity = saved
       devices = saved.devices
+      deviceListError = nil
       hostRunID = UUID()
       isStarting = true
       try rebuildListener()

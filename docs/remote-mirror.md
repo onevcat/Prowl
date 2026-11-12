@@ -24,7 +24,9 @@ With the switch on, the Settings section has two groups, named by direction:
 
 **Listen on** offers all interfaces (`0.0.0.0`), each of this Mac's IPv4 interfaces by
 name, and this Mac only (`127.0.0.1`); a value saved from an earlier version appears as
-**Custom**. The address and the port can change only while the listener is stopped.
+**Custom**. The address and the port can change only while the listener is stopped. A
+valid edit is saved at once, so a start at launch uses the address and port that Settings
+shows.
 
 The **Remote Mirror** network button in the toolbar opens a small panel for the frequent
 actions: hover to preview, or click to keep it open. It shows the listener status,
@@ -81,6 +83,8 @@ goes to the background, an open pane closes its mirror so the Host frees the pan
 app comes back, the pane connects again by itself and a message still in flight is checked
 with its receipt.
 
+If the saved devices cannot be read (for example, the keychain is locked), **Paired
+Devices** shows the failure and **Try Again** in place of an empty list.
 **Paired Devices** in Settings lists paired devices, also before the listener starts, with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
 plus mirrored pane names and **Revoke**, which asks for confirmation. Each active

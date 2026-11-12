@@ -119,3 +119,4 @@ the device list shows an iPhone or Mac icon; a record without it shows a generic
 - Updated 2026-11-13: slice 1, the alpha switch — see [002-slice-1-alpha-switch.md](002-slice-1-alpha-switch.md)
 - Updated 2026-11-13: slice 2, Settings groups and the reduced panel — see [003-slice-2-settings-groups.md](003-slice-2-settings-groups.md)
 - Updated 2026-11-13: slice 3, pairing pages and the device platform; slice 4 folded into the slices — see [004-slice-3-pairing-pages-and-platform.md](004-slice-3-pairing-pages-and-platform.md)
+- Updated 2026-11-13: fixes from the review loop and the end-to-end pass — see [005-review-fixes.md](005-review-fixes.md)
