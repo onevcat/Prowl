@@ -8,12 +8,58 @@ nonisolated struct MirrorDeviceCredential: Codable, Equatable, Sendable {
   let key: Data
 }
 
+/// The kind of a paired device, for its icon in the device list. The device reports it at
+/// pairing; a record from an earlier version has none.
+nonisolated enum MirrorDevicePlatform: String, Codable, Sendable {
+  case iOS = "ios"
+  case iPadOS = "ipados"
+  case macOS = "macos"
+  case android
+
+  var symbolName: String {
+    switch self {
+    case .iOS: "iphone"
+    case .iPadOS: "ipad"
+    case .macOS: "laptopcomputer"
+    case .android: "smartphone"
+    }
+  }
+
+  /// The symbol for a device that reported no platform.
+  static let unknownSymbolName = "macbook.and.iphone"
+}
+
 nonisolated struct MirrorPairedDevice: Codable, Identifiable, Equatable, Sendable {
   let id: UUID
   let name: String
   let key: Data
   let pairedAt: Date
   var lastSeen: Date?
+  var platform: MirrorDevicePlatform?
+
+  init(
+    id: UUID, name: String, key: Data, pairedAt: Date, lastSeen: Date? = nil,
+    platform: MirrorDevicePlatform? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.key = key
+    self.pairedAt = pairedAt
+    self.lastSeen = lastSeen
+    self.platform = platform
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    key = try container.decode(Data.self, forKey: .key)
+    pairedAt = try container.decode(Date.self, forKey: .pairedAt)
+    lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen)
+    // An unknown value must not make the whole identity unreadable.
+    platform = try container.decodeIfPresent(String.self, forKey: .platform)
+      .flatMap(MirrorDevicePlatform.init(rawValue:))
+  }
 }
 
 nonisolated struct MirrorHostIdentity: Codable {

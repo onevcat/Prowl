@@ -10,6 +10,12 @@ struct MirrorPairingView: View {
   @State private var copyError: String?
   @State private var interfaces: [MirrorNetworkInterface] = []
   @State private var dismissTask: Task<Void, Never>?
+  @State private var kind: DeviceKind = .iPhone
+
+  /// The device to pair. Each page shows the one step for that device (docs-ai 091).
+  private enum DeviceKind: Hashable {
+    case iPhone, mac
+  }
 
   private var reachable: [MirrorNetworkInterface] {
     MirrorHostAddresses.reachable(listenAddress: host.address, interfaces: interfaces)
@@ -29,17 +35,31 @@ struct MirrorPairingView: View {
         Text("The device can now connect to this Mac and select a pane.").foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       } else {
+        Picker("Device to pair", selection: $kind) {
+          Text("iPhone").tag(DeviceKind.iPhone)
+          Text("Mac").tag(DeviceKind.mac)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .help("Choose the device that you want to pair with this Mac")
+        .accessibilityIdentifier("remote-mirror-pairing-device-kind")
         // Sheets propose no height; without fixedSize multi-line text collapses to one truncated line.
-        Text(
-          """
-          On an iPhone, scan the QR code in Prowl Mirror. On another Mac, open Settings → Remote Mirror → \
-          Connect to Another Mac, then paste the connection details into any connection field.
-          """
-        )
+        Group {
+          switch kind {
+          case .iPhone:
+            Text("On the iPhone, open Prowl Mirror, tap Scan QR Code, and point the camera at this code.")
+          case .mac:
+            Text(
+              """
+              On the other Mac, open Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…, \
+              then paste the connection details into any field.
+              """)
+          }
+        }
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         code
-        pairingQR
+        connection
       }
       if let error = copyError ?? host.error {
         Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
@@ -92,7 +112,7 @@ struct MirrorPairingView: View {
     }
   }
 
-  private var pairingQR: some View {
+  private var connection: some View {
     let choices = reachable.filter { !$0.isLoopback && $0.address != "::1" }
     let selected = pairingAddress
     return VStack(spacing: 8) {
@@ -103,19 +123,21 @@ struct MirrorPairingView: View {
               Text("\(item.label): \(item.address)").tag(item.address)
             }
           }
-          .help("Choose the Wi-Fi or VPN address reachable from your Mirror device")
+          .help("Choose the Wi-Fi or VPN address that the other device can reach")
         }
         Text("\(selected):\(host.port)").font(.body.monospaced()).textSelection(.enabled)
-        Button(copied ? "Copied" : "Copy Connection Details", systemImage: copied ? "checkmark" : "doc.on.doc") {
-          copyConnectionDetails()
+        switch kind {
+        case .iPhone:
+          MirrorPairingQRCode(
+            address: selected, port: host.port, code: host.pairingKey, expires: expires)
+        case .mac:
+          Button(copied ? "Copied" : "Copy Connection Details", systemImage: copied ? "checkmark" : "doc.on.doc") {
+            copyConnectionDetails()
+          }
+          .keyboardShortcut("c", modifiers: .command)
+          .help("Copy the address, port and pairing code together (⌘C)")
+          .accessibilityIdentifier("remote-mirror-copy-connection")
         }
-        .keyboardShortcut("c", modifiers: .command)
-        .help("Copy the address, port and pairing code together (⌘C)")
-        .accessibilityIdentifier("remote-mirror-copy-connection")
-        MirrorPairingQRCode(
-          address: selected, port: host.port, code: host.pairingKey, expires: expires)
-        Text("In Prowl Mirror on your phone, tap Scan QR Code.")
-          .font(.caption).foregroundStyle(.secondary)
       } else if selected == nil {
         Text("No network address is available for pairing. Listen on a Wi-Fi or VPN interface.")
           .font(.caption).foregroundStyle(.secondary)

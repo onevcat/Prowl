@@ -35,9 +35,11 @@ A listener is reachable from the local network or a VPN; the internet cannot rea
 it unless a router forwards the port. Without a paired device key or a live pairing
 code, a connection fails during the TLS handshake.
 
-**Add a Device** opens a modal pairing sheet with a 60-second code, a reachable
-Wi-Fi or VPN address and port, and a QR code. **Copy Connection Details** (⌘C)
-copies the address, port, code, and expiry together. When multiple addresses are
+**Add a Device** opens a modal pairing sheet with a 60-second code and a reachable
+Wi-Fi or VPN address and port. A control at the top selects the device to pair: the
+**iPhone** page shows a QR code to scan in Prowl Mirror; the **Mac** page shows
+**Copy Connection Details** (⌘C), which copies the address, port, code, and expiry
+together. When multiple addresses are
 available, choose **Connection address** first. If the listener is restarting, the sheet waits before generating
 its first code; if the listener is off, the sheet offers **Start Listening**. **Refresh Code**
 replaces the code; **Cancel** invalidates an unused code without stopping Host or
@@ -88,6 +90,8 @@ confirmation, then disconnects only that mirror. The terminal keeps running,
 other mirrors remain connected, and the device stays paired and can reconnect.
 If that connection has already ended or been replaced, confirmation does nothing. A device
 browsing panes can be connected with zero mirrors.
+Each device shows an iPhone, iPad or Mac icon from the platform that it reported at pairing;
+a device paired by an earlier version shows a generic icon until it pairs again.
 Device labels use the Mac local host name or the iOS system device name; pairing
 does not resolve a DNS name to obtain this label.
 

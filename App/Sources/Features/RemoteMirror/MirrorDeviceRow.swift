@@ -18,6 +18,10 @@ struct MirrorDeviceRow: View {
     let panes = host.mirroredPanes(for: device.id)
     VStack(alignment: .leading, spacing: 4) {
       HStack(alignment: .top) {
+        Image(systemName: device.platform?.symbolName ?? MirrorDevicePlatform.unknownSymbolName)
+          .foregroundStyle(.secondary)
+          .frame(width: 22)
+          .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 4) {
           Text(device.name).lineLimit(1)
           Text(status(mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)

@@ -47,6 +47,10 @@ hostID and a fresh 32-byte nonce. Device proves its secret using HMAC-SHA256 ove
 UTF-8 `device:HOST_UUID:DEVICE_UUID:` followed by nonce bytes. Enrollment proves the
 code over `pair:HOST_UUID:DEVICE_NAME:` plus nonce. UUID strings use the Foundation
 uppercase canonical spelling. Proofs are Base64 Data fields in control JSON.
+The `pair` control can carry an optional `platform` string (`ios`, `ipados`, `macos`,
+`android`). It is a display hint for the Host's device list and is not part of the proof.
+The Host stores a value that it knows and ignores any other value; a client that sends
+none shows with a generic icon.
 Different purpose, Host, identity or nonce cannot reuse a proof.
 
 Before proof validation only authentication/enrollment and connection heartbeats

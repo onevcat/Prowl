@@ -519,7 +519,8 @@ final class MirrorHost {
         }
         let device = MirrorPairedDevice(
           id: UUID(), name: request.name,
-          key: try MirrorAuthentication.randomKey(), pairedAt: Date())
+          key: try MirrorAuthentication.randomKey(), pairedAt: Date(),
+          platform: request.platform.flatMap(MirrorDevicePlatform.init(rawValue:)))
         identity.devices.append(device)
         try saveIdentity(identity)
         self.identity = identity
