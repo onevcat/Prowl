@@ -693,7 +693,7 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }
 
-  @Test(.dependencies) func rapidLeftSidebarTogglesKeepAlternating() async {
+  @Test(.dependencies) func rapidLeftSidebarToggleActionsKeepReducerStateAlternating() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
@@ -710,7 +710,7 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
   }
 
-  @Test(.dependencies) func leftSidebarVisibilityWriteBackDoesNotBreakToggle() async {
+  @Test(.dependencies) func leftSidebarVisibilitySetThenToggleKeepsReducerState() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
@@ -724,15 +724,6 @@ struct AppFeatureCommandPaletteTests {
     await store.send(.showLeftSidebar) {
       $0.leftSidebarVisibility = .all
     }
-    await store.finish()
-  }
-
-  @Test(.dependencies) func setLeftSidebarVisibilityIgnoresNoOpWriteBack() async {
-    let store = TestStore(initialState: AppFeature.State()) {
-      AppFeature()
-    }
-
-    await store.send(.setLeftSidebarVisibility(.all))
     await store.finish()
   }
 

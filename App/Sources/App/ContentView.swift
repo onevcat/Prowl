@@ -16,14 +16,15 @@ struct ContentView: View {
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
-  @State private var columnVisibility: NavigationSplitViewVisibility = .all
-  @State private var isApplyingStoreVisibility = false
-  @State private var storeVisibilitySyncTask: Task<Void, Never>?
+  // Keep this binding local. Binding it to the store lets SwiftUI's transition
+  // write-backs feed back into the store and loop.
+  @State private var columnVisibility: NavigationSplitViewVisibility
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
     repositoriesStore = store.scope(state: \.repositories, action: \.repositories)
     self.terminalManager = terminalManager
+    _columnVisibility = State(initialValue: store.leftSidebarVisibility)
   }
 
   var body: some View {
@@ -61,9 +62,6 @@ struct ContentView: View {
       }
     }
     .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
-    .onAppear {
-      columnVisibility = store.leftSidebarVisibility
-    }
     .onChange(of: store.leftSidebarVisibility) { _, newValue in
       applyStoreVisibility(newValue)
     }
@@ -294,20 +292,12 @@ struct ContentView: View {
   }
 
   private func applyStoreVisibility(_ newValue: NavigationSplitViewVisibility) {
-    storeVisibilitySyncTask?.cancel()
-    isApplyingStoreVisibility = true
     withAnimation(.easeOut(duration: 0.2)) {
       columnVisibility = newValue
-    }
-    storeVisibilitySyncTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(250))
-      guard !Task.isCancelled else { return }
-      isApplyingStoreVisibility = false
     }
   }
 
   private func sendLocalVisibility(_ newValue: NavigationSplitViewVisibility) {
-    guard !isApplyingStoreVisibility else { return }
     guard newValue != store.leftSidebarVisibility else { return }
     store.send(.setLeftSidebarVisibility(newValue))
   }

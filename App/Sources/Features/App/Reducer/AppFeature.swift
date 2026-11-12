@@ -852,7 +852,6 @@ struct AppFeature {
         return .none
 
       case .setLeftSidebarVisibility(let visibility):
-        guard visibility != state.leftSidebarVisibility else { return .none }
         state.leftSidebarVisibility = visibility
         return .none
 
