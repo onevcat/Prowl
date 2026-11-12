@@ -23,7 +23,7 @@ final class MirrorHost {
   @ObservationIgnored private var commandDevices: [UUID: UUID] = [:]
   var onStarted: (() -> Void)?
   var onStopped: (() -> Void)?
-  @ObservationIgnored private let enabled: Bool
+  @ObservationIgnored private let enabled: () -> Bool
   @ObservationIgnored private let source: any MirrorPaneSource
   @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private var listener: NWListener?
@@ -216,7 +216,8 @@ final class MirrorHost {
   }
 
   init(
-    source: any MirrorPaneSource, defaults: UserDefaults = .standard, enabled: Bool,
+    source: any MirrorPaneSource, defaults: UserDefaults = .standard,
+    enabled: @autoclosure @escaping () -> Bool,
     clock: any Clock<Duration> = ContinuousClock(),
     loadIdentity: @escaping () throws -> MirrorHostIdentity? = {
       try MirrorCredentialVault.load(MirrorHostIdentity.self, account: "host")
@@ -236,8 +237,8 @@ final class MirrorHost {
   }
 
   func start() {
-    // Code security: hidden experimental UI must not leave a reachable listener.
-    guard enabled, !isStarting, !isRunning, listener == nil else { return }
+    // Code security: hidden Mirror UI must not leave a reachable listener.
+    guard enabled(), !isStarting, !isRunning, listener == nil else { return }
     error = nil
     guard let portNumber = UInt16(port), portNumber > 0,
       IPv4Address(address) != nil || IPv6Address(address) != nil

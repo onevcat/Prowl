@@ -1,4 +1,4 @@
-# Remote Mirror (experimental)
+# Remote Mirror (alpha)
 
 Two Prowl apps can view and control the same Host terminal. The Host keyboard stays
 available. Each pane has one remote owner. Explicit **Take Over** replaces that
@@ -8,8 +8,10 @@ it after the list was read; use the explicit **Take Over** action.
 
 ## Enable and pair
 
-Launch the Mac App with `PROWL_REMOTE_MIRROR=1`. The experiment is hidden and cannot
-start a listener otherwise. Hover over the **Remote Mirror** network button to
+Open **Settings → Remote Mirror** and turn on **Enable Remote Mirror**. The switch is off
+by default. While it is off, the Remote Mirror button and the sidebar section are hidden
+and the Host cannot start a listener; turning it off stops the Host and closes all mirrors
+opened from this Mac. Hover over the **Remote Mirror** network button to
 preview, or click to keep it open. Under **Host**, pick **Listen on** and a port,
 then **Start Host**. The picker offers all interfaces (`0.0.0.0`), each of this
 Mac's IPv4 interfaces by name, and this Mac only (`127.0.0.1`); a value saved

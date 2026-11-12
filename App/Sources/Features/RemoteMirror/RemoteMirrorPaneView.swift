@@ -4,10 +4,8 @@ import SwiftUI
 struct RemoteMirrorSidebar: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
 
-  @Dependency(FeatureFlags.self) private var featureFlags
-
   var body: some View {
-    if featureFlags.remoteMirror && !mirrors.clients.isEmpty {
+    if mirrors.isEnabled && !mirrors.clients.isEmpty {
       VStack(alignment: .leading, spacing: 6) {
         Text("Remote Mirrors").font(.caption.bold()).foregroundStyle(.secondary)
         ForEach(mirrors.clients) { client in

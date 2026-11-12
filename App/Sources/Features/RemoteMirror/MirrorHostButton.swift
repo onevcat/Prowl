@@ -4,7 +4,6 @@ import SwiftUI
 struct MirrorHostButton: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
   @Environment(ToolbarPopoverCoordinator.self) private var popovers
-  @Dependency(FeatureFlags.self) private var featureFlags
   @State private var sheet: MirrorSheet?
   @State private var connectionToOpen: MirrorKnownHost?
 
@@ -25,7 +24,7 @@ struct MirrorHostButton: View {
   }
 
   var body: some View {
-    if featureFlags.remoteMirror {
+    if mirrors.isEnabled {
       let isPresented = popovers.presented == .mirror
       Button {
         popovers.toggle(.mirror)

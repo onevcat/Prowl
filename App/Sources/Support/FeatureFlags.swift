@@ -1,13 +1,11 @@
 import ComposableArchitecture
 import Foundation
 
-/// Process-scoped switches. Experimental mirror services are disabled with their UI.
+/// Process-scoped switches.
 nonisolated struct FeatureFlags: Equatable, Sendable {
   let workflowUI: Bool
-  let remoteMirror: Bool
 
   init(environment: [String: String]) {
-    remoteMirror = environment["PROWL_REMOTE_MIRROR"] == "1"
     workflowUI = environment["PROWL_WORKFLOW_UI"].map { $0 == "1" } ?? true
   }
 
@@ -19,9 +17,7 @@ nonisolated struct FeatureFlags: Equatable, Sendable {
 extension FeatureFlags: DependencyKey {
   static let liveValue = FeatureFlags(environment: ProcessInfo.processInfo.environment)
   // Workflow feature tests exercise the default UI; switch tests inject off.
-  static let testValue = FeatureFlags(environment: [
-    "PROWL_WORKFLOW_UI": "1", "PROWL_REMOTE_MIRROR": "1",
-  ])
+  static let testValue = FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "1"])
 }
 
 extension DependencyValues {

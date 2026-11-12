@@ -18,6 +18,26 @@ struct MirrorHostTests {
     #expect(host.hostRunID == nil)
   }
 
+  @Test func hostReadsTheSwitchAtEachStart() {
+    enum Failure: Error { case unavailable }
+    var enabled = false
+    var attempts = 0
+    // The identity load fails, so that an allowed start opens no listener.
+    let host = MirrorHost(
+      source: Source(), enabled: enabled,
+      loadIdentity: {
+        attempts += 1
+        throw Failure.unavailable
+      }, saveIdentity: { _ in })
+    host.start()
+    #expect(attempts == 0)
+    #expect(host.error == nil)
+    enabled = true
+    host.start()
+    #expect(attempts == 1)
+    #expect(host.error != nil)
+  }
+
   @Test func initialHostStartDoesNotRetryIdentityFailure() async {
     enum Failure: Error { case unavailable }
     var attempts = 0

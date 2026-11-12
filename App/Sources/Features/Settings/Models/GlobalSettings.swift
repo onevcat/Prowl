@@ -53,6 +53,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var ghosttyConfigPath: String?
   /// Whether Prowl may open its own SSH connection to detect remote agents (docs-ai 082).
   var remoteAgentDetection: RemoteAgentDetectionConsent = .undecided
+  /// The alpha switch of Remote Mirror (docs-ai 091). While it is off, the Mirror UI is hidden
+  /// and the listener cannot start.
+  var remoteMirrorEnabled: Bool = false
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -255,6 +258,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
     try container.encodeIfPresent(ghosttyConfigPath, forKey: .ghosttyConfigPath)
     try container.encode(remoteAgentDetection, forKey: .remoteAgentDetection)
+    try container.encode(remoteMirrorEnabled, forKey: .remoteMirrorEnabled)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -312,6 +316,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case detectRepositoryIconsAutomatically
     case ghosttyConfigPath
     case remoteAgentDetection
+    case remoteMirrorEnabled
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
@@ -411,6 +416,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .detectRepositoryIconsAutomatically)
       ?? true
     remoteAgentDetection = try Self.decodeRemoteAgentDetection(from: container)
+    remoteMirrorEnabled = try container.decodeIfPresent(Bool.self, forKey: .remoteMirrorEnabled) ?? false
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
     showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
