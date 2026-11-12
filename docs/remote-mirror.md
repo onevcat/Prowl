@@ -320,6 +320,11 @@ confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, �
 TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
 shows above the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
+When the agent is blocked and the Host cannot read the question as a menu (a dialog layout it
+does not know, or a typed answer), there is no prompt panel. A red **Blocked** strip shows
+instead. In Chat it has **Answer in Terminal**, which opens the terminal screen; the dialog
+is on that screen and the key bar answers it. The strip says "on the Mac" only when the Host
+takes no keys for the pane.
 The iOS app logs connections, prompts and Host command results to the unified log under the
 subsystem `com.onevcat.prowl.mirror-ios`; collect it with Console.app or `log collect --device`.
 The floating composer

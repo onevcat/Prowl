@@ -123,9 +123,16 @@
         events.append(
           .init(.agentStatus, .status(.init(state: .working)), at: Date(), source: .osc, sequence: last.sequence + 2))
       }
+      // `--mirror-ui-blocked-fixture`: the agent waits on a prompt that the Host did not read as a menu.
+      let blocked = CommandLine.arguments.contains("--mirror-ui-blocked-fixture")
+      if blocked, let last = events.last {
+        let status = MirrorConversationEvent.Status(state: .blocked, kind: "permission")
+        events.append(.init(.agentStatus, .status(status), at: Date(), source: .osc, sequence: last.sequence + 1))
+      }
       channel.conversation = events
       channel.agent = agent
       if CommandLine.arguments.contains("--mirror-ui-running-tool-fixture") { channel.setAgentState(.working) }
+      if blocked { channel.setAgentState(.blocked) }
       return channel
     }
 
