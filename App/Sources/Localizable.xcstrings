@@ -317,6 +317,16 @@
         }
       }
     },
+    "%@ is running in this pane. Stop it first, for example with ⌃C." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 正在此窗格中运行。请先停止它，例如按 ⌃C。"
+          }
+        }
+      }
+    },
     "%@ may not be installed" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1226,6 +1236,16 @@
         }
       }
     },
+    "A script is running in this pane. Wait for it or stop it first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗格中有脚本正在运行。请等待它结束，或先停止它。"
+          }
+        }
+      }
+    },
     "A script that Prowl runs on the remote host is missing from the app." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2116,12 +2136,22 @@
         }
       }
     },
-    "Allow paired Prowl devices to connect to this Mac" : {
+    "Alpha" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许已配对的 Prowl 设备连接到这台 Mac"
+            "value" : "Alpha"
+          }
+        }
+      }
+    },
+    "Alpha feature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alpha 阶段功能"
           }
         }
       }
@@ -2192,6 +2222,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 worktree 中已在运行的 Agent 将担任此角色。"
+          }
+        }
+      }
+    },
+    "An agent runs in this pane. Send your message to the agent instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗格中正在运行 Agent。请改为向 Agent 发送消息。"
+          }
+        }
+      }
+    },
+    "An agent started in this pane." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗格中已启动 Agent。"
           }
         }
       }
@@ -3337,6 +3387,16 @@
         }
       }
     },
+    "Cannot read the paired devices: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取已配对的设备：%@"
+          }
+        }
+      }
+    },
     "Cannot resolve the address %@. Check the name or use an IP address." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3347,22 +3407,22 @@
         }
       }
     },
-    "Cannot start Host: %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法启动主机：%@"
-          }
-        }
-      }
-    },
     "Cannot start display replica." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法启动显示副本。"
+          }
+        }
+      }
+    },
+    "Cannot start listening: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法开始监听：%@"
           }
         }
       }
@@ -3957,12 +4017,12 @@
         }
       }
     },
-    "Choose the Wi-Fi or VPN address reachable from your Mirror device" : {
+    "Choose the Wi-Fi or VPN address that the other device can reach" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择镜像设备可访问的 Wi-Fi 或 VPN 地址"
+            "value" : "选择另一台设备可访问的 Wi-Fi 或 VPN 地址"
           }
         }
       }
@@ -3993,6 +4053,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择用于显示 Agent 灵动岛的内置或外接显示器"
+          }
+        }
+      }
+    },
+    "Choose the device that you want to pair with this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要与这台 Mac 配对的设备"
           }
         }
       }
@@ -4197,12 +4267,12 @@
         }
       }
     },
-    "Click Add to add one." : {
+    "Click Add to add one. You can also drop folders here." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点击“添加”以添加一个。"
+            "value" : "点击“添加”以添加一个。也可以将文件夹拖放到这里。"
           }
         }
       }
@@ -4263,16 +4333,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "点击以设置命令脚本"
-          }
-        }
-      }
-    },
-    "Client" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "客户端"
           }
         }
       }
@@ -4827,16 +4887,6 @@
         }
       }
     },
-    "Closing this panel keeps Host running." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭此面板后，主机仍会继续运行。"
-          }
-        }
-      }
-    },
     "Code Host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5167,32 +5217,52 @@
         }
       }
     },
-    "Connect to Host" : {
+    "Connect to Another Mac" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接到主机"
+            "value" : "连接到另一台 Mac"
           }
         }
       }
     },
-    "Connect to a New Host…" : {
+    "Connect to This Mac" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接到新主机…"
+            "value" : "连接到这台 Mac"
           }
         }
       }
     },
-    "Connect to this Host and select a pane" : {
+    "Connect to a Mac" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接到此主机并选择窗格"
+            "value" : "连接到 Mac"
+          }
+        }
+      }
+    },
+    "Connect to a Mac…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到 Mac…"
+          }
+        }
+      }
+    },
+    "Connect to the saved Mac and select a pane" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到这台已保存的 Mac 并选择窗格"
           }
         }
       }
@@ -6837,6 +6907,16 @@
         }
       }
     },
+    "Device to pair" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要配对的设备"
+          }
+        }
+      }
+    },
     "Diagnostics" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7017,22 +7097,22 @@
         }
       }
     },
+    "Disconnect all devices and stop listening; local terminals keep running" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开所有设备并停止监听；本地终端继续运行"
+          }
+        }
+      }
+    },
     "Disconnect mirror of %@ from %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "断开 %1$@ 与 %2$@ 的镜像"
-          }
-        }
-      }
-    },
-    "Disconnect mirrors and stop listening; local terminals keep running" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "断开所有镜像并停止监听；本地终端继续运行"
           }
         }
       }
@@ -7537,6 +7617,16 @@
         }
       }
     },
+    "Enable Remote Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用远程镜像"
+          }
+        }
+      }
+    },
     "Enable this workflow before running." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7597,16 +7687,6 @@
         }
       }
     },
-    "Enter a fresh code from Host instead of using saved device access" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入主机上的新配对码，不使用已保存的设备授权"
-          }
-        }
-      }
-    },
     "Enter a host, such as user@example.com or an alias from your SSH configuration." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7633,6 +7713,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入名称。"
+          }
+        }
+      }
+    },
+    "Enter a new code from the other Mac instead of the saved access" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入另一台 Mac 上的新配对码，不使用已保存的访问权限"
           }
         }
       }
@@ -7687,22 +7777,22 @@
         }
       }
     },
-    "Enter another Mac’s address and its pairing code" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入另一台 Mac 的地址及其配对码"
-          }
-        }
-      }
-    },
     "Enter the Host address." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入主机地址。"
+          }
+        }
+      }
+    },
+    "Enter the address of another Mac and its pairing code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入另一台 Mac 的地址及其配对码"
           }
         }
       }
@@ -9219,56 +9309,6 @@
         }
       }
     },
-    "Host is off" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已关闭"
-          }
-        }
-      }
-    },
-    "Host is off. Start Host to create a pairing code." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已关闭。启动主机后即可创建配对码。"
-          }
-        }
-      }
-    },
-    "Host listening" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机正在监听"
-          }
-        }
-      }
-    },
-    "Host mirroring" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机正在镜像"
-          }
-        }
-      }
-    },
-    "Host off" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已关闭"
-          }
-        }
-      }
-    },
     "Host pane closed. Choose another pane from Add to Prowl." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9345,16 +9385,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机：%@"
-          }
-        }
-      }
-    },
-    "Hosts paired with an earlier version appear after you click the Remote Mirror button." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用旧版本配对的主机会在你点击“远程镜像”按钮后显示。"
           }
         }
       }
@@ -9515,16 +9545,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“就地”命令暂时无法在远程项目中运行。"
-          }
-        }
-      }
-    },
-    "In Prowl Mirror on your phone, tap Scan QR Code." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在手机的 Prowl Mirror 中，轻点“扫描二维码”。"
           }
         }
       }
@@ -10259,12 +10279,22 @@
         }
       }
     },
-    "Let paired Prowl apps on your network mirror this Mac’s terminals." : {
+    "Let a paired iPhone or another Mac see and control the Prowl terminals of this Mac." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许网络中已配对的 Prowl 镜像这台 Mac 的终端。"
+            "value" : "允许已配对的 iPhone 或另一台 Mac 查看并操作这台 Mac 上 Prowl 的终端。"
+          }
+        }
+      }
+    },
+    "Let paired devices connect to this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许已配对的设备连接到这台 Mac"
           }
         }
       }
@@ -10579,6 +10609,16 @@
         }
       }
     },
+    "Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac"
+          }
+        }
+      }
+    },
     "Making the bots decisive" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10799,12 +10839,12 @@
         }
       }
     },
-    "Mirror a terminal pane from Prowl on another Mac." : {
+    "Mirroring" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "镜像另一台 Mac 上 Prowl 的终端窗格。"
+            "value" : "正在镜像"
           }
         }
       }
@@ -11509,6 +11549,16 @@
         }
       }
     },
+    "No device is connected." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已连接的设备。"
+          }
+        }
+      }
+    },
     "No duration recorded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11579,12 +11629,12 @@
         }
       }
     },
-    "No network address is available for pairing. Start Host on a Wi-Fi or VPN interface." : {
+    "No network address is available for pairing. Listen on a Wi-Fi or VPN interface." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有可用于配对的网络地址。请在 Wi-Fi 或 VPN 接口上启动主机。"
+            "value" : "没有可用于配对的网络地址。请在 Wi-Fi 或 VPN 接口上监听。"
           }
         }
       }
@@ -11599,12 +11649,12 @@
         }
       }
     },
-    "No paired Hosts yet." : {
+    "No paired devices." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "尚无已配对的主机。"
+            "value" : "没有已配对的设备。"
           }
         }
       }
@@ -11669,12 +11719,12 @@
         }
       }
     },
-    "No response from %@. Check the address and that Host is started." : {
+    "No response from %@. Check the address and that the other Mac is listening." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 没有响应。请检查地址，并确认主机已启动。"
+            "value" : "%@ 没有响应。请检查地址，并确认另一台 Mac 正在监听。"
           }
         }
       }
@@ -11695,6 +11745,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此范围内没有运行记录。请尝试“此 worktree”或“所有运行”。"
+          }
+        }
+      }
+    },
+    "No saved Macs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已保存的 Mac。"
           }
         }
       }
@@ -11999,12 +12059,12 @@
         }
       }
     },
-    "Nothing is listening at %@. Check that Host is started and the port is correct." : {
+    "Nothing is listening at %@. Check that the other Mac is listening and the port is correct." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 上没有程序在监听。请确认主机已启动且端口正确。"
+            "value" : "%@ 上没有程序在监听。请确认另一台 Mac 正在监听且端口正确。"
           }
         }
       }
@@ -12119,12 +12179,22 @@
         }
       }
     },
-    "On the other device, open Remote Mirror → Client → Connect to a New Host. Copy the connection details and paste into any connection field on Mac, or scan the QR code on mobile." : {
+    "On the iPhone, open Prowl Mirror, tap Scan QR Code, and point the camera at this code." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在另一台设备上，打开远程镜像 → 客户端 → 连接新主机。拷贝连接信息并粘贴到 Mac 上的任意连接字段中，或在移动设备上扫描二维码。"
+            "value" : "在 iPhone 上打开 Prowl Mirror，轻点“扫描二维码”，然后将摄像头对准此二维码。"
+          }
+        }
+      }
+    },
+    "On the other Mac, open Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…, then paste the connection details into any field." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在另一台 Mac 上打开“设置”→“远程镜像”→“连接到另一台 Mac”→“连接到 Mac…”，然后将连接信息粘贴到任意字段中。"
           }
         }
       }
@@ -12139,12 +12209,32 @@
         }
       }
     },
+    "Only navigation and control keys can be sent from a mirror." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像端只能发送导航键和控制键。"
+          }
+        }
+      }
+    },
     "Only show when agents are running" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅在 Agent 运行时显示"
+          }
+        }
+      }
+    },
+    "Only the first %lld keys were pressed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只按下了前 %lld 个按键。"
           }
         }
       }
@@ -12356,6 +12446,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开设置"
+          }
+        }
+      }
+    },
+    "Open Settings to manage paired devices, the listener, and connections to another Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置，管理已配对的设备、监听以及到另一台 Mac 的连接"
           }
         }
       }
@@ -13202,6 +13302,26 @@
         }
       }
     },
+    "Paired Devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配对的设备"
+          }
+        }
+      }
+    },
+    "Paired devices cannot connect to this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配对的设备目前无法连接到这台 Mac。"
+          }
+        }
+      }
+    },
     "Paired with %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13322,12 +13442,12 @@
         }
       }
     },
-    "Paste connection details from Host into any field below, or enter the address and pairing code manually." : {
+    "Paste the connection details from the other Mac into any field below, or enter the address and pairing code." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将主机上的连接信息粘贴到下方任意字段中，或手动输入地址和配对码。"
+            "value" : "将另一台 Mac 上的连接信息粘贴到下方任意字段中，或输入地址和配对码。"
           }
         }
       }
@@ -13633,12 +13753,12 @@
         }
       }
     },
-    "Press %@ or click Add to add one." : {
+    "Press %@ or click Add to add one. You can also drop folders here." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按 %@ 或点击“添加”以添加一个。"
+            "value" : "按 %@ 或点击“添加”以添加一个。也可以将文件夹拖放到这里。"
           }
         }
       }
@@ -13689,16 +13809,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上一页"
-          }
-        }
-      }
-    },
-    "Previously paired Hosts could not be read. Use Connect to a New Host to continue." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法读取先前配对的主机。请使用“连接到新主机”继续。"
           }
         }
       }
@@ -14544,12 +14654,12 @@
         }
       }
     },
-    "Read previously paired Hosts from secure storage again" : {
+    "Read previously saved Macs from secure storage again" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新从安全存储中读取先前配对的主机"
+            "value" : "重新从安全存储中读取先前保存的 Mac"
           }
         }
       }
@@ -14570,6 +14680,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "改回读取独立 Ghostty 应用的配置文件。"
+          }
+        }
+      }
+    },
+    "Read the paired devices from secure storage again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新从安全存储中读取已配对的设备"
           }
         }
       }
@@ -14980,6 +15100,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程镜像"
+          }
+        }
+      }
+    },
+    "Remote Mirror Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程镜像设置…"
           }
         }
       }
@@ -15554,12 +15684,12 @@
         }
       }
     },
-    "Rename Host" : {
+    "Rename Mac" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重命名主机"
+            "value" : "重命名 Mac"
           }
         }
       }
@@ -15594,12 +15724,12 @@
         }
       }
     },
-    "Rename this Host or forget its saved access" : {
+    "Rename the saved Mac or forget its access" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重命名此主机，或忘记其已保存的访问权限"
+            "value" : "重命名这台已保存的 Mac，或忘记其访问权限"
           }
         }
       }
@@ -17134,6 +17264,26 @@
         }
       }
     },
+    "See and control the Prowl terminals of another Mac from this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 上查看并操作另一台 Mac 上 Prowl 的终端。"
+          }
+        }
+      }
+    },
+    "See and control the Prowl terminals of this Mac from Prowl Mirror on an iPhone, or from Prowl on another Mac, on the same network. This feature is in alpha and can change between releases." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 iPhone 上的 Prowl Mirror 或另一台 Mac 上的 Prowl，在同一网络中查看并操作这台 Mac 上 Prowl 的终端。此功能处于 Alpha 阶段，不同版本之间可能有变化。"
+          }
+        }
+      }
+    },
     "Select" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17786,6 +17936,16 @@
         }
       }
     },
+    "Send one command line from a mirror." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像端一次只能发送一行命令。"
+          }
+        }
+      }
+    },
     "Send the next request to GitHub now instead of at the retry time" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18366,6 +18526,16 @@
         }
       }
     },
+    "Show the Remote Mirror button in the toolbar and let paired devices connect to this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在工具栏中显示远程镜像按钮，并允许已配对的设备连接到这台 Mac"
+          }
+        }
+      }
+    },
     "Show the Run button in the worktree toolbar." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18727,6 +18897,36 @@
         }
       }
     },
+    "Someone is typing in this pane on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有人正在 Mac 上的此窗格中输入。"
+          }
+        }
+      }
+    },
+    "Someone is typing with an input method on the Mac. Finish there first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有人正在 Mac 上使用输入法输入。请先在那边完成输入。"
+          }
+        }
+      }
+    },
+    "Someone pressed a key in this pane on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有人在 Mac 上的此窗格中按了键。"
+          }
+        }
+      }
+    },
     "Source" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18907,12 +19107,22 @@
         }
       }
     },
-    "Start Host" : {
+    "Start Listening" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启动主机"
+            "value" : "开始监听"
+          }
+        }
+      }
+    },
+    "Start listening when Prowl opens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 打开时开始监听"
           }
         }
       }
@@ -18923,6 +19133,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始监听，然后创建配对码"
+          }
+        }
+      }
+    },
+    "Start the listener at launch, so paired devices can connect without a click here" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时即开始监听，已配对的设备无需在此点击即可连接"
           }
         }
       }
@@ -19117,12 +19337,12 @@
         }
       }
     },
-    "Stop Host" : {
+    "Stop Listening" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "停止主机"
+            "value" : "停止监听"
           }
         }
       }
@@ -19407,6 +19627,16 @@
         }
       }
     },
+    "System-wide shortcut: shows or hides Agent Island while another app is active. Once the island has been shown since Prowl launched, this takes precedence over the same shortcut in other apps." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局快捷键：在其他应用处于活跃状态时显示或隐藏 Agent 灵动岛。自 Prowl 启动后灵动岛显示过一次起，它优先于其他应用中的相同快捷键。"
+          }
+        }
+      }
+    },
     "TLS handshake failed (%@)." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19587,6 +19817,16 @@
         }
       }
     },
+    "That answer is not offered on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 上没有提供该答案。"
+          }
+        }
+      }
+    },
     "The Agent Profile Prowl starts for this role." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19613,6 +19853,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机尚未准备好处理下一个请求。"
+          }
+        }
+      }
+    },
+    "The Mac could not read the state of this terminal." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 无法读取此终端的状态。"
+          }
+        }
+      }
+    },
+    "The Mac could not read what runs in this pane." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 无法读取此窗格中正在运行的内容。"
+          }
+        }
+      }
+    },
+    "The Mac did not accept the key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 没有接受该按键。"
+          }
+        }
+      }
+    },
+    "The Mac did not accept the text." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 没有接受该文本。"
+          }
+        }
+      }
+    },
+    "The Mac did not move the selection as expected. Check the prompt there." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 上的选项没有按预期移动。请在那边检查提示框。"
           }
         }
       }
@@ -19697,12 +19987,32 @@
         }
       }
     },
+    "The agent in this pane is no longer running." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗格中的 Agent 已不再运行。"
+          }
+        }
+      }
+    },
     "The agent will use the runtime's least-restricted mode. It may execute commands and modify files without prompting; managed or user-defined runtime policies can still apply." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Agent 将使用运行时限制最少的模式。它可能会在不提示的情况下执行命令和修改文件；受管理或用户定义的运行时策略仍可能适用。"
+          }
+        }
+      }
+    },
+    "The answer needed too many steps. Answer on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作答所需的步骤过多。请在 Mac 上作答。"
           }
         }
       }
@@ -19734,6 +20044,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配对码已过期。刷新即可创建新的配对码。"
+          }
+        }
+      }
+    },
+    "The command is on the prompt line on the Mac but did not run." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令已在 Mac 的命令行提示符上，但没有运行。"
           }
         }
       }
@@ -19788,12 +20108,12 @@
         }
       }
     },
-    "The eight-character code shown on Host under Add a Device.\nIt expires after 60 seconds." : {
+    "The eight-character code that the other Mac shows under Add a Device.\nIt expires after 60 seconds." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "主机上“添加设备”中显示的八位配对码。\n60 秒后过期。"
+            "value" : "另一台 Mac 的“添加设备”中显示的八位配对码。\n60 秒后过期。"
           }
         }
       }
@@ -19938,6 +20258,16 @@
         }
       }
     },
+    "The mirror no longer owns this pane." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该镜像已不再拥有此窗格。"
+          }
+        }
+      }
+    },
     "The name is shown instead of %@ on this Mac only." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19948,12 +20278,12 @@
         }
       }
     },
-    "The network port other Prowl apps connect to" : {
+    "The network port that paired devices connect to" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "其他 Prowl 连接时使用的网络端口"
+            "value" : "已配对的设备连接时使用的网络端口"
           }
         }
       }
@@ -19964,6 +20294,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新标签页会在主机的后台打开，并镜像到这里。"
+          }
+        }
+      }
+    },
+    "The pane is no longer open on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该窗格在 Mac 上已关闭。"
           }
         }
       }
@@ -20014,6 +20354,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该配置已不存在。"
+          }
+        }
+      }
+    },
+    "The prompt changed on the Mac. Check it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 上的提示框已发生变化。请重新查看。"
+          }
+        }
+      }
+    },
+    "The prompt is no longer open on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该提示框在 Mac 上已关闭。"
+          }
+        }
+      }
+    },
+    "The prompt line was cleared and nothing ran. ⌃Y on the Mac brings the old text back." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令行提示符已清空，没有运行任何命令。在 Mac 上按 ⌃Y 可恢复原来的文本。"
           }
         }
       }
@@ -20178,6 +20548,16 @@
         }
       }
     },
+    "The saved Macs could not be read. Use Connect to a Mac to continue." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取已保存的 Mac。请使用“连接到 Mac”继续。"
+          }
+        }
+      }
+    },
     "The script is too large to run in a remote project." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20194,6 +20574,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所选 worktree 已不可用。"
+          }
+        }
+      }
+    },
+    "The selection may have moved; nothing was chosen." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选项可能已移动；未选择任何项。"
+          }
+        }
+      }
+    },
+    "The shell is not waiting for a new command: a command is still pending or running, or the shell has no Ghostty shell integration. Check the pane on the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell 没有在等待新命令：有命令仍待执行或正在运行，或者该 shell 没有 Ghostty shell 集成。请在 Mac 上检查该窗格。"
           }
         }
       }
@@ -20378,6 +20778,36 @@
         }
       }
     },
+    "This Host cannot answer prompts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机无法回答提示框。"
+          }
+        }
+      }
+    },
+    "This Host cannot press keys from a mirror." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机无法接受来自镜像的按键。"
+          }
+        }
+      }
+    },
+    "This Host cannot run shell commands from a mirror." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此主机无法运行来自镜像的 shell 命令。"
+          }
+        }
+      }
+    },
     "This Host no longer recognizes this Mac. Enter a new pairing code from Host." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20394,6 +20824,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这台 Mac 没有地址为 %@ 的网络接口。"
+          }
+        }
+      }
+    },
+    "This Mac is not listening. Start listening to create a pairing code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 未在监听。开始监听后即可创建配对码。"
           }
         }
       }
@@ -20694,6 +21134,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这次运行在 worktree %@ 中进行。"
+          }
+        }
+      }
+    },
+    "This shell takes one line without tabs from a mirror." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 shell 只接受来自镜像的不含制表符的单行内容。"
           }
         }
       }
@@ -23001,6 +23451,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "git@github.com:owner/repo.git"
+          }
+        }
+      }
+    },
+    "iPhone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone"
           }
         }
       }

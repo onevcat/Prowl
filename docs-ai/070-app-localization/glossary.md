@@ -98,6 +98,12 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 | Take Over / Revoke / Forget | 接管 / 撤销 / 忘记 |
 | mirror (n., one connected viewer) | 镜像 (`%lld 个镜像`) |
 | Last seen / Last connected | 上次在线 / 上次连接 |
+| listen / Start Listening / Stop Listening / the listener | 监听 / 开始监听 / 停止监听 / 监听 |
+| this Mac / another Mac, the other Mac / saved Mac | 这台 Mac / 另一台 Mac / 已保存的 Mac |
+| paired device | 已配对的设备 |
+| prompt (a question that an agent shows in its pane) | 提示框 (提示词 is the text sent to an agent) |
+| prompt line (of a shell) | 命令行提示符 |
+| Alpha | Alpha (`Alpha 阶段` in a sentence) |
 
 ## SSH remote agents
 

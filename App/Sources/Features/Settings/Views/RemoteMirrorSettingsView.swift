@@ -155,7 +155,7 @@ struct RemoteMirrorSettingsView: View {
           }
           Spacer()
           Button("Connect") { sheet = .connect(saved) }
-            .help("Connect to this Mac and select a pane")
+            .help("Connect to the saved Mac and select a pane")
           Menu {
             Button("Rename…") {
               alias = saved.alias ?? ""
@@ -168,7 +168,7 @@ struct RemoteMirrorSettingsView: View {
           .menuStyle(.borderlessButton)
           .menuIndicator(.hidden)
           .fixedSize()
-          .help("Rename this Mac or forget its saved access")
+          .help("Rename the saved Mac or forget its access")
         }
       }
       if known.hosts.isEmpty, known.notice == nil {
