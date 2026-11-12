@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-11-13 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #1084, #1085, #1087 |
 | **Related** | [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), `docs/remote-mirror.md` |
 
 ## Background
@@ -115,3 +115,7 @@ the device list shows an iPhone or Mac icon; a record without it shows a generic
   make the visible state hard to explain.
 
 ## Amendments
+
+- Updated 2026-11-13: slice 1, the alpha switch — see [002-slice-1-alpha-switch.md](002-slice-1-alpha-switch.md)
+- Updated 2026-11-13: slice 2, Settings groups and the reduced panel — see [003-slice-2-settings-groups.md](003-slice-2-settings-groups.md)
+- Updated 2026-11-13: slice 3, pairing pages and the device platform; slice 4 folded into the slices — see [004-slice-3-pairing-pages-and-platform.md](004-slice-3-pairing-pages-and-platform.md)
