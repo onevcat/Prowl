@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.11.13](https://github.com/onevcat/Prowl/releases/tag/v2026.11.13)
+
+This release brings Remote Mirror into Settings as an opt-in alpha, expands control from iPhone, and improves everyday reliability.
+
+### New
+
+- Enable Remote Mirror’s alpha switch in Settings to manage listening, paired devices, and connections to other Macs. Pairing now has separate instructions for iPhone and Mac. The `PROWL_REMOTE_MIRROR=1` launch variable no longer has an effect: turn on **Settings → Remote Mirror → Enable Remote Mirror** instead. The iPhone app is not on the App Store yet.
+- The iOS mirror now groups agents by project and shows conversations with expandable tool details. Start sessions, answer supported permission and question dialogs, send messages while agents work, and run commands at an available shell prompt; use **Answer in Terminal** when a dialog needs terminal keys.
+- Resolve supported Mac drafts from the phone with **Replace and Send** or **Bring Draft Here**. CLI users can choose `prowl agents dispatch --on-draft replace` or `--on-draft discard`; drafts remain protected by default.
+- Press ⌘⌥⇧P to show or hide Agent Island, and customize the shortcut in Settings → Shortcuts. Once Agent Island has been enabled during the current launch, the shortcut also works from other apps.
+- Open folders by dropping them onto Prowl’s empty main area or Dock icon, including when Prowl is not running.
+
+### Fixed
+
+- Fixed iOS mirror reconnection after returning from the background, pairing again without restarting, and a crash when queued messages were consumed. Chat now opens at the latest message, with more reliable scrolling and clearer keyboard controls.
+- Agent input no longer mistakes dim Claude or Codex suggestions for drafts, and wrapped CJK messages submit correctly. Claude conversations and status now follow sessions moved into background jobs.
+- Fixed the left sidebar getting stuck hidden after rapid toggles, and `prowl <path>` failing to add a new folder when bringing Prowl to the foreground.
+
 ## [2026.11.2](https://github.com/onevcat/Prowl/releases/tag/v2026.11.2)
 
 OSC 7501 support now covers more agents: Amp, Antigravity, Devin, Droid, and Grok Build.
