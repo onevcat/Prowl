@@ -11,3 +11,4 @@ This file records the findings that changed code.
 | --- | --- | --- |
 | R1 | The listen address and port were saved only when a listener became ready. An edit in Settings followed by a quit was lost, and a start at launch could use a wider address than the one shown. | `MirrorHost.address` and `MirrorHost.port` save each valid edit to `UserDefaults`. An invalid value does not replace the saved one. |
 | R2 | A failed read of the saved devices showed **No paired devices.** | `MirrorHost.deviceListError` holds the failure. Settings shows it with **Try Again**, which reads again without a listener start. A missing identity is still an empty list. |
+| R3 | The connection sheet moved to Settings, but the mirror shows in the main window. With that window behind, minimized, or closed, a successful connection showed nothing. | `RemoteMirrorStore.add` calls `showSelectedMirror`, which `ProwlApp` sets to `NSApplication.surfaceMainWindow()`. Cancel does not call it. |

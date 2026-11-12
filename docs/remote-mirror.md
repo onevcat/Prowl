@@ -20,7 +20,8 @@ With the switch on, the Settings section has two groups, named by direction:
   and **Stop Listening**, **Start listening when Prowl opens** (off by default),
   **Listen on**, and **Port**. **Paired Devices** below it lists every paired device.
 - **Connect to Another Mac**: this Mac is the client. It lists the saved Macs and
-  **Connect to a Mac…**.
+  **Connect to a Mac…**. After a pane is selected, the main window comes forward (it
+  reopens if it was closed) and shows the mirror.
 
 **Listen on** offers all interfaces (`0.0.0.0`), each of this Mac's IPv4 interfaces by
 name, and this Mac only (`127.0.0.1`); a value saved from an earlier version appears as

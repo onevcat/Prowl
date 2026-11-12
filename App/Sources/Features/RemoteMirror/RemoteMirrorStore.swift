@@ -18,6 +18,9 @@ final class RemoteMirrorStore {
   /// Opens Settings on the Remote Mirror section; the app sets it.
   @ObservationIgnored var openSettings: (() -> Void)?
 
+  /// Brings the main window forward, because a mirror shows only there; the app sets it.
+  @ObservationIgnored var showSelectedMirror: (() -> Void)?
+
   /// The alpha switch in Settings (docs-ai 091). The Mirror UI and the listener follow it.
   var isEnabled: Bool { settingsFile.global.remoteMirrorEnabled }
 
@@ -64,6 +67,8 @@ final class RemoteMirrorStore {
     clients.append(client)
     selectedID = client.id
     client.subscribe(pane)
+    // The connection sheet lives in Settings; the mirror shows in the main window.
+    showSelectedMirror?()
   }
 
   func remove(_ client: MirrorClient) {

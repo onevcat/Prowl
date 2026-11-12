@@ -323,6 +323,7 @@ struct ProwlApp: App {
         .filter { $0.host == nil }.map(\.listWorktree)
     }
     mirrors.openSettings = { appStore.send(.openRemoteMirrorSettings) }
+    mirrors.showSelectedMirror = { _ = NSApplication.shared.surfaceMainWindow() }
     mirrors.startHostOnLaunchIfNeeded()
 
     _cliSocketServer = State(initialValue: cliServer)
