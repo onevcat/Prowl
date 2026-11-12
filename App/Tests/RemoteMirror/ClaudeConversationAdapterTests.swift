@@ -49,6 +49,27 @@ struct ClaudeConversationAdapterTests {
     #expect(events[1].timestamp == MirrorConversationEvent.parseTimestamp("2026-11-03T14:18:56.620Z"))
   }
 
+  /// Claude Code 2.1.322 records a paste of several lines inside `<pasted_content id="…">`
+  /// tags (seen live: an `agents dispatch` prompt showed the raw tag in the phone's bubble).
+  /// The person wrote the text, not the tags.
+  @Test func pastedContentTagsAreNotPartOfTheMessage() {
+    func text(_ content: String) -> String? {
+      let events = run([base("user", ["message": ["role": "user", "content": content], "promptId": "p1"])])
+      guard case .message(let message)? = events.first(where: { $0.kind == .userMessage })?.payload else { return nil }
+      return message.text.text
+    }
+    func block(_ id: String, _ body: String) -> String {
+      "<pasted_content id=\"\(id)\">\n\(body)\n</pasted_content id=\"\(id)\">"
+    }
+    let prompt = "[Prowl] Reply with exactly: D-1\n\n---\nProtocol"
+    #expect(text("\n\n" + block("4bec", prompt) + "\n") == prompt)
+    let mixed = "see this\n\n" + block("a1", "line 1\nline 2") + "\nand " + block("b2", "x")
+    #expect(text(mixed) == "see this\n\nline 1\nline 2\nand x")
+    // Tags that do not pair up are the person's own text.
+    let unpaired = "what does <pasted_content id=\"a1\"> mean?\n</pasted_content id=\"zz\">"
+    #expect(text(unpaired) == unpaired)
+  }
+
   @Test func bootstrapAnnouncesOnlyTheSession() {
     var adapter = ClaudeConversationAdapter()
     let first = adapter.bootstrap(["type": "mode", "sessionId": "sess-1"])

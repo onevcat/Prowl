@@ -100,12 +100,27 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
       let notice = Event.Notice(level: .info, text: Value.title(command, limit: 200), subtype: "command")
       return [Event(.notice, .notice(notice), at: timestamp, source: .transcript)]
     }
-    let message = Event.Message(text: .init(text), origin: origin, images: images > 0 ? images : nil)
+    let message = Event.Message(
+      text: .init(withoutPasteTags(text)), origin: origin, images: images > 0 ? images : nil)
     let turn = Event.Turn(id: Value.string(record, "promptId"), origin: origin)
     return [
       Event(.turnStarted, .turn(turn), at: timestamp, source: .transcript),
       Event(.userMessage, .message(message), at: timestamp, source: .transcript),
     ]
+  }
+
+  /// A paste of several lines, as Claude Code 2.1.322 records it: the text between an opening
+  /// and a closing tag that carry the same id. `Regex` is not Sendable; this literal is
+  /// immutable and only read.
+  nonisolated(unsafe) private static let pastedContent =
+    #/<pasted_content id="(?<id>[^"\n]{1,64})">\n(?<body>(?s:.*?))\n</pasted_content id="\k<id>">/#
+
+  /// The message as the person wrote it: the body of each pasted block in place of the block,
+  /// without the blank lines Claude puts around it at the ends. Tags that do not pair up stay.
+  static func withoutPasteTags(_ text: String) -> String {
+    guard text.contains("<pasted_content id=") else { return text }
+    let unwrapped = text.replacing(pastedContent) { $0.output.body }
+    return unwrapped == text ? text : unwrapped.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private mutating func toolEnd(
