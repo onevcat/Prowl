@@ -290,8 +290,9 @@ Analytics events also do not include paths, repository names, or branch names. D
 builds send no telemetry.
 
 Other network traffic happens only for the features that need it: update checks
-(Sparkle, from GitHub), GitHub data through your own `gh` CLI, SSH to hosts that you
-add, and Remote Mirror connections that you pair.
+(Sparkle, from GitHub), Git commands against your repositories' remotes with your own
+Git configuration (for example a fetch before a new worktree), GitHub data through your
+own `gh` CLI, SSH to hosts that you add, and Remote Mirror connections that you pair.
 
 ## License
 
