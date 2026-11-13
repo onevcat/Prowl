@@ -264,6 +264,50 @@ Then add a repository with `⌘⇧O`, press `⌘N` to create a worktree, and lau
 
 macOS 26.0+
 
+## Privacy & Telemetry
+
+Prowl runs on your Mac. Your terminals, code, and agent sessions stay there. Release
+builds send two kinds of data, and you can turn off each one in **Settings → Advanced**:
+
+- **Usage analytics** (PostHog): the name of an action, such as `app_launched`,
+  `worktree_created`, or `terminal_tab_created`, with an anonymous install ID. A few
+  events carry numbers only: the count of repositories added, the editor chosen for
+  **Open in**, the length of a session, or memory use with the count of repositories,
+  worktrees, and tabs. Each event also carries the app version, the macOS version, the
+  Mac model, the CPU architecture, and the locale. Analytics stops at once when you turn
+  it off.
+- **Crash reports** (Sentry): crash stack traces, the app version, the same anonymous
+  install ID, a small sample of performance traces, and diagnostics for a few known
+  problems (high memory use, no visible main window). Each report carries the names of
+  the recent app actions, without their data. Crash reporting starts when the app opens,
+  so turning it off takes effect after you restart Prowl.
+
+Prowl does not send terminal output, file contents, repository or branch names, or
+agent conversations. Debug builds send nothing.
+
+Other network traffic happens only for the features that need it: update checks
+(Sparkle, from GitHub), GitHub data through your own `gh` CLI, SSH to hosts that you
+add, and Remote Mirror connections that you pair.
+
+## License
+
+Prowl is licensed under the [Functional Source License, Version 1.1, ALv2 Future
+License](LICENSE) (FSL-1.1-ALv2), which it inherits from the upstream
+[Supacode](https://github.com/supabitapp/supacode) project. In plain words:
+
+- **You may use Prowl for any purpose except a competing use**, and that includes use
+  inside a company. The license names internal use as a permitted purpose.
+- **A competing use** is to make Prowl available to others in a commercial product or
+  service that substitutes for it or offers the same or substantially similar
+  functionality.
+- **Each version becomes available under the Apache License 2.0** two years after its
+  release.
+
+The iOS mirror client in [`Mirror/iOS`](Mirror/iOS) is licensed separately under the
+[MIT License](Mirror/iOS/LICENSE).
+
+This summary is for convenience. The [LICENSE](LICENSE) file is the binding text.
+
 ---
 
 ## For Developers
