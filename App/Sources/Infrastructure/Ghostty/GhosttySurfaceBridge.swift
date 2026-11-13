@@ -512,7 +512,13 @@ final class GhosttySurfaceBridge {
 
     case GHOSTTY_ACTION_START_SEARCH:
       let needle = string(from: action.action.start_search.needle) ?? ""
-      state.searchNeedle = needle
+      if !needle.isEmpty {
+        state.searchNeedle = needle
+        state.searchInput = needle
+      } else if state.searchNeedle == nil {
+        state.searchNeedle = ""
+        state.searchInput = ""
+      }
       state.searchTotal = nil
       state.searchSelected = nil
       if let surfaceView {

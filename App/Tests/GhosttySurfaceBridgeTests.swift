@@ -53,8 +53,10 @@ struct GhosttySurfaceBridgeTests {
     #expect(bridge.state.searchFocusPending)
     #expect(bridge.state.searchNeedle == "")
 
+    bridge.state.searchInput = "needle"
     _ = bridge.handleAction(target: target, action: action)
     #expect(bridge.state.searchFocusPending)
+    #expect(bridge.state.searchInput == "needle")
 
     bridge.state.searchFocusPending = false
     _ = bridge.handleAction(target: target, action: action)

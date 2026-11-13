@@ -9,6 +9,29 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct GhosttySurfaceSearchOverlayTests {
+  @Test func searchInputSurvivesOverlayRebuild() async throws {
+    let fixture = SearchOverlayFixture()
+    defer { fixture.window.close() }
+    await fixture.settle()
+
+    let originalField = try fixture.field()
+    #expect(originalField.stringValue.isEmpty)
+    try #require(fixture.window.makeFirstResponder(originalField))
+    let editor = try #require(originalField.currentEditor() as? NSTextView)
+    #expect(fixture.window.firstResponder === editor)
+    editor.insertText("needle", replacementRange: NSRange(location: NSNotFound, length: 0))
+    #expect(editor.string == "needle")
+    #expect(fixture.surfaceView.bridge.state.searchInput == "needle")
+
+    fixture.rebuild()
+    await fixture.settle()
+
+    let rebuiltField = try fixture.field()
+    #expect(rebuiltField !== originalField)
+    #expect(rebuiltField.stringValue == "needle")
+    #expect(fixture.surfaceView.bridge.state.searchInput == "needle")
+  }
+
   @Test func manualSearchFocusReportsTheActiveSurface() async throws {
     let fixture = SearchOverlayFixture()
     defer { fixture.window.close() }

@@ -7,7 +7,6 @@ struct GhosttySurfaceSearchOverlay: View {
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
-  @State private var searchText: String
   @State private var corner: GhosttySearchCorner = .topRight
   @State private var dragOffset: CGSize = .zero
   @State private var barSize: CGSize = .zero
@@ -18,7 +17,6 @@ struct GhosttySurfaceSearchOverlay: View {
   init(surfaceView: GhosttySurfaceView) {
     self.surfaceView = surfaceView
     self._state = Bindable(surfaceView.bridge.state)
-    self._searchText = State(initialValue: surfaceView.bridge.state.searchNeedle ?? "")
   }
 
   var body: some View {
@@ -26,7 +24,7 @@ struct GhosttySurfaceSearchOverlay: View {
       ZStack(alignment: corner.alignment) {
         HStack(spacing: 4) {
           GhosttySearchField(
-            text: $searchText,
+            text: $state.searchInput,
             focusPending: $state.searchFocusPending,
             focusOwner: state,
             focusRequests: surfaceView.runtime.focusRequests,
@@ -125,14 +123,10 @@ struct GhosttySurfaceSearchOverlay: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
       .onAppear {
-        scheduleSearch(searchText)
+        scheduleSearch(state.searchInput)
       }
-      .onChange(of: searchText) { _, newValue in
+      .onChange(of: state.searchInput) { _, newValue in
         scheduleSearch(newValue)
-      }
-      .onChange(of: state.searchNeedle) { _, newValue in
-        guard let newValue, !newValue.isEmpty, newValue != searchText else { return }
-        searchText = newValue
       }
       .onChange(of: state.searchTotal) { _, newValue in
         if let total = newValue, total > 0, state.searchSelected == nil {
@@ -197,7 +191,7 @@ struct GhosttySurfaceSearchOverlay: View {
     guard let searchTask else { return }
     searchTask.cancel()
     self.searchTask = nil
-    emitSearch(searchText)
+    emitSearch(state.searchInput)
   }
 
   private func searchButtonHelp(_ title: String, commandID: String) -> String {

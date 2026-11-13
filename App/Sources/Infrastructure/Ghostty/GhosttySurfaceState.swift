@@ -24,6 +24,7 @@ final class GhosttySurfaceState {
   /// The host of the pane's foreground `ssh`, set by agent detection (docs-ai 082).
   var remoteIndicator: RemotePaneIndicator?
   var searchNeedle: String?
+  var searchInput = ""
   var searchTotal: Int?
   var searchSelected: Int?
   var searchFocusPending = false

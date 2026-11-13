@@ -186,7 +186,7 @@ Edit menu: **Find…** (`start_search`), **Find Next/Previous**
 Selection for Find** (`search_selection`). These are Ghostty-managed.
 
 **Find…** (⌘F by default) opens the find bar and focuses its search field. A later focus
-action takes priority.
+action takes priority. The search text remains when the split layout changes.
 
 ## Scrollback, CJK, copy/paste
 
