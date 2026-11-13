@@ -396,6 +396,7 @@ struct WorktreeRowsView: View {
       info: row.info,
       tabCountBadge: WorktreeTabCountBadge(worktreeID: row.id, terminalManager: terminalManager),
       showsPullRequestInfo: !isWorktreeDragActive,
+      showsChangeCounts: store.showSidebarChangeCounts,
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,

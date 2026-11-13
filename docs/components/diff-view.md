@@ -15,6 +15,8 @@ fast way to review before committing or merging.
 
 **Open:** click a worktree's diff badge, press `⌘⇧Y` (`show_diff`), use
 Command Palette → "Show Diff", or right-click a worktree row → "Show Diff".
+Settings → General → Diff Tool → **Show change counts in the sidebar** hides the
+badges; the other entry points stay.
 
 The same entry points work for **workspace child repositories**: the child
 row's diff badge, its context menu, and — with a child selected — `⌘⇧Y`,
