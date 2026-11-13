@@ -266,8 +266,9 @@ macOS 26.0+
 
 ## Privacy & Telemetry
 
-Prowl runs on your Mac. Your terminals, code, and agent sessions stay there. Release
-builds send two kinds of data, and you can turn off each one in **Settings → Advanced**:
+Prowl runs on your Mac. Apart from the features listed at the end of this section,
+your terminals, code, and agent sessions stay there. Release builds send two kinds of
+telemetry, and you can turn off each one in **Settings → Advanced**:
 
 - **Usage analytics** (PostHog): the name of an action, such as `app_launched`,
   `worktree_created`, or `terminal_tab_created`, with an anonymous install ID. A few
@@ -279,11 +280,14 @@ builds send two kinds of data, and you can turn off each one in **Settings → A
 - **Crash reports** (Sentry): crash stack traces, the app version, the same anonymous
   install ID, a small sample of performance traces, and diagnostics for a few known
   problems (high memory use, no visible main window). Each report carries the names of
-  the recent app actions, without their data. Crash reporting starts when the app opens,
-  so turning it off takes effect after you restart Prowl.
+  the recent app actions, without their data. The "no visible main window" diagnostic
+  also carries the app's launch arguments, which contain a folder path when Prowl was
+  opened with one (for example by `prowl open <path>`). Crash reporting starts when the
+  app opens, so turning it off takes effect after you restart Prowl.
 
-Prowl does not send terminal output, file contents, repository or branch names, or
-agent conversations. Debug builds send nothing.
+Telemetry does not include terminal output, file contents, or agent conversations.
+Analytics events also do not include paths, repository names, or branch names. Debug
+builds send no telemetry.
 
 Other network traffic happens only for the features that need it: update checks
 (Sparkle, from GitHub), GitHub data through your own `gh` CLI, SSH to hosts that you
