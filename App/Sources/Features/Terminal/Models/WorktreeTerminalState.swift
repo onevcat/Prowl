@@ -614,6 +614,12 @@ final class WorktreeTerminalState {
     tabAgentBlockedById.values.contains(true)
   }
 
+  /// Whether any tab holds a working or blocked agent, as opposed to a command
+  /// that only reports progress through `tabIsRunningById`.
+  var hasBusyAgent: Bool {
+    tabAgentBusyById.values.contains(true)
+  }
+
   var isRunScriptRunning: Bool {
     runScriptTabId != nil
   }
