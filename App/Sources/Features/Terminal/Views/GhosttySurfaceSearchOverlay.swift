@@ -368,6 +368,7 @@ struct GhosttySearchField: NSViewRepresentable {
 
     private var focusPending: Binding<Bool>?
     private weak var observedWindow: NSWindow?
+    private weak var observedEditor: NSTextView?
     private var focusContext: GhosttySurfaceView.FocusContext?
     private var pendingFocusRequest: GhosttySurfaceView.SearchFocusRequest?
     private var focusOwnership: GhosttySurfaceView.SearchFocusRequest?
@@ -381,9 +382,11 @@ struct GhosttySearchField: NSViewRepresentable {
     }
 
     func stopRequestingFocus() {
+      captureSearchSelection()
       transferFocusBeforeRemoval()
       isActive = false
       removeWindowUpdateObserver()
+      removeSelectionObserver()
     }
 
     func requestFocus() {
@@ -423,9 +426,11 @@ struct GhosttySearchField: NSViewRepresentable {
           self.finishFocusRequest(focusPending)
           return
         }
+        let selectedRange = self.focusOwner?.searchSelectionRange
         _ = window.makeFirstResponder(self)
         if self.isFocused(in: window) {
           self.recordFocusOwnership()
+          self.restoreSearchSelection(selectedRange)
           self.finishFocusRequest(focusPending)
         } else if window.firstResponder === window,
           let request = self.pendingFocusRequest,
@@ -442,8 +447,67 @@ struct GhosttySearchField: NSViewRepresentable {
       if result {
         recordFocusOwnership()
         onFocused?()
+        if let editor = currentEditor() as? NSTextView {
+          observeSelection(in: editor)
+        }
       }
       return result
+    }
+
+    override func resignFirstResponder() -> Bool {
+      captureSearchSelection()
+      let result = super.resignFirstResponder()
+      if result {
+        removeSelectionObserver()
+      }
+      return result
+    }
+
+    private func observeSelection(in editor: NSTextView) {
+      guard observedEditor !== editor else { return }
+      removeSelectionObserver()
+      NotificationCenter.default.addObserver(
+        self, selector: #selector(searchSelectionDidChange(_:)),
+        name: NSTextView.didChangeSelectionNotification, object: editor
+      )
+      observedEditor = editor
+    }
+
+    private func removeSelectionObserver() {
+      guard let observedEditor else { return }
+      NotificationCenter.default.removeObserver(
+        self, name: NSTextView.didChangeSelectionNotification, object: observedEditor
+      )
+      self.observedEditor = nil
+    }
+
+    @objc private func searchSelectionDidChange(_ notification: Notification) {
+      guard let editor = notification.object as? NSTextView, editor === observedEditor else { return }
+      captureSearchSelection(in: editor)
+    }
+
+    private func captureSearchSelection() {
+      guard let editor = currentEditor() as? NSTextView else { return }
+      captureSearchSelection(in: editor)
+    }
+
+    private func captureSearchSelection(in editor: NSTextView) {
+      let range = editor.selectedRange()
+      guard range.location != NSNotFound else { return }
+      focusOwner?.searchSelectionRange = range
+    }
+
+    private func restoreSearchSelection(_ range: NSRange?) {
+      guard let range, let owner = focusOwner, let editor = currentEditor() as? NSTextView else { return }
+      let length = (editor.string as NSString).length
+      guard range.location != NSNotFound, range.location <= length,
+        range.length <= length - range.location
+      else {
+        owner.searchSelectionRange = nil
+        return
+      }
+      editor.setSelectedRange(range)
+      captureSearchSelection(in: editor)
     }
 
     private func recordFocusOwnership() {
@@ -476,6 +540,7 @@ struct GhosttySearchField: NSViewRepresentable {
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
       if newWindow == nil {
+        captureSearchSelection()
         transferFocusBeforeRemoval()
       }
       super.viewWillMove(toWindow: newWindow)

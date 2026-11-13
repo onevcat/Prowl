@@ -514,10 +514,16 @@ final class GhosttySurfaceBridge {
       let needle = string(from: action.action.start_search.needle) ?? ""
       if !needle.isEmpty {
         state.searchNeedle = needle
-        state.searchInput = needle
+        if state.searchInput != needle {
+          state.searchInput = needle
+          state.searchSelectionRange = nil
+        }
       } else if state.searchNeedle == nil {
         state.searchNeedle = ""
-        state.searchInput = ""
+        if !state.searchInput.isEmpty {
+          state.searchInput = ""
+          state.searchSelectionRange = nil
+        }
       }
       state.searchTotal = nil
       state.searchSelected = nil

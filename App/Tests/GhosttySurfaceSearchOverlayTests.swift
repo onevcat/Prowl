@@ -94,6 +94,27 @@ struct GhosttySurfaceSearchOverlayTests {
     #expect(!fixture.surfaceView.bridge.state.searchFocusPending)
   }
 
+  @Test func focusedSearchRestoresCaretAndSelectionAfterOverlayRebuild() async throws {
+    let fixture = SearchOverlayFixture(requestFocus: true)
+    defer { fixture.window.close() }
+    await fixture.settle()
+    let originalField = try fixture.field()
+    let editor = try #require(originalField.currentEditor() as? NSTextView)
+    editor.insertText("needle", replacementRange: NSRange(location: NSNotFound, length: 0))
+    editor.setSelectedRange(NSRange(location: 2, length: 3))
+    let selectedRange = editor.selectedRange()
+    #expect(fixture.surfaceView.bridge.state.searchSelectionRange == selectedRange)
+
+    fixture.rebuild()
+    await fixture.settle()
+
+    let rebuiltField = try fixture.field()
+    let rebuiltEditor = try #require(rebuiltField.currentEditor() as? NSTextView)
+    let rebuiltRange = rebuiltEditor.selectedRange()
+    #expect(rebuiltRange.location == selectedRange.location, "Location: \(rebuiltRange.location)")
+    #expect(rebuiltRange.length == selectedRange.length, "Length: \(rebuiltRange.length)")
+  }
+
   @Test(arguments: [false, true])
   func unfocusedSearchDoesNotTakeFocusAfterOverlayRebuild(fromTerminal: Bool) async throws {
     let fixture = SearchOverlayFixture(requestFocus: true)

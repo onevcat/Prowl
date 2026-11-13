@@ -1,3 +1,4 @@
+import Foundation
 import GhosttyKit
 import Observation
 
@@ -25,6 +26,7 @@ final class GhosttySurfaceState {
   var remoteIndicator: RemotePaneIndicator?
   var searchNeedle: String?
   var searchInput = ""
+  var searchSelectionRange: NSRange?
   var searchTotal: Int?
   var searchSelected: Int?
   var searchFocusPending = false
