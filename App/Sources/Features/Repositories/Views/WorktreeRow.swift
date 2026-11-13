@@ -156,6 +156,9 @@ struct WorktreeRow: View {
               frameSize: CGSize(width: 16, height: 16)
             )
             .foregroundStyle(AgentDisplayState.working.foregroundStyle)
+            // The glyph text is hidden from accessibility so that VoiceOver does not
+            // read animation frames; this makes one stable element in its place.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Agent is working")
           case .blocked:
             Image(systemName: "exclamationmark.circle.fill")
