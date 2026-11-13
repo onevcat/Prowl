@@ -36,7 +36,8 @@ struct GhosttySurfaceSearchOverlay: View {
             onEscape: {
               closeSearch()
               surfaceView.requestFocus()
-            }
+            },
+            onFocused: { surfaceView.onFocusChange?(true) }
           )
           .frame(width: 180)
           .padding(.leading, 8)
@@ -277,6 +278,7 @@ struct GhosttySearchField: NSViewRepresentable {
   let focusRequests: GhosttySurfaceView.FocusRequests
   var onSubmit: (Bool) -> Void
   var onEscape: () -> Void
+  var onFocused: () -> Void = {}
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: $text)
@@ -290,6 +292,7 @@ struct GhosttySearchField: NSViewRepresentable {
     field.updateFocusPending($focusPending)
     field.onSubmit = onSubmit
     field.onEscape = onEscape
+    field.onFocused = onFocused
     field.isBordered = false
     field.drawsBackground = false
     field.focusRingType = .none
@@ -306,6 +309,7 @@ struct GhosttySearchField: NSViewRepresentable {
     }
     nsView.onSubmit = onSubmit
     nsView.onEscape = onEscape
+    nsView.onFocused = onFocused
     nsView.focusRequests = focusRequests
     nsView.focusOwner = focusOwner
 
@@ -351,6 +355,7 @@ struct GhosttySearchField: NSViewRepresentable {
   final class SearchField: NSTextField {
     var onSubmit: ((Bool) -> Void)?
     var onEscape: (() -> Void)?
+    var onFocused: (() -> Void)?
     var focusRequests: GhosttySurfaceView.FocusRequests?
     var focusOwner: GhosttySurfaceState?
 
@@ -418,6 +423,14 @@ struct GhosttySearchField: NSViewRepresentable {
           self.focusContext = GhosttySurfaceView.FocusContext(window: window)
         }
       }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+      let result = super.becomeFirstResponder()
+      if result {
+        onFocused?()
+      }
+      return result
     }
 
     private func updateRequestContext(in window: NSWindow) -> Bool {
