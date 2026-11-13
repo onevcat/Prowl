@@ -240,11 +240,50 @@ Ask-prompt heuristics, plus its own session layout and icon. Grok Build also
 ships an `agent` symlink; Prowl only treats that name as Grok when the path points
 at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
 
+Claude Code's native installer (`claude install`) places the engine binary at
+`~/.local/share/claude/versions/<semver>` and launchers (including Happy's) spawn that
+absolute path. The process's `argv0` basename is then the semver itself, so Prowl
+recognizes it by path pattern rather than by name.
+
+Agents started through **Happy** (`happy-coder`) are recognized too. Happy runs the
+agent on a PTY of its own, in its own session and process group, and proxies that TUI
+into the pane — so the engine is not a member of the pane's foreground job, and a probe
+that reads the job alone sees only Happy's own Node processes. It is still a reachable
+descendant of Happy, so Prowl walks down from the launcher and identifies the engine
+from its own argv, exactly as for a directly launched agent. Whatever `happy`,
+`happy codex`, `happy gemini`, `happy acp <runner>`, or a restored `happy resume <id>`
+starts is therefore named by itself, and a subcommand that starts no agent (`auth`,
+`doctor`, the background `daemon`) has nothing to find. Prowl reports the engine's own
+pid for these panes, so session names and process-scoped native state work as usual.
+
+Note that for a local launcher, its *own* arguments are not read as the running
+agent: `happy codex` names what the user asked Happy to start, while the Codex it
+names runs in another process entirely. A hosted process is identified only by what
+it is — its `argv0`, its process name, or the script a wrapped runtime was handed —
+so a hosted shim's payload (Happy passes a whole `--mcp-config` JSON blob and a
+prompt file) cannot claim the pane.
+
+A launcher started on a remote host is read differently. The host-side probe
+reports the pane's foreground job only (see
+[Remote agents over SSH](#remote-agents-over-ssh)), so there is no descendant walk
+and nothing else that could name the agent. The launcher's own arguments are the
+evidence instead — a remote `node …/happy claude` resolves to Claude as it did
+before — and live state tracks the host's screen. Native state and session names
+belong to another machine either way, so publishing the launcher's remote pid is
+not an issue there.
+
 ## How detection works
 
 1. **Process probe.** Prowl reads the pane's foreground process group and matches
    process names / argv against known agent executables, scoring argv[0] highest,
-   then process name, then command-line tokens.
+   then process name, then command-line tokens. When a job member is a launcher that
+   runs its agent outside the job (Happy), the probe also walks that launcher's
+   descendants. The job itself always decides first. Among the hosted processes, the
+   agent nearest the launcher is the pane's — that is the session the launcher
+   started, and an agent's own work below it (a subagent, a tool, a documented
+   `claude mcp serve`) never takes its place — and of that agent's own processes the
+   best-evidenced one is published, since a wrapped runtime appears twice and it is
+   the inner native process that holds the session file open.
 2. **Screen heuristics.** Claude detection consumes the full active screen (bounded
    by the terminal height); Pi starts from the last ~32 non-blank lines so an
    expanded background-agent widget stays intact, and every other agent starts
