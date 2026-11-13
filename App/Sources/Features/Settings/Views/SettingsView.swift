@@ -56,12 +56,21 @@ struct SettingsView: View {
         }
 
         Section("Repositories") {
-          ForEach(repositories) { repository in
-            RepoDisplayName(
-              fallbackName: repository.name,
-              customTitle: customTitles[repository.id]
-            )
-            .tag(SettingsSection.repository(repository.id))
+          // Sidebar order and groups, so the two lists read the same.
+          ForEach(store.repositories.settingsRepositoryListItems()) { item in
+            switch item {
+            case .repository(let repositoryID):
+              repositoryRow(repositoryID, in: repositories, customTitles: customTitles)
+            case .group(_, let title, let repositoryIDs):
+              // No tag: a group label cannot be selected.
+              Label(title, systemImage: "folder")
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+              ForEach(repositoryIDs, id: \.self) { repositoryID in
+                repositoryRow(repositoryID, in: repositories, customTitles: customTitles)
+                  .padding(.leading, 12)
+              }
+            }
           }
         }
       }
@@ -213,6 +222,21 @@ struct SettingsView: View {
     }
     .focusedSceneAction(\.closeSettingsWindowAction, enabled: true) {
       dismiss()
+    }
+  }
+
+  @ViewBuilder
+  private func repositoryRow(
+    _ repositoryID: Repository.ID,
+    in repositories: IdentifiedArrayOf<Repository>,
+    customTitles: [Repository.ID: String]
+  ) -> some View {
+    if let repository = repositories[id: repositoryID] {
+      RepoDisplayName(
+        fallbackName: repository.name,
+        customTitle: customTitles[repository.id]
+      )
+      .tag(SettingsSection.repository(repository.id))
     }
   }
 }
