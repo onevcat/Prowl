@@ -26,7 +26,7 @@ final class GhosttySurfaceState {
   var searchNeedle: String?
   var searchTotal: Int?
   var searchSelected: Int?
-  var searchFocusCount = 0
+  var searchFocusPending = false
   var sizeLimitMinWidth: UInt32?
   var sizeLimitMinHeight: UInt32?
   var sizeLimitMaxWidth: UInt32?

@@ -42,6 +42,41 @@ struct GhosttySurfaceBridgeTests {
     #expect(received?.1 == "Body")
   }
 
+  @Test func searchStartRequestsFocusAndAllowsRepeatedRequests() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_START_SEARCH
+    let target = ghostty_target_s()
+
+    #expect(!bridge.state.searchFocusPending)
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+    #expect(bridge.state.searchNeedle == "")
+
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+
+    bridge.state.searchFocusPending = false
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+  }
+
+  @Test func searchEndCancelsPendingFocus() {
+    let bridge = GhosttySurfaceBridge()
+    bridge.state.searchNeedle = "needle"
+    bridge.state.searchTotal = 3
+    bridge.state.searchSelected = 1
+    bridge.state.searchFocusPending = true
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_END_SEARCH
+
+    _ = bridge.handleAction(target: ghostty_target_s(), action: action)
+    #expect(!bridge.state.searchFocusPending)
+    #expect(bridge.state.searchNeedle == nil)
+    #expect(bridge.state.searchTotal == nil)
+    #expect(bridge.state.searchSelected == nil)
+  }
+
   @Test func configChangeEmitsCallback() {
     let bridge = GhosttySurfaceBridge()
     var callbackCount = 0

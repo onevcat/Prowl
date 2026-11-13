@@ -11,7 +11,6 @@ struct GhosttySurfaceSearchOverlay: View {
   @State private var corner: GhosttySearchCorner = .topRight
   @State private var dragOffset: CGSize = .zero
   @State private var barSize: CGSize = .zero
-  @State private var isSearchFieldFocused = false
   @State private var searchTask: Task<Void, Never>?
 
   private let overlayPadding: CGFloat = 8
@@ -28,7 +27,9 @@ struct GhosttySurfaceSearchOverlay: View {
         HStack(spacing: 4) {
           GhosttySearchField(
             text: $searchText,
-            isFocused: isSearchFieldFocused,
+            focusPending: $state.searchFocusPending,
+            focusOwner: state,
+            focusRequests: surfaceView.runtime.focusRequests,
             onSubmit: { isShifted in
               navigateSearch(isShifted ? .previous : .next)
             },
@@ -57,7 +58,9 @@ struct GhosttySurfaceSearchOverlay: View {
             )
           }
           .buttonStyle(GhosttySearchButtonStyle())
-          .help(searchButtonHelp(String(localized: "Find Previous"), commandID: AppShortcuts.CommandID.findPrevious))
+          .help(
+            searchButtonHelp(
+              String(localized: "Find Previous"), commandID: AppShortcuts.CommandID.findPrevious))
 
           Button {
             navigateSearch(.next)
@@ -69,7 +72,9 @@ struct GhosttySurfaceSearchOverlay: View {
             )
           }
           .buttonStyle(GhosttySearchButtonStyle())
-          .help(searchButtonHelp(String(localized: "Find Next"), commandID: AppShortcuts.CommandID.findNext))
+          .help(
+            searchButtonHelp(
+              String(localized: "Find Next"), commandID: AppShortcuts.CommandID.findNext))
 
           Button {
             closeSearch()
@@ -119,26 +124,19 @@ struct GhosttySurfaceSearchOverlay: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
       .onAppear {
-        focusSearchField()
         scheduleSearch(searchText)
       }
       .onChange(of: searchText) { _, newValue in
         scheduleSearch(newValue)
       }
       .onChange(of: state.searchNeedle) { _, newValue in
-        guard let newValue else { return }
-        focusSearchField()
-        if !newValue.isEmpty, newValue != searchText {
-          searchText = newValue
-        }
+        guard let newValue, !newValue.isEmpty, newValue != searchText else { return }
+        searchText = newValue
       }
       .onChange(of: state.searchTotal) { _, newValue in
         if let total = newValue, total > 0, state.searchSelected == nil {
           surfaceView.performBindingAction("navigate_search:next")
         }
-      }
-      .onChange(of: state.searchFocusCount) { _, _ in
-        focusSearchField()
       }
       .onDisappear {
         searchTask?.cancel()
@@ -208,14 +206,6 @@ struct GhosttySurfaceSearchOverlay: View {
     return title
   }
 
-  private func focusSearchField() {
-    isSearchFieldFocused = false
-    Task { @MainActor in
-      await Task.yield()
-      isSearchFieldFocused = true
-    }
-  }
-
   private func centerPosition(
     for corner: GhosttySearchCorner,
     in containerSize: CGSize,
@@ -280,9 +270,11 @@ private struct SearchButtonLabel: View {
   }
 }
 
-private struct GhosttySearchField: NSViewRepresentable {
+struct GhosttySearchField: NSViewRepresentable {
   @Binding var text: String
-  var isFocused: Bool
+  @Binding var focusPending: Bool
+  let focusOwner: GhosttySurfaceState
+  let focusRequests: GhosttySurfaceView.FocusRequests
   var onSubmit: (Bool) -> Void
   var onEscape: () -> Void
 
@@ -293,6 +285,9 @@ private struct GhosttySearchField: NSViewRepresentable {
   func makeNSView(context: Context) -> SearchField {
     let field = SearchField()
     field.delegate = context.coordinator
+    field.focusRequests = focusRequests
+    field.focusOwner = focusOwner
+    field.updateFocusPending($focusPending)
     field.onSubmit = onSubmit
     field.onEscape = onEscape
     field.isBordered = false
@@ -311,10 +306,10 @@ private struct GhosttySearchField: NSViewRepresentable {
     }
     nsView.onSubmit = onSubmit
     nsView.onEscape = onEscape
+    nsView.focusRequests = focusRequests
+    nsView.focusOwner = focusOwner
 
-    if isFocused, nsView.window?.firstResponder !== nsView.currentEditor() {
-      nsView.window?.makeFirstResponder(nsView)
-    }
+    nsView.updateFocusPending($focusPending)
   }
 
   final class Coordinator: NSObject, NSTextFieldDelegate {
@@ -349,9 +344,139 @@ private struct GhosttySearchField: NSViewRepresentable {
     }
   }
 
+  static func dismantleNSView(_ nsView: SearchField, coordinator: Coordinator) {
+    nsView.stopRequestingFocus()
+  }
+
   final class SearchField: NSTextField {
     var onSubmit: ((Bool) -> Void)?
     var onEscape: (() -> Void)?
+    var focusRequests: GhosttySurfaceView.FocusRequests?
+    var focusOwner: GhosttySurfaceState?
+
+    private var focusPending: Binding<Bool>?
+    private weak var observedWindow: NSWindow?
+    private var focusContext: GhosttySurfaceView.FocusContext?
+    private var pendingFocusRequest: GhosttySurfaceView.SearchFocusRequest?
+    private var isFocusRequestScheduled = false
+    private var isActive = true
+
+    func updateFocusPending(_ binding: Binding<Bool>) {
+      focusPending = binding
+      requestFocus()
+    }
+
+    func stopRequestingFocus() {
+      isActive = false
+      removeWindowUpdateObserver()
+    }
+
+    func requestFocus() {
+      guard isActive, focusPending?.wrappedValue == true else {
+        pendingFocusRequest = nil
+        focusContext = nil
+        removeWindowUpdateObserver()
+        return
+      }
+      guard let window else {
+        removeWindowUpdateObserver()
+        return
+      }
+      _ = updateRequestContext(in: window)
+      updateWindowUpdateObserver()
+      guard !isFocusRequestScheduled else { return }
+      isFocusRequestScheduled = true
+      Task { @MainActor [weak self, weak window] in
+        guard let self else { return }
+        var retryAfterWindowChange = false
+        defer {
+          self.isFocusRequestScheduled = false
+          if retryAfterWindowChange {
+            self.requestFocus()
+          }
+        }
+        guard self.isActive, let window, self.window === window,
+          let focusPending = self.focusPending, focusPending.wrappedValue
+        else {
+          retryAfterWindowChange = self.isActive && self.window != nil && self.window !== window
+          self.updateWindowUpdateObserver()
+          return
+        }
+        guard self.updateRequestContext(in: window),
+          self.isFocused(in: window) || self.focusContext?.matches(in: window) == true
+        else {
+          self.finishFocusRequest(focusPending)
+          return
+        }
+        _ = window.makeFirstResponder(self)
+        if self.isFocused(in: window) {
+          self.finishFocusRequest(focusPending)
+        } else if window.firstResponder === window,
+          let request = self.pendingFocusRequest,
+          self.focusRequests?.searchRequest(for: request.owner)?.matches(request) == true
+        {
+          self.focusContext = GhosttySurfaceView.FocusContext(window: window)
+        }
+      }
+    }
+
+    private func updateRequestContext(in window: NSWindow) -> Bool {
+      guard let focusOwner, let focusRequests,
+        let request = focusRequests.searchRequest(for: focusOwner), let context = request.context,
+        context.window === window
+      else { return false }
+      if focusContext?.window !== window || pendingFocusRequest?.matches(request) != true {
+        focusContext = context
+        pendingFocusRequest = request
+      }
+      return true
+    }
+
+    private func finishFocusRequest(_ binding: Binding<Bool>) {
+      pendingFocusRequest = nil
+      focusContext = nil
+      removeWindowUpdateObserver()
+      binding.wrappedValue = false
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      requestFocus()
+    }
+
+    @objc private func windowDidUpdate(_ notification: Notification) {
+      guard let window, notification.object as? NSWindow === window else { return }
+      guard focusPending?.wrappedValue == true else {
+        removeWindowUpdateObserver()
+        return
+      }
+      requestFocus()
+    }
+
+    private func updateWindowUpdateObserver() {
+      guard isActive, focusPending?.wrappedValue == true, let window else {
+        removeWindowUpdateObserver()
+        return
+      }
+      guard observedWindow !== window else { return }
+      removeWindowUpdateObserver()
+      NotificationCenter.default.addObserver(
+        self, selector: #selector(windowDidUpdate(_:)), name: NSWindow.didUpdateNotification,
+        object: window
+      )
+      observedWindow = window
+    }
+
+    private func removeWindowUpdateObserver() {
+      NotificationCenter.default.removeObserver(
+        self, name: NSWindow.didUpdateNotification, object: nil)
+      observedWindow = nil
+    }
+
+    private func isFocused(in window: NSWindow) -> Bool {
+      guard self.window === window, let editor = currentEditor() else { return false }
+      return window.firstResponder === editor
+    }
 
     override func cancelOperation(_ sender: Any?) {
       onEscape?()
