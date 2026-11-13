@@ -506,11 +506,26 @@ extension WorktreeTerminalState {
 
     case .toggleSplitZoom:
       guard tree.isSplit else { return false }
+      let preserveSearchFocus = shouldPreserveSearchFocus(on: targetSurface)
       let newZoomed = (tree.zoomed == targetNode) ? nil : targetNode
       updateTree(tree.settingZoomed(newZoomed), for: tabId)
-      focusSurface(targetSurface, in: tabId)
+      if preserveSearchFocus {
+        recordActiveSurface(targetSurface, in: tabId)
+      } else {
+        focusSurface(targetSurface, in: tabId)
+      }
       return true
     }
+  }
+
+  private func shouldPreserveSearchFocus(on surface: GhosttySurfaceView) -> Bool {
+    let state = surface.bridge.state
+    let requests = surface.runtime.focusRequests
+    guard state.searchNeedle != nil, let window = surface.window,
+      let request = requests.searchRequest(for: state)
+    else { return false }
+    return requests.isSearchFieldFocused(for: state, in: window)
+      || (state.searchFocusPending && request.context?.matchesOrAllowsDetachedSource(in: window) == true)
   }
 
   func performSplitOperation(_ operation: TerminalSplitTreeView.Operation, in tabId: TerminalTabID) {

@@ -28,6 +28,95 @@ struct GhosttySearchFieldTests {
     #expect(!source.bridge.state.searchFocusPending)
   }
 
+  @Test(arguments: [false, true])
+  func pendingFindSurvivesSourceDetachment(reattach: Bool) async throws {
+    let window = makeWindow()
+    let source = makeSurface(runtime: GhosttyRuntime())
+    window.contentView?.addSubview(source)
+    try #require(window.makeFirstResponder(source))
+    startSearch(on: source)
+    let field = makeField(for: source)
+    window.contentView?.addSubview(field)
+    source.removeFromSuperview()
+    try #require(window.firstResponder === window)
+    if reattach {
+      window.contentView?.addSubview(source)
+    }
+    await Task.megaYield()
+
+    #expect(field.currentEditor() != nil)
+    #expect(!source.bridge.state.searchFocusPending)
+  }
+
+  @Test func pendingFindDoesNotFollowSourceToAnotherWindow() async throws {
+    let window = makeWindow()
+    let otherWindow = makeWindow()
+    let source = makeSurface(runtime: GhosttyRuntime())
+    window.contentView?.addSubview(source)
+    try #require(window.makeFirstResponder(source))
+    startSearch(on: source)
+    let field = makeField(for: source)
+    window.contentView?.addSubview(field)
+    source.removeFromSuperview()
+    otherWindow.contentView?.addSubview(source)
+    await Task.megaYield()
+
+    #expect(field.currentEditor() == nil)
+    #expect(!source.bridge.state.searchFocusPending)
+  }
+
+  @Test func splitZoomPreservesSearchFocusAfterResponderFallback() async throws {
+    let window = SearchFocusTestWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
+      styleMask: [.titled], backing: .buffered, defer: true
+    )
+    let runtime = GhosttyRuntime()
+    let state = WorktreeTerminalState(
+      runtime: runtime,
+      worktree: Worktree(
+        id: "/tmp/repo/wt-1", name: "wt-1", detail: "",
+        workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
+        repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+      )
+    )
+    let tabID = try #require(state.createTab())
+    let firstID = try #require(state.focusedSurfaceId(in: tabID))
+    #expect(state.performSplitAction(.newSplit(direction: .right), for: firstID))
+    let targetID = try #require(state.focusedSurfaceId(in: tabID))
+    let target = try #require(state.surfaceView(for: targetID))
+    window.contentView?.addSubview(target)
+    let sourceControl = NSTextField(frame: NSRect(x: 0, y: 80, width: 180, height: 24))
+    window.contentView?.addSubview(sourceControl)
+    try #require(window.makeFirstResponder(sourceControl))
+    let sourceEditor = try #require(sourceControl.currentEditor())
+    try #require(window.firstResponder === sourceEditor)
+    target.bridge.state.searchNeedle = ""
+    let requests = runtime.focusRequests
+    requests.beginSearch(for: target.bridge.state, in: window)
+    target.bridge.state.searchFocusPending = true
+
+    let field = GhosttySearchField.SearchField(frame: NSRect(x: 0, y: 40, width: 180, height: 24))
+    field.focusRequests = requests
+    field.focusOwner = target.bridge.state
+    let binding = Binding(
+      get: { target.bridge.state.searchFocusPending },
+      set: { target.bridge.state.searchFocusPending = $0 }
+    )
+    field.updateFocusPending(binding)
+    window.acceptsSearchField = false
+    window.clearsResponderOnRejection = true
+    window.contentView?.addSubview(field)
+    field.requestFocus()
+    await Task.megaYield()
+    try #require(window.firstResponder === window)
+
+    let request = try #require(requests.searchRequest(for: target.bridge.state))
+    #expect(request.context?.matches(in: window) == true)
+    #expect(state.performSplitAction(.toggleSplitZoom, for: targetID))
+    #expect(requests.searchRequest(for: target.bridge.state)?.matches(request) == true)
+    #expect(target.bridge.state.searchFocusPending)
+  }
+
   @Test func newerTextFieldFocusBeforeFieldCreationCancelsSearch() async throws {
     let window = makeWindow()
     let source = makeSurface(runtime: GhosttyRuntime())
@@ -378,6 +467,79 @@ struct GhosttySearchFieldTests {
     #expect(original.currentEditor() == nil)
     #expect(replacement.currentEditor() != nil)
     #expect(!pending)
+  }
+
+  @Test func focusedRemovalDoesNotRestoreAfterNewerTextFieldFocus() async throws {
+    let window = makeWindow()
+    var pending = true
+    var restoreRequested = false
+    let field = makeField(focusPending: Binding(get: { pending }, set: { pending = $0 }), in: window)
+    field.onFocusedRemoval = { _ in restoreRequested = true }
+    let other = NSTextField(frame: NSRect(x: 0, y: 40, width: 180, height: 24))
+    window.contentView?.addSubview(field)
+    window.contentView?.addSubview(other)
+    await Task.megaYield()
+    try #require(field.currentEditor() != nil)
+
+    field.stopRequestingFocus()
+    try #require(window.makeFirstResponder(other))
+    await Task.megaYield()
+
+    #expect(!restoreRequested)
+    #expect(other.currentEditor() != nil)
+    #expect(!pending)
+  }
+
+  @Test func newerTerminalRequestBeforeRemovalPreventsFocusTransfer() async throws {
+    let window = makeWindow()
+    var pending = true
+    var restoreRequested = false
+    let field = makeField(focusPending: Binding(get: { pending }, set: { pending = $0 }), in: window)
+    field.onFocusedRemoval = { _ in restoreRequested = true }
+    window.contentView?.addSubview(field)
+    await Task.megaYield()
+    try #require(field.currentEditor() != nil)
+    try #require(!pending)
+    let terminal = makeSurface(runtime: GhosttyRuntime())
+    let clock = TestClock()
+
+    GhosttySurfaceView.moveFocus(to: terminal, clock: clock, requests: field.focusRequests)
+    field.stopRequestingFocus()
+    await Task.megaYield()
+
+    #expect(!restoreRequested)
+    window.contentView?.addSubview(terminal)
+    await clock.advance(by: .seconds(2))
+    await Task.megaYield()
+    #expect(window.firstResponder === terminal)
+  }
+
+  @Test func focusedRemovalDoesNotRestoreAfterNewerTerminalRequest() async throws {
+    let window = makeWindow()
+    var pending = true
+    var restoreRequested = false
+    let field = makeField(focusPending: Binding(get: { pending }, set: { pending = $0 }), in: window)
+    field.onFocusedRemoval = { _ in restoreRequested = true }
+    window.contentView?.addSubview(field)
+    await Task.megaYield()
+    try #require(field.currentEditor() != nil)
+    let runtime = GhosttyRuntime()
+    let terminal = GhosttySurfaceView(
+      runtime: runtime, workingDirectory: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let clock = TestClock()
+
+    field.stopRequestingFocus()
+    GhosttySurfaceView.moveFocus(to: terminal, clock: clock, requests: field.focusRequests)
+    await Task.megaYield()
+    #expect(!restoreRequested)
+    #expect(!pending)
+
+    window.contentView?.addSubview(terminal)
+    await clock.advance(by: .seconds(2))
+    await Task.megaYield()
+    #expect(window.firstResponder === terminal)
   }
 
   @Test func repeatedPendingRequestsShareOneFocusTask() async throws {
