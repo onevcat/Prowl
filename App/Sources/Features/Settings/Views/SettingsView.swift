@@ -62,10 +62,12 @@ struct SettingsView: View {
             case .repository(let repositoryID):
               repositoryRow(repositoryID, in: repositories, customTitles: customTitles)
             case .group(_, let title, let repositoryIDs):
-              // No tag: a group label cannot be selected.
-              Label(title, systemImage: "folder")
+              // A quiet caption, not a row: no tag (cannot be selected) and no icon.
+              Text(title)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .padding(.top, 4)
               ForEach(repositoryIDs, id: \.self) { repositoryID in
                 repositoryRow(repositoryID, in: repositories, customTitles: customTitles)
                   .padding(.leading, 12)
