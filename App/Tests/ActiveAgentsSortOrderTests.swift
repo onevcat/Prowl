@@ -171,6 +171,31 @@ struct ActiveAgentsSortOrderTests {
     #expect(state.activeAgentOrderInputs != nil)
   }
 
+  // MARK: - Promoted title
+
+  @Test func promotedTitleLabelKeepsTheAgentNameAndTheRemoteHost() {
+    let now = Date(timeIntervalSince1970: 1_790_000_000)
+    let local = makeEntry(agentID(0))
+    #expect(
+      ActiveAgentRowPresentation.promotedTitleAccessibilityLabel(for: local, subtitle: "main")
+        == "\(local.displayName), main")
+
+    var known = makeEntry(agentID(1))
+    known.remote = RemoteAgentContext(
+      connection: ConnectionKey(user: "alice", hostname: "box.example"),
+      correlation: .correlated, confirmedAt: now, now: now)
+    #expect(
+      ActiveAgentRowPresentation.promotedTitleAccessibilityLabel(for: known, subtitle: "repo")
+        == "\(known.displayName), alice@box.example \u{00B7} repo")
+
+    var unresolved = makeEntry(agentID(2))
+    unresolved.remote = RemoteAgentContext(
+      connection: nil, correlation: .probeUnavailable(nil), confirmedAt: nil, now: now)
+    #expect(
+      ActiveAgentRowPresentation.promotedTitleAccessibilityLabel(for: unresolved, subtitle: "repo")
+        == "\(unresolved.displayName), Remote host \u{00B7} repo")
+  }
+
   // MARK: - Helpers
 
   private func sections(

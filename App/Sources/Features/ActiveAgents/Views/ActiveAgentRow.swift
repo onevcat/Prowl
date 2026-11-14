@@ -51,7 +51,9 @@ struct ActiveAgentRow: View {
         .truncationMode(.tail)
         // The agent name is hidden on screen; VoiceOver still names the agent.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: "\(entry.displayName), \(subtitle)"))
+        .accessibilityLabel(
+          Text(verbatim: ActiveAgentRowPresentation.promotedTitleAccessibilityLabel(for: entry, subtitle: subtitle))
+        )
     } else {
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         if showsAgentName {
