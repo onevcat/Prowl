@@ -296,7 +296,8 @@ tab at the worktree **root** — unlike a plain
 new tab, it never inherits the focused tab's current directory), **Stop Running
 Script** (only while a Prowl-tracked run script is running), **Copy Path**,
 **Copy Branch Name**,
-**Reveal in Finder**, **Open Pull Request** (only when the worktree has a PR),
+**Reveal in Finder**, **Open Pull Request** (when the worktree has a PR; else
+**Open Repository on GitHub**, named for the code host),
 and **Close All Tabs** (disabled when the worktree has no tabs; uses the same
 active-agent / long-running-command confirmation as the tab bar's "Close All",
 and the confirmation names the target worktree).
