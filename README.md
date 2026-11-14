@@ -308,8 +308,9 @@ License](LICENSE) (FSL-1.1-ALv2), which it inherits from the upstream
 - **Each version becomes available under the Apache License 2.0** two years after its
   release.
 
-The iOS mirror client in [`Mirror/iOS`](Mirror/iOS) is licensed separately under the
-[MIT License](Mirror/iOS/LICENSE).
+The mirror clients in [`Mirror/iOS`](Mirror/iOS) and [`Mirror/Android`](Mirror/Android) are
+licensed separately under the MIT License ([iOS](Mirror/iOS/LICENSE),
+[Android](Mirror/Android/LICENSE)).
 
 This summary is for convenience. The [LICENSE](LICENSE) file is the binding text.
 
