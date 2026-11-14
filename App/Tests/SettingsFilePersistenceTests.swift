@@ -60,6 +60,15 @@ struct SettingsFilePersistenceTests {
     #expect(decoded.ghosttyConfigPath == "/Users/me/.config/prowl/ghostty.conf")
   }
 
+  @Test func sidebarChangeCountsDefaultOnAndRoundTrip() throws {
+    #expect(try storedGlobalSettings(removing: "showSidebarChangeCounts").showSidebarChangeCounts)
+
+    var settings = GlobalSettings.default
+    settings.showSidebarChangeCounts = false
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: JSONEncoder().encode(settings))
+    #expect(!decoded.showSidebarChangeCounts)
+  }
+
   private func storedGlobalSettings(
     removing removedKey: String? = nil,
     setting extra: [String: Any] = [:]

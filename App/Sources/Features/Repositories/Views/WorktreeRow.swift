@@ -10,6 +10,8 @@ struct WorktreeRow: View {
   let tabCountBadge: WorktreeTabCountBadge?
   let iconSystemName: String?
   let showsPullRequestInfo: Bool
+  /// Whether the `+N -N` change counts show; a Settings option (#1092).
+  let showsChangeCounts: Bool
   let isHovered: Bool
   let isPinned: Bool
   let isMainWorktree: Bool
@@ -39,6 +41,7 @@ struct WorktreeRow: View {
     tabCountBadge: WorktreeTabCountBadge? = nil,
     iconSystemName: String? = nil,
     showsPullRequestInfo: Bool,
+    showsChangeCounts: Bool = true,
     isHovered: Bool,
     isPinned: Bool,
     isMainWorktree: Bool,
@@ -64,6 +67,7 @@ struct WorktreeRow: View {
     self.tabCountBadge = tabCountBadge
     self.iconSystemName = iconSystemName
     self.showsPullRequestInfo = showsPullRequestInfo
+    self.showsChangeCounts = showsChangeCounts
     self.isHovered = isHovered
     self.isPinned = isPinned
     self.isMainWorktree = isMainWorktree
@@ -102,7 +106,7 @@ struct WorktreeRow: View {
     let displayAddedLines = info?.addedLines
     let displayRemovedLines = info?.removedLines
     let lineChangePresentation: LineChangeBadgePresentation? =
-      if let displayAddedLines, let displayRemovedLines {
+      if showsChangeCounts, let displayAddedLines, let displayRemovedLines {
         LineChangeBadgePresentation(
           addedLines: displayAddedLines,
           removedLines: displayRemovedLines,

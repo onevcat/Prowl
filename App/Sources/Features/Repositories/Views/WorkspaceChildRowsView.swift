@@ -7,6 +7,7 @@ import SwiftUI
 /// creating one rooted at that repository's folder when needed.
 struct WorkspaceChildRowsView: View {
   let rows: [WorkspaceChildRowModel]
+  let showsChangeCounts: Bool
   let selectedID: String?
   let onSelect: (String) -> Void
   let onShowDiff: (String) -> Void
@@ -23,6 +24,7 @@ struct WorkspaceChildRowsView: View {
         info: row.info,
         iconSystemName: nil,
         showsPullRequestInfo: true,
+        showsChangeCounts: showsChangeCounts,
         isHovered: false,
         isPinned: false,
         isMainWorktree: false,

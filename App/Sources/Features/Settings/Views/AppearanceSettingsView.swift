@@ -207,6 +207,11 @@ struct AppearanceSettingsView: View {
               """
             )
           }
+          Toggle(
+            "Show change counts in the sidebar",
+            isOn: $store.showSidebarChangeCounts
+          )
+          .help("Show the added and removed line counts on sidebar rows. Show Diff still works when they are hidden.")
         }
         Section("Run") {
           Toggle(

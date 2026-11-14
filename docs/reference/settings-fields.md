@@ -113,6 +113,7 @@ reads have no scheduled removal date.
 | `shelfSpineTintFollowsRepositoryColor` | Bool | `true` | Tint shelf spines by repo color. |
 | `externalDiffToolID` | String | `built-in` | Tool used by diff badges and Show Diff: `built-in`, `hunk`, `filemerge`, `kaleidoscope`, or `custom`. |
 | `externalDiffCustomCommand` | String | `""` | Command template for `externalDiffToolID = custom`; supports `{leftPath}`, `{rightPath}`, `{worktreePath}`, `{repoPath}`, and `{branch}`. |
+| `showSidebarChangeCounts` | Bool | `true` | Show the `+N -N` change counts on sidebar worktree and workspace child rows. When off, open the diff with `⌘⇧Y`, the row context menu, or the Command Palette. (Settings → General → Diff Tool.) |
 | `detectRepositoryIconsAutomatically` | Bool | `true` | Scan newly added repositories locally for a high-confidence project icon (app icon, launcher, favicon/logo) and use it as the repo icon. Applies to future additions only; never replaces a manual icon. |
 
 ## Per-repository settings (`RepositorySettings`)

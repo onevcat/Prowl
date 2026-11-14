@@ -49,6 +49,7 @@ struct AppFeature {
       var repositories = repositories
       repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       repositories.showActiveAgentNames = settings.showActiveAgentNames
+      repositories.showSidebarChangeCounts = settings.showSidebarChangeCounts
       repositories.activeAgents.isIslandEnabled = settings.agentIslandEnabled
       self.repositories = repositories
       self.settings = settings
@@ -491,6 +492,7 @@ struct AppFeature {
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
         state.repositories.showActiveAgentNames = settings.showActiveAgentNames
+        state.repositories.showSidebarChangeCounts = settings.showSidebarChangeCounts
         state.repositories.activeAgents.isIslandEnabled = settings.agentIslandEnabled
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           @Shared(.repositorySettings(selectedWorktree.repositoryLocation)) var repositorySettings
