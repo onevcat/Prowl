@@ -1113,7 +1113,7 @@ extension RepositoriesFeature {
     ].joined(separator: "/")
   }
 
-  nonisolated private static func validWebURL(_ raw: String) -> URL? {
+  nonisolated static func validWebURL(_ raw: String) -> URL? {
     guard let url = URL(string: raw),
       let scheme = url.scheme?.lowercased(),
       ["http", "https"].contains(scheme),

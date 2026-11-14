@@ -65,6 +65,14 @@ struct WorkspaceChildRowsView: View {
         Button("Reveal in Finder") {
           NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: row.workingDirectory.path)
         }
+        // The PR number in the row is plain text, and the toolbar, shortcut and
+        // palette act on the workspace, not this child, so this is its PR action.
+        if let pullRequestURL = row.pullRequestURL {
+          Button("Open Pull Request") {
+            NSWorkspace.shared.open(pullRequestURL)
+          }
+          .help("Open \(row.repositoryName)'s pull request on the code host")
+        }
         Divider()
         Button("Show Diff") {
           onShowDiff(row.id)
