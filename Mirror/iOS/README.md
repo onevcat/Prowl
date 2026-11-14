@@ -2,8 +2,7 @@
 Native iOS mirror client for Prowl, supporting iPhone and iPad
 
 Migrated from `Awhisper/ProwlMirror-iPad` at commit `2b8e237` into this repository.
-The source snapshot retains its notices; the original repository and history remain
-available separately. The app now uses `com.onevcat.prowl.mirror`, so it installs
+The original repository and history remain available separately. The app now uses `com.onevcat.prowl.mirror`, so it installs
 alongside the old app and does not automatically migrate its saved connections.
 
 ## Flow
@@ -159,8 +158,7 @@ local date (`YYYY.M.D`) and the build number is the local time (`YYYYMMDDHHMM`),
 has a larger build number. Set `MIRROR_IOS_VERSION` or `MIRROR_IOS_BUILD` to override them.
 The script prints the commit of each build; add it to the TestFlight notes.
 
-See the shared [wire contract](../../docs/remote-mirror-wire.md) and
-`ThirdPartyNotices/` for source/license notices.
+See the shared [wire contract](../../docs/remote-mirror-wire.md).
 
 Ordinary Send requires Host capability `agent-input`. It does not add a completion
 prompt or create a pending dispatch; prior automation receipts remain unchanged.
@@ -169,3 +167,10 @@ Delivery confirmation and reconnect receipt lookup remain separate from task suc
 Use **Scan QR Code** in the Host connection form to scan **Add a Device** on Host.
 Scanning connects with the encoded address, port and short-lived code. Camera
 permission is optional; manual entry remains available. Refresh expired codes on Host.
+
+## License
+
+The iOS mirror client is licensed under the [MIT License](LICENSE). This covers
+`Mirror/iOS/` and the sources it compiles from `Mirror/Shared/` and
+`Mirror/Fixtures/`. The rest of the repository keeps its own
+[license](../../LICENSE).

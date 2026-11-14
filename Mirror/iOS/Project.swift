@@ -42,7 +42,8 @@ let project = Project(
       infoPlist: nil,
       sources: ["../Shared/*.swift"],
       // Conversation fixtures feed the DEBUG fixture mode and UI tests without a Host.
-      resources: ["../Fixtures/conversation/*.events.jsonl"],
+      // LICENSE ships the MIT notice with every distributed copy of the app.
+      resources: ["../Fixtures/conversation/*.events.jsonl", "LICENSE"],
       buildableFolders: ["ProwlMirror-iOS"],
       settings: settings("App", productName: "ProwlMirror-iOS")
     ),
