@@ -16,7 +16,11 @@ branches are live on disk at once — ideal for giving each agent its own branch
 
 Within a repository, worktrees are grouped: **Main** (the repo root), **Pinned**,
 **Pending** (being created), and the rest. Each row shows the name, branch detail,
-an unread-notification bell, and run/agent status.
+an unread-notification bell, and run/agent status. In place of the branch icon, a
+working agent shows the animated bagua indicator that Active Agents uses, an agent
+waiting for input shows a red exclamation mark, and the row's own work (create,
+archive, delete) or a command that reports progress shows a plain spinner. With
+Reduce Motion on, a working agent shows the plain spinner too.
 
 ## Repository kinds
 

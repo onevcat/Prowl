@@ -142,6 +142,9 @@ struct BaguaWorkingIndicator: View {
   static let frames = ["☰", "☱", "☲", "☳", "☴", "☵", "☶", "☷"]
   static let frameDuration = 0.12
 
+  var font: Font = .system(size: 17, weight: .bold, design: .monospaced)
+  var frameSize = CGSize(width: 20, height: 18)
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
       frameText(Self.frame(at: context.date))
@@ -161,9 +164,9 @@ struct BaguaWorkingIndicator: View {
 
   private func frameText(_ frame: String) -> some View {
     Text(frame)
-      .font(.system(size: 17, weight: .bold, design: .monospaced))
+      .font(font)
       .lineLimit(1)
-      .frame(width: 20, height: 18)
+      .frame(width: frameSize.width, height: frameSize.height)
       .accessibilityHidden(true)
   }
 }

@@ -1420,6 +1420,12 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.hasBlockedAgent == true
   }
 
+  /// Whether the worktree holds a working or blocked agent. The sidebar row
+  /// uses it to tell agent work from a command that reports progress.
+  func hasBusyAgent(for worktreeID: Worktree.ID) -> Bool {
+    states[worktreeID]?.hasBusyAgent == true
+  }
+
   func isRunScriptRunning(for worktreeID: Worktree.ID) -> Bool {
     states[worktreeID]?.isRunScriptRunning == true
   }

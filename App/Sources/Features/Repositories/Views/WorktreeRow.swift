@@ -18,6 +18,7 @@ struct WorktreeRow: View {
   let isLoading: Bool
   let taskStatus: WorktreeTaskStatus?
   let hasBlockedAgent: Bool
+  let hasBusyAgent: Bool
   let isRunScriptRunning: Bool
   let showsNotificationIndicator: Bool
   let notifications: [WorktreeTerminalNotification]
@@ -33,6 +34,7 @@ struct WorktreeRow: View {
   let onStopRunScript: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     name: String,
@@ -48,6 +50,7 @@ struct WorktreeRow: View {
     isLoading: Bool,
     taskStatus: WorktreeTaskStatus?,
     hasBlockedAgent: Bool = false,
+    hasBusyAgent: Bool = false,
     isRunScriptRunning: Bool,
     showsNotificationIndicator: Bool,
     notifications: [WorktreeTerminalNotification],
@@ -74,6 +77,7 @@ struct WorktreeRow: View {
     self.isLoading = isLoading
     self.taskStatus = taskStatus
     self.hasBlockedAgent = hasBlockedAgent
+    self.hasBusyAgent = hasBusyAgent
     self.isRunScriptRunning = isRunScriptRunning
     self.showsNotificationIndicator = showsNotificationIndicator
     self.notifications = notifications
@@ -89,13 +93,14 @@ struct WorktreeRow: View {
   }
 
   var body: some View {
-    // A blocked agent has stopped and is waiting on an answer, so it must not
-    // wear the running spinner — that affordance tells you to wait, which is
-    // the opposite of what a blocked agent needs. `isLoading` still wins: that
-    // spinner describes the row's own create/archive/delete work, not an agent.
-    let showsBlockedIndicator = hasBlockedAgent && !isLoading
-    let showsSpinner = isLoading || (taskStatus == .running && !showsBlockedIndicator)
-    let hidesBranchIcon = showsSpinner || showsBlockedIndicator
+    let activityIndicator = WorktreeRowActivityIndicator(
+      isLoading: isLoading,
+      taskStatus: taskStatus,
+      hasBlockedAgent: hasBlockedAgent,
+      hasBusyAgent: hasBusyAgent,
+      reduceMotion: reduceMotion
+    )
+    let hidesBranchIcon = activityIndicator != .none
     let branchIconName =
       iconSystemName
       ?? (isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch"))
@@ -143,14 +148,27 @@ struct WorktreeRow: View {
               .opacity(hidesBranchIcon ? 0 : 1)
               .accessibilityHidden(true)
           }
-          if showsBlockedIndicator {
+          switch activityIndicator {
+          case .none:
+            EmptyView()
+          case .progress:
+            ProgressView()
+              .controlSize(.small)
+          case .agentWorking:
+            BaguaWorkingIndicator(
+              font: .system(.caption, design: .monospaced).weight(.bold),
+              frameSize: CGSize(width: 16, height: 16)
+            )
+            .foregroundStyle(AgentDisplayState.working.foregroundStyle)
+            // The glyph text is hidden from accessibility so that VoiceOver does not
+            // read animation frames; this makes one stable element in its place.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Agent is working")
+          case .blocked:
             Image(systemName: "exclamationmark.circle.fill")
               .font(.caption)
               .foregroundStyle(.red)
               .accessibilityLabel("Agent is waiting for your input")
-          } else if showsSpinner {
-            ProgressView()
-              .controlSize(.small)
           }
         }
         .frame(width: 16, height: 16)
