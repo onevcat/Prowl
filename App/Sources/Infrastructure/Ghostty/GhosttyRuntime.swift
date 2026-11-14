@@ -46,6 +46,7 @@ final class GhosttyRuntime {
     }
   }
 
+  let focusRequests = GhosttySurfaceView.FocusRequests()
   var config: ghostty_config_t?
   private(set) var app: ghostty_app_t?
   private(set) var configSource: GhosttyConfigSource

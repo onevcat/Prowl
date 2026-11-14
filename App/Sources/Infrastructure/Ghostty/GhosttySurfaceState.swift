@@ -1,3 +1,4 @@
+import Foundation
 import GhosttyKit
 import Observation
 
@@ -24,9 +25,11 @@ final class GhosttySurfaceState {
   /// The host of the pane's foreground `ssh`, set by agent detection (docs-ai 082).
   var remoteIndicator: RemotePaneIndicator?
   var searchNeedle: String?
+  var searchInput = ""
+  var searchSelectionRange: NSRange?
   var searchTotal: Int?
   var searchSelected: Int?
-  var searchFocusCount = 0
+  var searchFocusPending = false
   var sizeLimitMinWidth: UInt32?
   var sizeLimitMinHeight: UInt32?
   var sizeLimitMaxWidth: UInt32?

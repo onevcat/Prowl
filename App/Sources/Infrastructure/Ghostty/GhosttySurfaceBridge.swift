@@ -514,18 +514,30 @@ final class GhosttySurfaceBridge {
       let needle = string(from: action.action.start_search.needle) ?? ""
       if !needle.isEmpty {
         state.searchNeedle = needle
+        if state.searchInput != needle {
+          state.searchInput = needle
+          state.searchSelectionRange = nil
+        }
       } else if state.searchNeedle == nil {
         state.searchNeedle = ""
+        if !state.searchInput.isEmpty {
+          state.searchInput = ""
+          state.searchSelectionRange = nil
+        }
       }
       state.searchTotal = nil
       state.searchSelected = nil
-      state.searchFocusCount += 1
+      if let surfaceView {
+        surfaceView.runtime.focusRequests.beginSearch(for: state, in: surfaceView.window)
+      }
+      state.searchFocusPending = true
       return true
 
     case GHOSTTY_ACTION_END_SEARCH:
       state.searchNeedle = nil
       state.searchTotal = nil
       state.searchSelected = nil
+      state.searchFocusPending = false
       return true
 
     case GHOSTTY_ACTION_SEARCH_TOTAL:

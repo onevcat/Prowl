@@ -1,5 +1,6 @@
 import Clocks
 import ConcurrencyExtras
+import Foundation
 import GhosttyKit
 import Testing
 
@@ -40,6 +41,65 @@ struct GhosttySurfaceBridgeTests {
 
     #expect(received?.0 == "Title")
     #expect(received?.1 == "Body")
+  }
+
+  @Test func searchStartRequestsFocusAndAllowsRepeatedRequests() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_START_SEARCH
+    let target = ghostty_target_s()
+
+    #expect(!bridge.state.searchFocusPending)
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+    #expect(bridge.state.searchNeedle == "")
+
+    bridge.state.searchInput = "needle"
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+    #expect(bridge.state.searchInput == "needle")
+
+    bridge.state.searchFocusPending = false
+    _ = bridge.handleAction(target: target, action: action)
+    #expect(bridge.state.searchFocusPending)
+  }
+
+  @Test func searchStartResetsSelectionOnlyWhenTheNeedleChanges() {
+    let bridge = GhosttySurfaceBridge()
+    bridge.state.searchInput = "needle"
+    bridge.state.searchSelectionRange = NSRange(location: 1, length: 3)
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_START_SEARCH
+    let target = ghostty_target_s()
+
+    "needle".withCString { needle in
+      action.action.start_search.needle = needle
+      _ = bridge.handleAction(target: target, action: action)
+    }
+    #expect(bridge.state.searchSelectionRange == NSRange(location: 1, length: 3))
+
+    "other".withCString { needle in
+      action.action.start_search.needle = needle
+      _ = bridge.handleAction(target: target, action: action)
+    }
+    #expect(bridge.state.searchInput == "other")
+    #expect(bridge.state.searchSelectionRange == nil)
+  }
+
+  @Test func searchEndCancelsPendingFocus() {
+    let bridge = GhosttySurfaceBridge()
+    bridge.state.searchNeedle = "needle"
+    bridge.state.searchTotal = 3
+    bridge.state.searchSelected = 1
+    bridge.state.searchFocusPending = true
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_END_SEARCH
+
+    _ = bridge.handleAction(target: ghostty_target_s(), action: action)
+    #expect(!bridge.state.searchFocusPending)
+    #expect(bridge.state.searchNeedle == nil)
+    #expect(bridge.state.searchTotal == nil)
+    #expect(bridge.state.searchSelected == nil)
   }
 
   @Test func configChangeEmitsCallback() {

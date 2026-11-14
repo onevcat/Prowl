@@ -164,6 +164,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var currentCursor: NSCursor = .iBeam
   var focused = false
   private var detachedFocusClearTask: Task<Void, Never>?
+  private var windowAttachmentRevision = 0
   var markedText = NSMutableAttributedString()
   private(set) var lastEditingAt: TimeInterval?
 
@@ -591,6 +592,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+    windowAttachmentRevision &+= 1
     if window == nil {
       // SwiftUI can temporarily detach a pane while rebuilding split/zoom
       // layout — or when another SwiftUI subtree (e.g. Shelf) takes over
@@ -970,10 +972,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     to view: GhosttySurfaceView,
     from previous: GhosttySurfaceView? = nil,
     clock: any Clock<Duration> = ContinuousClock(),
-    requests: FocusRequests = .shared
+    requests: FocusRequests? = nil
   ) {
-    requests.latest &+= 1
-    let request = requests.latest
+    let requests = requests ?? view.runtime.focusRequests
+    let request = requests.beginTerminal()
     Task { @MainActor in
       var delay: TimeInterval = 0.05
       while request == requests.latest {
@@ -991,10 +993,96 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
   }
 
-  /// A request retries until its view has a window, so the newest request must cancel older ones:
-  /// a retry that lands later would move first responder away from the surface that shows focus.
+  struct FocusContext {
+    weak var window: NSWindow?
+    private weak var responder: NSResponder?
+    private weak var editorDelegate: AnyObject?
+    private let usesFieldEditor: Bool
+    private let sourceAttachmentRevision: Int?
+
+    init(window: NSWindow) {
+      self.window = window
+      responder = window.firstResponder
+      let editor = responder as? NSTextView
+      editorDelegate = editor?.delegate
+      usesFieldEditor = editor?.isFieldEditor == true
+      sourceAttachmentRevision = (responder as? GhosttySurfaceView)?.windowAttachmentRevision
+    }
+
+    func matches(in window: NSWindow) -> Bool {
+      guard self.window === window, let responder, window.firstResponder === responder,
+        !usesFieldEditor || editorDelegate != nil
+      else { return false }
+      return (responder as? NSTextView)?.delegate === editorDelegate
+    }
+
+    func matchesOrAllowsDetachedSource(in window: NSWindow) -> Bool {
+      if matches(in: window) { return true }
+      guard self.window === window,
+        window.firstResponder === window || window.firstResponder === window.contentView,
+        let source = responder as? GhosttySurfaceView, let sourceAttachmentRevision,
+        source.windowAttachmentRevision != sourceAttachmentRevision,
+        source.window == nil || source.window === window
+      else { return false }
+      return true
+    }
+  }
+
+  struct SearchFocusRequest {
+    let owner: GhosttySurfaceState
+    let requests: FocusRequests
+    let revision: Int
+    let context: FocusContext?
+
+    func matches(_ other: SearchFocusRequest) -> Bool {
+      owner === other.owner && requests === other.requests && revision == other.revision
+    }
+  }
+
+  /// The newest focus request cancels older retries.
   final class FocusRequests {
-    static let shared = FocusRequests()
-    fileprivate var latest = 0
+    private(set) var latest = 0
+    private weak var searchOwner: GhosttySurfaceState?
+    private weak var focusedSearchField: NSTextField?
+    private var searchContext: FocusContext?
+
+    func beginTerminal() -> Int {
+      latest &+= 1
+      searchOwner = nil
+      focusedSearchField = nil
+      return latest
+    }
+
+    func beginSearch(for owner: GhosttySurfaceState, in window: NSWindow? = nil) {
+      latest &+= 1
+      if searchOwner !== owner {
+        focusedSearchField = nil
+      }
+      searchOwner = owner
+      searchContext = window.map { FocusContext(window: $0) }
+    }
+
+    func recordFocusedSearchField(_ field: NSTextField, for owner: GhosttySurfaceState) {
+      guard searchOwner === owner else { return }
+      focusedSearchField = field
+    }
+
+    func refreshSearchContext(for request: SearchFocusRequest, in window: NSWindow) {
+      guard searchRequest(for: request.owner)?.matches(request) == true else { return }
+      searchContext = FocusContext(window: window)
+    }
+
+    func isSearchFieldFocused(for owner: GhosttySurfaceState, in window: NSWindow) -> Bool {
+      guard searchOwner === owner, let field = focusedSearchField, field.window === window,
+        let editor = window.firstResponder as? NSTextView,
+        field.currentEditor() === editor
+      else { return false }
+      return true
+    }
+
+    func searchRequest(for owner: GhosttySurfaceState) -> SearchFocusRequest? {
+      guard searchOwner === owner else { return nil }
+      return SearchFocusRequest(owner: owner, requests: self, revision: latest, context: searchContext)
+    }
   }
 }
