@@ -48,8 +48,19 @@ Command Palette → "Toggle Active Agents Panel".
 | **Done** | finished, not yet seen | blue |
 | **Idle** | nothing running / seen | grey |
 
-Rows appear in the order agents are first detected. (See
-[agent-detection](agent-detection.md) for how these states are determined.)
+The **Sort agents by** setting orders the rows (see [agent-detection](agent-detection.md)
+for how the states are determined):
+
+- **Start Time** (default) — the order in which agents were first detected.
+- **Project** — one section per project, in the sidebar order (sidebar groups set the order but
+  add no header). Each section has a single title with the project's name and color; its rows
+  leave out the repository name. With agent names off, the subtitle (pane title or branch) moves
+  up to the title line. Agents that run outside every project come last, under **Other**.
+- **Status** — Blocked, then Working, then Done, then Idle; start time inside one status. Rows
+  move when an agent changes state.
+
+The keyboard navigation and the [Agent Island](agent-island.md) roster follow the same order.
+`prowl agents` always lists agents by start time.
 A row whose pane is bound to an active workflow run replaces its subtitle with
 `in <workflow> · <role>` for the life of the run.
 
@@ -82,7 +93,8 @@ no Copy Path or Reveal in Finder for a remote agent. See
     Prowl has resolved the session to a file (see
     [agent-detection](agent-detection.md)); agents with server-side or
     store-only sessions (e.g. Amp threads) don't offer it.
-- **Keyboard navigation:** `⌥⌃↓` next agent, `⌥⌃↑` previous agent (wraps).
+- **Keyboard navigation:** `⌥⌃↓` next agent, `⌥⌃↑` previous agent (wraps), in the panel's
+  display order.
 - **Resize** the panel by dragging its top edge (height is remembered).
 - **Auto-show:** if `autoShowActiveAgentsPanel` is on and the panel is hidden, a
   newly detected agent opens it automatically.
@@ -103,6 +115,8 @@ Settings → Agents → Display:
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
 - `showActiveAgentTabTitles` — show each agent's pane title (surface title,
   falling back to the tab title) instead of its branch.
+- `activeAgentsSortOrder` — **Sort agents by**: `startTime` (default), `project`, or
+  `status`.
 - `showActiveAgentNames` — show the agent name before the repository name (on by
   default). Turn it off to keep narrow rows on the repository; Agent Island rows
   keep the name.

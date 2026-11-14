@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-11-15 |
 | **Primary PRs** | (fill in as they merge) |
 | **Related** | [029-active-agents-panel](../029-active-agents-panel/000-plan.md), [066-agent-island](../066-agent-island/000-plan.md), [086-sidebar-repository-groups](../086-sidebar-repository-groups/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), `docs/components/active-agents.md`, `docs/components/agent-island.md`, issue #1091 |
