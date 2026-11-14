@@ -92,7 +92,11 @@ let project = Project(
         "../Mirror/Shared/*.swift",
         "../Mirror/Relay/Sources/MirrorRelayProtocol/*.swift",
       ],
-      resources: .resources(bundledFolders.map { .folderReference(path: $0) }),
+      // `Credits.rtf` at the bundle root is what the standard About panel shows: the
+      // license terms that redistribution must carry, and the Ghostty notice.
+      resources: .resources(
+        bundledFolders.map { .folderReference(path: $0) } + [.glob(pattern: "Resources/Credits.rtf")]
+      ),
       buildableFolders: ["Sources"],
       copyFiles: [
         .resources(
