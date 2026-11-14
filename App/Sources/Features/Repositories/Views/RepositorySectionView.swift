@@ -254,6 +254,7 @@ struct RepositorySectionView: View {
         if repository.isWorkspace {
           WorkspaceChildRowsView(
             rows: state.workspaceChildRows(in: repository),
+            showsChangeCounts: state.showSidebarChangeCounts,
             selectedID: state.selection == .repository(repository.id)
               ? state.selectedWorkspaceChildID : nil,
             onSelect: { childID in

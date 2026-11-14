@@ -10,6 +10,8 @@ struct WorktreeRow: View {
   let tabCountBadge: WorktreeTabCountBadge?
   let iconSystemName: String?
   let showsPullRequestInfo: Bool
+  /// Whether the `+N -N` change counts show; a Settings option (#1092).
+  let showsChangeCounts: Bool
   let isHovered: Bool
   let isPinned: Bool
   let isMainWorktree: Bool
@@ -41,6 +43,7 @@ struct WorktreeRow: View {
     tabCountBadge: WorktreeTabCountBadge? = nil,
     iconSystemName: String? = nil,
     showsPullRequestInfo: Bool,
+    showsChangeCounts: Bool = true,
     isHovered: Bool,
     isPinned: Bool,
     isMainWorktree: Bool,
@@ -67,6 +70,7 @@ struct WorktreeRow: View {
     self.tabCountBadge = tabCountBadge
     self.iconSystemName = iconSystemName
     self.showsPullRequestInfo = showsPullRequestInfo
+    self.showsChangeCounts = showsChangeCounts
     self.isHovered = isHovered
     self.isPinned = isPinned
     self.isMainWorktree = isMainWorktree
@@ -107,7 +111,7 @@ struct WorktreeRow: View {
     let displayAddedLines = info?.addedLines
     let displayRemovedLines = info?.removedLines
     let lineChangePresentation: LineChangeBadgePresentation? =
-      if let displayAddedLines, let displayRemovedLines {
+      if showsChangeCounts, let displayAddedLines, let displayRemovedLines {
         LineChangeBadgePresentation(
           addedLines: displayAddedLines,
           removedLines: displayRemovedLines,
@@ -247,7 +251,6 @@ struct WorktreeRow: View {
         worktreeName: detailText,
         showsPullRequestTag: showsPullRequestTag,
         pullRequestNumber: display.pullRequest?.number,
-        pullRequestURL: display.pullRequest.flatMap { URL(string: $0.url) },
         pullRequestState: display.pullRequestState,
         mergeReadiness: mergeReadiness,
         isQueued: isQueued,
@@ -299,7 +302,6 @@ private struct WorktreeRowInfoView: View {
   let worktreeName: String
   let showsPullRequestTag: Bool
   let pullRequestNumber: Int?
-  let pullRequestURL: URL?
   let pullRequestState: String?
   let mergeReadiness: PullRequestMergeReadiness?
   let isQueued: Bool
@@ -341,10 +343,9 @@ private struct WorktreeRowInfoView: View {
     if showsPullRequestTag, let pullRequestNumber {
       appendSeparator()
       var segment = AttributedString("PR #\(pullRequestNumber)")
+      // Plain text, not a link: a click anywhere on the row selects the worktree.
+      // The row's context menu, the toolbar PR button and its shortcut open the PR.
       segment.foregroundColor = .secondary
-      // Clickable via `Text`'s built-in link handling; the rest of the row
-      // keeps its tap-to-select behavior.
-      segment.link = pullRequestURL
       result.append(segment)
     }
     if pullRequestState == "MERGED" {

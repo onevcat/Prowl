@@ -44,9 +44,14 @@ GitHub remote, stale PR badges are cleared.
   time remaining.
 
 PR status can surface as a badge on the worktree and as a summary in the command
-palette. The **PR #N** tag in a sidebar row is a link — click it to open the
-pull request in the browser; right-click the row → **Open Pull Request** does
-the same (falling back to the repository page when no PR URL is known).
+palette. The **PR #N** tag in a sidebar row is plain text, so a click anywhere on
+the row selects the worktree. To open the pull request in the browser,
+right-click the row → **Open Pull Request**, or use the toolbar PR button or its
+shortcut. When the worktree has no PR, the context menu shows **Open Repository
+on GitHub** (or the name of the code host) in its place, which opens the
+repository page. A
+workspace child row has its own **Open Pull Request** in its context menu, shown
+when the child has a pull request.
 
 ## Actions (via Command Palette, when a PR exists)
 

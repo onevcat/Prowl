@@ -7,6 +7,7 @@ import SwiftUI
 /// creating one rooted at that repository's folder when needed.
 struct WorkspaceChildRowsView: View {
   let rows: [WorkspaceChildRowModel]
+  let showsChangeCounts: Bool
   let selectedID: String?
   let onSelect: (String) -> Void
   let onShowDiff: (String) -> Void
@@ -23,6 +24,7 @@ struct WorkspaceChildRowsView: View {
         info: row.info,
         iconSystemName: nil,
         showsPullRequestInfo: true,
+        showsChangeCounts: showsChangeCounts,
         isHovered: false,
         isPinned: false,
         isMainWorktree: false,
@@ -64,6 +66,14 @@ struct WorkspaceChildRowsView: View {
         }
         Button("Reveal in Finder") {
           NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: row.workingDirectory.path)
+        }
+        // The PR number in the row is plain text, and the toolbar, shortcut and
+        // palette act on the workspace, not this child, so this is its PR action.
+        if let pullRequestURL = row.pullRequestURL {
+          Button("Open Pull Request") {
+            NSWorkspace.shared.open(pullRequestURL)
+          }
+          .help("Open \(row.repositoryName)'s pull request on the code host")
         }
         Divider()
         Button("Show Diff") {

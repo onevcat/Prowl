@@ -104,6 +104,11 @@ struct WorkspaceChildRowModel: Equatable, Identifiable {
   let branchName: String?
   let info: WorktreeInfoEntry?
   let workingDirectory: URL
+
+  /// The web URL of the child's pull request, or nil when it has none.
+  var pullRequestURL: URL? {
+    info?.pullRequest.flatMap { RepositoriesFeature.validWebURL($0.url) }
+  }
 }
 
 /// A sidebar group container (docs-ai 086). `members` holds the member rows while

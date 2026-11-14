@@ -397,6 +397,7 @@ struct WorktreeRowsView: View {
       info: row.info,
       tabCountBadge: WorktreeTabCountBadge(worktreeID: row.id, terminalManager: terminalManager),
       showsPullRequestInfo: !isWorktreeDragActive,
+      showsChangeCounts: store.showSidebarChangeCounts,
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,
@@ -464,6 +465,24 @@ struct WorktreeRowsView: View {
     .help(finderReason ?? String(localized: "Reveal this worktree in Finder"))
   }
 
+  /// `.openOnCodeHost` opens the PR when one is known and falls back to the
+  /// repository page, the same as the toolbar button and its shortcut.
+  @ViewBuilder
+  private func codeHostContextMenuItem(for row: WorktreeRowModel) -> some View {
+    if row.info?.pullRequest != nil {
+      Button("Open Pull Request") {
+        store.send(.githubIntegration(.pullRequestAction(row.id, .openOnCodeHost)))
+      }
+      .help("Open this worktree's pull request on the code host")
+    } else if repository.capabilities.supportsCodeHost {
+      let codeHost = store.state.codeHost(for: repository.id)
+      Button("Open Repository on \(codeHost.displayName)") {
+        store.send(.githubIntegration(.pullRequestAction(row.id, .openOnCodeHost)))
+      }
+      .help("Open this repository's page on the code host")
+    }
+  }
+
   @ViewBuilder
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
@@ -529,12 +548,7 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.setString(row.name, forType: .string)
     }
     renameBranchContextMenuItem(for: row, isBulkSelection: isBulkSelection)
-    if row.info?.pullRequest != nil {
-      Button("Open Pull Request") {
-        store.send(.githubIntegration(.pullRequestAction(row.id, .openOnCodeHost)))
-      }
-      .help("Open this worktree's pull request on the code host")
-    }
+    codeHostContextMenuItem(for: row)
     Divider()
     let diffReason = worktree.availability(of: .diff).unavailableReason?.message
     Button("Show Diff") {
