@@ -60,7 +60,8 @@ for how the states are determined):
   move when an agent changes state.
 
 The keyboard navigation and the [Agent Island](agent-island.md) roster follow the same order.
-`prowl agents` always lists agents by start time.
+The setting does not change `prowl agents`: its text output keeps its own status order, and
+`--json` keeps the start-time order.
 A row whose pane is bound to an active workflow run replaces its subtitle with
 `in <workflow> · <role>` for the life of the run.
 

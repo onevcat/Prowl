@@ -36,7 +36,8 @@ that `MirrorRosterDecorations.swift` computes on the Mac.
 
 - No collapsible sections, and no second header level for sidebar groups. Sidebar groups
   only set the order of the project sections.
-- No change to `prowl agents`: its output keeps the start-time order, because scripts can
+- No change to `prowl agents`: its output keeps its current order (status order for text,
+  start-time order for `--json`), because scripts can
   depend on it.
 - No change to the Agent Island attention cells (Blocked and Done callouts). They keep their
   own priority order.
@@ -87,6 +88,6 @@ mode.
 | Order inside a project | Start time | Rows do not move when a state changes, so a click hits the intended row. The **Status** mode is for users who want movement |
 | Collapsing | None | Agents are few; a plain list is enough |
 | Island and keyboard navigation | Follow the panel order | With only the panel reordered, "next agent" jumps across sections, and the island and the panel disagree |
-| `prowl agents` | Start time always | CLI output is an interface; a display setting must not change it |
+| `prowl agents` | Unchanged by the setting | CLI output is an interface; a display setting must not change it |
 
 ## Amendments
