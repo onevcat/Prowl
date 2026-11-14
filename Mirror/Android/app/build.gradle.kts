@@ -16,6 +16,24 @@ android {
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "META-INF/versions/**/OSGI-INF/MANIFEST.MF" }
 }
+// Ship the MIT notice with every distributed copy of the app (assets/LICENSE).
+abstract class CopyLicenseAsset : DefaultTask() {
+    @get:InputFile abstract val license: RegularFileProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        license.get().asFile.copyTo(outputDir.get().file("LICENSE").asFile, overwrite = true)
+    }
+}
+val copyLicenseAsset = tasks.register<CopyLicenseAsset>("copyLicenseAsset") {
+    license.set(rootProject.layout.projectDirectory.file("LICENSE"))
+}
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyLicenseAsset, CopyLicenseAsset::outputDir)
+    }
+}
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.activity:activity-compose:1.9.0")
