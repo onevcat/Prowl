@@ -50,6 +50,7 @@ struct AppFeature {
       repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       repositories.showActiveAgentNames = settings.showActiveAgentNames
       repositories.showSidebarChangeCounts = settings.showSidebarChangeCounts
+      repositories.activeAgents.sortOrder = settings.activeAgentsSortOrder
       repositories.activeAgents.isIslandEnabled = settings.agentIslandEnabled
       self.repositories = repositories
       self.settings = settings
@@ -493,6 +494,11 @@ struct AppFeature {
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
         state.repositories.showActiveAgentNames = settings.showActiveAgentNames
         state.repositories.showSidebarChangeCounts = settings.showSidebarChangeCounts
+        if state.repositories.activeAgents.sortOrder != settings.activeAgentsSortOrder {
+          // Set outside `RepositoriesFeature`, so its `onChange` does not see this change.
+          state.repositories.activeAgents.sortOrder = settings.activeAgentsSortOrder
+          state.repositories.refreshActiveAgentOrder()
+        }
         state.repositories.activeAgents.isIslandEnabled = settings.agentIslandEnabled
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           @Shared(.repositorySettings(selectedWorktree.repositoryLocation)) var repositorySettings

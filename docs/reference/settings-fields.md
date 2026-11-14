@@ -95,6 +95,7 @@ reads have no scheduled removal date.
 | `canvasDefaultLayout` | enum (`uniform`/`tile`) | `tile` | Layout a fresh Canvas starts in: `uniform` packs same-size cards (Arrange), `tile` resizes cards to fill the screen. Canvas then keeps the layout you last chose. |
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
+| `activeAgentsSortOrder` | String | `startTime` | Order of the Active Agents panel, Agent Island roster, and next/previous agent shortcuts: `startTime`, `project` (sections in sidebar order), or `status` (Blocked → Working → Done → Idle). An unknown value reads as `startTime`. |
 | `showActiveAgentTabTitles` | Bool | `false` | Show pane titles (surface title, falling back to the tab title; vs. branch) in the agents panel. |
 | `showActiveAgentNames` | Bool | `true` | Show the agent name before the repository name in agents panel rows; when off, the name moves to the row's tooltip. Agent Island is not affected. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |

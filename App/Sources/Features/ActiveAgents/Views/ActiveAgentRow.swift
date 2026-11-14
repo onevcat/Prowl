@@ -9,6 +9,8 @@ struct ActiveAgentRow: View {
   let isDimmed: Bool
   /// The Island roster has room for the name, so only the sidebar panel passes the setting.
   var showsAgentName = true
+  /// A project section of the panel names the project once, so its rows leave it out.
+  var showsRepositoryName = true
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
@@ -16,11 +18,13 @@ struct ActiveAgentRow: View {
       agentIcon
       VStack(alignment: .leading, spacing: 2) {
         title
-        subtitleLine
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.tail)
+        if !showsSubtitleAsTitle {
+          subtitleLine
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
       }
       Spacer(minLength: 8)
       statusPill
@@ -31,30 +35,54 @@ struct ActiveAgentRow: View {
     .opacity(isDimmed ? 0.7 : 1)
   }
 
+  /// With neither the agent name nor the project name, the subtitle moves up so that the
+  /// title line is never empty.
+  private var showsSubtitleAsTitle: Bool {
+    !showsAgentName && !showsRepositoryName
+  }
+
+  @ViewBuilder
   private var title: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 3) {
-      if showsAgentName {
-        Text(entry.displayName)
-          .font(.body.weight(.medium))
-          .foregroundStyle(.primary)
-        Text("·")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.tertiary)
-      }
-      Text(repositoryName)
+    if showsSubtitleAsTitle {
+      subtitleLine
         .font(.callout.weight(.medium))
-        .foregroundStyle(repositoryColor?.color ?? .secondary)
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        // The agent name is hidden on screen; VoiceOver still names the agent.
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-          Text(
-            verbatim: ActiveAgentRowPresentation.repositoryAccessibilityLabel(
-              for: entry,
-              repositoryName: repositoryName,
-              showAgentName: showsAgentName
-            )
-          )
+          Text(verbatim: ActiveAgentRowPresentation.promotedTitleAccessibilityLabel(for: entry, subtitle: subtitle))
         )
+    } else {
+      HStack(alignment: .firstTextBaseline, spacing: 3) {
+        if showsAgentName {
+          Text(entry.displayName)
+            .font(.body.weight(.medium))
+            .foregroundStyle(.primary)
+        }
+        if showsRepositoryName {
+          if showsAgentName {
+            Text("·")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.tertiary)
+          }
+          Text(repositoryName)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(repositoryColor?.color ?? .secondary)
+            .accessibilityLabel(
+              Text(
+                verbatim: ActiveAgentRowPresentation.repositoryAccessibilityLabel(
+                  for: entry,
+                  repositoryName: repositoryName,
+                  showAgentName: showsAgentName
+                )
+              )
+            )
+        }
+      }
+      .lineLimit(1)
     }
-    .lineLimit(1)
   }
 
   /// A remote agent shows its host before the usual subtitle (docs-ai 082, L0 item 10). One

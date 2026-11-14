@@ -15,6 +15,20 @@ struct AgentDisplaySettingsView: View {
           Text("Hidden panels reopen as soon as an agent starts or updates.")
         }
         .help("Open the Active Agents panel when an agent is detected.")
+        Picker(selection: $store.activeAgentsSortOrder) {
+          ForEach(ActiveAgentsSortOrder.allCases, id: \.self) { order in
+            Text(order.title).tag(order)
+          }
+        } label: {
+          Text("Sort agents by")
+          Text(
+            """
+            Project puts agents under their project's title, in sidebar order. Status puts \
+            blocked agents first. Agent Island and the next and previous agent shortcuts use the \
+            same order.
+            """)
+        }
+        .help("Choose the order of the rows in the Active Agents panel and in Agent Island.")
         Toggle(
           "Show terminal titles in agent rows",
           isOn: $store.showActiveAgentTabTitles

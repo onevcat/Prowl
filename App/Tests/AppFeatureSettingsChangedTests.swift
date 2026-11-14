@@ -23,6 +23,7 @@ struct AppFeatureSettingsChangedTests {
     settings.showActiveAgentTabTitles = true
     settings.showActiveAgentNames = false
     settings.showSidebarChangeCounts = false
+    settings.activeAgentsSortOrder = .status
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
@@ -31,6 +32,7 @@ struct AppFeatureSettingsChangedTests {
       $0.repositories.showActiveAgentTabTitles = true
       $0.repositories.showActiveAgentNames = false
       $0.repositories.showSidebarChangeCounts = false
+      $0.repositories.activeAgents.sortOrder = .status
     }
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled) {
       $0.repositories.githubIntegrationAvailability = .disabled
@@ -55,6 +57,15 @@ struct AppFeatureSettingsChangedTests {
     let state = AppFeature.State(settings: SettingsFeature.State(settings: settings))
 
     #expect(!state.repositories.showSidebarChangeCounts)
+  }
+
+  @Test func initialStateCopiesActiveAgentsSortOrder() {
+    var settings = GlobalSettings.default
+    settings.activeAgentsSortOrder = .project
+
+    let state = AppFeature.State(settings: SettingsFeature.State(settings: settings))
+
+    #expect(state.repositories.activeAgents.sortOrder == .project)
   }
 
   @Test(.dependencies) func disablingIconDetectionCancelsPendingScans() async {
