@@ -68,6 +68,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .padding(.top, 4)
+                .accessibilityAddTraits(.isHeader)
               ForEach(repositoryIDs, id: \.self) { repositoryID in
                 repositoryRow(repositoryID, in: repositories, customTitles: customTitles)
                   .padding(.leading, 12)
