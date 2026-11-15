@@ -4,7 +4,7 @@
 
 | Date | Change | Ref |
 | --- | --- | --- |
-| 2026-11-15 | Shelf spines, sidebar sections, and worktree rows skip unchanged bodies; palette items only while open; cached divider width | (fill in) |
+| 2026-11-15 | Shelf spines, sidebar sections, and worktree rows skip unchanged bodies; palette items only while open; cached divider width | #1117 |
 
 ## Outcome & current state (as of 2026-11-15)
 

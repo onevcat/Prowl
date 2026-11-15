@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-11-15 |
-| **Primary PRs** | (fill in) |
+| **Primary PRs** | #1117 |
 | **Related** | [070.002](../070-app-localization/002-resource-lookup-cost.md), [057.003](../057-performance-benchmark-suite/003-interaction-call-path-counts.md), [023-shelf-mode](../023-shelf-mode/000-plan.md) |
 
 ## Background
