@@ -73,27 +73,15 @@ struct ActiveAgentsPanel: View {
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
-            ForEach(store.entries) { entry in
-              Button {
-                store.send(.entryTapped(entry.id))
-              } label: {
-                ActiveAgentRow(
-                  entry: entry,
-                  repositoryName: repositoryName(for: entry),
-                  subtitle: subtitle(for: entry),
-                  repositoryColor: repositoryColor(for: entry),
-                  isDimmed: isDimmed(entry),
-                  showsAgentName: showAgentNames
-                )
+            ForEach(store.sections) { section in
+              let isProjectSection = section.kind != .all
+              if isProjectSection {
+                sectionHeader(for: section)
               }
-              .buttonStyle(.plain)
-              .help(helpText(for: entry))
-              .contextMenu {
-                ActiveAgentRowContextMenu(
-                  entry: entry,
-                  directory: rowDisplays[entry.id]?.directory,
-                  send: { store.send($0) }
-                )
+              ForEach(section.entryIDs, id: \.self) { entryID in
+                if let entry = store.entries[id: entryID] {
+                  row(for: entry, inProjectSection: isProjectSection)
+                }
               }
             }
           }
@@ -106,6 +94,50 @@ struct ActiveAgentsPanel: View {
         .fill(.thinMaterial)
     }
     .clipShape(panelBackgroundShape)
+  }
+
+  private func row(for entry: ActiveAgentEntry, inProjectSection: Bool) -> some View {
+    Button {
+      store.send(.entryTapped(entry.id))
+    } label: {
+      ActiveAgentRow(
+        entry: entry,
+        repositoryName: repositoryName(for: entry),
+        subtitle: subtitle(for: entry),
+        repositoryColor: repositoryColor(for: entry),
+        isDimmed: isDimmed(entry),
+        showsAgentName: showAgentNames,
+        showsRepositoryName: !inProjectSection
+      )
+    }
+    .buttonStyle(.plain)
+    .padding(.leading, inProjectSection ? 8 : 0)
+    .help(helpText(for: entry))
+    .contextMenu {
+      ActiveAgentRowContextMenu(
+        entry: entry,
+        directory: rowDisplays[entry.id]?.directory,
+        send: { store.send($0) }
+      )
+    }
+  }
+
+  /// A single-level project title (docs-ai 092). The rows of one project share the
+  /// repository that they show, so the first row gives the name and the color.
+  private func sectionHeader(for section: ActiveAgentSection) -> some View {
+    let firstEntry = section.entryIDs.first.flatMap { store.entries[id: $0] }
+    let isOther = section.kind == .other
+    let title = isOther ? String(localized: "Other") : firstEntry.map(repositoryName(for:)) ?? ""
+    let color = isOther ? nil : firstEntry.flatMap(repositoryColor(for:))
+    return Text(title)
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(color?.color ?? .secondary)
+      .lineLimit(1)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 10)
+      .padding(.top, 6)
+      .padding(.bottom, 2)
+      .accessibilityAddTraits(.isHeader)
   }
 
   private var resizeHandle: some View {

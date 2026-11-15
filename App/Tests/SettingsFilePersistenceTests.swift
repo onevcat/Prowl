@@ -69,6 +69,18 @@ struct SettingsFilePersistenceTests {
     #expect(!decoded.showSidebarChangeCounts)
   }
 
+  @Test func activeAgentsSortOrderDefaultsToStartTimeAndRoundTrips() throws {
+    #expect(try storedGlobalSettings(removing: "activeAgentsSortOrder").activeAgentsSortOrder == .startTime)
+    #expect(
+      try storedGlobalSettings(setting: ["activeAgentsSortOrder": "someFutureOrder"]).activeAgentsSortOrder
+        == .startTime)
+
+    var settings = GlobalSettings.default
+    settings.activeAgentsSortOrder = .project
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: JSONEncoder().encode(settings))
+    #expect(decoded.activeAgentsSortOrder == .project)
+  }
+
   private func storedGlobalSettings(
     removing removedKey: String? = nil,
     setting extra: [String: Any] = [:]

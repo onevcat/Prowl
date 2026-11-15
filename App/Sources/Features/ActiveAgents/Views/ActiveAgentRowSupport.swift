@@ -36,6 +36,14 @@ enum ActiveAgentRowPresentation {
     showAgentName ? repositoryName : "\(entry.displayName), \(repositoryName)"
   }
 
+  /// The label of a subtitle that moved up to the title line (docs-ai 092): the hidden agent
+  /// name, then the subtitle as the row shows it, with a remote agent's host.
+  static func promotedTitleAccessibilityLabel(for entry: ActiveAgentEntry, subtitle: String) -> String {
+    let shownSubtitle =
+      entry.remote.map { "\(RemoteAgentPresentation.hostLabel(for: $0)) \u{00B7} \(subtitle)" } ?? subtitle
+    return "\(entry.displayName), \(shownSubtitle)"
+  }
+
   /// The reason a remote agent's observation rests on what it does; nil for a local agent.
   /// The island roster, whose subtitle already shows title and branch, uses it alone.
   static func remoteHelpText(for entry: ActiveAgentEntry) -> String? {

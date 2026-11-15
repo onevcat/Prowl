@@ -34,20 +34,22 @@ struct AgentIslandRosterContent: View {
   let selectedSurfaceID: UUID?
 
   var body: some View {
+    // The panel's display order (docs-ai 092), so digits and pages match its rows.
+    let entries = store.orderedEntries
     let layout = AgentIslandRosterLayout.layout(
-      entryCount: store.entries.count,
+      entryCount: entries.count,
       requestedPageIndex: store.islandNavigation.pageIndex
     )
     VStack(spacing: 0) {
       VStack(spacing: 0) {
-        if store.entries.isEmpty {
+        if entries.isEmpty {
           Text("No running agents")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
         }
         ForEach(Array(layout.entryRange.enumerated()), id: \.element) { visibleIndex, entryIndex in
-          let entry = store.entries[entryIndex]
+          let entry = entries[entryIndex]
           Button {
             store.send(.island(.entryTapped(entry.id)))
           } label: {

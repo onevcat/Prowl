@@ -821,6 +821,12 @@ struct RepositoriesFeature {
         return .none
       }
     }
+    .onChange(of: \.activeAgentOrderInputs) { _, _ in
+      Reduce { state, _ in
+        state.refreshActiveAgentOrder()
+        return .none
+      }
+    }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
     }

@@ -28,6 +28,31 @@ struct ActiveAgentsFeature {
     var islandHotKeyRegistrationFailures: [String: Keybinding] = [:]
     @Shared(.appStorage("activeAgentsPanelHidden")) var isPanelHidden: Bool = false
     @Shared(.appStorage("activeAgentsPanelHeight")) var panelHeight: Double = 200
+    /// Mirrored from `GlobalSettings.activeAgentsSortOrder` (docs-ai 092).
+    var sortOrder: ActiveAgentsSortOrder = .startTime
+    /// The project of each entry and the project order, kept current by `RepositoriesFeature`
+    /// while `sortOrder` is `.project`; empty otherwise. This feature cannot see the sidebar
+    /// layout or resolve a working directory to a repository by itself.
+    var projectIDsByEntryID: [ActiveAgentEntry.ID: Repository.ID] = [:]
+    var projectOrder: [Repository.ID] = []
+
+    /// The rows of the panel, in display order.
+    var sections: [ActiveAgentSection] {
+      ActiveAgentsOrdering.sections(
+        entries: entries,
+        sortOrder: sortOrder,
+        projectIDs: projectIDsByEntryID,
+        projectOrder: projectOrder
+      )
+    }
+
+    /// `entries` in display order. Keyboard navigation and the Agent Island roster use it, so
+    /// they step through the rows in the order the panel shows them.
+    var orderedEntries: IdentifiedArrayOf<ActiveAgentEntry> {
+      sortOrder == .startTime
+        ? entries
+        : ActiveAgentsOrdering.orderedEntries(entries: entries, sections: sections)
+    }
   }
 
   enum Action: Equatable {
@@ -67,7 +92,7 @@ struct ActiveAgentsFeature {
       case .agentEntryChanged(let entry, let autoShowPanel):
         state.entries[id: entry.id] = entry
         if state.isIslandRosterExpanded {
-          state.islandNavigation.reconcile(entries: state.entries)
+          state.islandNavigation.reconcile(entries: state.orderedEntries)
         }
         if autoShowPanel, state.isPanelHidden {
           state.$isPanelHidden.withLock { $0 = false }
@@ -80,7 +105,7 @@ struct ActiveAgentsFeature {
           state.isIslandRosterExpanded = false
           state.islandNavigation = .init()
         } else if state.isIslandRosterExpanded {
-          state.islandNavigation.reconcile(entries: state.entries)
+          state.islandNavigation.reconcile(entries: state.orderedEntries)
         }
         return .none
 
@@ -124,7 +149,7 @@ struct ActiveAgentsFeature {
         } else {
           state.isIslandRosterExpanded = true
           state.islandNavigation.start(
-            entries: state.entries,
+            entries: state.orderedEntries,
             preferredEntryID: state.islandAttentionEntries.first?.id,
             preferredSurfaceID: state.focusedSurfaceID
           )
@@ -138,12 +163,12 @@ struct ActiveAgentsFeature {
 
       case .islandMoveSelection(let direction):
         guard state.isIslandRosterExpanded else { return .none }
-        state.islandNavigation.moveSelection(direction, entries: state.entries)
+        state.islandNavigation.moveSelection(direction, entries: state.orderedEntries)
         return .none
 
       case .islandMovePage(let direction):
         guard state.isIslandRosterExpanded else { return .none }
-        state.islandNavigation.movePage(direction, entries: state.entries)
+        state.islandNavigation.movePage(direction, entries: state.orderedEntries)
         return .none
 
       case .islandActivateSelection:
@@ -154,7 +179,7 @@ struct ActiveAgentsFeature {
 
       case .islandActivateVisibleEntry(let index):
         guard state.isIslandRosterExpanded,
-          let id = state.islandNavigation.visibleEntryID(at: index, entries: state.entries)
+          let id = state.islandNavigation.visibleEntryID(at: index, entries: state.orderedEntries)
         else {
           return .none
         }
@@ -188,7 +213,7 @@ struct ActiveAgentsFeature {
       let targetID = Self.entryID(
         navigatingFrom: state.focusedSurfaceID,
         direction: direction,
-        in: state.entries
+        in: state.orderedEntries
       )
     else {
       return .none
