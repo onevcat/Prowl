@@ -159,7 +159,7 @@ private struct MotivationalStatusView: View {
         in: resolvedKeybindings
       )
       HStack(spacing: 8) {
-        Image(systemName: style.icon)
+        ToolbarSymbolImage.image(style.icon, textStyle: .callout, scale: .medium)
           .foregroundStyle(style.color)
           .font(.callout)
           .accessibilityHidden(true)
