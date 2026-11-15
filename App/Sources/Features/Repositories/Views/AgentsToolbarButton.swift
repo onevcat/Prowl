@@ -121,7 +121,7 @@ struct AgentsToolbarButton: View {
           )
         Text(capsule.displayName)
       } else {
-        Image(systemName: "sparkles")
+        ToolbarSymbolImage.image("sparkles", textStyle: .title3, weight: .medium)
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
           .frame(
@@ -139,7 +139,7 @@ struct AgentsToolbarButton: View {
     if let source = capsule.iconSource {
       TabIconImage(rawName: source.storageString, pointSize: 17)
     } else {
-      Image(systemName: "sparkle")
+      ToolbarSymbolImage.image("sparkle", textStyle: .title3, weight: .medium)
         .accessibilityHidden(true)
     }
   }

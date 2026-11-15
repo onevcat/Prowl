@@ -1182,7 +1182,11 @@ struct WorktreeDetailView: View {
           onResetOpenActionToAutomatic()
         } label: {
           if openActionIsAutomatic {
-            Label("Automatic", systemImage: "checkmark")
+            Label {
+              Text("Automatic")
+            } icon: {
+              ToolbarSymbolImage.image("checkmark")
+            }
           } else {
             Text("Automatic")
           }
@@ -1209,8 +1213,8 @@ struct WorktreeDetailView: View {
         }
         .help("Copy path")
       } label: {
-        Image(systemName: "chevron.down")
-          .font(.caption2)
+        // The toolbar draws a menu label at its own size, not at `.caption2`.
+        ToolbarSymbolImage.image("chevron.down", scale: .medium)
           .accessibilityLabel("Open in menu")
       }
       .imageScale(.small)

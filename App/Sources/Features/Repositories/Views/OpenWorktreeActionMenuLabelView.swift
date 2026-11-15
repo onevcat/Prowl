@@ -14,7 +14,7 @@ struct OpenWorktreeActionMenuLabelView: View {
             .renderingMode(.original)
             .accessibilityHidden(true)
         case .symbol(let name):
-          Image(systemName: name)
+          ToolbarSymbolImage.image(name)
             .foregroundStyle(.primary)
             .accessibilityHidden(true)
         }
