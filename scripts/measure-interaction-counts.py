@@ -20,6 +20,16 @@ The counters (see `PROBES`):
   much of the sidebar and the menu bar SwiftUI evaluates again.
 - `body`: (with `--count-bodies`) `body` getters of views in the Prowl module.
 
+`--mode timing` attaches no debugger. After each interaction it sends `prowl list` at
+once and records how long that request waits (`main_thread_wait_ms`): the CLI handler
+runs on the main thread, so the request returns only after the main thread finishes
+the work that the interaction started. Absolute values depend on the machine; compare
+two apps only inside one job on one machine.
+
+Report tools: `--compare BASE.json HEAD.json` prints a Markdown table of two reports'
+medians, `--merge A.json B.json --output C.json` combines the samples of reports of one
+app, and `--summarize A.json ...` prints the Markdown table of each report.
+
 Run `make measure-interaction-counts` (it builds the Debug app first) or call this
 script with `--app <path to Prowl Debug.app>`.
 """
@@ -295,6 +305,15 @@ def settle(counter: Counter, quiet: float, minimum: float, maximum: float) -> di
       return current
 
 
+def timing_step(instance: ProwlInstance, step: str, action, args) -> StepSample:
+  time.sleep(args.quiet)
+  start = time.monotonic()
+  action()
+  instance.cli_json("list")
+  waited = time.monotonic() - start
+  return StepSample(step, {"main_thread_wait_ms": round(waited * 1000)}, waited)
+
+
 def measure_step(counter: Counter, step: str, action, args) -> StepSample:
   before = settle(counter, args.quiet, 0, args.max_settle)
   bodies_before = counter.body_locations()
@@ -350,9 +369,44 @@ def markdown_table(report: dict) -> str:
   return "\n".join(lines) + "\n\n"
 
 
+def compare_table(base: dict, head: dict) -> str:
+  """Render the medians of two reports of the same mode side by side."""
+  lines = [
+    f"### {base.get('label') or 'base'} → {head.get('label') or 'head'} · macOS {head['os']} · {head['language']}",
+    "",
+    "| Step | Counter | Base | Head | Change |",
+    "| --- | --- | ---: | ---: | ---: |",
+  ]
+  for step, values in head["summary"].items():
+    base_values = base["summary"].get(step, {}).get("median", {})
+    for key, value in sorted(values["median"].items()):
+      before = base_values.get(key)
+      if before is None:
+        change = ""
+      elif before == 0:
+        change = "±0" if value == 0 else "new"
+      else:
+        change = f"{(value - before) / before * 100:+.0f}%"
+      lines.append(f"| {step} | {key} | {'' if before is None else f'{before:g}'} | {value:g} | {change} |")
+  return "\n".join(lines) + "\n\n"
+
+
+def merge_reports(reports: list[dict]) -> dict:
+  """Combine the samples of several reports of one app and mode into one report."""
+  merged = dict(reports[0])
+  merged["samples"] = [sample for report in reports for sample in report["samples"]]
+  steps = [StepSample(s["step"], s["counts"], s.get("seconds_with_lldb", 0)) for s in merged["samples"]]
+  merged["summary"] = summarize(steps)
+  return merged
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  parser.add_argument("--app", required=True, type=Path, help="Path to Prowl Debug.app")
+  parser.add_argument("--app", type=Path, help="Path to Prowl Debug.app")
+  parser.add_argument("--mode", choices=["counts", "timing"], default="counts")
+  parser.add_argument("--compare", nargs=2, type=Path, metavar=("BASE", "HEAD"), help="Compare two reports")
+  parser.add_argument("--merge", nargs="+", type=Path, help="Combine reports of one app into --output")
+  parser.add_argument("--summarize", nargs="+", type=Path, help="Print the Markdown table of each report")
   parser.add_argument("--language", default="zh-Hans")
   parser.add_argument("--repos", type=int, default=4)
   parser.add_argument("--worktrees-per-repo", type=int, default=3, help="Linked worktrees per repository")
@@ -367,10 +421,28 @@ def main() -> int:
   parser.add_argument("--keep-workdir", action="store_true")
   args = parser.parse_args()
 
+  if args.compare or args.summarize:
+    if args.compare:
+      table = compare_table(*(json.loads(path.read_text()) for path in args.compare))
+    else:
+      table = "".join(markdown_table(json.loads(path.read_text())) for path in args.summarize)
+    print(table, end="")
+    if args.markdown:
+      with args.markdown.open("a") as handle:
+        handle.write(table)
+    return 0
+  if args.merge:
+    if args.output is None:
+      parser.error("--merge needs --output")
+    merged = merge_reports([json.loads(path.read_text()) for path in args.merge])
+    args.output.write_text(json.dumps(merged, indent=2) + "\n")
+    return 0
+  if args.app is None:
+    parser.error("--app is required")
   app = args.app.resolve()
   if not (app / "Contents/Resources/prowl-cli/prowl").exists():
     parser.error(f"{app} has no bundled prowl CLI")
-  lldb = import_lldb()
+  lldb = import_lldb() if args.mode == "counts" else None
 
   # Unix socket paths are limited to 104 bytes, so the work directory stays short.
   workdir = Path(tempfile.mkdtemp(prefix="prowl-perf-", dir="/tmp")).resolve()
@@ -392,12 +464,16 @@ def main() -> int:
         group_panes.append(opened["data"]["target"]["pane"]["id"])
       panes.append(group_panes)
 
-    counter = Counter(lldb, instance.pid, args.count_bodies)
+    if args.mode == "counts":
+      counter = Counter(lldb, instance.pid, args.count_bodies)
     # Visit every worktree once so each keeps a terminal state, as in a long-running session.
     for group_panes in panes:
       for pane in group_panes:
         instance.cli_json("focus", "--pane", pane)
-    settle(counter, args.quiet, args.min_settle, args.max_settle)
+    if counter is not None:
+      settle(counter, args.quiet, args.min_settle, args.max_settle)
+    else:
+      time.sleep(args.min_settle)
 
     for round_index in range(args.rounds):
       group = panes[round_index % len(panes)]
@@ -409,7 +485,10 @@ def main() -> int:
         ("activate", lambda: run(["open", "-a", str(app)])),
       ]
       for step, action in steps:
-        sample = measure_step(counter, step, action, args)
+        if counter is not None:
+          sample = measure_step(counter, step, action, args)
+        else:
+          sample = timing_step(instance, step, action, args)
         samples.append(sample)
         print(f"round {round_index + 1} {step:<18} {sample.counts} {sample.seconds:.2f}s", file=sys.stderr)
   finally:
@@ -427,6 +506,7 @@ def main() -> int:
   summary = summarize(samples)
   report = {
     "schema": "prowl.interaction-counts/v1",
+    "mode": args.mode,
     "label": args.label,
     "os": platform.mac_ver()[0],
     "arch": platform.machine(),

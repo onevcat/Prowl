@@ -63,5 +63,41 @@ class MarkdownTableTests(unittest.TestCase):
     )
 
 
+class CompareTableTests(unittest.TestCase):
+  def test_reports_relative_change_per_step_and_counter(self):
+    base = {
+      "label": "base",
+      "os": "26.6",
+      "language": "zh-Hans",
+      "summary": module.summarize([sample("switch_same_repo", 132, 132), sample("activate", 0, 4)]),
+    }
+    head = {
+      "label": "head",
+      "os": "26.6",
+      "language": "zh-Hans",
+      "summary": module.summarize([sample("switch_same_repo", 0, 66), sample("activate", 0, 0)]),
+    }
+
+    table = module.compare_table(base, head)
+
+    self.assertIn("| switch_same_repo | resource_to_string | 132 | 66 | -50% |\n", table)
+    self.assertIn("| switch_same_repo | strings_table_parse | 132 | 0 | -100% |\n", table)
+    self.assertIn("| activate | strings_table_parse | 0 | 0 | ±0 |\n", table)
+    self.assertIn("| activate | resource_to_string | 4 | 0 | -100% |\n", table)
+
+
+class MergeReportsTests(unittest.TestCase):
+  def test_combines_samples_and_recomputes_the_summary(self):
+    def report(waits):
+      samples = [{"step": "activate", "counts": {"main_thread_wait_ms": w}, "seconds_with_lldb": 0} for w in waits]
+      return {"label": "head", "os": "26.6", "samples": samples, "summary": {}}
+
+    merged = module.merge_reports([report([100, 300]), report([200])])
+
+    self.assertEqual(len(merged["samples"]), 3)
+    self.assertEqual(merged["summary"]["activate"]["median"], {"main_thread_wait_ms": 200})
+    self.assertEqual(merged["label"], "head")
+
+
 if __name__ == "__main__":
   unittest.main()
