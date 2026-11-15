@@ -223,15 +223,25 @@ struct ShortcutSettingsEditor: View {
 
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .center, spacing: 12) {
-        HStack(spacing: 5) {
-          Text(command.title)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          if let globalShortcutHelp = Self.globalShortcutHelp(for: command.id) {
-            Image(systemName: "globe")
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 5) {
+            Text(command.title)
+              .lineLimit(1)
+              .truncationMode(.tail)
+            if let globalShortcutHelp = Self.globalShortcutHelp(for: command.id) {
+              Image(systemName: "globe")
+                .foregroundStyle(.secondary)
+                .help(globalShortcutHelp)
+                .accessibilityLabel("System-wide shortcut")
+            }
+          }
+          // A single-command row stands alone in a Settings form, so it shows the help as a
+          // subtitle like the other form rows. The table keeps it in the globe tooltip.
+          if commandID != nil, let globalShortcutHelp = Self.globalShortcutHelp(for: command.id) {
+            Text(globalShortcutHelp)
+              .font(.subheadline)
               .foregroundStyle(.secondary)
-              .help(globalShortcutHelp)
-              .accessibilityLabel("System-wide shortcut")
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
         .frame(minWidth: ShortcutTableLayout.commandColumnMinWidth, maxWidth: .infinity, alignment: .leading)

@@ -28,41 +28,28 @@ struct WorktreeSettingsView: View {
               .monospaced()
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          VStack(alignment: .leading) {
-            Toggle(
-              "Prompt for branch name during creation",
-              isOn: $store.promptForWorktreeCreation
-            )
-            .help("Ask for branch name and base ref before creating a worktree.")
+          Toggle(isOn: $store.promptForWorktreeCreation) {
+            Text("Prompt for branch name during creation")
             Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
-              .foregroundStyle(.secondary)
           }
-          VStack(alignment: .leading) {
-            Toggle(
-              "Fetch remote before creating worktree",
-              isOn: $store.fetchRemoteBeforeWorktreeCreation
-            )
-            .help("Runs git fetch <remote> before creating a worktree.")
+          .help("Ask for branch name and base ref before creating a worktree.")
+          Toggle(isOn: $store.fetchRemoteBeforeWorktreeCreation) {
+            Text("Fetch remote before creating worktree")
             Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
-              .foregroundStyle(.secondary)
           }
+          .help("Runs git fetch <remote> before creating a worktree.")
         }
         Section("Cleanup") {
-          VStack(alignment: .leading) {
-            Toggle(
-              "Delete local branch during automatic cleanup",
-              isOn: $store.deleteBranchOnAutomaticCleanup
-            )
-            .help("Delete the local branch when automatic cleanup removes a Prowl-created worktree.")
+          Toggle(isOn: $store.deleteBranchOnAutomaticCleanup) {
+            Text("Delete local branch during automatic cleanup")
             Text(
               """
               Applies when merged or expired worktrees are cleaned up automatically, and only to branches \
               created by Prowl. The manual delete dialog remembers your last choice instead.
               """
             )
-            .foregroundStyle(.secondary)
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .help("Delete the local branch when automatic cleanup removes a Prowl-created worktree.")
           Picker(selection: $store.mergedWorktreeAction) {
             Text("Do nothing").tag(MergedWorktreeAction?.none)
             ForEach(MergedWorktreeAction.allCases) { action in
@@ -80,16 +67,14 @@ struct WorktreeSettingsView: View {
               EmptyView()
             }
           }
-          VStack(alignment: .leading) {
-            Picker(selection: $store.displayedArchivedAutoDeletePeriod.sending(\.archivedAutoDeletePeriodSelected)) {
-              Text("Never").tag(AutoDeletePeriod?.none)
-              ForEach(AutoDeletePeriod.allCases) { period in
-                Text(period.label).tag(AutoDeletePeriod?.some(period))
-              }
-            } label: {
-              Text("Auto-delete archived worktrees")
-              Text("Permanently removes archived worktrees after the selected period.")
+          Picker(selection: $store.displayedArchivedAutoDeletePeriod.sending(\.archivedAutoDeletePeriodSelected)) {
+            Text("Never").tag(AutoDeletePeriod?.none)
+            ForEach(AutoDeletePeriod.allCases) { period in
+              Text(period.label).tag(AutoDeletePeriod?.some(period))
             }
+          } label: {
+            Text("Auto-delete archived worktrees")
+            Text("Permanently removes archived worktrees after the selected period.")
           }
         }
         Section("Copy Defaults") {

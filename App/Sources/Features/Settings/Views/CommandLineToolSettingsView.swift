@@ -80,13 +80,21 @@ struct CommandLineToolSettingsView: View {
       }
 
       Section("Connection") {
-        LabeledContent("Socket") {
+        LabeledContent {
           Text(socketPath)
             .font(.callout.monospaced())
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
             .lineLimit(1)
             .truncationMode(.middle)
+        } label: {
+          Text("Socket")
+          Text(
+            """
+            prowl reaches the running app through this local Unix socket. \
+            Set PROWL_CLI_SOCKET for both Prowl and prowl to use a different path.
+            """
+          )
         }
 
         LabeledContent("Status") {
@@ -103,15 +111,6 @@ struct CommandLineToolSettingsView: View {
             .font(.callout)
             .fixedSize(horizontal: false, vertical: true)
         }
-
-        Text(
-          """
-          prowl reaches the running app through this local Unix socket. \
-          Set PROWL_CLI_SOCKET for both Prowl and prowl to use a different path.
-          """
-        )
-        .foregroundStyle(.secondary)
-        .font(.callout)
       }
 
       if let agentSkillsStore = store.scope(state: \.agentSkills, action: \.agentSkills) {

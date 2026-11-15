@@ -67,17 +67,14 @@ struct NotificationsSettingsView: View {
             isOn: $store.systemNotificationsEnabled
           )
           .help("Show macOS system notification banners")
-          Toggle(
-            "Show notification badge on dock icon",
-            isOn: $store.showNotificationDotOnDock
-          )
+          Toggle(isOn: $store.showNotificationDotOnDock) {
+            Text("Show notification badge on dock icon")
+            if let dockBadgeCaption {
+              Text(dockBadgeCaption)
+            }
+          }
           .help("Show the unread worktree count on the Prowl dock icon.")
           .disabled(!dockBadgeAvailable)
-          if let dockBadgeCaption {
-            Text(dockBadgeCaption)
-              .font(.callout)
-              .foregroundStyle(.secondary)
-          }
         }
         Section("Command Finished") {
           Toggle(

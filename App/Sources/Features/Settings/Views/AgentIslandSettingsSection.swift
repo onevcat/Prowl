@@ -81,9 +81,6 @@ struct AgentIslandSettingsSection: View {
         islandHotKeyRegistrationFailures: globalHotKeyRegistrationFailures,
         commandID: AppShortcuts.CommandID.toggleAgentIsland
       )
-      Text(ShortcutSettingsEditor.globalShortcutHelp)
-        .font(.callout)
-        .foregroundStyle(.secondary)
       ShortcutSettingsEditor(
         store: store,
         effectiveKeybindings: effectiveKeybindings,
@@ -91,9 +88,6 @@ struct AgentIslandSettingsSection: View {
         islandHotKeyRegistrationFailures: globalHotKeyRegistrationFailures,
         commandID: AppShortcuts.CommandID.toggleAgentIslandVisibility
       )
-      Text(ShortcutSettingsEditor.visibilityGlobalShortcutHelp)
-        .font(.callout)
-        .foregroundStyle(.secondary)
 
       LabeledContent {
         HStack(spacing: 8) {

@@ -24,16 +24,13 @@ struct AppearanceSettingsView: View {
             }
           } label: {
             Label("Language", systemImage: "translate")
-          }
-          Text(
-            "The change applies the next time Prowl starts; quitting the app may interrupt running terminal tasks.",
-            comment: "App language setting footer: Restart requirement and terminal task warning"
-          )
-          .foregroundStyle(.secondary)
-          if store.languageChangePending {
-            Text("The language will switch on next launch.", comment: "App language change pending notice")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
+            Text(
+              "The change applies the next time Prowl starts; quitting the app may interrupt running terminal tasks.",
+              comment: "App language setting footer: Restart requirement and terminal task warning"
+            )
+            if store.languageChangePending {
+              Text("The language will switch on next launch.", comment: "App language change pending notice")
+            }
           }
         }
         .help("Choose the app language. The change applies the next time Prowl starts.")
@@ -70,10 +67,13 @@ struct AppearanceSettingsView: View {
         }
         TerminalConfigSettingsSection(store: store)
         Section("Window Tint") {
-          Picker("Tint nav & toolbar", selection: $store.windowTintMode) {
+          Picker(selection: $store.windowTintMode) {
             ForEach(WindowTintMode.allCases) { mode in
               Text(mode.title).tag(mode)
             }
+          } label: {
+            Text("Tint nav & toolbar")
+            Text(tintFootnote)
           }
           .help("Color the navigation panel and toolbar.")
           if store.windowTintMode == .custom {
@@ -84,39 +84,33 @@ struct AppearanceSettingsView: View {
             )
             .help("Tint the nav and toolbar with this color in every view, ignoring repository colors.")
           }
-          Text(tintFootnote)
-            .font(.callout)
-            .foregroundStyle(.secondary)
 
-          Picker("Tint spines in Shelf View", selection: $store.shelfSpineTintFallback) {
+          Picker(selection: $store.shelfSpineTintFallback) {
             ForEach(ShelfSpineTintFallback.allCases) { fallback in
               Text(fallback.title).tag(fallback)
             }
+          } label: {
+            Text("Tint spines in Shelf View")
+            Text(shelfSpineTintFallbackCaption)
           }
           .help("Spine style for repositories without a color, or for every spine when Follow Repo Color is off.")
-          Toggle(
-            "Follow Repo Color Setting",
-            isOn: $store.shelfSpineTintFollowsRepositoryColor
-          )
+          Toggle(isOn: $store.shelfSpineTintFollowsRepositoryColor) {
+            Text("Follow Repo Color Setting")
+            Text(shelfSpineTintFollowCaption)
+          }
           .help("When disabled, all Shelf spines use the selected Gray or System Tint style.")
-          Text(shelfSpineTintFootnote)
-            .font(.callout)
-            .foregroundStyle(.secondary)
         }
         Section("Repository Icons") {
-          Toggle(
-            "Detect project icons automatically",
-            isOn: $store.detectRepositoryIconsAutomatically
-          )
+          Toggle(isOn: $store.detectRepositoryIconsAutomatically) {
+            Text("Detect project icons automatically")
+            Text(
+              """
+              Detection runs locally when a repository is added. It never replaces an icon \
+              you picked, and turning it off leaves already detected icons unchanged.
+              """
+            )
+          }
           .help("Use a project's own app icon or logo as the repository icon when adding it.")
-          Text(
-            """
-            Detection runs locally when a repository is added. It never replaces an icon \
-            you picked, and turning it off leaves already detected icons unchanged.
-            """
-          )
-          .foregroundStyle(.secondary)
-          .font(.callout)
         }
         Section("Splits") {
           Toggle(
@@ -133,15 +127,15 @@ struct AppearanceSettingsView: View {
           }
           .help("View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder.")
 
-          Picker("Canvas layout", selection: $store.canvasDefaultLayout) {
+          Picker(selection: $store.canvasDefaultLayout) {
             ForEach(CanvasDefaultLayout.allCases) { layout in
               Text(layout.title).tag(layout)
             }
+          } label: {
+            Text("Canvas layout")
+            Text(store.canvasDefaultLayout.settingsDescription)
           }
           .help("How cards are arranged the first time you open Canvas for a set of cards.")
-          Text(store.canvasDefaultLayout.settingsDescription)
-            .foregroundStyle(.secondary)
-            .font(.callout)
         }
         Section("Terminal Layout") {
           Toggle(isOn: $store.restoreTerminalLayoutOnLaunch) {
@@ -179,20 +173,17 @@ struct AppearanceSettingsView: View {
           )
         }
         Section("Diff Tool") {
-          Picker(
-            "Open diff with",
-            selection: $store.externalDiffToolID
-          ) {
+          Picker(selection: $store.externalDiffToolID) {
             ForEach(externalDiffToolOptions) { tool in
               Text(tool.title)
                 .tag(tool.settingsID)
                 .disabled(!tool.isInstalled)
             }
+          } label: {
+            Text("Open diff with")
+            Text("Tools not installed on this Mac appear disabled.")
           }
           .help("Choose what opens when you click a diff badge or run Show Diff.")
-          Text("Tools not installed on this Mac appear disabled.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
           if store.externalDiffToolID == ExternalDiffTool.custom.settingsID {
             TextField(
               "Command",
@@ -244,21 +235,18 @@ struct AppearanceSettingsView: View {
     }
   }
 
-  private var shelfSpineTintFootnote: String {
-    switch (store.shelfSpineTintFallback, store.shelfSpineTintFollowsRepositoryColor) {
-    case (.neutral, true):
-      return String(
-        localized: "Uncolored repositories use a gray spine. Repositories with a custom color still use that color.")
-    case (.neutral, false):
-      return String(
-        localized: "Uncolored repositories use a gray spine. Repository colors are ignored for Shelf spines.")
-    case (.systemTint, true):
-      return String(
-        localized:
-          "Uncolored repositories use the system tint color. Repositories with a custom color still use that color.")
-    case (.systemTint, false):
-      return String(
-        localized: "Uncolored repositories use the system tint color. Repository colors are ignored for Shelf spines.")
+  private var shelfSpineTintFallbackCaption: String {
+    switch store.shelfSpineTintFallback {
+    case .neutral:
+      return String(localized: "Uncolored repositories use a gray spine.")
+    case .systemTint:
+      return String(localized: "Uncolored repositories use the system tint color.")
     }
+  }
+
+  private var shelfSpineTintFollowCaption: String {
+    store.shelfSpineTintFollowsRepositoryColor
+      ? String(localized: "Repositories with a custom color still use that color.")
+      : String(localized: "Repository colors are ignored for Shelf spines.")
   }
 }
