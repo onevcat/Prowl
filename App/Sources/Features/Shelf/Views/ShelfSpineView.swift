@@ -684,6 +684,8 @@ private struct ShelfSpineControlButton: View {
 
 /// Shared metrics for the Shelf layout so the three segments stay in sync.
 enum ShelfMetrics {
+  /// The spine movement of a book switch; the open book's terminal mounts after it.
+  static let bookSwitchDuration: Double = 0.2
   /// Width of a single spine. Sized for comfortable one-line-of-text plus
   /// a bit of breathing room around the rotated title.
   static let spineWidth: CGFloat = 34

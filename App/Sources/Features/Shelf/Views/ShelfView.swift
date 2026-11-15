@@ -28,6 +28,11 @@ struct ShelfView: View {
   /// Drives the chrome tint mode / custom color and the Shelf spine tint
   /// preferences.
   @Shared(.settingsFile) private var settingsFile
+  /// The book whose terminal is in the view tree. On a book switch the open area shows the
+  /// terminal background while the spines move, and the terminal mounts when the movement
+  /// ends: building and laying out a terminal view in the same update would delay the first
+  /// frame of the movement.
+  @State private var mountedBookID: Worktree.ID?
 
   var body: some View {
     // Body-invocation counter. The @ViewBuilder getter rules out a
@@ -107,7 +112,21 @@ struct ShelfView: View {
     // book switches (which also set their own TCA animation) and
     // left-nav-originated switches, so the spine flow is consistent
     // regardless of entry point.
-    .animation(.easeInOut(duration: 0.2), value: openBookID)
+    .animation(.easeInOut(duration: ShelfMetrics.bookSwitchDuration), value: openBookID)
+    .task(id: openBookID) {
+      await mountTerminal(for: openBookID)
+    }
+  }
+
+  /// Mounts the terminal of `bookID` once the spines stop moving. The first book mounts at
+  /// once. A newer switch cancels this one, so quick switches mount only the last book.
+  private func mountTerminal(for bookID: Worktree.ID?) async {
+    guard mountedBookID != bookID else { return }
+    if mountedBookID != nil {
+      try? await ContinuousClock().sleep(for: .seconds(ShelfMetrics.bookSwitchDuration))
+      guard !Task.isCancelled else { return }
+    }
+    mountedBookID = bookID
   }
 
   @ViewBuilder
@@ -157,7 +176,7 @@ struct ShelfView: View {
   ///
   /// No `animation:` is passed to `store.send` because the visible
   /// spine-flow animation is already driven by the view-level
-  /// `.animation(.easeInOut(duration: 0.2), value: openBookID)` modifier
+  /// `.animation(.easeInOut(duration: ShelfMetrics.bookSwitchDuration), value: openBookID)` modifier
   /// on the root container — wrapping the dispatch in another animation
   /// transaction would double-run layout / transition machinery for the
   /// same change.
@@ -209,7 +228,12 @@ struct ShelfView: View {
 
   @ViewBuilder
   private func openBookArea(for book: ShelfBook, state: RepositoriesFeature.State) -> some View {
-    if let worktree = state.selectedTerminalWorktree, worktree.id == book.id {
+    if book.id != mountedBookID {
+      Color(nsColor: terminalManager.surfaceBackgroundColor())
+        .opacity(surfaceBackgroundOpacity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    } else if let worktree = state.selectedTerminalWorktree, worktree.id == book.id {
       let shouldFocus = state.shouldFocusTerminal(for: worktree.id)
       ShelfOpenBookView(
         worktree: worktree,

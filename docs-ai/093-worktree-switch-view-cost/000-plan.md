@@ -94,3 +94,4 @@ Samples of 30 switches add these causes on the main thread (ms per switch, Debug
 
 ## Amendments
 - Updated 2026-11-15: near-Release baseline and toolbar symbols as cached images — see [002-toolbar-symbol-images.md](002-toolbar-symbol-images.md)
+- Updated 2026-11-15: Shelf mounts the terminal after the book movement — see [003-shelf-deferred-terminal.md](003-shelf-deferred-terminal.md)
