@@ -1,0 +1,146 @@
+name: interaction-counts
+
+# Compares main-thread work on interaction call paths (worktree switch, app activation) between
+# the merge base with main and the head of a branch, on the oldest supported macOS and on the
+# current one. See scripts/measure-interaction-counts.py.
+#
+# - Counts are LLDB breakpoint hits, not times, so they compare across runners.
+# - Timing alternates the two apps on one runner and compares them there only: runner speed
+#   differs too much to compare times across jobs.
+#
+# It builds the App twice, so it does not run on every pull request: add the `perf` label to a
+# pull request, or start it by hand.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  # A label other than `perf` starts a run that skips all jobs. Give that run its own group, so
+  # that it does not cancel a comparison that is running.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}${{ github.event.action == 'labeled' &&
+    github.event.label.name != 'perf' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Run when the `perf` label is added, or on a push to a pull request that has it.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'perf') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'perf'))
+    runs-on: xcode-27
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      PROWL_DERIVED_DATA_PATH: ${{ github.workspace }}/build/ci-derived-data
+      MISE_HTTP_TIMEOUT: 120
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PROWL_CI_BUILD_SETTINGS: COMPILATION_CACHE_ENABLE_CACHING=NO COMPILER_INDEX_STORE_ENABLE=NO
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-macos
+      # The merge base builds first: it is closest to main, whose build state the cache holds.
+      # The head then rebuilds only what the branch changed.
+      - name: Build the merge base and the head
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          base_sha="$(git merge-base origin/main "$head_sha")"
+          mkdir -p build/perf
+          build_app() {
+            make embed-cli-debug embed-docs embed-skills ensure-project
+            xcodebuild build -workspace Prowl.xcworkspace -scheme Prowl -configuration Debug \
+              -destination "platform=macOS" -derivedDataPath "$PROWL_DERIVED_DATA_PATH" \
+              -skipMacroValidation -clonedSourcePackagesDirPath ~/Library/Caches/prowl-spm-cache/SourcePackages \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              SWIFT_COMPILATION_MODE=incremental $PROWL_CI_BUILD_SETTINGS 2>&1 | mise exec -- xcsift -w --format toon
+            local app="$PROWL_DERIVED_DATA_PATH/Build/Products/Debug/Prowl Debug.app"
+            codesign --force --deep --sign - "$app"
+            rm -rf "build/perf/$1"
+            mkdir -p "build/perf/$1"
+            ditto -c -k --keepParent "$app" "build/perf/$1/app.zip"
+          }
+          if [ "$base_sha" != "$head_sha" ]; then
+            git checkout --quiet "$base_sha"
+            git submodule update --init --recursive --quiet
+            make ensure-ghostty
+            build_app base
+            git checkout --quiet "$head_sha"
+            git submodule update --init --recursive --quiet
+            make ensure-ghostty
+          fi
+          build_app head
+          printf '%s\n' "$base_sha" > build/perf/base-sha
+          printf '%s\n' "$head_sha" > build/perf/head-sha
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prowl-debug-apps-${{ github.run_id }}
+          path: build/perf/
+          retention-days: 3
+
+  measure:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: prowl-debug-apps-${{ github.run_id }}
+          path: build/perf
+      - name: Show the environment
+        run: |
+          sw_vers
+          xcodebuild -version
+      - name: Measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/measure-interaction-counts.py
+          variants=(head)
+          [ -f build/perf/base/app.zip ] && variants=(base head)
+          for variant in "${variants[@]}"; do
+            ditto -x -k "build/perf/$variant/app.zip" "build/perf/$variant"
+            sha="$(cat "build/perf/$variant-sha" | cut -c1-8)"
+            xcrun python3 "$script" --app "build/perf/$variant/Prowl Debug.app" --rounds 5 --count-bodies \
+              --label "$variant $sha" --output "build/perf/counts-$variant.json"
+          done
+          # Two alternating blocks per app, so drift on the runner lands on both sides.
+          for block in 1 2; do
+            for variant in "${variants[@]}"; do
+              sha="$(cat "build/perf/$variant-sha" | cut -c1-8)"
+              xcrun python3 "$script" --mode timing --app "build/perf/$variant/Prowl Debug.app" --rounds 6 \
+                --label "$variant $sha" --output "build/perf/timing-$variant-$block.json"
+            done
+          done
+          python3 "$script" --merge build/perf/timing-head-*.json --output build/perf/timing-head.json
+          if [ -f build/perf/counts-base.json ]; then
+            python3 "$script" --merge build/perf/timing-base-*.json --output build/perf/timing-base.json
+            python3 "$script" --compare build/perf/counts-base.json build/perf/counts-head.json --markdown "$GITHUB_STEP_SUMMARY"
+            python3 "$script" --compare build/perf/timing-base.json build/perf/timing-head.json --markdown "$GITHUB_STEP_SUMMARY"
+          else
+            python3 "$script" --summarize build/perf/counts-head.json build/perf/timing-head.json --markdown "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interaction-counts-${{ matrix.runner }}-${{ github.run_id }}
+          path: build/perf/*.json
+          if-no-files-found: ignore
+          retention-days: 30

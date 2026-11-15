@@ -106,3 +106,6 @@ optimized settings.)
 - Updated 2026-08-02: added the explicit-invocation `run-benchmark` skill so agents can
   run the layers with the right comparison and a persistent report — see
   [002-benchmark-runbook-skill.md](002-benchmark-runbook-skill.md)
+- Updated 2026-11-15: added LLDB call-path counts of worktree switches and app activation in a
+  running Debug app, and a workflow that compares them between the merge base and the head on
+  macOS 26 and 27 — see [003-interaction-call-path-counts.md](003-interaction-call-path-counts.md)

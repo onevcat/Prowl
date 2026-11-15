@@ -96,6 +96,12 @@ comparison step can find its rows.
    - `make measure-cpu` — needs a running Prowl Debug instance; set `PROWL_PID` when
      several run. Records agent mix and load next to the attribution, so quote them
      together.
+   - `make measure-interaction-counts` — launches its own isolated Debug app and counts
+     string-table parses, `LocalizedStringResource` lookups, and (with
+     `INTERACTION_COUNTS_ARGS=--count-bodies`) view `body` evaluations per worktree switch and
+     activation. Compare counts, not times. For macOS 26, add the `perf` label to the PR: the
+     `interaction-counts` workflow compares the merge base and the head on `macos-26` and
+     macOS 27 (docs-ai 057.003).
 4. `make capture-spike` is a standing watch for long-running instances, not a step here;
    mention it if the user is chasing an intermittent spike.
 

@@ -297,7 +297,7 @@ struct SidebarListView: View {
   private func topSegmentButton(
     _ segment: TopSegment,
     systemImage: String,
-    title: LocalizedStringResource,
+    title: String.LocalizationValue,
     accessibilityIdentifier: String,
     shortcutCommandID: String? = nil,
     requiresRepository: Bool = false

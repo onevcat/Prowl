@@ -639,6 +639,12 @@ measure-cpu: # Steady-state CPU + per-symbol attribution of the running Prowl De
 capture-spike: # Sample the running Prowl Debug app the moment CPU crosses a threshold (THRESHOLD=150 DURATION=10)
 	@bash scripts/capture-cpu-spike.sh $(or $(THRESHOLD),150) $(or $(DURATION),10)
 
+INTERACTION_COUNTS_ARGS ?=
+measure-interaction-counts: build-app # Count work on worktree-switch and activation call paths in a Debug app via LLDB (INTERACTION_COUNTS_ARGS="--language en --count-bodies")
+	@set -euo pipefail; \
+	products="$$(xcodebuild -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -configuration Debug -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $$2; exit}')"; \
+	xcrun python3 "$(CURRENT_MAKEFILE_DIR)/scripts/measure-interaction-counts.py" --app "$$products/Prowl Debug.app" $(INTERACTION_COUNTS_ARGS)
+
 measure-titles: # Black-box check that animated tab titles stay coalesced to ~1 change/s (works on Release builds)
 	@bash scripts/measure-title-coalescing.sh
 

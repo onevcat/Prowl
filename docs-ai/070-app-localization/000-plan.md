@@ -117,7 +117,7 @@ localization overrides the key as the English text; remove it when the key chang
 A key that is built at run time must have `"extractionState": "manual"` in the catalog, or the
 audit reports it as unused. The shortcut titles in `AppShortcuts.bindings` and the Command
 Palette titles are such keys. `AppLanguageTests` checks that each shortcut title has a `zh-Hans`
-entry. `LocalizedStringResource(runtimeKey:)` (in `supacode/App/AppShortcuts.swift`) marks the
+entry. `String.LocalizationValue(runtimeKey:)` (in `App/Sources/App/AppShortcuts.swift`) marks the
 call sites.
 
 A run-time lookup localizes only the value it returns. When the same `String` also goes to
@@ -127,9 +127,13 @@ look complete.
 
 Prefer to let the compiler see the literal:
 
-- Give a helper a `LocalizedStringResource` or `LocalizedStringKey` parameter, not `String`.
-  The literal at each call site is then extracted. Do not add a `String` overload next to it: a
-  literal selects the `String` overload.
+- Give a helper a typed parameter, not `String`: `String.LocalizationValue` when the helper
+  returns a `String` (it calls `String(localized:)`), `LocalizedStringKey` or
+  `LocalizedStringResource` when it passes the copy straight to SwiftUI. The literal at each
+  call site is then extracted. Do not add a `String` overload next to it: a literal selects the
+  `String` overload. Never call `String(localized:)` with a `LocalizedStringResource`: on
+  macOS 26 that call skips the bundle's string-table cache and parses the whole table again
+  (see [002-resource-lookup-cost.md](002-resource-lookup-cost.md)).
 - Write long copy as one multi-line literal with `\` line continuations, not as a `+` chain.
 - When one English word has two meanings, use a separate key with a default value, for example
   `String(localized: "agentState.done", defaultValue: "Done")`, and give the entry an explicit
@@ -185,3 +189,8 @@ compares a value with itself and does not check the text.
   that rewrites the catalog was not observed yet; if it orders keys differently, follow Xcode.
 
 ## Amendments
+
+- Updated 2026-11-15: `String(localized:)` with a `LocalizedStringResource` re-parsed the strings
+  table on macOS 26 and stalled the main thread; helpers that return a `String` now take
+  `String.LocalizationValue`. The helper rule above was corrected in place — see
+  [002-resource-lookup-cost.md](002-resource-lookup-cost.md)
