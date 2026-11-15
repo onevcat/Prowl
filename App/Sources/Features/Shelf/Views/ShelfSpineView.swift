@@ -632,7 +632,7 @@ private struct ShelfSpineTabSlot: View {
 
 private struct ShelfSpineControlButton: View {
   let systemImage: String
-  let label: LocalizedStringResource
+  let label: String.LocalizationValue
   let shortcut: String?
   let action: () -> Void
 

@@ -116,8 +116,8 @@ struct SidebarCommands: Commands {
   @ViewBuilder
   private var shelfBookMenuButtons: some View {
     ForEach(Array(AppShortcuts.shelfBookSelectionCommandIDs.enumerated()), id: \.element) { index, commandID in
-      let title: LocalizedStringResource = "Select Book \(index + 1)"
-      Button(title) {
+      let title: String.LocalizationValue = "Select Book \(index + 1)"
+      Button(String(localized: title)) {
         store.send(.repositories(.selectShelfBook(index + 1)))
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: commandID)))
@@ -129,7 +129,7 @@ struct SidebarCommands: Commands {
     store.resolvedKeybindings.keyboardShortcut(for: commandID)
   }
 
-  private func helpText(title: LocalizedStringResource, commandID: String) -> String {
+  private func helpText(title: String.LocalizationValue, commandID: String) -> String {
     let localizedTitle = String(localized: title)
     if let shortcut = store.resolvedKeybindings.display(for: commandID) {
       return "\(localizedTitle) (\(shortcut))"

@@ -50,7 +50,7 @@ enum CanvasLayoutKind: String, CaseIterable, Sendable {
   }
 
   /// One-line description used as the toolbar button tooltip.
-  var helpTitle: LocalizedStringResource {
+  var helpTitle: String.LocalizationValue {
     switch self {
     case .arrange: "Arrange cards preserving sizes"
     case .organize: "Organize cards in a uniform grid"
@@ -59,7 +59,7 @@ enum CanvasLayoutKind: String, CaseIterable, Sendable {
   }
 
   /// Tooltip while this layout is the active automatic mode.
-  var activeHelpTitle: LocalizedStringResource {
+  var activeHelpTitle: String.LocalizationValue {
     switch self {
     case .arrange: "Arranging: cards re-arrange as they are added or closed"
     case .organize: "Organizing: cards keep the grid as they are added or closed"

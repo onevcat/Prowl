@@ -908,7 +908,7 @@ enum AppShortcuts {
   }
 
   static func helpText(
-    title: LocalizedStringResource,
+    title: String.LocalizationValue,
     commandID: String,
     in resolvedKeybindings: ResolvedKeybindingMap
   ) -> String {
@@ -1076,10 +1076,10 @@ extension UserCustomShortcut {
   }
 }
 
-extension LocalizedStringResource {
+extension String.LocalizationValue {
   /// A key that is only known at run time. The compiler cannot extract such a key, so its
   /// catalog entry must have the extraction state "manual".
   init(runtimeKey: String) {
-    self.init(String.LocalizationValue(runtimeKey))
+    self.init(runtimeKey)
   }
 }

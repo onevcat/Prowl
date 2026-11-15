@@ -27,7 +27,7 @@ struct WorktreeCommands: Commands {
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
     let codeHostWorktreeID = selectedCodeHostWorktreeID
     let codeHost = repositories.codeHost(forWorktreeID: codeHostWorktreeID)
-    let codeHostLabel: LocalizedStringResource =
+    let codeHostLabel: String.LocalizationValue =
       if codeHost == .unknown { "Open on Code Host" } else { "Open on \(codeHost.displayName)" }
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let customCommands = store.selectedCustomCommands
@@ -122,7 +122,7 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openWorktree)))
       .help(helpText(title: "Open Worktree", commandID: AppShortcuts.CommandID.openWorktree))
       .disabled(openSelectedWorktreeAction == nil)
-      Button(codeHostLabel) {
+      Button(String(localized: codeHostLabel)) {
         if let codeHostWorktreeID {
           store.send(.repositories(.githubIntegration(.pullRequestAction(codeHostWorktreeID, .openOnCodeHost))))
         }
@@ -210,7 +210,7 @@ struct WorktreeCommands: Commands {
     store.resolvedKeybindings.display(for: commandID)
   }
 
-  private func helpText(title: LocalizedStringResource, commandID: String) -> String {
+  private func helpText(title: String.LocalizationValue, commandID: String) -> String {
     let localizedTitle = String(localized: title)
     if let shortcut = shortcutDisplay(for: commandID) {
       return "\(localizedTitle) (\(shortcut))"
