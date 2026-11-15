@@ -73,7 +73,10 @@ system surface. Therefore `AgentNotificationsToolbarContent` uses exactly one is
 1. `.sharedBackgroundVisibility(.hidden)` on that `ToolbarItem`;
 2. an `HStack(spacing: 0)` containing `ToolbarNotificationsPopoverButton`, conditional
    `WorkflowHistoryPopoverButton`, experimental `MirrorHostButton`, and conditional `ToolbarUpdateButton`;
-3. one outer `.glassEffect(.regular.interactive(), in: Capsule())`.
+3. one outer `.glassEffect(.regular.interactive(), in: Capsule())`;
+4. `.accessibilityElement(children: .contain)` on that `HStack`. Without it, SwiftUI gives
+   every button in the item the accessibility label of the first one, so Workflow History and
+   Remote Mirror read as "Notifications" (#1043). The modifier changes no pixel.
 
 This is an ownership boundary, not a new style system. Do not add a divider, child glass,
 child padding, child frame, `buttonStyle(.plain)`, or a new color while moving these controls.

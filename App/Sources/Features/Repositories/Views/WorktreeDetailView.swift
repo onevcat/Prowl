@@ -1072,6 +1072,9 @@ struct WorktreeDetailView: View {
           }
         }
         .glassEffect(.regular.interactive(), in: Capsule())
+        // Without a container, every button in this item gets the accessibility label of
+        // the first one (#1043).
+        .accessibilityElement(children: .contain)
       }
       .sharedBackgroundVisibility(.hidden)
     }
