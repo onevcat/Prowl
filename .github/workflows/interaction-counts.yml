@@ -1,0 +1,102 @@
+name: interaction-counts
+
+# Counts main-thread work on interaction call paths (worktree switch, app activation) in a
+# Debug build of the App, on the oldest supported macOS and on the current one. The counts are
+# breakpoint hits, not times, so they compare across runners. See
+# scripts/measure-interaction-counts.py.
+#
+# It builds the App, so it does not run on every pull request: add the `perf` label to a pull
+# request, or start it by hand.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'perf')
+    runs-on: xcode-27
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      PROWL_DERIVED_DATA_PATH: ${{ github.workspace }}/build/ci-derived-data
+      MISE_HTTP_TIMEOUT: 120
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PROWL_CI_BUILD_SETTINGS: COMPILATION_CACHE_ENABLE_CACHING=NO COMPILER_INDEX_STORE_ENABLE=NO
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-macos
+      - name: Stage debug app resources
+        run: make embed-cli-debug embed-docs embed-skills
+      - name: Generate workspace
+        run: make ensure-project
+      # The same settings as the test build, so the restored App build state is reused. The
+      # measurement sets breakpoints on Prowl symbols, so this build keeps its symbols.
+      - name: Build the Debug app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build -workspace Prowl.xcworkspace -scheme Prowl -configuration Debug \
+            -destination "platform=macOS" -derivedDataPath "$PROWL_DERIVED_DATA_PATH" \
+            -skipMacroValidation -clonedSourcePackagesDirPath ~/Library/Caches/prowl-spm-cache/SourcePackages \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SWIFT_COMPILATION_MODE=incremental $PROWL_CI_BUILD_SETTINGS 2>&1 | mise exec -- xcsift -w --format toon
+          app="$PROWL_DERIVED_DATA_PATH/Build/Products/Debug/Prowl Debug.app"
+          codesign --force --deep --sign - "$app"
+          mkdir -p build/perf
+          ditto -c -k --keepParent "$app" build/perf/app.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prowl-debug-app-${{ github.run_id }}
+          path: build/perf/app.zip
+          retention-days: 3
+
+  measure:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: prowl-debug-app-${{ github.run_id }}
+          path: build/perf
+      - name: Show the environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          DevToolsSecurity -status || true
+      - name: Count interaction work
+        shell: bash
+        run: |
+          set -euo pipefail
+          ditto -x -k build/perf/app.zip build/perf
+          for language in zh-Hans en; do
+            xcrun python3 scripts/measure-interaction-counts.py \
+              --app "build/perf/Prowl Debug.app" --language "$language" --rounds 5 --count-bodies \
+              --label "${{ matrix.runner }}" --output "build/perf/report-$language.json" \
+              --markdown "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interaction-counts-${{ matrix.runner }}-${{ github.run_id }}
+          path: build/perf/report-*.json
+          if-no-files-found: ignore
+          retention-days: 30
