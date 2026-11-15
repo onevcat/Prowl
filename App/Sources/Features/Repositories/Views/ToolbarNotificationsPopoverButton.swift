@@ -21,7 +21,7 @@ struct ToolbarNotificationsPopoverButton: View {
       popovers.toggle(.notifications)
     } label: {
       HStack(spacing: 6) {
-        Image(systemName: unseenWorktreeCount > 0 ? "bell.badge.fill" : "bell.fill")
+        ToolbarSymbolImage.image(unseenWorktreeCount > 0 ? "bell.badge.fill" : "bell.fill")
           .foregroundStyle(unseenWorktreeCount > 0 ? .orange : .secondary)
           .accessibilityHidden(true)
         if notificationCount > 0 {

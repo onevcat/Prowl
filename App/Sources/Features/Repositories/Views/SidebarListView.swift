@@ -224,7 +224,11 @@ struct SidebarListView: View {
           Button {
             isAddChoicePresented = true
           } label: {
-            Label("Add...", systemImage: "folder.badge.plus")
+            Label {
+              Text("Add...")
+            } icon: {
+              ToolbarSymbolImage.image("folder.badge.plus")
+            }
           }
           .help("Add Repository or Workspace")
           .persistentPopover(isPresented: $isAddChoicePresented) {

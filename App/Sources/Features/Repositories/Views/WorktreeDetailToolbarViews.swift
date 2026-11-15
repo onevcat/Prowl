@@ -93,7 +93,7 @@ struct RunScriptToolbarButton: View {
       config.action()
     } label: {
       HStack(spacing: 6) {
-        Image(systemName: config.systemImage)
+        ToolbarSymbolImage.image(config.systemImage)
           .accessibilityHidden(true)
         Text(config.title)
 
@@ -133,7 +133,7 @@ struct UserCustomCommandToolbarButton: View {
       action()
     } label: {
       HStack(spacing: 6) {
-        Image(systemName: systemImage)
+        ToolbarSymbolImage.image(systemImage)
           .accessibilityHidden(true)
         Text(title)
         if commandKeyObserver.isPressed, let shortcut {
@@ -180,8 +180,7 @@ struct CustomCommandOverflowButton: View {
     Button {
       isPresented.toggle()
     } label: {
-      Image(systemName: "chevron.down")
-        .font(.caption2)
+      ToolbarSymbolImage.image("chevron.down", textStyle: .caption2)
         .accessibilityLabel("More custom commands")
     }
     .help("More custom commands")
