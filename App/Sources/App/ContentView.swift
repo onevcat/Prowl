@@ -15,7 +15,6 @@ struct ContentView: View {
   @Bindable var store: StoreOf<AppFeature>
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
-  @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   // Keep this binding local. Binding it to the store lets SwiftUI's transition
   // write-backs feed back into the store and loop.
   @State private var columnVisibility: NavigationSplitViewVisibility
@@ -202,19 +201,10 @@ struct ContentView: View {
     .focusedSceneValue(\.renameBranchAction, renameBranchAction)
     .focusedSceneValue(\.revealInSidebarAction, revealInSidebarAction.asFocusedAction())
     .overlay {
-      CommandPaletteOverlayView(
-        store: store.scope(state: \.commandPalette, action: \.commandPalette),
-        items: CommandPaletteFeature.commandPaletteItems(
-          from: store.repositories,
-          customCommands: store.selectedCustomCommands,
-          runScriptStatusByWorktreeID: store.runScriptStatusByWorktreeID,
-          actionTargetWorktreeID: store.repositories.isShowingCanvas
-            ? terminalManager.canvasFocusedWorktreeID
-            : nil,
-          ghosttyCommands: ghosttyShortcuts.commandPaletteEntries,
-          workflowItems: featureFlags.workflowUI ? store.workflowPaletteItems : []
-        ),
-        resolvedKeybindings: store.resolvedKeybindings
+      CommandPaletteOverlayHost(
+        store: store,
+        terminalManager: terminalManager,
+        showsWorkflowItems: featureFlags.workflowUI
       )
     }
     .overlay {
@@ -397,5 +387,36 @@ private struct RunScriptPromptView: View {
     }
     .padding(20)
     .frame(minWidth: 520)
+  }
+}
+
+/// Builds the command palette items only while the palette is open. The items read most of
+/// the repositories state, so building them in `ContentView.body` evaluated the whole window
+/// again on every repositories change, such as each worktree switch.
+private struct CommandPaletteOverlayHost: View {
+  let store: StoreOf<AppFeature>
+  let terminalManager: WorktreeTerminalManager
+  let showsWorkflowItems: Bool
+  @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
+
+  var body: some View {
+    CommandPaletteOverlayView(
+      store: store.scope(state: \.commandPalette, action: \.commandPalette),
+      items: store.commandPalette.isPresented ? items : [],
+      resolvedKeybindings: store.resolvedKeybindings
+    )
+  }
+
+  private var items: [CommandPaletteItem] {
+    CommandPaletteFeature.commandPaletteItems(
+      from: store.repositories,
+      customCommands: store.selectedCustomCommands,
+      runScriptStatusByWorktreeID: store.runScriptStatusByWorktreeID,
+      actionTargetWorktreeID: store.repositories.isShowingCanvas
+        ? terminalManager.canvasFocusedWorktreeID
+        : nil,
+      ghosttyCommands: ghosttyShortcuts.commandPaletteEntries,
+      workflowItems: showsWorkflowItems ? store.workflowPaletteItems : []
+    )
   }
 }

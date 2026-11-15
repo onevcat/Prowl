@@ -58,6 +58,9 @@ struct SidebarListView: View {
   @Binding var collapsedGroupIDs: Set<RepositoryGroup.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
+  /// Read here once and passed to the sections, so that a section does not hold `@Shared`.
+  @Shared(.repositoryAppearances) private var repositoryAppearances
+  @Shared(.hostProfiles) private var hostProfiles
   @State private var draggedSidebarItem: SidebarDragItem?
   @State private var targetedSidebarDropDestination: SidebarDropDestination?
   @State private var sidebarHeight = 0.0
@@ -70,8 +73,9 @@ struct SidebarListView: View {
 
   var body: some View {
     let state = store.state
-    let hotkeyRows = state.orderedWorktreeRows(
-      includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs))
+    let hotkeyRowIDs = state.orderedWorktreeRows(
+      includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs)
+    ).map(\.id)
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: expandedRepoIDs)
     let expandableRepositoryIDs = Self.expandableRepositoryIDs(in: state.repositories)
     let repositoryItems = presentation.items.filter { $0.topLevelKey != nil }
@@ -113,7 +117,7 @@ struct SidebarListView: View {
               item,
               index: index,
               topLevelKeys: presentation.topLevelKeys,
-              hotkeyRows: hotkeyRows,
+              hotkeyRowIDs: hotkeyRowIDs,
               selectedWorktreeIDs: selectedWorktreeIDs
             )
           }
@@ -403,7 +407,7 @@ struct SidebarListView: View {
     _ item: SidebarItem,
     index: Int,
     topLevelKeys: [String],
-    hotkeyRows: [WorktreeRowModel],
+    hotkeyRowIDs: [Worktree.ID],
     selectedWorktreeIDs: Set<Worktree.ID>
   ) -> some View {
     let dragContext = sidebarLayoutDragContext
@@ -435,7 +439,7 @@ struct SidebarListView: View {
               repositoryRowView(
                 member,
                 hasTopSpacing: memberIndex > 0,
-                hotkeyRows: hotkeyRows,
+                hotkeyRowIDs: hotkeyRowIDs,
                 selectedWorktreeIDs: selectedWorktreeIDs,
                 dragContext: dragContext
               )
@@ -466,7 +470,7 @@ struct SidebarListView: View {
         repositoryRowView(
           item,
           hasTopSpacing: index > 0,
-          hotkeyRows: hotkeyRows,
+          hotkeyRowIDs: hotkeyRowIDs,
           selectedWorktreeIDs: selectedWorktreeIDs,
           dragContext: dragContext
         )
@@ -488,26 +492,45 @@ struct SidebarListView: View {
   private func repositoryRowView(
     _ item: SidebarItem,
     hasTopSpacing: Bool,
-    hotkeyRows: [WorktreeRowModel],
+    hotkeyRowIDs: [Worktree.ID],
     selectedWorktreeIDs: Set<Worktree.ID>,
     dragContext: SidebarLayoutDragContext
   ) -> some View {
     switch item {
     case .repository(let model):
       if let repository = store.state.repositories[id: model.repositoryID] {
+        let state = store.state
+        let isRepositorySelection = state.selection == .repository(repository.id)
         RepositorySectionView(
           repository: repository,
           hasTopSpacing: hasTopSpacing,
           isDragActive: dragContext.isActive,
-          hotkeyRows: hotkeyRows,
-          selectedWorktreeIDs: selectedWorktreeIDs,
-          expandedRepoIDs: $expandedRepoIDs,
+          isExpanded: expandedRepoIDs.contains(repository.id),
+          isSelected: isRepositorySelection && state.selectedWorkspaceChildID == nil,
+          selectedWorkspaceChildID: isRepositorySelection ? state.selectedWorkspaceChildID : nil,
+          appearance: repositoryAppearances[repository.id] ?? .empty,
+          remoteHost: RemoteProjectHostSummary(location: repository.location, hostProfiles: hostProfiles),
+          hotkeyRowIDs: hotkeyRowIDs,
+          selectedWorktreeIDs: selectedWorktreeIDs.filter { id in
+            repository.worktrees[id: id] != nil || state.pendingWorktree(for: id)?.repositoryID == repository.id
+          },
+          multiSelectedWorktreeIDs: selectedWorktreeIDs.count > 1 ? selectedWorktreeIDs : [],
+          onToggleExpanded: {
+            withAnimation(.easeOut(duration: 0.2)) {
+              if expandedRepoIDs.contains(repository.id) {
+                expandedRepoIDs.remove(repository.id)
+              } else {
+                expandedRepoIDs.insert(repository.id)
+              }
+            }
+          },
           store: store,
           terminalManager: terminalManager,
           onRepositorySelected: {
             selectRepository(repository)
           }
         )
+        .equatable()
         .draggableSidebarItem(
           .repository(model.repositoryID),
           isEnabled: !model.isRemoving,
