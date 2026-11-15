@@ -996,5 +996,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
   final class FocusRequests {
     static let shared = FocusRequests()
     fileprivate var latest = 0
+
+    /// Cancels the requests that still retry, for focus that moved to another control.
+    func cancelPending() {
+      latest &+= 1
+    }
   }
 }

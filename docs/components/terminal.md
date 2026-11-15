@@ -185,6 +185,10 @@ Edit menu: **Find…** (`start_search`), **Find Next/Previous**
 (`search:next`/`search:previous`), **Hide Find Bar** (`end_search`), **Use
 Selection for Find** (`search_selection`). These are Ghostty-managed.
 
+**Find…** (⌘F by default) opens the find bar and puts keyboard focus in its search field.
+The query stays while the find bar is open, also when the split layout or the Shelf view
+changes. Split zoom keeps focus in the search field.
+
 ## Scrollback, CJK, copy/paste
 
 Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty

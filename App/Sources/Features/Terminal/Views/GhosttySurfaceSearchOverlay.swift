@@ -7,11 +7,9 @@ struct GhosttySurfaceSearchOverlay: View {
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
-  @State private var searchText: String
   @State private var corner: GhosttySearchCorner = .topRight
   @State private var dragOffset: CGSize = .zero
   @State private var barSize: CGSize = .zero
-  @State private var isSearchFieldFocused = false
   @State private var searchTask: Task<Void, Never>?
 
   private let overlayPadding: CGFloat = 8
@@ -19,7 +17,15 @@ struct GhosttySurfaceSearchOverlay: View {
   init(surfaceView: GhosttySurfaceView) {
     self.surfaceView = surfaceView
     self._state = Bindable(surfaceView.bridge.state)
-    self._searchText = State(initialValue: surfaceView.bridge.state.searchNeedle ?? "")
+  }
+
+  /// The query lives in the surface state, so it survives when SwiftUI rebuilds this overlay
+  /// for a split layout change.
+  private var searchText: Binding<String> {
+    Binding(
+      get: { state.searchNeedle ?? "" },
+      set: { state.searchNeedle = $0 }
+    )
   }
 
   var body: some View {
@@ -27,8 +33,9 @@ struct GhosttySurfaceSearchOverlay: View {
       ZStack(alignment: corner.alignment) {
         HStack(spacing: 4) {
           GhosttySearchField(
-            text: $searchText,
-            isFocused: isSearchFieldFocused,
+            text: searchText,
+            owner: state,
+            focusPending: state.searchFocusPending,
             onSubmit: { isShifted in
               navigateSearch(isShifted ? .previous : .next)
             },
@@ -119,26 +126,16 @@ struct GhosttySurfaceSearchOverlay: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
       .onAppear {
-        focusSearchField()
-        scheduleSearch(searchText)
-      }
-      .onChange(of: searchText) { _, newValue in
-        scheduleSearch(newValue)
+        scheduleSearch(searchText.wrappedValue)
       }
       .onChange(of: state.searchNeedle) { _, newValue in
         guard let newValue else { return }
-        focusSearchField()
-        if !newValue.isEmpty, newValue != searchText {
-          searchText = newValue
-        }
+        scheduleSearch(newValue)
       }
       .onChange(of: state.searchTotal) { _, newValue in
         if let total = newValue, total > 0, state.searchSelected == nil {
           surfaceView.performBindingAction("navigate_search:next")
         }
-      }
-      .onChange(of: state.searchFocusCount) { _, _ in
-        focusSearchField()
       }
       .onDisappear {
         searchTask?.cancel()
@@ -198,7 +195,7 @@ struct GhosttySurfaceSearchOverlay: View {
     guard let searchTask else { return }
     searchTask.cancel()
     self.searchTask = nil
-    emitSearch(searchText)
+    emitSearch(searchText.wrappedValue)
   }
 
   private func searchButtonHelp(_ title: String, commandID: String) -> String {
@@ -206,14 +203,6 @@ struct GhosttySurfaceSearchOverlay: View {
       return "\(title) (\(shortcut))"
     }
     return title
-  }
-
-  private func focusSearchField() {
-    isSearchFieldFocused = false
-    Task { @MainActor in
-      await Task.yield()
-      isSearchFieldFocused = true
-    }
   }
 
   private func centerPosition(
@@ -280,9 +269,11 @@ private struct SearchButtonLabel: View {
   }
 }
 
-private struct GhosttySearchField: NSViewRepresentable {
+struct GhosttySearchField: NSViewRepresentable {
   @Binding var text: String
-  var isFocused: Bool
+  let owner: GhosttySurfaceState
+  /// Passed by value so that a new Find request makes SwiftUI call `updateNSView`.
+  let focusPending: Bool
   var onSubmit: (Bool) -> Void
   var onEscape: () -> Void
 
@@ -292,6 +283,7 @@ private struct GhosttySearchField: NSViewRepresentable {
 
   func makeNSView(context: Context) -> SearchField {
     let field = SearchField()
+    field.owner = owner
     field.delegate = context.coordinator
     field.onSubmit = onSubmit
     field.onEscape = onEscape
@@ -311,9 +303,9 @@ private struct GhosttySearchField: NSViewRepresentable {
     }
     nsView.onSubmit = onSubmit
     nsView.onEscape = onEscape
-
-    if isFocused, nsView.window?.firstResponder !== nsView.currentEditor() {
-      nsView.window?.makeFirstResponder(nsView)
+    nsView.owner = owner
+    if focusPending {
+      nsView.takePendingFocus()
     }
   }
 
@@ -352,6 +344,32 @@ private struct GhosttySearchField: NSViewRepresentable {
   final class SearchField: NSTextField {
     var onSubmit: ((Bool) -> Void)?
     var onEscape: (() -> Void)?
+    weak var owner: GhosttySurfaceState?
+
+    var hasKeyboardFocus: Bool {
+      guard let window, let editor = currentEditor() else { return false }
+      return window.firstResponder === editor
+    }
+
+    /// Takes keyboard focus for a pending Find request, once.
+    ///
+    /// SwiftUI can call `updateNSView` before it adds the field to a window. Then this call does
+    /// nothing and `viewDidMoveToWindow` applies the request.
+    func takePendingFocus(requests: GhosttySurfaceView.FocusRequests = .shared) {
+      guard let owner, owner.searchFocusPending, let window else { return }
+      if !hasKeyboardFocus {
+        window.makeFirstResponder(self)
+      }
+      guard hasKeyboardFocus else { return }
+      owner.searchFocusPending = false
+      // An older terminal request that still retries must not take the focus back.
+      requests.cancelPending()
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      takePendingFocus()
+    }
 
     override func cancelOperation(_ sender: Any?) {
       onEscape?()
@@ -422,5 +440,15 @@ private struct GhosttySearchButtonStyle: ButtonStyle {
       return Color.primary.opacity(0.1)
     }
     return Color.clear
+  }
+}
+
+extension GhosttySurfaceView {
+  /// Whether the Find field of this surface has keyboard focus.
+  var isSearchFieldFocused: Bool {
+    guard let editor = window?.firstResponder as? NSTextView, editor.isFieldEditor,
+      let field = (editor.delegate as AnyObject?) as? GhosttySearchField.SearchField
+    else { return false }
+    return field.owner === bridge.state
   }
 }

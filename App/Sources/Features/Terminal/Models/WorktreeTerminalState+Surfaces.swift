@@ -507,8 +507,16 @@ extension WorktreeTerminalState {
     case .toggleSplitZoom:
       guard tree.isSplit else { return false }
       let newZoomed = (tree.zoomed == targetNode) ? nil : targetNode
+      // Keep focus in the pane's Find field if it has it. If SwiftUI replaces the Find bar for
+      // the new layout, the new field takes the focus.
+      let keepsSearchFieldFocus = targetSurface.isSearchFieldFocused
       updateTree(tree.settingZoomed(newZoomed), for: tabId)
-      focusSurface(targetSurface, in: tabId)
+      if keepsSearchFieldFocus {
+        targetSurface.bridge.state.searchFocusPending = true
+        recordActiveSurface(targetSurface, in: tabId)
+      } else {
+        focusSurface(targetSurface, in: tabId)
+      }
       return true
     }
   }

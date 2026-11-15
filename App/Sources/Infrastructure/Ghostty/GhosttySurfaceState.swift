@@ -23,10 +23,13 @@ final class GhosttySurfaceState {
   var colorChangeB: UInt8?
   /// The host of the pane's foreground `ssh`, set by agent detection (docs-ai 082).
   var remoteIndicator: RemotePaneIndicator?
+  /// The Find query, or `nil` when the Find bar is closed. Ghostty sets it on `start_search`, and the
+  /// Find field writes what the user types.
   var searchNeedle: String?
   var searchTotal: Int?
   var searchSelected: Int?
-  var searchFocusCount = 0
+  /// Set by a Find request; cleared when the Find field takes keyboard focus.
+  var searchFocusPending = false
   var sizeLimitMinWidth: UInt32?
   var sizeLimitMinHeight: UInt32?
   var sizeLimitMaxWidth: UInt32?
