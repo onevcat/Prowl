@@ -92,7 +92,12 @@ struct ActiveAgentsPanel: View {
     .clipShape(panelBackgroundShape)
     // Glass, not a fixed material: it samples the tinted sidebar behind it, so the
     // panel stays legible with a custom window tint in both light and dark mode.
-    .glassEffect(.regular, in: panelBackgroundShape)
+    // The window-background tint damps the repository rows that scroll under the
+    // panel, so they do not show through as colored blurs.
+    .glassEffect(
+      .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.6)),
+      in: panelBackgroundShape
+    )
   }
 
   private func row(for entry: ActiveAgentEntry, inProjectSection: Bool) -> some View {
