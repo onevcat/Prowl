@@ -89,7 +89,7 @@ executing that fixture. See [validation](docs/validation.md) for actual run evid
 The shared [wire contract](../../docs/remote-mirror-wire.md) is owned by Prowl. There is no legacy
 protocol or 64-hex-code compatibility. Update both ends together.
 
-Source attribution and upstream terms: [ThirdPartyNotices](ThirdPartyNotices/README.md).
+Source attribution and dependency licenses: [ThirdPartyNotices](ThirdPartyNotices/README.md).
 
 Ordinary Send requires Host capability `agent-input`. It does not add a completion
 prompt or create a pending dispatch; prior automation receipts remain unchanged.
@@ -101,3 +101,8 @@ permission is optional; manual entry remains available. The scanner opens in por
 without a red scanning line. Refresh expired codes on Host.
 The Live scroll toolbar places Scroll up on the left and Scroll down on the right,
 with loading feedback centered between them.
+
+## License
+
+The Android mirror client is licensed under the [MIT License](LICENSE). This covers
+`Mirror/Android/`. The rest of the repository keeps its own [license](../../LICENSE).

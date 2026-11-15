@@ -3,8 +3,8 @@
 This Android implementation ports the behavior and wire contract of
 [Awhisper/ProwlMirror-iOS](https://github.com/Awhisper/ProwlMirror-iOS) (`570a423`)
 and [Awhisper/Prowl](https://github.com/Awhisper/Prowl) (`bbd8e6e4`), derived from
-[onevcat/Prowl](https://github.com/onevcat/Prowl). The upstream source terms are
-preserved in [Prowl-LICENSE](Prowl-LICENSE); do not assume this code is MIT licensed.
+the Remote Mirror sources of [onevcat/Prowl](https://github.com/onevcat/Prowl). Like the
+iOS mirror client, it is licensed under the [MIT License](../LICENSE).
 
 Runtime dependencies:
 - AndroidX / Jetpack Compose: Apache License 2.0.
