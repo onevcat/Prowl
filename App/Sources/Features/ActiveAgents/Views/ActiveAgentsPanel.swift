@@ -89,10 +89,11 @@ struct ActiveAgentsPanel: View {
         .scrollIndicators(.never)
       }
     }
+    .background {
+      panelBackgroundShape
+        .fill(.thinMaterial)
+    }
     .clipShape(panelBackgroundShape)
-    // Glass, not a fixed material: it samples the tinted sidebar behind it, so the
-    // panel stays legible with a custom window tint in both light and dark mode.
-    .glassEffect(.regular, in: panelBackgroundShape)
   }
 
   private func row(for entry: ActiveAgentEntry, inProjectSection: Bool) -> some View {
