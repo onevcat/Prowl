@@ -125,6 +125,7 @@ struct ShelfView: View {
       distanceFromOpen: distance,
       terminalState: terminalManager.stateIfExists(for: book.id),
       activeAgentEntries: activeAgentEntries,
+      appearance: repositoryAppearances[book.repositoryID] ?? .empty,
       tintFallback: settingsFile.global.shelfSpineTintFallback,
       followsRepositoryColor: settingsFile.global.shelfSpineTintFollowsRepositoryColor,
       onOpenBook: { openBook(book, selectingTab: nil) },
@@ -148,6 +149,7 @@ struct ShelfView: View {
         store.send(.repositoryManagement(.openRepositorySettings(book.repositoryID)))
       }
     )
+    .equatable()
   }
 
   /// Dispatch the open-book action only when `book` isn't already the open

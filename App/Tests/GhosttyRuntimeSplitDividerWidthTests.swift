@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import Prowl
@@ -82,5 +83,27 @@ struct GhosttyRuntimeSplitDividerWidthTests {
       from: "prowl-split-divider-color = #ff0000")
 
     #expect(parsed == nil)
+  }
+
+  @MainActor
+  @Test func readsTheFileAgainOnlyAfterTheConfigChanges() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "split-divider-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let first = directory.appending(path: "first.conf")
+    let second = directory.appending(path: "second.conf")
+    try "prowl-split-divider-width = 3\n".write(to: first, atomically: true, encoding: .utf8)
+    try "prowl-split-divider-width = 7\n".write(to: second, atomically: true, encoding: .utf8)
+    let runtime = GhosttyRuntime(configSource: .file(path: first.path(percentEncoded: false)))
+
+    #expect(runtime.splitDividerWidth() == 3)
+    try "prowl-split-divider-width = 5\n".write(to: first, atomically: true, encoding: .utf8)
+    #expect(runtime.splitDividerWidth() == 3)
+
+    runtime.reloadAppConfig()
+    #expect(runtime.splitDividerWidth() == 5)
+
+    runtime.setConfigSource(.file(path: second.path(percentEncoded: false)))
+    #expect(runtime.splitDividerWidth() == 7)
   }
 }

@@ -1,4 +1,3 @@
-import Sharing
 import SwiftUI
 
 private let shelfLogger = ProwlLogger("Shelf")
@@ -10,7 +9,12 @@ private let shelfLogger = ProwlLogger("Shelf")
 /// the book with its current tab) and per-tab slot (opens the book with
 /// that tab). Animations, ⌘-held digit overlay, and bottom controls are
 /// layered in subsequent phases.
-struct ShelfSpineView: View {
+///
+/// `ShelfView` wraps each spine in `.equatable()`: a book switch evaluates `ShelfView` again,
+/// and without the comparison every spine would evaluate its body, tab slots, and menus again
+/// too. `==` compares every input that the body reads, except the actions. The actions read
+/// the store and the terminal state when they run, so an older copy acts the same.
+struct ShelfSpineView: View, @MainActor Equatable {
   let book: ShelfBook
   let isOpen: Bool
   /// Absolute distance along the ordered book list between this spine and
@@ -21,6 +25,9 @@ struct ShelfSpineView: View {
   let distanceFromOpen: Int?
   let terminalState: WorktreeTerminalState?
   let activeAgentEntries: [ActiveAgentEntry]
+  /// Passed in instead of read from `@Shared` here: a `@Shared` property makes each comparison
+  /// and each initialization of the spine read the shared value.
+  let appearance: RepositoryAppearance
   let tintFallback: ShelfSpineTintFallback
   let followsRepositoryColor: Bool
   let onOpenBook: () -> Void
@@ -44,8 +51,31 @@ struct ShelfSpineView: View {
   let onOpenRepositorySettings: () -> Void
 
   @State private var isHovering = false
-  @Shared(.repositoryAppearances) private var repositoryAppearances
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.book == rhs.book
+      && lhs.isOpen == rhs.isOpen
+      && Self.proximity(lhs.distanceFromOpen) == Self.proximity(rhs.distanceFromOpen)
+      && lhs.terminalState === rhs.terminalState
+      && lhs.activeAgentEntries == rhs.activeAgentEntries
+      && lhs.appearance == rhs.appearance
+      && lhs.tintFallback == rhs.tintFallback
+      && lhs.followsRepositoryColor == rhs.followsRepositoryColor
+      && lhs.closeMenuTitle == rhs.closeMenuTitle
+      && (lhs.onNewTab == nil) == (rhs.onNewTab == nil)
+      && (lhs.onSplitVertical == nil) == (rhs.onSplitVertical == nil)
+      && (lhs.onSplitHorizontal == nil) == (rhs.onSplitHorizontal == nil)
+      && (lhs.onCloseBook == nil) == (rhs.onCloseBook == nil)
+  }
+
+  /// The distance as the body uses it: the tint ladders stop changing after
+  /// `proximityLadder.count`, so distant spines compare equal when the open book moves.
+  private static func proximity(_ distance: Int?) -> Int? {
+    distance.map { min($0, proximityLadder.count) }
+  }
+
+  private static let proximityLadder: [Double] = [1.0, 0.5, 0.3, 0.2, 0.1, 0.05]
 
   var body: some View {
     // Body-invocation counter signpost. With ~10 spines visible during
@@ -113,7 +143,7 @@ struct ShelfSpineView: View {
   /// active-highlight fill so they fade in lockstep.
   private var accentProximityMultiplier: Double {
     guard let distance = distanceFromOpen else { return 0 }
-    let ladder: [Double] = [1.0, 0.5, 0.3, 0.2, 0.1, 0.05]
+    let ladder = Self.proximityLadder
     return distance < ladder.count ? ladder[distance] : 0
   }
 
@@ -153,10 +183,6 @@ struct ShelfSpineView: View {
       return color.color
     }
     return .accentColor
-  }
-
-  private var appearance: RepositoryAppearance {
-    repositoryAppearances[book.repositoryID] ?? .empty
   }
 
   private var activeAgentEntryByTabID: [TerminalTabID: ActiveAgentEntry] {

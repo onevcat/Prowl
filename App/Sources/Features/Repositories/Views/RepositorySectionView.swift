@@ -1,16 +1,32 @@
 import AppKit
 import ComposableArchitecture
-import Sharing
 import SwiftUI
 
-struct RepositorySectionView: View {
+/// `SidebarListView` evaluates its body again on each selection change and wraps each section
+/// in `.equatable()`, so only the sections whose rows change evaluate their body again. For
+/// that, the parent resolves the selection, the expansion, and the shared settings, and this
+/// body must not read `selection` or `sidebarSelectedWorktreeIDs` from the store. `==`
+/// compares every input that the body reads, except the store and the actions: those read the
+/// current state when they run. The section takes no `Binding`: SwiftUI evaluates a view
+/// again whenever its parent passes a binding, whatever `==` returns.
+struct RepositorySectionView: View, @MainActor Equatable {
   private static let debugHeaderLayers = false
   let repository: Repository
   let hasTopSpacing: Bool
   let isDragActive: Bool
-  let hotkeyRows: [WorktreeRowModel]
+  let isExpanded: Bool
+  /// The header row is the selection: a folder, or a workspace without a selected child.
+  let isSelected: Bool
+  /// The selected child of this workspace, nil when the selection is elsewhere.
+  let selectedWorkspaceChildID: String?
+  let appearance: RepositoryAppearance
+  let remoteHost: RemoteProjectHostSummary?
+  let hotkeyRowIDs: [Worktree.ID]
+  /// The selected worktrees of this repository.
   let selectedWorktreeIDs: Set<Worktree.ID>
-  @Binding var expandedRepoIDs: Set<Repository.ID>
+  /// All selected worktrees when more than one is selected, else empty.
+  let multiSelectedWorktreeIDs: Set<Worktree.ID>
+  let onToggleExpanded: () -> Void
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   let onRepositorySelected: () -> Void
@@ -18,33 +34,37 @@ struct RepositorySectionView: View {
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isHovering = false
-  @Shared(.repositoryAppearances) private var repositoryAppearances
-  @Shared(.hostProfiles) private var hostProfiles
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.repository == rhs.repository
+      && lhs.hasTopSpacing == rhs.hasTopSpacing
+      && lhs.isDragActive == rhs.isDragActive
+      && lhs.isExpanded == rhs.isExpanded
+      && lhs.isSelected == rhs.isSelected
+      && lhs.selectedWorkspaceChildID == rhs.selectedWorkspaceChildID
+      && lhs.appearance == rhs.appearance
+      && lhs.remoteHost == rhs.remoteHost
+      && lhs.hotkeyRowIDs == rhs.hotkeyRowIDs
+      && lhs.selectedWorktreeIDs == rhs.selectedWorktreeIDs
+      && lhs.multiSelectedWorktreeIDs == rhs.multiSelectedWorktreeIDs
+      && lhs.terminalManager === rhs.terminalManager
+  }
 
   var body: some View {
     let state = store.state
-    let isExpanded = expandedRepoIDs.contains(repository.id)
     // Workspaces are `.plain` (no git worktrees) but still expand to reveal
     // their child repository rows, so they get the chevron even though
     // `supportsWorktrees` is false. Worktree-creation affordances stay gated on
     // `supportsWorktrees` so a workspace never offers "New Worktree".
     let isExpandable = repository.capabilities.supportsWorktrees || repository.isWorkspace
     let isRemovingRepository = state.isRemovingRepository(repository)
-    let isSelected = state.selection == .repository(repository.id) && state.selectedWorkspaceChildID == nil
     let openRepoSettings = {
       _ = store.send(.repositoryManagement(.openRepositorySettings(repository.id)))
     }
     let toggleExpanded = {
       guard !isRemovingRepository else { return }
-      withAnimation(.easeOut(duration: 0.2)) {
-        if isExpanded {
-          expandedRepoIDs.remove(repository.id)
-        } else {
-          expandedRepoIDs.insert(repository.id)
-        }
-      }
+      onToggleExpanded()
     }
-    let appearance = repositoryAppearances[repository.id] ?? .empty
     let header = HStack {
       // Inner HStack groups the name row and the tab-count badge so they
       // share the leading-aligned region of the outer header. Crucially
@@ -64,7 +84,7 @@ struct RepositorySectionView: View {
             : (repository.isWorkspace
               ? String(localized: "Open terminal in workspace")
               : String(localized: "Open terminal in folder")),
-          remoteHost: RemoteProjectHostSummary(location: repository.location, hostProfiles: hostProfiles)
+          remoteHost: remoteHost
         )
         // Expanded git repos move the count into the worktree rows, so the
         // header stays quiet. Workspaces keep the header badge even when
@@ -255,8 +275,7 @@ struct RepositorySectionView: View {
           WorkspaceChildRowsView(
             rows: state.workspaceChildRows(in: repository),
             showsChangeCounts: state.showSidebarChangeCounts,
-            selectedID: state.selection == .repository(repository.id)
-              ? state.selectedWorkspaceChildID : nil,
+            selectedID: selectedWorkspaceChildID,
             onSelect: { childID in
               store.send(.openWorkspaceChild(childID))
             },
@@ -278,8 +297,9 @@ struct RepositorySectionView: View {
           WorktreeRowsView(
             repository: repository,
             isExpanded: isExpanded,
-            hotkeyRows: hotkeyRows,
+            hotkeyRowIDs: hotkeyRowIDs,
             selectedWorktreeIDs: selectedWorktreeIDs,
+            multiSelectedWorktreeIDs: multiSelectedWorktreeIDs,
             store: store,
             terminalManager: terminalManager
           )

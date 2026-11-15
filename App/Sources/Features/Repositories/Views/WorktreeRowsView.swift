@@ -5,8 +5,14 @@ import SwiftUI
 struct WorktreeRowsView: View {
   let repository: Repository
   let isExpanded: Bool
-  let hotkeyRows: [WorktreeRowModel]
+  /// The worktree rows of all visible repositories, in sidebar order: the index is the
+  /// selection shortcut.
+  let hotkeyRowIDs: [Worktree.ID]
+  /// The selected worktrees of this repository.
   let selectedWorktreeIDs: Set<Worktree.ID>
+  /// All selected worktrees when more than one is selected, else empty. The row menus act
+  /// on all of them.
+  let multiSelectedWorktreeIDs: Set<Worktree.ID>
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
@@ -30,9 +36,9 @@ struct WorktreeRowsView: View {
     let isRepositoryRemoving = state.isRemovingRepository(repository)
     let isSidebarDragActive = state.isSidebarDragActive
     let shortcutHintTextByID = Dictionary(
-      hotkeyRows.enumerated().compactMap { index, row -> (Worktree.ID, String)? in
+      hotkeyRowIDs.enumerated().compactMap { index, rowID -> (Worktree.ID, String)? in
         guard let text = worktreeShortcutHint(for: index) else { return nil }
-        return (row.id, text)
+        return (rowID, text)
       },
       uniquingKeysWith: { first, _ in first }
     )
@@ -123,7 +129,6 @@ struct WorktreeRowsView: View {
     }
   }
 
-  @ViewBuilder
   private func rowView(
     _ row: WorktreeRowModel,
     isRepositoryRemoving: Bool,
@@ -131,20 +136,48 @@ struct WorktreeRowsView: View {
     shortcutHint: WorktreeShortcutHintDisplay
   ) -> some View {
     let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
-    let config = rowConfig(
-      for: row,
+    let isSelected = selectedWorktreeIDs.contains(row.id)
+    let inputs = RowInputs(
+      row: row,
       isRepositoryRemoving: isRepositoryRemoving,
-      isWorktreeDragActive: isWorktreeDragActive,
       moveDisabled: moveDisabled,
-      shortcutHint: shortcutHint
+      shortcutHint: shortcutHint,
+      isSelected: isSelected,
+      isHovered: !isWorktreeDragActive && hoveredWorktreeID == row.id,
+      isContextMenuHighlighted: contextMenuHighlightedWorktreeID == row.id && !isSelected,
+      isWorktreeDragActive: isWorktreeDragActive,
+      supportsCodeHost: repository.capabilities.supportsCodeHost,
+      renameBranchHelpText: AppShortcuts.helpText(
+        title: "Rename branch",
+        commandID: AppShortcuts.CommandID.renameBranch,
+        in: resolvedKeybindings
+      ),
+      colorScheme: colorScheme,
+      hotkeyRowIDs: hotkeyRowIDs,
+      multiSelectedWorktreeIDs: multiSelectedWorktreeIDs
     )
-    let baseRow = worktreeRowView(row, config: config)
-      .disabled(isRepositoryRemoving)
+    // Without this, each selection or hover change would build every row of the repository
+    // and its menu again.
+    return EquatableContent(inputs) { inputs in
+      rowContent(inputs)
+    }
+    .equatable()
+  }
+
+  /// The row for `inputs`. It runs in the body of `EquatableContent`, so the terminal and
+  /// store state that it reads invalidates only this row. The actions read the current state
+  /// when they run.
+  @ViewBuilder
+  private func rowContent(_ inputs: RowInputs) -> some View {
+    let row = inputs.row
+    let config = rowConfig(for: inputs)
+    let baseRow = worktreeRowView(inputs, config: config)
+      .disabled(inputs.isRepositoryRemoving)
       .contentShape(.dragPreview, .rect)
       .contentShape(.interaction, .rect)
       .contentShape(Rectangle())
     Group {
-      if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
+      if row.isRemovable, let worktree = store.state.worktree(for: row.id), !inputs.isRepositoryRemoving {
         baseRow
           .overlay {
             ContextMenuActivationOverlay {
@@ -152,7 +185,7 @@ struct WorktreeRowsView: View {
             }
           }
           .contextMenu {
-            rowContextMenu(worktree: worktree, row: row)
+            rowContextMenu(worktree: worktree, inputs: inputs)
           }
       } else {
         baseRow
@@ -164,14 +197,14 @@ struct WorktreeRowsView: View {
     .accessibilityAddTraits(.isButton)
     .draggableWorktree(
       id: row.id,
-      isEnabled: !moveDisabled,
+      isEnabled: !inputs.moveDisabled,
       beginDrag: {
         draggingWorktreeIDs = [row.id]
         store.send(.worktreeOrdering(.setSidebarDragActive(true)))
       }
     )
-    .environment(\.colorScheme, colorScheme)
-    .preferredColorScheme(colorScheme)
+    .environment(\.colorScheme, inputs.colorScheme)
+    .preferredColorScheme(inputs.colorScheme)
     .onHover { hovering in
       if hovering {
         hoveredWorktreeID = row.id
@@ -194,13 +227,10 @@ struct WorktreeRowsView: View {
     }
   }
 
-  private func rowConfig(
-    for row: WorktreeRowModel,
-    isRepositoryRemoving: Bool,
-    isWorktreeDragActive: Bool,
-    moveDisabled: Bool,
-    shortcutHint: WorktreeShortcutHintDisplay
-  ) -> WorktreeRowViewConfig {
+  private func rowConfig(for inputs: RowInputs) -> WorktreeRowViewConfig {
+    let row = inputs.row
+    let isWorktreeDragActive = inputs.isWorktreeDragActive
+    let shortcutHint = inputs.shortcutHint
     let displayName =
       if row.isDeleting {
         "\(row.name) (deleting...)"
@@ -211,12 +241,12 @@ struct WorktreeRowsView: View {
       }
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
     let notifications = terminalManager.stateIfExists(for: row.id)?.notifications ?? []
-    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isWorktreeDragActive
+    let canShowRowActions = row.isRemovable && !inputs.isRepositoryRemoving && !isWorktreeDragActive
     let diffUnavailableReason = diffUnavailableReason(for: row.id)
     return WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
-      isHovered: !isWorktreeDragActive && hoveredWorktreeID == row.id,
+      isHovered: inputs.isHovered,
       showsNotificationIndicator: !isWorktreeDragActive && showsNotificationIndicator,
       notifications: isWorktreeDragActive ? [] : notifications,
       onFocusNotification: focusNotificationHandler(for: row.id),
@@ -227,7 +257,7 @@ struct WorktreeRowsView: View {
       onDiffTap: diffUnavailableReason == nil ? diffTapHandler(for: row.id) : nil,
       diffUnavailableReason: diffUnavailableReason,
       onStopRunScript: stopRunScriptHandler(for: row.id),
-      moveDisabled: moveDisabled,
+      moveDisabled: inputs.moveDisabled,
     )
   }
 
@@ -273,7 +303,8 @@ struct WorktreeRowsView: View {
 
   private func selectWorktreeRow(_ worktreeID: Worktree.ID) {
     if commandKeyObserver.isPressed {
-      var nextSelection = selectedWorktreeIDs
+      // This view has only its own repository's selection; the toggle keeps the others.
+      var nextSelection = SidebarListView.selectedWorktreeIDs(in: store.state)
       if nextSelection.contains(worktreeID) {
         nextSelection.remove(worktreeID)
       } else {
@@ -284,7 +315,7 @@ struct WorktreeRowsView: View {
         return
       }
       let primarySelection =
-        hotkeyRows.map(\.id).first(where: nextSelection.contains)
+        hotkeyRowIDs.first(where: nextSelection.contains)
         ?? nextSelection.first
       store.send(.selectWorktree(primarySelection, focusTerminal: false))
       store.send(.setSidebarSelectedWorktreeIDs(nextSelection))
@@ -369,6 +400,25 @@ struct WorktreeRowsView: View {
     let moveDisabled: Bool
   }
 
+  /// Every value that a row reads from this view. A row evaluates its body again only when
+  /// these change, or when the terminal or store state that the row reads itself changes.
+  private struct RowInputs: Equatable {
+    let row: WorktreeRowModel
+    let isRepositoryRemoving: Bool
+    let moveDisabled: Bool
+    let shortcutHint: WorktreeShortcutHintDisplay
+    let isSelected: Bool
+    let isHovered: Bool
+    let isContextMenuHighlighted: Bool
+    let isWorktreeDragActive: Bool
+    let supportsCodeHost: Bool
+    let renameBranchHelpText: String
+    let colorScheme: ColorScheme
+    /// The click actions use these, so a row with older values must not stay.
+    let hotkeyRowIDs: [Worktree.ID]
+    let multiSelectedWorktreeIDs: Set<Worktree.ID>
+  }
+
   private struct WorktreeShortcutHints {
     let textByID: [Worktree.ID: String]
     let isVisible: Bool
@@ -378,19 +428,20 @@ struct WorktreeRowsView: View {
     }
   }
 
-  private struct WorktreeShortcutHintDisplay {
+  private struct WorktreeShortcutHintDisplay: Equatable {
     let text: String?
     let isVisible: Bool
   }
 
-  private func worktreeRowView(_ row: WorktreeRowModel, config: WorktreeRowViewConfig) -> some View {
-    let isSelected = selectedWorktreeIDs.contains(row.id)
-    let showsContextMenuHighlight = contextMenuHighlightedWorktreeID == row.id && !isSelected
+  private func worktreeRowView(_ inputs: RowInputs, config: WorktreeRowViewConfig) -> some View {
+    let row = inputs.row
+    let isSelected = inputs.isSelected
+    let showsContextMenuHighlight = inputs.isContextMenuHighlighted
     let taskStatus = terminalManager.taskStatus(for: row.id)
     let hasBlockedAgent = terminalManager.hasBlockedAgent(for: row.id)
     let hasBusyAgent = terminalManager.hasBusyAgent(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
-    let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
+    let isWorktreeDragActive = inputs.isWorktreeDragActive
     return WorktreeRow(
       name: config.displayName,
       worktreeName: config.worktreeName,
@@ -468,13 +519,13 @@ struct WorktreeRowsView: View {
   /// `.openOnCodeHost` opens the PR when one is known and falls back to the
   /// repository page, the same as the toolbar button and its shortcut.
   @ViewBuilder
-  private func codeHostContextMenuItem(for row: WorktreeRowModel) -> some View {
+  private func codeHostContextMenuItem(for row: WorktreeRowModel, supportsCodeHost: Bool) -> some View {
     if row.info?.pullRequest != nil {
       Button("Open Pull Request") {
         store.send(.githubIntegration(.pullRequestAction(row.id, .openOnCodeHost)))
       }
       .help("Open this worktree's pull request on the code host")
-    } else if repository.capabilities.supportsCodeHost {
+    } else if supportsCodeHost {
       let codeHost = store.state.codeHost(for: repository.id)
       Button("Open Repository on \(codeHost.displayName)") {
         store.send(.githubIntegration(.pullRequestAction(row.id, .openOnCodeHost)))
@@ -484,9 +535,10 @@ struct WorktreeRowsView: View {
   }
 
   @ViewBuilder
-  private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
+  private func rowContextMenu(worktree: Worktree, inputs: RowInputs) -> some View {
+    let row = inputs.row
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
-    let contextRows = contextActionRows(for: row)
+    let contextRows = contextActionRows(for: row, multiSelectedWorktreeIDs: inputs.multiSelectedWorktreeIDs)
     let isBulkSelection = contextRows.count > 1
     let archiveTargets =
       contextRows
@@ -547,8 +599,8 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(row.name, forType: .string)
     }
-    renameBranchContextMenuItem(for: row, isBulkSelection: isBulkSelection)
-    codeHostContextMenuItem(for: row)
+    renameBranchContextMenuItem(for: row, isBulkSelection: isBulkSelection, helpText: inputs.renameBranchHelpText)
+    codeHostContextMenuItem(for: row, supportsCodeHost: inputs.supportsCodeHost)
     Divider()
     let diffReason = worktree.availability(of: .diff).unavailableReason?.message
     Button("Show Diff") {
@@ -582,18 +634,16 @@ struct WorktreeRowsView: View {
   }
 
   @ViewBuilder
-  private func renameBranchContextMenuItem(for row: WorktreeRowModel, isBulkSelection: Bool) -> some View {
+  private func renameBranchContextMenuItem(
+    for row: WorktreeRowModel,
+    isBulkSelection: Bool,
+    helpText: String
+  ) -> some View {
     if !isBulkSelection {
       Button("Rename Branch…") {
         store.send(.requestRenameBranchPrompt(row.id))
       }
-      .help(
-        AppShortcuts.helpText(
-          title: "Rename branch",
-          commandID: AppShortcuts.CommandID.renameBranch,
-          in: resolvedKeybindings
-        )
-      )
+      .help(helpText)
     }
   }
 
@@ -616,11 +666,14 @@ struct WorktreeRowsView: View {
     store.send(.worktreeLifecycle(.requestArchiveWorktree(worktreeID, repository.id)))
   }
 
-  private func contextActionRows(for row: WorktreeRowModel) -> [WorktreeRowModel] {
-    guard selectedWorktreeIDs.count > 1, selectedWorktreeIDs.contains(row.id) else {
+  private func contextActionRows(
+    for row: WorktreeRowModel,
+    multiSelectedWorktreeIDs: Set<Worktree.ID>
+  ) -> [WorktreeRowModel] {
+    guard multiSelectedWorktreeIDs.contains(row.id) else {
       return [row]
     }
-    let rows = selectedWorktreeIDs.compactMap { store.state.selectedRow(for: $0) }
+    let rows = multiSelectedWorktreeIDs.compactMap { store.state.selectedRow(for: $0) }
     return rows.isEmpty ? [row] : rows
   }
 
