@@ -7,35 +7,19 @@ struct AdvancedSettingsView: View {
   var body: some View {
     Form {
       Section("Analytics & Crash Reports") {
-        VStack(alignment: .leading) {
-          Toggle(
-            "Share analytics with Prowl",
-            isOn: $store.analyticsEnabled
-          )
-          .help("Share anonymous usage data with Prowl (requires restart)")
+        Toggle(isOn: $store.analyticsEnabled) {
+          Text("Share analytics with Prowl")
           Text("Anonymous usage data helps improve Prowl.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
           Text("Requires app restart.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("Share anonymous usage data with Prowl (requires restart)")
 
-        VStack(alignment: .leading) {
-          Toggle(
-            "Share crash reports with Prowl",
-            isOn: $store.crashReportsEnabled
-          )
-          .help("Share anonymous crash reports with Prowl (requires restart)")
+        Toggle(isOn: $store.crashReportsEnabled) {
+          Text("Share crash reports with Prowl")
           Text("Anonymous crash reports help improve stability.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
           Text("Requires app restart.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("Share anonymous crash reports with Prowl (requires restart)")
       }
     }
     .formStyle(.grouped)

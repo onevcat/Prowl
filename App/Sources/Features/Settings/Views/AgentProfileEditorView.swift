@@ -132,19 +132,21 @@ struct AgentProfileEditorView: View {
         )
       }
       if runtimeAdapter?.supportsAccountIsolation == true {
-        Toggle("Use Dedicated Home", isOn: $store.profile.bindsDedicatedHome)
-          .help("Keep a separate login, usage, and configuration for this profile")
+        Toggle(isOn: $store.profile.bindsDedicatedHome) {
+          Text("Use Dedicated Home")
+          if store.profile.bindsDedicatedHome {
+            Text(
+              """
+              This profile gets its own runtime home: separate login and usage, \
+              but also separate skills, global instructions, and session history. \
+              The first launch signs in through the agent itself.
+              """
+            )
+          }
+        }
+        .help("Keep a separate login, usage, and configuration for this profile")
       }
       if runtimeAdapter?.supportsAccountIsolation == true, store.profile.bindsDedicatedHome {
-        Text(
-          """
-          This profile gets its own runtime home: separate login and usage, \
-          but also separate skills, global instructions, and session history. \
-          The first launch signs in through the agent itself.
-          """
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
         LabeledContent(
           "Profile Home",
           value: store.homeInitialized

@@ -228,7 +228,6 @@ struct WorkflowSettingsDetailView: View {
   private func runSetupSection(_ row: WorkflowSettingsRow) -> some View {
     Section {
       Picker(
-        "Run Setup",
         selection: Binding(
           get: { row.bindModeOverride },
           set: { store.send(.runSetupChanged($0)) })
@@ -236,6 +235,9 @@ struct WorkflowSettingsDetailView: View {
         Text("Follow Workflow").tag(Optional<WorkflowBindModeOverride.Mode>.none)
         Text("Always Review Before Running").tag(Optional(WorkflowBindModeOverride.Mode.ask))
         Text("Run Directly When Possible").tag(Optional(WorkflowBindModeOverride.Mode.auto))
+      } label: {
+        Text("Run Setup")
+        Text(runSetupDescription(row))
       }
       .help(
         """
@@ -243,11 +245,6 @@ struct WorkflowSettingsDetailView: View {
         and validation results.
         """
       )
-
-      Text(runSetupDescription(row))
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
     } header: {
       Text("Run Setup")
     }

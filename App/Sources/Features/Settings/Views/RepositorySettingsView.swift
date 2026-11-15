@@ -187,14 +187,15 @@ struct RepositorySettingsView: View {
             }
             .disabled(store.isBareRepository)
 
-            if store.isBareRepository {
-              Text("Copy flags are ignored for bare repositories.")
-                .foregroundStyle(.secondary)
-            }
           } header: {
             VStack(alignment: .leading, spacing: 4) {
               Text("Worktree")
               Text("Applies when creating a new worktree")
+                .foregroundStyle(.secondary)
+            }
+          } footer: {
+            if store.isBareRepository {
+              Text("Copy flags are ignored for bare repositories.")
                 .foregroundStyle(.secondary)
             }
           }
@@ -204,17 +205,13 @@ struct RepositorySettingsView: View {
           Section {
             if store.showsDiffSettings {
               Toggle(isOn: observeLineDiffsAutomatically) {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("Observe line diffs automatically")
-                  Text(
-                    """
-                    Keeps each workspace's line-change badge up to date in the background. \
-                    Turn off for very large repositories to avoid background git diff work.
-                    """
-                  )
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                }
+                Text("Observe line diffs automatically")
+                Text(
+                  """
+                  Keeps each workspace's line-change badge up to date in the background. \
+                  Turn off for very large repositories to avoid background git diff work.
+                  """
+                )
               }
               .help(
                 """
@@ -226,17 +223,13 @@ struct RepositorySettingsView: View {
 
             if store.showsPullRequestSettings {
               Toggle(isOn: fetchPullRequestState) {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("Fetch pull request state")
-                  Text(
-                    """
-                    Periodically checks pull request status (open, merged, checks) for this repository's branches. \
-                    Turn off to skip background GitHub queries.
-                    """
-                  )
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                }
+                Text("Fetch pull request state")
+                Text(
+                  """
+                  Periodically checks pull request status (open, merged, checks) for this repository's branches. \
+                  Turn off to skip background GitHub queries.
+                  """
+                )
               }
               .help(
                 """
