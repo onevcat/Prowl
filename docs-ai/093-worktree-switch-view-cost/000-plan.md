@@ -93,3 +93,4 @@ Samples of 30 switches add these causes on the main thread (ms per switch, Debug
   code remains per switch, so the extra structure is not justified yet.
 
 ## Amendments
+- Updated 2026-11-15: near-Release baseline and toolbar symbols as cached images — see [002-toolbar-symbol-images.md](002-toolbar-symbol-images.md)
