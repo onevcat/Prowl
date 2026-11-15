@@ -1976,6 +1976,16 @@
         }
       }
     },
+    "Agent is working" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 正在工作"
+          }
+        }
+      }
+    },
     "Agent started." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4083,6 +4093,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择此分组的图标"
+          }
+        }
+      }
+    },
+    "Choose the order of the rows in the Active Agents panel and in Agent Island." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择活跃 Agent 面板和 Agent 灵动岛中各行的顺序。"
           }
         }
       }
@@ -12269,6 +12289,16 @@
         }
       }
     },
+    "Open %@'s pull request on the code host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在代码托管平台上打开 %@ 的拉取请求"
+          }
+        }
+      }
+    },
     "Open Command Palette" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12871,6 +12901,16 @@
         }
       }
     },
+    "Open this repository's page on the code host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在代码托管平台上打开此仓库的页面"
+          }
+        }
+      }
+    },
     "Open this worktree's pull request on the code host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13168,6 +13208,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "原始大小 — 点按以使整个终端适应此窗口；主机尺寸保持不变"
+          }
+        }
+      }
+    },
+    "Other" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他"
           }
         }
       }
@@ -13849,6 +13899,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配置"
+          }
+        }
+      }
+    },
+    "Project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
+        }
+      }
+    },
+    "Project puts agents under their project's title, in sidebar order. Status puts blocked agents first. Agent Island and the next and previous agent shortcuts use the same order." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”会把 Agent 归到各自的项目标题下，按侧边栏顺序排列。“状态”会把受阻的 Agent 排在最前。Agent 灵动岛以及上一个/下一个 Agent 的快捷键也使用同样的顺序。"
           }
         }
       }
@@ -15884,6 +15954,16 @@
         }
       }
     },
+    "Repositories with a custom color still use that color." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设有自定义颜色的仓库仍使用该颜色。"
+          }
+        }
+      }
+    },
     "Repositories you add will appear here" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15950,6 +16030,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仓库和全局的终端操作。已启用的命令先按仓库顺序、再按全局顺序显示。可在“设置 → 命令”中编辑全局命令。"
+          }
+        }
+      }
+    },
+    "Repository colors are ignored for Shelf spines." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "书架书脊会忽略仓库颜色。"
           }
         }
       }
@@ -18376,6 +18466,16 @@
         }
       }
     },
+    "Show change counts in the sidebar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在侧边栏显示更改行数"
+          }
+        }
+      }
+    },
     "Show committed changes relative to the branch's base" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18542,6 +18642,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 worktree 工具栏中显示“运行”按钮。"
+          }
+        }
+      }
+    },
+    "Show the added and removed line counts on sidebar rows. Show Diff still works when they are hidden." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在侧边栏各行显示新增和删除的行数。隐藏后仍可使用“显示 Diff”。"
           }
         }
       }
@@ -18927,6 +19037,16 @@
         }
       }
     },
+    "Sort agents by" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 排序方式"
+          }
+        }
+      }
+    },
     "Source" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19113,6 +19233,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始监听"
+          }
+        }
+      }
+    },
+    "Start Time" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始时间"
           }
         }
       }
@@ -21774,42 +21904,22 @@
         }
       }
     },
-    "Uncolored repositories use a gray spine. Repositories with a custom color still use that color." : {
+    "Uncolored repositories use a gray spine." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未设颜色的仓库使用灰色书脊。设有自定义颜色的仓库仍使用该颜色。"
+            "value" : "未设颜色的仓库使用灰色书脊。"
           }
         }
       }
     },
-    "Uncolored repositories use a gray spine. Repository colors are ignored for Shelf spines." : {
+    "Uncolored repositories use the system tint color." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未设颜色的仓库使用灰色书脊。书架书脊会忽略仓库颜色。"
-          }
-        }
-      }
-    },
-    "Uncolored repositories use the system tint color. Repositories with a custom color still use that color." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未设颜色的仓库使用系统色调。设有自定义颜色的仓库仍使用该颜色。"
-          }
-        }
-      }
-    },
-    "Uncolored repositories use the system tint color. Repository colors are ignored for Shelf spines." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未设颜色的仓库使用系统色调。书架书脊会忽略仓库颜色。"
+            "value" : "未设颜色的仓库使用系统色调。"
           }
         }
       }
