@@ -1491,6 +1491,11 @@ final class WorktreeTerminalManager {
     runtime?.backgroundOpacity() ?? 1.0
   }
 
+  /// The color that a terminal surface fills its background with, before the opacity.
+  func surfaceBackgroundColor() -> NSColor {
+    runtime?.backgroundColor() ?? .windowBackgroundColor
+  }
+
   func unfocusedSplitOverlay() -> (fill: Color?, opacity: Double) {
     guard let runtime else { return (nil, 0) }
     return (runtime.unfocusedSplitFill(), runtime.unfocusedSplitOverlayOpacity())

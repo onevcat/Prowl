@@ -93,3 +93,4 @@ Samples of 30 switches add these causes on the main thread (ms per switch, Debug
   code remains per switch, so the extra structure is not justified yet.
 
 ## Amendments
+- Updated 2026-11-15: Shelf mounts the terminal after the book movement — see [003-shelf-deferred-terminal.md](003-shelf-deferred-terminal.md)
