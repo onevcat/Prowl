@@ -106,6 +106,7 @@ struct ActiveAgentsPanel: View {
         subtitle: subtitle(for: entry),
         repositoryColor: repositoryColor(for: entry),
         isDimmed: isDimmed(entry),
+        dimmedOpacity: 0.5,
         showsAgentName: showAgentNames,
         showsRepositoryName: !inProjectSection
       )

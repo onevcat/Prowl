@@ -7,6 +7,9 @@ struct ActiveAgentRow: View {
   let subtitle: String
   let repositoryColor: RepositoryColorChoice?
   let isDimmed: Bool
+  /// The Island roster also fills the selected row, so its dim can stay light. The sidebar
+  /// panel has only the dim to mark the selection, so it passes a stronger value.
+  var dimmedOpacity = 0.7
   /// The Island roster has room for the name, so only the sidebar panel passes the setting.
   var showsAgentName = true
   /// A project section of the panel names the project once, so its rows leave it out.
@@ -32,7 +35,7 @@ struct ActiveAgentRow: View {
     .padding(.horizontal, 10)
     .padding(.vertical, 7)
     .contentShape(.rect)
-    .opacity(isDimmed ? 0.7 : 1)
+    .opacity(isDimmed ? dimmedOpacity : 1)
   }
 
   /// With neither the agent name nor the project name, the subtitle moves up so that the
