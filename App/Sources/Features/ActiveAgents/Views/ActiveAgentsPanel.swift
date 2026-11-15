@@ -94,6 +94,12 @@ struct ActiveAgentsPanel: View {
         .fill(.thinMaterial)
     }
     .clipShape(panelBackgroundShape)
+    // A hairline edge keeps the panel apart from the sidebar when a custom window
+    // tint gives both the same color.
+    .overlay {
+      panelBackgroundShape
+        .strokeBorder(.separator)
+    }
   }
 
   private func row(for entry: ActiveAgentEntry, inProjectSection: Bool) -> some View {
