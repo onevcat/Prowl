@@ -16,12 +16,20 @@ on:
     types: [labeled, synchronize]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A label other than `perf` starts a run that skips all jobs. Give that run its own group, so
+  # that it does not cancel a comparison that is running.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}${{ github.event.action == 'labeled' &&
+    github.event.label.name != 'perf' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'perf')
+    # Run when the `perf` label is added, or on a push to a pull request that has it.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'perf') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'perf'))
     runs-on: xcode-27
     timeout-minutes: 60
     permissions:

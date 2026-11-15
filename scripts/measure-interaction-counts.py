@@ -5,6 +5,7 @@ The script seeds a temporary set of repositories and worktrees, launches the giv
 Prowl app against an isolated home, data directory, and CLI socket, attaches LLDB,
 and counts breakpoint hits for each interaction:
 
+- `idle`: no interaction, the baseline of the other steps,
 - worktree switches inside one repository and across repositories (`prowl focus`),
 - app deactivation and activation (`open -b com.apple.finder`, then `open -a <app>`).
 
@@ -23,8 +24,15 @@ The counters (see `PROBES`):
 `--mode timing` attaches no debugger. After each interaction it sends `prowl list` at
 once and records how long that request waits (`main_thread_wait_ms`): the CLI handler
 runs on the main thread, so the request returns only after the main thread finishes
-the work that the interaction started. Absolute values depend on the machine; compare
-two apps only inside one job on one machine.
+the work that the interaction started. It also records the CPU time of all app
+threads during `--cpu-window` seconds from the start of the interaction (`cpu_ms`):
+that includes the work that ends after the reply, such as layout, display, animation
+frames, and rendering. The `idle` step gives the fixed cost of the `prowl list`
+request. Absolute values depend on the machine; compare two apps only inside one job on
+one machine.
+
+`--app-env KEY=VALUE` passes environment variables to the app, for example a switch
+that an experiment reads.
 
 Report tools: `--compare BASE.json HEAD.json` prints a Markdown table of two reports'
 medians, `--merge A.json B.json --output C.json` combines the samples of reports of one
@@ -37,10 +45,12 @@ script with `--app <path to Prowl Debug.app>`.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import platform
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -83,7 +93,7 @@ PROBES = [
 
 BODY_PROBE = Probe("body", regex=r"^Prowl\..*\.body\.getter :", optional=True)
 
-STEPS = ["switch_same_repo", "switch_cross_repo", "deactivate", "activate"]
+STEPS = ["idle", "switch_same_repo", "switch_cross_repo", "deactivate", "activate"]
 
 
 @dataclass
@@ -124,8 +134,9 @@ def seed_repositories(root: Path, repo_count: int, extra_worktrees: int) -> list
 
 
 class ProwlInstance:
-  def __init__(self, app: Path, workdir: Path, language: str):
+  def __init__(self, app: Path, workdir: Path, language: str, app_env: list[str] | None = None):
     self.app = app
+    self.app_env = app_env or []
     self.workdir = workdir
     self.language = language
     self.home = workdir / "home"
@@ -146,6 +157,7 @@ class ProwlInstance:
         "--env", f"CFFIXED_USER_HOME={self.home}",
         "--env", f"PROWL_DEBUG_DATA_DIRECTORY={self.data}",
         "--env", f"PROWL_CLI_SOCKET={self.socket}",
+        *[arg for pair in self.app_env for arg in ("--env", pair)],
         str(self.app),
         "--args", "-AppleLanguages", f"({self.language})",
       ],
@@ -305,13 +317,52 @@ def settle(counter: Counter, quiet: float, minimum: float, maximum: float) -> di
       return current
 
 
+class _RusageInfoV0(ctypes.Structure):
+  _fields_ = [
+    ("ri_uuid", ctypes.c_uint8 * 16),
+    ("ri_user_time", ctypes.c_uint64),
+    ("ri_system_time", ctypes.c_uint64),
+    ("ri_pkg_idle_wkups", ctypes.c_uint64),
+    ("ri_interrupt_wkups", ctypes.c_uint64),
+    ("ri_pageins", ctypes.c_uint64),
+    ("ri_wired_size", ctypes.c_uint64),
+    ("ri_resident_size", ctypes.c_uint64),
+    ("ri_phys_footprint", ctypes.c_uint64),
+    ("ri_proc_start_abstime", ctypes.c_uint64),
+    ("ri_proc_exit_abstime", ctypes.c_uint64),
+  ]
+
+
+class _TimebaseInfo(ctypes.Structure):
+  _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
+
+
+_libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+_timebase = _TimebaseInfo()
+_libc.mach_timebase_info(ctypes.byref(_timebase))
+
+
+def process_cpu_ns(pid: int) -> int:
+  """User and system CPU time of all threads of `pid`, in nanoseconds."""
+  info = _RusageInfoV0()
+  if _libc.proc_pid_rusage(pid, 0, ctypes.byref(info)) != 0:
+    raise RuntimeError(f"proc_pid_rusage failed for pid {pid}")
+  ticks = info.ri_user_time + info.ri_system_time
+  return ticks * _timebase.numer // _timebase.denom
+
+
 def timing_step(instance: ProwlInstance, step: str, action, args) -> StepSample:
   time.sleep(args.quiet)
+  cpu_before = process_cpu_ns(instance.pid)
   start = time.monotonic()
   action()
   instance.cli_json("list")
   waited = time.monotonic() - start
-  return StepSample(step, {"main_thread_wait_ms": round(waited * 1000)}, waited)
+  # Work that the main thread defers (layout, display) and work on other threads can end
+  # after the CLI reply, so the CPU time covers a fixed window.
+  time.sleep(max(0.0, args.cpu_window - (time.monotonic() - start)))
+  cpu_ms = (process_cpu_ns(instance.pid) - cpu_before) / 1_000_000
+  return StepSample(step, {"main_thread_wait_ms": round(waited * 1000), "cpu_ms": round(cpu_ms)}, waited)
 
 
 def measure_step(counter: Counter, step: str, action, args) -> StepSample:
@@ -412,6 +463,12 @@ def main() -> int:
   parser.add_argument("--worktrees-per-repo", type=int, default=3, help="Linked worktrees per repository")
   parser.add_argument("--rounds", type=int, default=5)
   parser.add_argument("--count-bodies", action="store_true", help="Also count Prowl view body evaluations")
+  parser.add_argument(
+    "--app-env", action="append", default=[], metavar="KEY=VALUE", help="Environment variable for the app (repeatable)"
+  )
+  parser.add_argument(
+    "--cpu-window", type=float, default=1.0, help="Seconds after an interaction that the CPU time covers (timing mode)"
+  )
   parser.add_argument("--quiet", type=float, default=1.5, help="Seconds without counter changes that end a step")
   parser.add_argument("--min-settle", type=float, default=2.0)
   parser.add_argument("--max-settle", type=float, default=30.0)
@@ -450,7 +507,7 @@ def main() -> int:
   defaults_backup = workdir / "defaults-backup.plist"
   had_defaults = subprocess.run(["defaults", "export", defaults_domain, str(defaults_backup)], capture_output=True).returncode == 0
 
-  instance = ProwlInstance(app, workdir, args.language)
+  instance = ProwlInstance(app, workdir, args.language, args.app_env)
   counter: Counter | None = None
   samples: list[StepSample] = []
   try:
@@ -475,10 +532,14 @@ def main() -> int:
     else:
       time.sleep(args.min_settle)
 
+    # Start every round with the app in front, as after the activation step.
+    run(["open", "-a", str(app)])
+    time.sleep(args.quiet)
     for round_index in range(args.rounds):
       group = panes[round_index % len(panes)]
       other = panes[(round_index + 1) % len(panes)]
       steps = [
+        ("idle", lambda: None),
         ("switch_same_repo", lambda g=group: instance.cli_json("focus", "--pane", g[1 + round_index % (len(g) - 1)])),
         ("switch_cross_repo", lambda o=other: instance.cli_json("focus", "--pane", o[0])),
         ("deactivate", lambda: run(["open", "-b", "com.apple.finder"])),
@@ -532,5 +593,12 @@ def main() -> int:
   return 0
 
 
+def _exit_on_signal(signum, _frame) -> None:
+  # Raise instead of dying, so that `main` restores the defaults domain and stops the app.
+  raise SystemExit(128 + signum)
+
+
 if __name__ == "__main__":
+  signal.signal(signal.SIGTERM, _exit_on_signal)
+  signal.signal(signal.SIGHUP, _exit_on_signal)
   sys.exit(main())

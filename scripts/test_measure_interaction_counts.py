@@ -1,6 +1,8 @@
 import importlib.util
+import os
 from pathlib import Path
 import sys
+import time
 import unittest
 
 
@@ -84,6 +86,19 @@ class CompareTableTests(unittest.TestCase):
     self.assertIn("| switch_same_repo | strings_table_parse | 132 | 0 | -100% |\n", table)
     self.assertIn("| activate | strings_table_parse | 0 | 0 | ±0 |\n", table)
     self.assertIn("| activate | resource_to_string | 4 | 0 | -100% |\n", table)
+
+
+class ProcessCPUTests(unittest.TestCase):
+  def test_counts_cpu_time_that_this_process_spends(self):
+    before = module.process_cpu_ns(os.getpid())
+    deadline = time.process_time() + 0.05
+    while time.process_time() < deadline:
+      pass
+
+    spent = module.process_cpu_ns(os.getpid()) - before
+
+    self.assertGreaterEqual(spent, 40_000_000)
+    self.assertLess(spent, 5_000_000_000)
 
 
 class MergeReportsTests(unittest.TestCase):
