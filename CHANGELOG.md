@@ -1,5 +1,36 @@
 # Changelog
 
+## [2026.11.16](https://github.com/onevcat/Prowl/releases/tag/v2026.11.16)
+
+This release is about speed: switching projects and worktrees is more than twice as fast on macOS 26 and over 20% faster on macOS 27, and Shelf book switching is much smoother. It also adds more control over how agents and sidebar details appear.
+
+### Performance
+
+- Opening another project or worktree is now **more than 2× faster on macOS 26** and **over 20% faster on macOS 27**. Prowl no longer re-reads its localized strings on every switch and app activation (a macOS 26 cost that grew with the number of worktrees), and the sidebar now redraws only the rows and sections that actually changed.
+- Bringing Prowl to the front is also noticeably quicker on macOS 26.
+- Shelf book switching is much smoother: spines start moving about twice as soon after you pick a book, and the longest stutter during a switch is roughly a third of what it was. The new terminal appears and takes keyboard focus when the 0.2-second movement ends; quick repeated switches load only the last book.
+- Switching no longer slows down as you add more repositories and worktrees: sidebar sections, rows, and Shelf spines that a switch does not touch are skipped, and toolbar icons are drawn from a cache.
+
+### New
+
+- Sort Active Agents by **Start Time**, **Project**, or **Status** in Settings → Agents → Display. Project groups agents under their project's title in sidebar order; Status puts blocked agents first. Agent Island and the next/previous agent shortcuts follow the same order.
+- Hide the `+N -N` change counts on sidebar rows with Settings → General → Diff Tool → **Show change counts in the sidebar**. Show Diff (⇧⌘Y), the row context menu, and the Command Palette still open the diff.
+- Sidebar rows with a working agent now show the animated bagua indicator used by Active Agents, so agent work stands apart from ordinary command progress. With Reduce Motion enabled, the standard progress indicator is used.
+- The About panel now includes the license terms and third-party notices.
+
+### Improved
+
+- Settings lists repositories in the same order and groups as the sidebar.
+- Setting descriptions now appear as subtitles directly under their controls, instead of as separate rows.
+- The Active Agents panel has a hairline border, so it stays distinct from the sidebar with a custom window tint, and unselected agents are dimmed more so the selected one is easier to spot.
+
+### Fixed
+
+- Agents launched through Happy (`happy-coder`) now appear in Active Agents, with their session names and status.
+- ⌘F now reliably focuses the Find field on the first press, and search text survives toggling Shelf.
+- Clicking the PR number in a sidebar row now selects the worktree instead of opening the browser. Use **Open Pull Request** in the row's context menu or the toolbar PR button to open it.
+- Toolbar capsule buttons now have their own accessibility labels, so VoiceOver names each action correctly.
+
 ## [2026.11.13](https://github.com/onevcat/Prowl/releases/tag/v2026.11.13)
 
 This release brings Remote Mirror into Settings as an opt-in alpha, expands control from iPhone, and improves everyday reliability.
