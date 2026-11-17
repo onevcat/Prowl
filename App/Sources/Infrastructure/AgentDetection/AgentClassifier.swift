@@ -247,13 +247,13 @@ private nonisolated func agentCandidates(
     // The REPL delegates to `devin acp`, which owns the native session lock.
     // Keep the shell-launched parent as launchProcess while resolving that child.
     let isDevinEngine = name == "devin" && arguments.dropFirst().first == "acp"
-    let demoted = isAntigravityUpdater && identifyAgent(processName: name) == .antigravity
+    let demoted = isAntigravityUpdater && namesAntigravityCLI(name, process: process)
     candidates.append((name, isDevinEngine ? 90 : demoted ? 60 : 80))
   }
   if let name = normalizedProcessName(process.name) {
     // Demote the comm-name candidate too (50 clears the score-40 wrapped-runtime
     // guard), or a missing TUI argv0 would tie the pick at 70.
-    let demoted = isAntigravityUpdater && identifyAgent(processName: name) == .antigravity
+    let demoted = isAntigravityUpdater && namesAntigravityCLI(name, process: process)
     candidates.append((name, demoted ? 50 : 70))
   }
 
@@ -326,6 +326,11 @@ private nonisolated func identifyAgent(
     }
     return nil
   }
+  if candidate.name == "antigravity" {
+    // The IDE launcher has the same name; only the install path proves the CLI.
+    guard candidate.score > weakCandidateScore else { return nil }
+    return isAntigravityCLIInstall(process) ? .antigravity : nil
+  }
   // Grok Build, Devin, Antigravity, and TraeCode CLI are native executables, not
   // wrapped-runtime scripts. Their names can also appear as model arguments or
   // quoted prompt tokens in a wrapper's cmdline; require argv0/name evidence.
@@ -357,6 +362,29 @@ private nonisolated func isClaudeNativeInstaller(_ process: ForegroundProcess) -
     return true
   }
   return false
+}
+
+/// Whether `name`, read from `process`'s argv0 or comm, names the Antigravity CLI.
+private nonisolated func namesAntigravityCLI(_ name: String, process: ForegroundProcess) -> Bool {
+  identifyAgent(processName: name) == .antigravity
+    || (name == "antigravity" && isAntigravityCLIInstall(process))
+}
+
+/// The Homebrew `antigravity-cli` cask (since 2026-11-13) installs `agy` as a wrapper
+/// script that execs `<Caskroom>/antigravity-cli/<version>/antigravity`, so argv0 and
+/// comm are the bare `antigravity` that the IDE launcher also uses. The IDE never puts
+/// its launcher in an `antigravity-cli` folder, so that folder is the evidence.
+///
+/// Only the executable path counts: the full argv[0], or the first cmdline word when
+/// argv is not available. A later argument that mentions the path is not evidence.
+private nonisolated func isAntigravityCLIInstall(_ process: ForegroundProcess) -> Bool {
+  let executablePath =
+    process.arguments?.first
+    ?? process.cmdline?.split(whereSeparator: \.isWhitespace).first.map(String.init)
+  guard let executablePath else { return false }
+  let components = executablePath.lowercased().split(separator: "/")
+  guard components.count > 1, components.last == "antigravity" else { return false }
+  return components.dropLast().contains("antigravity-cli")
 }
 
 private nonisolated func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {

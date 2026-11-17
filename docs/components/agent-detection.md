@@ -239,6 +239,11 @@ Oh My Pi owns its richer spinner and interactive
 Ask-prompt heuristics, plus its own session layout and icon. Grok Build also
 ships an `agent` symlink; Prowl only treats that name as Grok when the path points
 at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
+The Homebrew `antigravity-cli` cask installs `agy` as a wrapper script that runs
+`<Caskroom>/antigravity-cli/<version>/antigravity`, so that process is named
+`antigravity`. The Antigravity IDE launcher has the same name, so Prowl treats
+`antigravity` as the CLI only when its executable path has an `antigravity-cli`
+folder.
 
 Claude Code's native installer (`claude install`) places the engine binary at
 `~/.local/share/claude/versions/<semver>` and launchers (including Happy's) spawn that
