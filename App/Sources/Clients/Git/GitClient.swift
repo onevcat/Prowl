@@ -40,7 +40,10 @@ struct GitClient {
       _ = try await git.run(["rev-parse", "--git-dir"], in: normalizedPath, shell: shell)
     } catch {
       if isConfirmedNonRepository(error, at: normalizedPath) { throw GitClientError.notRepository }
-      throw wrapShellError(error, operation: .repoRoot, command: "git rev-parse --git-dir")
+      throw wrapShellError(
+        error, operation: .repoRoot,
+        command: "\(git.url.path(percentEncoded: false)) rev-parse --git-dir",
+        directory: normalizedPath.path(percentEncoded: false))
     }
     let wtURL = try wtScriptURL()
     let output = try await runBundledWtProcess(
@@ -1329,7 +1332,8 @@ struct GitClient {
       // A remote host that cannot be reached is not a git failure (docs-ai 084 B3b).
       throw error
     } catch {
-      throw wrapShellError(error, operation: operation, command: command)
+      throw wrapShellError(
+        error, operation: operation, command: command, directory: gitDirectoryArgument(arguments))
     }
   }
 
@@ -1363,7 +1367,9 @@ struct GitClient {
         currentDirectoryURL
       ).stdout
     } catch {
-      throw wrapShellError(error, operation: operation, command: command)
+      throw wrapShellError(
+        error, operation: operation, command: command,
+        directory: currentDirectoryURL?.path(percentEncoded: false))
     }
   }
 

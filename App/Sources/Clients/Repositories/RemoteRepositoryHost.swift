@@ -246,7 +246,8 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     } catch {
       throw wrapShellError(
         error, operation: operation,
-        command: ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " "))
+        command: ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " "),
+        directory: gitDirectoryArgument(arguments))
     }
   }
 
