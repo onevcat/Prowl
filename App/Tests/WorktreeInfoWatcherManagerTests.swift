@@ -63,6 +63,7 @@ struct WorktreeInfoWatcherManagerTests {
     manager.handleCommand(.setWorktrees([remoteWorktree]))
     manager.handleCommand(.setSelectedWorktreeID(remoteWorktree.id))
     manager.handleCommand(.setOpenedWorktreeIDs([remoteWorktree.id]))
+    manager.handleCommand(.refreshLineChanges)
     await drainAsyncEvents(120)
 
     #expect(localCalls.value.isEmpty)
@@ -740,6 +741,7 @@ struct WorktreeInfoWatcherManagerTests {
     await drainAsyncEvents(120)
     #expect(collector.filesChangedCount(worktreeID: worktree.id) == 1)
 
+    manager.handleCommand(.refreshLineChanges)
     let monitor = try #require(monitorStore.monitor(for: worktree.id))
     monitor.emit()
 
@@ -878,6 +880,109 @@ struct WorktreeInfoWatcherManagerTests {
     manager.handleCommand(.stop)
     await task.value
     try FileManager.default.removeItem(at: tempRepository.tempRoot)
+  }
+
+  @Test func refreshLineChangesUpdatesHeadAndFileEventTiming() async throws {
+    let clock = TestClock()
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
+    defer { try? FileManager.default.removeItem(at: tempRepository.tempRoot) }
+    let worktree = try #require(tempRepository.worktrees.first)
+    let fileMonitorStore = TestWorktreeFileEventMonitorStore()
+    let headMonitorStore = TestWorktreeHeadEventMonitorStore()
+    let count = LockIsolated<Int?>(4_999)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .seconds(3_600),
+      lineChangesSafetyRefreshInterval: .seconds(3_600),
+      lineChangePhaseOffset: { _, _ in .zero },
+      worktreeFileEventMonitorFactory: fileMonitorStore.makeMonitor,
+      worktreeHeadEventMonitorFactory: headMonitorStore.makeMonitor,
+      indexEntryCountProvider: { _ in count.value },
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees([worktree]))
+    manager.handleCommand(.setOpenedWorktreeIDs([worktree.id]))
+    await drainAsyncEvents(120)
+    let fileMonitor = try #require(fileMonitorStore.monitor(for: worktree.id))
+    let headMonitor = try #require(headMonitorStore.monitor(for: worktree.id))
+    let refreshes: [(Int?, WorktreeInfoWatcherManager.LineChangesTiming)] = [
+      (5_000, .medium),
+      (20_000, .large),
+      (nil, .large),
+      (4_999, .small),
+    ]
+    var expectedEvents = 1
+    #expect(collector.filesChangedCount(worktreeID: worktree.id) == expectedEvents)
+
+    for (entryCount, timing) in refreshes {
+      count.withValue { $0 = entryCount }
+      manager.handleCommand(.refreshLineChanges)
+      fileMonitor.emit()
+      await clock.advance(by: timing.eventDebounce - .milliseconds(1))
+      await drainAsyncEvents(120)
+      #expect(collector.filesChangedCount(worktreeID: worktree.id) == expectedEvents)
+      await clock.advance(by: .milliseconds(1))
+      await drainAsyncEvents(120)
+      expectedEvents += 1
+      #expect(collector.filesChangedCount(worktreeID: worktree.id) == expectedEvents)
+
+      headMonitor.emit(.write)
+      await clock.advance(by: timing.filesChangedDebounce - .milliseconds(1))
+      await drainAsyncEvents(120)
+      #expect(collector.filesChangedCount(worktreeID: worktree.id) == expectedEvents)
+      await clock.advance(by: .milliseconds(1))
+      await drainAsyncEvents(120)
+      expectedEvents += 1
+      #expect(collector.filesChangedCount(worktreeID: worktree.id) == expectedEvents)
+    }
+
+    manager.handleCommand(.stop)
+    await task.value
+  }
+
+  @Test func refreshLineChangesRereadsOnlyCurrentLocalRoots() throws {
+    let first = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
+    let second = try makeTempRepository(worktreeNames: ["finch"])
+    defer {
+      try? FileManager.default.removeItem(at: first.tempRoot)
+      try? FileManager.default.removeItem(at: second.tempRoot)
+    }
+    let remote = RemoteRepositoryFixtures.gitRepository()
+    let reads = LockIsolated<[URL]>([])
+    let manager = WorktreeInfoWatcherManager(
+      indexEntryCountProvider: { root in
+        reads.withValue { $0.append(root) }
+        return 4_999
+      }, clock: TestClock()
+    )
+    defer { manager.handleCommand(.stop) }
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    let worktrees = first.worktrees + second.worktrees + remote.worktrees
+    let roots = Set([first.tempRoot, second.tempRoot].map(\.standardizedFileURL))
+    manager.handleCommand(.setWorktrees(worktrees))
+    #expect(reads.value.count == 2)
+    #expect(Set(reads.value) == roots)
+    reads.withValue { $0.removeAll() }
+
+    manager.handleCommand(.setWorktrees(worktrees))
+    #expect(reads.value.isEmpty)
+    manager.handleCommand(.refreshLineChanges)
+    #expect(reads.value.count == 2)
+    #expect(Set(reads.value) == roots)
+    reads.withValue { $0.removeAll() }
+
+    manager.handleCommand(.setWorktrees(second.worktrees + remote.worktrees))
+    manager.handleCommand(.refreshLineChanges)
+    #expect(reads.value == [second.tempRoot.standardizedFileURL])
+    reads.withValue { $0.removeAll() }
+
+    manager.handleCommand(.setWorktrees(Array(remote.worktrees)))
+    manager.handleCommand(.refreshLineChanges)
+    #expect(reads.value.isEmpty)
+    manager.handleCommand(.setWorktrees(first.worktrees))
+    #expect(reads.value == [first.tempRoot.standardizedFileURL])
   }
 
   @Test func canceledSelectionCooldownDoesNotClearReplacementCooldown() async throws {

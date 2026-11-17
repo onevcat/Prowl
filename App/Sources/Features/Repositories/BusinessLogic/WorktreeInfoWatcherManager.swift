@@ -199,6 +199,8 @@ final class WorktreeInfoWatcherManager {
     case .setSelectedWorktreeID(let worktreeID):
       setSelectedWorktreeID(worktreeID)
     case .refreshLineChanges:
+      let localRoots = Set(worktrees.values.compactMap { $0.repositoryLocation.localURL?.standardizedFileURL })
+      refreshRepositoryTimings(for: localRoots, includingCached: true)
       scheduleLineChangesRefreshForAllWorktrees()
     case .setPullRequestTrackingEnabled(let isEnabled):
       setPullRequestTrackingEnabled(isEnabled)
@@ -725,12 +727,12 @@ final class WorktreeInfoWatcherManager {
     return repositoryLineChangesTimings[root] ?? defaultLineChangesTiming
   }
 
-  private func refreshRepositoryTimings(for localRoots: Set<URL>) {
+  private func refreshRepositoryTimings(for localRoots: Set<URL>, includingCached: Bool = false) {
     let obsoleteRoots = repositoryLineChangesTimings.keys.filter { !localRoots.contains($0) }
     for root in obsoleteRoots {
       repositoryLineChangesTimings.removeValue(forKey: root)
     }
-    for root in localRoots where repositoryLineChangesTimings[root] == nil {
+    for root in localRoots where includingCached || repositoryLineChangesTimings[root] == nil {
       if let count = indexEntryCountProvider(root) {
         repositoryLineChangesTimings[root] = LineChangesTiming.tier(forIndexEntryCount: count)
       }
