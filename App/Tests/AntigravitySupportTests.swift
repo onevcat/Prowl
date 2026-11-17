@@ -84,6 +84,73 @@ struct AntigravitySupportTests {
     #expect(identifyAgentInJob(ForegroundJob(processGroupID: 202, processes: [wrapped])) == nil)
   }
 
+  @Test func recognizesTheHomebrewWrapperByItsInstallPath() throws {
+    let expected = try agent()
+    // Since 2026-11-13 the `antigravity-cli` cask installs `agy` as a wrapper script
+    // that execs the staged binary, so argv0 and comm are the bare `antigravity`.
+    let caskPath = "/opt/homebrew/Caskroom/antigravity-cli/1.5.9,4515810895593472/antigravity"
+    let cask = ForegroundProcess(
+      pid: 300, name: "antigravity", argv0: "antigravity", cmdline: caskPath, arguments: [caskPath])
+    let identified = try #require(
+      identifyAgentInJob(ForegroundJob(processGroupID: 300, processes: [cask])))
+    #expect(identified.agent == expected)
+    #expect(identified.process.ref == .local(300))
+
+    let linuxbrewPath = "/home/linuxbrew/.linuxbrew/Caskroom/antigravity-cli/1.5.9/antigravity"
+    let linuxbrew = ForegroundProcess(
+      pid: 301, name: "antigravity", argv0: "antigravity", cmdline: linuxbrewPath, arguments: [linuxbrewPath])
+    #expect(identifyAgentInJob(ForegroundJob(processGroupID: 301, processes: [linuxbrew]))?.agent == expected)
+
+    // A path with a space still counts: the full argv[0] is the evidence, not a cmdline word.
+    let spacedPath = "/Users/me/My Tools/antigravity-cli/antigravity"
+    let spaced = ForegroundProcess(
+      pid: 302, name: "antigravity", argv0: "antigravity", cmdline: "\(spacedPath) --resume",
+      arguments: [spacedPath, "--resume"])
+    #expect(identifyAgentInJob(ForegroundJob(processGroupID: 302, processes: [spaced]))?.agent == expected)
+
+    // The updater child of the cask binary is demoted like the `agy` one.
+    let updater = ForegroundProcess(
+      pid: 303, parentProcessID: 300, name: "antigravity", argv0: "antigravity",
+      cmdline: "\(caskPath) --bg-updater", arguments: [caskPath, "--bg-updater"])
+    for processes in [[cask, updater], [updater, cask]] {
+      let picked = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 300, processes: processes)))
+      #expect(picked.process.ref == .local(300))
+    }
+  }
+
+  @Test func bareAntigravityWithoutCLIPathEvidenceStaysUnknown() {
+    let shapes: [ForegroundProcess] = [
+      // The IDE launcher.
+      ForegroundProcess(
+        pid: 310, name: "antigravity", argv0: "antigravity",
+        cmdline: "/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity --wait",
+        arguments: ["/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity", "--wait"]),
+      // The IDE's Electron main process.
+      ForegroundProcess(
+        pid: 311, name: "Antigravity", argv0: "Antigravity",
+        cmdline: "/Applications/Antigravity.app/Contents/MacOS/Antigravity",
+        arguments: ["/Applications/Antigravity.app/Contents/MacOS/Antigravity"]),
+      // A bare name with no path at all.
+      ForegroundProcess(pid: 312, name: "antigravity", argv0: "antigravity", cmdline: "antigravity"),
+      // A shell that only mentions the cask path in its command string.
+      ForegroundProcess(
+        pid: 314, name: "bash", argv0: "bash",
+        cmdline: "bash -c /opt/homebrew/Caskroom/antigravity-cli/1.5.9/antigravity",
+        arguments: ["bash", "-c", "/opt/homebrew/Caskroom/antigravity-cli/1.5.9/antigravity"]),
+      // A runtime whose argument names the cask path.
+      ForegroundProcess(
+        pid: 315, name: "node", argv0: "node",
+        cmdline: "node /tmp/app.js /opt/homebrew/Caskroom/antigravity-cli/1.5.9/antigravity",
+        arguments: ["node", "/tmp/app.js", "/opt/homebrew/Caskroom/antigravity-cli/1.5.9/antigravity"]),
+    ]
+    for process in shapes {
+      #expect(
+        identifyAgentInJob(ForegroundJob(processGroupID: process.ref.localPID ?? 0, processes: [process])) == nil,
+        "\(process.cmdline ?? process.name)")
+    }
+  }
+
   @Test func launchBindsPromptAsLastValueTokenAndMapsModes() throws {
     let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
     // `--print`/`--prompt-interactive` consume the next token as the prompt, so
