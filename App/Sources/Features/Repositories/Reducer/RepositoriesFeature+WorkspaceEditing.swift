@@ -132,8 +132,6 @@ extension RepositoriesFeature {
                 "Skipped deleting protected branch \(branchName) in \(sourceLocation)")
             }
           } catch {
-            workspaceEditingLog.warning(
-              "Could not delete branch \(branchName) in \(sourceLocation): \(error.localizedDescription)")
             cleanupFailures.append(
               ProjectWorkspaceCleanupFailure(
                 entryID: removal.entry.id,

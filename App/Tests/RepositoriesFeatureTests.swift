@@ -3524,6 +3524,10 @@ struct RepositoriesFeatureTests {
           fetchRemote: true
         ))
     )
+    await store.receive { action in
+      guard case .worktreeCreation(.pendingWorktreeProgressUpdated(_, let progress)) = action else { return false }
+      return progress.outputLines.contains("git fetch failed: network unreachable")
+    }
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
   }
