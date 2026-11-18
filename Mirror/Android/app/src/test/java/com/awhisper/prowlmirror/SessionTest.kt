@@ -27,7 +27,7 @@ class SessionTest {
     private class Fixture(val scope: CoroutineScope) {
         val peers = mutableListOf<Peer>()
         val host = Host("host", credential = Credential(uuid(), uuid(), "unused"))
-        val pane = Pane(uuid(), "Pane", "/tmp", false)
+        var pane = Pane(uuid(), "Pane", "/tmp", false)
         val run = uuid()
         val lease = uuid()
         val session =
@@ -41,7 +41,12 @@ class SessionTest {
         val peer
             get() = peers.last()
 
-        fun ready(interactive: Boolean = true, remoteScroll: Boolean = false, scrollState: Boolean = false) {
+        fun ready(
+            interactive: Boolean = true,
+            remoteScroll: Boolean = false,
+            scrollState: Boolean = false,
+            conversation: Boolean = false,
+        ) {
             peer.ready(host)
             peer.receive(
                 control(
@@ -51,7 +56,8 @@ class SessionTest {
                         "capabilities" to (listOf("text-v1", "launch-profile", "history", "refresh") +
                             (if (interactive) listOf("agent-input") else emptyList()) +
                             (if (remoteScroll) listOf("remote-scroll") else emptyList()) +
-                            (if (scrollState) listOf("scroll-state-v1") else emptyList())),
+                            (if (scrollState) listOf("scroll-state-v1") else emptyList()) +
+                            (if (conversation) listOf("conversation-v1") else emptyList())),
                         "hostRunID" to run,
                     ),
                 )
@@ -102,6 +108,31 @@ class SessionTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun conversationAndTerminalShareConnectionAndResumeAtLastAck() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(conversation = "available")
+        f.session.connect()
+        f.ready(conversation = true)
+        f.session.choose(f.pane)
+        assertEquals("conversation-v1", f.peer.sent.last().payload().string("representation"))
+        f.subscribed()
+        val message = obj("seq" to 5, "source" to "transcript", "kind" to "assistant.message", "data" to obj())
+        f.peer.receive(control("conversationSnapshot", obj(
+            "subscriptionID" to f.lease, "sequence" to 5, "gap" to false, "events" to listOf(message),
+        )))
+        assertEquals("acknowledge", f.peer.sent.last().kind)
+        assertEquals(5L, f.peer.sent.last().payload().longInteger("sequence"))
+        f.session.showChat(false)
+        assertEquals("text-v1", f.peer.sent.last().payload().string("representation"))
+        f.subscribed()
+        f.session.showChat(true)
+        assertEquals("conversation-v1", f.peer.sent.last().payload().string("representation"))
+        assertEquals(5L, f.peer.sent.last().payload().longInteger("since"))
+        assertEquals(1, f.peers.size)
+        f.session.close()
     }
 
     @Test

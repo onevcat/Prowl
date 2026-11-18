@@ -56,6 +56,19 @@ is no private AI console or dependency on personal shell wrappers.
 - Saving credentials does not persist terminal output or drafts across process death.
   Rotation retains the current ViewModel; reopening the app offers saved Hosts.
 
+## Chat and Terminal
+
+When the Host advertises `conversation-v1` and a pane has a supported conversation,
+the app opens that pane in Chat. Terminal remains available on the same connection
+and is the default for other panes. Chat carries messages and expandable tool
+details and requests retained events after the last received sequence when reconnecting.
+Chat and its composer expand on phones and use a centered 720 dp column on wide displays.
+
+On Hosts with `prompt-respond`, the app can answer supported screen prompts, including
+multi-select menus. Terminal offers a key bar when the Host grants key input.
+A draft refusal can offer **Replace and Send** or **Bring Draft Here**, depending on
+what the Host can read and clear. An uncertain delivery still requires receipt recovery.
+
 ## Build and test
 
 Open `Mirror/Android/` in Android Studio, or change to that directory and use

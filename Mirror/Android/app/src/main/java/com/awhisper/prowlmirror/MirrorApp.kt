@@ -23,6 +23,7 @@ import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -32,7 +33,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun MirrorApp(model: MirrorModel) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
+        colorScheme = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF18A190))
+        else lightColorScheme(primary = Color(0xFF0A7A72))
     ) {
         var add by remember { mutableStateOf(false) }
         val drawer = rememberDrawerState(DrawerValue.Closed)
@@ -171,7 +173,7 @@ private fun Detail(session: Session?, menu: () -> Unit, add: () -> Unit, compact
                 if (compact) IconButton(onClick = menu) { Icon(Icons.Default.Menu, "Open sidebar") }
             },
             actions = {
-                if (state?.status == Status.live)
+                if (state?.status == Status.live && !state.chat)
                     IconButton(onClick = { session.loadHistory(refresh = true) }) {
                         Icon(Icons.Default.History, "History")
                     }
@@ -230,17 +232,26 @@ private fun Detail(session: Session?, menu: () -> Unit, add: () -> Unit, compact
                         Text("Select a Host pane", style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.height(16.dp))
                     }
-                    itemsIndexed(state.panes) { _, pane ->
-                        ListItem(
-                            headlineContent = { Text(pane.label) },
-                            supportingContent = { Text(pane.subtitle ?: pane.directory) },
-                            trailingContent = {
-                                TextButton(onClick = { session.choose(pane, takeover = pane.busy) }) {
-                                    Text(if (pane.busy) "Take over" else "Mirror")
-                                }
-                            },
-                        )
-                        HorizontalDivider()
+                    val groups = state.panes.groupBy { it.projectName ?: it.directory.ifBlank { "Other panes" } }
+                    for ((project, panes) in groups) {
+                        item(key = "project:$project") {
+                            Text(project, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+                        }
+                        itemsIndexed(panes, key = { _, pane -> pane.id }) { _, pane ->
+                            ListItem(
+                                headlineContent = { Text(pane.title) },
+                                supportingContent = {
+                                    Text(listOfNotNull(pane.agent, pane.agentState, pane.subtitle).joinToString(" · ")
+                                        .ifBlank { pane.directory })
+                                },
+                                trailingContent = {
+                                    TextButton(onClick = { session.choose(pane, takeover = pane.busy) }) {
+                                        Text(if (pane.busy) "Take over" else "Mirror")
+                                    }
+                                },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                     item {
                         TextButton(onClick = session::refreshPanes) { Text("Refresh Panes") }
@@ -254,8 +265,25 @@ private fun Detail(session: Session?, menu: () -> Unit, add: () -> Unit, compact
                     }
                 }
             } else {
-                Box(Modifier.weight(1f)) { Reading(session, state) }
-                Composer(session, state)
+                if (state.pane?.conversation == "available" && "conversation-v1" in state.capabilities) {
+                    Row(Modifier.align(Alignment.CenterHorizontally)) {
+                        FilterChip(selected = state.chat, onClick = { session.showChat(true) }, label = { Text("Chat") })
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(selected = !state.chat, onClick = { session.showChat(false) }, label = { Text("Terminal") })
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    if (state.chat) ConversationReader(state.conversation)
+                    else Reading(session, state)
+                }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.widthIn(max = if (state.chat) 720.dp else Dp.Unspecified).fillMaxWidth()) {
+                        Column {
+                            MirrorActions(session, state)
+                            Composer(session, state)
+                        }
+                    }
+                }
             }
         }
     }
@@ -527,7 +555,7 @@ private fun Reading(session: Session, state: SessionState) {
     }
 }
 
-private fun inlineMarkdown(text: String): AnnotatedString = buildAnnotatedString {
+internal fun inlineMarkdown(text: String): AnnotatedString = buildAnnotatedString {
     // Plain text remains lossless when terminal output is not Markdown; no HTML or external
     // resources.
     val matches = Regex("\\*\\*(.+?)\\*\\*|`([^`\\n]+)`").findAll(text)
@@ -556,6 +584,23 @@ internal fun Composer(session: Session, state: SessionState) {
             value = TextFieldValue(state.draft, TextRange(state.draft.length))
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        state.hostDraft?.let { draft ->
+            ElevatedCard(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("There is a draft on the Mac", style = MaterialTheme.typography.titleSmall)
+                    Text(draft.text, maxLines = 4)
+                    if (draft.replaceable) {
+                        TextButton(onClick = { session.replaceHostDraft(draft) }, enabled = state.canSend && value.composition == null) {
+                            Text("Replace and Send")
+                        }
+                        if (draft.complete) TextButton(onClick = { session.bringHostDraft(draft) }, enabled = state.canAct && value.composition == null) {
+                            Text("Bring Draft Here")
+                        }
+                    }
+                    TextButton(onClick = session::dismissHostDraft) { Text("Cancel") }
+                }
+            }
+        }
         OutlinedTextField(
             value,
             { next ->
@@ -642,7 +687,9 @@ internal fun Composer(session: Session, state: SessionState) {
                 },
                 enabled = state.canSend && value.composition == null,
             ) {
-                Text("Send")
+                if (state.delivery == Delivery.PENDING) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else Text("Send")
             }
         }
         if (state.delivery == Delivery.UNKNOWN)

@@ -53,6 +53,9 @@ data class Pane(
     val busy: Boolean,
     val projectName: String? = null,
     val subtitle: String? = null,
+    val conversation: String? = null,
+    val agent: String? = null,
+    val agentState: String? = null,
 ) {
     val label: String
         get() = projectName ?: title
@@ -66,6 +69,9 @@ data class Pane(
                 o.flag("busy"),
                 o.optionalString("projectName"),
                 o.optionalString("subtitle"),
+                o.optionalString("conversation"),
+                o.optionalString("agent"),
+                o.optionalString("agentState"),
             )
     }
 }
@@ -109,6 +115,9 @@ object Wire {
             "scrollState",
             "history",
             "historyPage",
+            "conversationSnapshot",
+            "conversationEvents",
+            "screenPrompt",
             "command",
             "commandResult",
             "commandReceipt",
@@ -216,7 +225,7 @@ object Commands {
                 )
         )
 
-    fun input(listing: JsonObject, pane: String, text: String): JsonObject {
+    fun input(listing: JsonObject, pane: String, text: String, onDraft: String? = null): JsonObject {
         if (!listing.flag("ok")) throw IOException("Host could not verify the target")
         val item =
             listing
@@ -226,7 +235,8 @@ object Commands {
                 .firstOrNull { canonical(it.record("pane").string("id")) == pane }
                 ?: throw IOException("Pane is no longer available")
         if (item.record("pane").optionalString("agent") != null)
-            return obj("agentsInput" to obj("_0" to obj("pane" to pane, "prompt" to text)))
+            return obj("agentsInput" to obj("_0" to obj("pane" to pane, "prompt" to text, "on_draft" to onDraft)))
+        if (onDraft != null) throw IOException("The pane no longer hosts an agent")
         if (item.record("task").optionalString("status") != "idle")
             throw IOException("Shell is busy or its state is unknown")
         return obj(

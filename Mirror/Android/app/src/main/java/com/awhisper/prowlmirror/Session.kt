@@ -26,6 +26,8 @@ enum class Delivery {
     REJECTED,
 }
 
+data class HostDraft(val text: String, val complete: Boolean, val replaceable: Boolean, val discardable: Boolean)
+
 data class SessionState(
     val host: Host,
     val status: Status = Status.disconnected,
@@ -50,17 +52,35 @@ data class SessionState(
     val scrolling: ScrollDirection? = null,
     val scrollCompletion: ScrollCompletion? = null,
     val scrollBounds: ScrollBounds = ScrollBounds(),
+    val chat: Boolean = false,
+    val conversation: ConversationFeed = ConversationFeed(),
+    val screenPrompt: JsonObject? = null,
+    val actionPending: Boolean = false,
+    val answeredPrompt: String? = null,
+    val hostDraft: HostDraft? = null,
+    val broughtDraftPolicy: String? = null,
 ) {
     val canScrollRemote: Boolean
-        get() = status == Status.live && "remote-scroll" in capabilities &&
+        get() = status == Status.live && !chat && "remote-scroll" in capabilities &&
             !showsHistory && scrolling == null
 
     fun canScrollRemote(direction: ScrollDirection): Boolean =
         canScrollRemote && scrollBounds.allows(direction)
 
+    val openPrompt: JsonObject?
+        get() = if (chat) conversation.openPrompt else screenPrompt
+
+    val keysAvailable: Boolean
+        get() = status == Status.live && "agent-keys" in capabilities &&
+            (pane?.agent != null || "shell-keys" in capabilities)
+
+    val canAct: Boolean
+        get() = status == Status.live && !actionPending && delivery != Delivery.PENDING &&
+            delivery != Delivery.UNKNOWN
+
     val canSend: Boolean
         get() =
-            status == Status.live &&
+            canAct &&
                 "launch-profile" in capabilities &&
                 draft.isNotBlank() &&
                 draft.toByteArray().size <= Wire.MAX_INPUT &&
@@ -330,6 +350,11 @@ class Session(
         state.update {
             it.copy(
                 pane = pane,
+                chat = pane.conversation == "available" && "conversation-v1" in it.capabilities,
+                conversation = ConversationFeed(),
+                answeredPrompt = null,
+                hostDraft = null,
+                broughtDraftPolicy = null,
                 text = "",
                 sequence = 0,
                 history = emptyList(),
@@ -344,22 +369,75 @@ class Session(
         subscribe()
     }
 
+    fun showChat(chat: Boolean) {
+        val current = state.value
+        if (current.chat == chat || current.status != Status.live || current.loadingHistory ||
+            current.delivery == Delivery.PENDING || commandPending != null || current.scrolling != null
+        ) return
+        if (chat && (current.pane?.conversation != "available" || "conversation-v1" !in current.capabilities)) return
+        state.update { it.copy(chat = chat) }
+        intent = "ifFree"
+        subscribe()
+    }
+
     private fun subscribe() {
         clearScroll()
         val pane = state.value.pane ?: return
         lease = null
         pendingScrollState = null
-        expectsScrollState = "scroll-state-v1" in state.value.capabilities
-        state.update { it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds()) }
+        val current = state.value
+        expectsScrollState = !current.chat && "scroll-state-v1" in current.capabilities
+        state.update { it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds(), screenPrompt = null) }
         send(
             control(
                 "subscribe",
                 obj(
-                    "paneID" to pane.id, "representation" to "text-v1", "intent" to intent,
+                    "paneID" to pane.id,
+                    "representation" to if (current.chat) "conversation-v1" else "text-v1",
+                    "intent" to intent,
+                    "since" to current.conversation.sequence.takeIf { current.chat && it > 0 },
                     "includeScrollState" to true.takeIf { expectsScrollState },
+                    "includeScreenPrompt" to true.takeIf { !current.chat && "prompt-respond" in current.capabilities },
                 ),
             )
         )
+    }
+
+    fun sendKey(key: String) {
+        val current = state.value
+        val pane = current.pane ?: return
+        if (!current.keysAvailable || key !in setOf("esc", "ctrl-c", "tab", "shift-tab", "up", "down", "left", "right", "enter")) return
+        runAction(obj("agentKeys" to obj("_0" to obj("pane" to pane.id, "keys" to listOf(key)))))
+    }
+
+    fun answerPrompt(prompt: JsonObject, choice: String) {
+        val current = state.value
+        val pane = current.pane ?: return
+        val id = prompt.string("id")
+        if ("prompt-respond" !in current.capabilities || current.openPrompt != prompt ||
+            current.answeredPrompt == id
+        ) return
+        val toggles = prompt.optionalFlag("multiSelect") == true && choice != "submit"
+        runAction(obj("promptRespond" to obj("_0" to obj("pane" to pane.id, "prompt" to id, "choice" to choice))),
+            id.takeUnless { toggles })
+    }
+
+    private fun runAction(request: JsonObject, answered: String? = null) {
+        if (!state.value.canAct || commandPending != null) return
+        state.update { it.copy(actionPending = true, error = null) }
+        scope.launch {
+            try {
+                val result = command(request)
+                if (!result.flag("ok")) throw IOException(result.record("error").string("message"))
+                if (answered != null) state.update { it.copy(answeredPrompt = answered) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                state.update { it.copy(error = e.message ?: "Host action failed") }
+            } finally {
+                state.update { it.copy(actionPending = false) }
+            }
+        }
     }
 
     fun setDraft(text: String) {
@@ -377,7 +455,29 @@ class Session(
         state.update { it.copy(showsHistory = false) }
     }
 
-    fun submit() {
+    fun dismissHostDraft() {
+        state.update { it.copy(hostDraft = null) }
+    }
+
+    fun bringHostDraft(draft: HostDraft) {
+        state.update {
+            if (!it.canAct || it.hostDraft != draft || !draft.complete || !draft.replaceable) it
+            else it.copy(
+                draft = listOf(draft.text, it.draft).filter(String::isNotBlank).joinToString("\n\n"),
+                draftRevision = it.draftRevision + 1,
+                hostDraft = null,
+                broughtDraftPolicy = if (draft.discardable) "discard" else "replace",
+            )
+        }
+    }
+
+    fun replaceHostDraft(draft: HostDraft) {
+        if (state.value.hostDraft == draft && draft.replaceable) submit("replace")
+    }
+
+    fun submit() = submit(state.value.broughtDraftPolicy)
+
+    private fun submit(onDraft: String?) {
         val current = state.value
         val activeLease = lease ?: return
         val run = runID ?: return
@@ -385,12 +485,12 @@ class Session(
         if (!current.canSend) return
         val item = Submission(uuid(), run, pane.id, current.draft, current.draftRevision)
         submission = item
-        state.update { it.copy(delivery = Delivery.PENDING, hint = "Host is checking readiness…") }
+        state.update { it.copy(delivery = Delivery.PENDING, hint = "Host is checking readiness…", hostDraft = null, broughtDraftPolicy = null) }
         scope.launch {
             try {
                 val listing = command(Commands.list())
                 if (lease != activeLease || submission != item) return@launch
-                val input = Commands.input(listing, item.pane, item.text)
+                val input = Commands.input(listing, item.pane, item.text, onDraft)
                 check(!input.has("agentsInput") || "agent-input" in state.value.capabilities) {
                     "Update Host to support interactive Agent input"
                 }
@@ -465,7 +565,7 @@ class Session(
 
     fun loadHistory(refresh: Boolean = false) {
         val active = lease ?: return
-        if (state.value.loadingHistory || "history" !in state.value.capabilities) return
+        if (state.value.chat || state.value.loadingHistory || "history" !in state.value.capabilities) return
         clearScroll()
         if (refresh) {
             historyGate.reset()
@@ -560,6 +660,8 @@ class Session(
 
     private fun receive(packet: Packet) {
         if (packet is Packet.Text) {
+            // Frames from the previous representation can precede the new lease.
+            if (state.value.status == Status.subscribing) return
             require(packet.text.toByteArray().size <= 1024 * 1024) {
                 "Text snapshot exceeds capacity"
             }
@@ -596,13 +698,29 @@ class Session(
         }
         packet as Packet.Control
         val p = packet.payload()
+        if (state.value.status == Status.subscribing &&
+            packet.kind in setOf("conversationSnapshot", "conversationEvents", "scrollState", "screenPrompt")
+        ) return
         when (packet.kind) {
             "panes" -> {
                 val caps = p.array("capabilities").map { it.asString }.toSet()
                 require("text-v1" in caps) { "Update Host to support text mirrors" }
-                runID = canonical(p.string("hostRunID"))
+                val hostRun = canonical(p.string("hostRunID"))
+                val sameRun = runID == hostRun
+                runID = hostRun
                 val panes = p.array("panes").map { Pane.parse(it.asJsonObject) }
-                state.update { it.copy(panes = panes, capabilities = caps) }
+                state.update {
+                    val updatedPane = panes.firstOrNull { pane -> pane.id == it.pane?.id }
+                    it.copy(
+                        panes = panes,
+                        pane = updatedPane ?: it.pane,
+                        capabilities = caps,
+                        chat = if (it.status == Status.live) it.chat else
+                            it.chat && "conversation-v1" in caps && updatedPane?.conversation == "available",
+                        conversation = if (sameRun) it.conversation else ConversationFeed(),
+                        answeredPrompt = it.answeredPrompt.takeIf { sameRun },
+                    )
+                }
                 if (state.value.pane == null) state.update { it.copy(status = Status.choosing) }
                 else if (panes.none { it.id == state.value.pane?.id })
                     state.update { it.copy(status = Status.paneClosed) }
@@ -644,9 +762,35 @@ class Session(
                 retryJob?.cancel()
                 detach()
             }
+            "screenPrompt" -> {
+                require(!state.value.chat && lease != null && canonical(p.string("subscriptionID")) == lease)
+                val prompt = p.getAsJsonObject("prompt")
+                state.update { it.copy(screenPrompt = prompt) }
+            }
+            "conversationSnapshot", "conversationEvents" -> {
+                val active = lease ?: throw IOException("Conversation has no active lease")
+                require(state.value.chat && canonical(p.string("subscriptionID")) == active)
+                val snapshot = packet.kind == "conversationSnapshot"
+                val sequence = p.longInteger("sequence")
+                val events = p.array("events")
+                if (snapshot && sequence < state.value.conversation.sequence) {
+                    // A feed can expire and be recreated without a Host restart.
+                    require(events.isEmpty) { "Conversation snapshot moved backwards" }
+                    state.update { it.copy(conversation = ConversationFeed()) }
+                    intent = "ifFree"
+                    subscribe()
+                    return
+                }
+                state.update { it.copy(conversation = it.conversation.accept(p, snapshot)) }
+                if (!events.isEmpty) send(control("acknowledge", obj("subscriptionID" to active, "sequence" to sequence)))
+            }
             "failure" -> {
                 val error = p.string("error")
-                if (error.startsWith("SCROLL_UNAVAILABLE") || error.startsWith("SCROLL_BUSY")) {
+                if (error.startsWith("CONVERSATION_UNSUPPORTED") && state.value.chat) {
+                    state.update { it.copy(chat = false) }
+                    intent = "ifFree"
+                    subscribe()
+                } else if (error.startsWith("SCROLL_UNAVAILABLE") || error.startsWith("SCROLL_BUSY")) {
                     val request = scrollRequest
                     if (request != null &&
                         p.optionalString("subscriptionID")?.let(::canonical) == request.lease &&
@@ -712,14 +856,30 @@ class Session(
             error?.optionalString("code")?.takeUnless {
                 it in setOf("REMOTE_COMMAND_UNCONFIRMED", "DISPATCH_FAILED", "SEND_FAILED")
             }
+        val details = error?.getAsJsonObject("details")?.getAsJsonObject("input")
+        val hostDraft = details?.takeIf { rejection != null && it.optionalString("reason") == "draft" }
+            ?.getAsJsonObject("draft")?.let { draft ->
+                HostDraft(
+                    draft.string("text"),
+                    draft.optionalFlag("is_complete") == true,
+                    details.optionalFlag("replaceable") == true,
+                    details.optionalFlag("discardable") == true,
+                )
+            }
+        val recovery = data?.getAsJsonObject("input")?.getAsJsonObject("replaced_draft")
         state.update {
             it.copy(
+                hostDraft = hostDraft,
                 delivery =
                     if (accepted) Delivery.ACCEPTED
                     else if (rejection != null) Delivery.REJECTED else Delivery.UNKNOWN,
                 draft = if (accepted && it.draftRevision == s.revision) "" else it.draft,
                 hint =
-                    if (accepted) "Sent. Agent completion is separate."
+                    if (accepted) when {
+                        recovery?.optionalString("recovery") == "stash" -> "Sent. The Mac agent stashed its draft."
+                        recovery != null -> "Sent. The Mac draft was replaced."
+                        else -> "Sent"
+                    }
                     else
                         error?.optionalString("message")
                             ?: "Delivery unconfirmed. Check Host before sending again.",
