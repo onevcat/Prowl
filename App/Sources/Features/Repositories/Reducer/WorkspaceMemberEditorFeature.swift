@@ -461,9 +461,6 @@ struct WorkspaceMemberEditorFeature {
         errorMessage = String(
           localized: "Could not read branches for \(displayName): \(error.localizedDescription)"
         )
-        ProwlLogger("workspace").warning(
-          "Branch detection failed for \(repositoryURL.path(percentEncoded: false)): \(error)"
-        )
       }
       let options = ProjectWorkspaceCreationRepository.baseRefOptions(
         automaticBaseRef: automaticBaseRef,
