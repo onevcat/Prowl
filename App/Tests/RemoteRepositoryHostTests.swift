@@ -39,7 +39,10 @@ struct RemoteRepositoryHostTests {
     }
 
     #expect(try RemoteGitShell.output(of: exited(0), command: command).stdout == "out")
-    #expect(throws: ShellClientError(command: "/usr/bin/git status", stdout: "out", stderr: "fatal", exitCode: 128)) {
+    #expect(
+      throws: ShellClientError(
+        command: "/usr/bin/git status", stdout: "out", stderr: "fatal", exitCode: 128, isRemote: true)
+    ) {
       try RemoteGitShell.output(of: exited(128, "fatal"), command: command)
     }
     #expect(throws: RemoteRepositoryHostError.connection(.unreachable)) {
@@ -47,8 +50,10 @@ struct RemoteRepositoryHostTests {
     }
     #expect(throws: RemoteRepositoryHostError.timedOut) { try RemoteGitShell.output(of: .timedOut, command: command) }
     // Git can exit 255 itself; without one of ssh's messages it stays a git failure.
-    #expect(throws: ShellClientError(command: "/usr/bin/git status", stdout: "out", stderr: "error: x", exitCode: 255))
-    {
+    #expect(
+      throws: ShellClientError(
+        command: "/usr/bin/git status", stdout: "out", stderr: "error: x", exitCode: 255, isRemote: true)
+    ) {
       try RemoteGitShell.output(of: exited(255, "error: x"), command: command)
     }
     let truncated = RemoteCommandOutcome.exited(

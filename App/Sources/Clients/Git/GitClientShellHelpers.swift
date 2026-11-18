@@ -57,7 +57,7 @@ nonisolated func gitErrorOutputSummary(_ output: String) -> String {
 nonisolated enum GitFailureKind: String, Equatable, Sendable {
   /// The task that ran the command was cancelled, for example by a newer reload.
   case cancelled
-  /// macOS refused to let the command read its working directory (EPERM).
+  /// The host denied access to the working directory (EPERM).
   case directoryAccessDenied = "directory_access_denied"
   case other
 }
@@ -71,9 +71,7 @@ nonisolated func gitFailureKind(for error: Error, isCancelled: Bool) -> GitFailu
   return .other
 }
 
-/// Shells and Git print these lines when macOS privacy controls (or a security
-/// product) deny read access to the working directory. `cd` into the directory
-/// still works, so the failure only shows when the command reads it.
+/// Shells and Git report EPERM when they cannot read the working directory.
 nonisolated private func isDeniedWorkingDirectory(_ stderr: String) -> Bool {
   stderr.split(separator: "\n").contains { line in
     line.contains("Operation not permitted")
@@ -81,47 +79,16 @@ nonisolated private func isDeniedWorkingDirectory(_ stderr: String) -> Bool {
   }
 }
 
-/// The directory that a `git -C <path> …` invocation runs in.
-nonisolated func gitDirectoryArgument(_ arguments: [String]) -> String? {
-  guard arguments.count > 1, arguments[0] == "-C" else { return nil }
-  return arguments[1]
-}
-
-/// The most stderr lines that a failure log line keeps.
-nonisolated let gitFailureLogStderrLineLimit = 3
-
-nonisolated func gitFailureLogLine(
-  operation: GitOperation,
-  error: Error,
-  kind: GitFailureKind,
-  directory: String?
-) -> String {
-  let exitCode = (error as? ShellClientError)?.exitCode ?? -1
-  var line = "git command failed operation=\(operation.rawValue) exit_code=\(exitCode) failure_kind=\(kind.rawValue)"
-  if let directory {
-    line += " directory=\(directory)"
-  }
-  if let shellError = error as? ShellClientError {
-    let tail = gitErrorOutputSummary(shellError.stderr)
-      .split(separator: "\n")
-      .suffix(gitFailureLogStderrLineLimit)
-      .joined(separator: " | ")
-    if !tail.isEmpty {
-      line += " stderr_tail=\"\(tail)\""
-    }
-  } else {
-    line += " error=\"\(error.localizedDescription)\""
-  }
-  return line
+/// Only these fields can appear in the public Git failure log.
+nonisolated func gitFailureLogLine(operation: GitOperation, exitCode: Int32, kind: GitFailureKind) -> String {
+  "git command failed operation=\(operation.rawValue) exit_code=\(exitCode) failure_kind=\(kind.rawValue)"
 }
 
 /// Converts a failed command into a `GitClientError` and records the failure.
-/// `directory` is where the command ran, when the command text does not show it.
 nonisolated func wrapShellError(
   _ error: Error,
   operation: GitOperation,
-  command: String,
-  directory: String? = nil
+  command: String
 ) -> GitClientError {
   let kind = gitFailureKind(for: error, isCancelled: Task.isCancelled)
   let gitError: GitClientError
@@ -137,7 +104,7 @@ nonisolated func wrapShellError(
     }
     let message = messageParts.joined(separator: "\n")
     gitError =
-      kind == .directoryAccessDenied
+      kind == .directoryAccessDenied && !shellError.isRemote
       ? .directoryAccessDenied(command: command, message: message)
       : .commandFailed(command: command, message: message)
   } else {
@@ -147,13 +114,14 @@ nonisolated func wrapShellError(
     gitLogger.debug("git command cancelled operation=\(operation.rawValue)")
     return gitError
   }
-  gitLogger.warning(gitFailureLogLine(operation: operation, error: error, kind: kind, directory: directory))
+  let exitCode = (error as? ShellClientError)?.exitCode ?? -1
+  gitLogger.warning(gitFailureLogLine(operation: operation, exitCode: exitCode, kind: kind))
   #if !DEBUG
     SentrySDK.logger.error(
       "git command failed",
       attributes: [
         "operation": operation.rawValue,
-        "exit_code": Int((error as? ShellClientError)?.exitCode ?? -1),
+        "exit_code": Int(exitCode),
         "failure_kind": kind.rawValue,
       ]
     )

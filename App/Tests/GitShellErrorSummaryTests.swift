@@ -58,7 +58,7 @@ struct GitShellErrorSummaryTests {
       exitCode: 1
     )
 
-    let wrapped = wrapShellError(error, operation: .worktreeList, command: "wt ls --json", directory: "/repo")
+    let wrapped = wrapShellError(error, operation: .worktreeList, command: "wt ls --json")
 
     guard case .directoryAccessDenied(let command, let message) = wrapped else {
       Issue.record("Expected directoryAccessDenied, got \(wrapped)")
@@ -67,6 +67,28 @@ struct GitShellErrorSummaryTests {
     #expect(command == "wt ls --json")
     #expect(message == "stderr:\n\(deniedWorkingDirectoryStderr)")
     #expect(wrapped.errorDescription?.hasPrefix("macOS denied access to this folder.") == true)
+  }
+
+  @Test func remotePermissionFailureKeepsGitDetails() async throws {
+    let lane = RemoteCommandLane(
+      run: { command, _ in
+        if command.arguments.last?.hasSuffix("command -v git") == true {
+          return .exited(.init(exitCode: 0, output: Data("/usr/bin/git".utf8), outputTruncated: false, errorOutput: ""))
+        }
+        return .exited(
+          .init(
+            exitCode: 128, output: Data(), outputTruncated: false,
+            errorOutput: deniedWorkingDirectoryStderr))
+      },
+      runScript: { _, _ in throw RemoteRepositoryHostError.unsupported })
+    let host = RemoteRepositoryHost(hostProfileID: UUID(), lane: lane)
+    do {
+      _ = try await host.remoteNames(at: "/srv/app")
+      Issue.record("Expected the remote command to fail")
+    } catch GitClientError.commandFailed(let command, let message) {
+      #expect(command.contains("/srv/app"))
+      #expect(message == "stderr:\n\(deniedWorkingDirectoryStderr)")
+    }
   }
 
   @Test func failureKindSeparatesCancellationFromFailure() {
@@ -81,29 +103,12 @@ struct GitShellErrorSummaryTests {
     #expect(gitFailureKind(for: denied, isCancelled: false) == .directoryAccessDenied)
   }
 
-  @Test func failureLogNamesTheDirectoryAndTheEndOfStderr() {
-    let error = ShellClientError(
-      command: "git rev-parse --git-dir",
-      stdout: "",
-      stderr: "line 1\nline 2\nline 3\nfatal: last line\n",
-      exitCode: 128
-    )
+  @Test func failureLogContainsOnlyPublicFields() {
+    let line = gitFailureLogLine(operation: .repoRoot, exitCode: 128, kind: .other)
 
-    let line = gitFailureLogLine(
-      operation: .repoRoot, error: error, kind: .other, directory: "/Users/me/Documents/repo")
-
-    #expect(
-      line == """
-        git command failed operation=repo_root exit_code=128 failure_kind=other \
-        directory=/Users/me/Documents/repo stderr_tail="line 2 | line 3 | fatal: last line"
-        """
-    )
+    #expect(line == "git command failed operation=repo_root exit_code=128 failure_kind=other")
   }
 
-  @Test func directoryComesFromTheGitDashCArgument() {
-    #expect(gitDirectoryArgument(["-C", "/repo", "status"]) == "/repo")
-    #expect(gitDirectoryArgument(["status"]) == nil)
-  }
 }
 
 private func gitErrorMessage(for error: ShellClientError) -> String {
@@ -115,7 +120,7 @@ private func gitErrorMessage(for error: ShellClientError) -> String {
   return message
 }
 
-private let deniedWorkingDirectoryStderr = """
+nonisolated private let deniedWorkingDirectoryStderr = """
   shell-init: error retrieving current directory: getcwd: cannot access parent directories: Operation not permitted
   fatal: Unable to read current working directory: Operation not permitted
   error: not a git repository
