@@ -44,7 +44,7 @@ nonisolated struct UserGlobalSettingsKey: SharedKey {
       let settings = try file.load(initialValue: (context.initialValue ?? .default).normalized())
       continuation.resume(returning: settings.normalized())
     } catch {
-      ProwlLogger("Settings").warning("Unable to load user global settings: \(error.localizedDescription)")
+      ProwlLogger("Settings").warning("Unable to load user global settings", error: error)
       continuation.resume(throwing: error)
     }
   }

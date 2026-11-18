@@ -133,7 +133,7 @@ final class MirrorHost {
       }
       try rebuildListener()
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed", error: error)
       self.error = error.localizedDescription
     }
   }
@@ -144,7 +144,7 @@ final class MirrorHost {
     pairingTask?.cancel()
     pairingTask = nil
     do { if isRunning { try rebuildListener() } } catch {
-      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed", error: error)
       self.error = error.localizedDescription
     }
   }
@@ -159,7 +159,7 @@ final class MirrorHost {
       identity = saved
       devices = saved.devices
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host device list is unavailable: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device list is unavailable", error: error)
       deviceListError = String(localized: "Cannot read the paired devices: \(error.localizedDescription)")
     }
   }
@@ -180,7 +180,7 @@ final class MirrorHost {
       // A stopped listener stays stopped; the next start reads the saved devices.
       if isRunning || isStarting { try rebuildListener() }
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed", error: error)
       self.error = error.localizedDescription
     }
   }
@@ -207,7 +207,7 @@ final class MirrorHost {
       }
       if isRunning || isStarting { try rebuildListener() }
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host device reset failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device reset failed", error: error)
       self.error = error.localizedDescription
     }
   }
@@ -286,7 +286,7 @@ final class MirrorHost {
       isStarting = true
       try rebuildListener()
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host start failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host start failed", error: error)
       self.error = String(localized: "Cannot start listening: \(error.localizedDescription)")
       isStarting = false
     }
@@ -357,7 +357,7 @@ final class MirrorHost {
           self.completePairings()
           self.onStarted?()
         case .failed(let error):
-          ProwlLogger("RemoteMirror").warning("Host listener failed: \(error)")
+          ProwlLogger("RemoteMirror").warning("Host listener failed", error: error)
           self.stop()
           self.error = MirrorConnectionFailure(error).listenerMessage(address: self.address, port: self.port)
         default: break

@@ -72,7 +72,7 @@ final class MirrorKnownHostStore {
       defaults.set(true, forKey: Self.importedKey)
       notice = nil
     } catch {
-      ProwlLogger("RemoteMirror").warning("Saved Host import failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Saved Host import failed", error: error)
       notice = String(
         localized: "The saved Macs could not be read. Use Connect to a Mac to continue."
       )
@@ -110,7 +110,7 @@ final class MirrorKnownHostStore {
       persist()
       notice = nil
     } catch {
-      ProwlLogger("RemoteMirror").warning("Forgetting a Host failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Forgetting a Host failed", error: error)
       notice = String(localized: "Could not remove the saved access for \(host.displayName). Try again.")
     }
   }

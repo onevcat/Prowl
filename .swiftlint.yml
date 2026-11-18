@@ -50,3 +50,9 @@ custom_rules:
     regex: "\\bDictionary\\s*\\(\\s*uniqueKeysWithValues\\s*:"
     message: "Avoid Dictionary(uniqueKeysWithValues:) because duplicate runtime data traps. Use explicit duplicate handling instead."
     severity: error
+  public_error_in_log:
+    name: "Public Error In Log"
+    regex: '\.(?:debug|info|warning|notice)\(\s*"[^"\n]*\\\((?:[A-Za-z]*[Ee]rror\b|[A-Za-z]*[Ff]ailure\b|[^)\n]*\.localizedDescription)'
+    message: "Do not interpolate an error into a log message. ProwlLogger writes the message as public data. Use warning(_:error:) or warning(_:privateDetail:)."
+    severity: error
+    included: "App/Sources/.*\\.swift"

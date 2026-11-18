@@ -168,7 +168,7 @@ final class SendCommandHandler: CommandHandler {
         data: RawJSON(encoding: payload)
       )
     } catch {
-      sendLogger.warning("Failed to encode send payload: \(error)")
+      sendLogger.warning("Failed to encode send payload", error: error)
       return errorResponse(code: CLIErrorCode.sendFailed, message: "Failed to encode response.")
     }
   }

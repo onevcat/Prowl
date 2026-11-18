@@ -247,7 +247,7 @@ enum WorkflowRunAdmission {
             try FileManager.default.removeItem(at: directory)
           }
         } catch {
-          ProwlLogger("WorkflowAdmission").warning("Cannot remove unpublished run at \(directory.path): \(error)")
+          ProwlLogger("WorkflowAdmission").warning("Cannot remove unpublished run at \(directory.path)", error: error)
         }
         context.occupancy?.finish()
       }

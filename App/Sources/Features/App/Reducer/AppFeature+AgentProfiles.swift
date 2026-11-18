@@ -28,7 +28,7 @@ extension AppFeature {
         homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory
       )
     } catch {
-      appLogger.warning("Agent profile launch planning failed: \(error)")
+      appLogger.warning("Agent profile launch planning failed", error: error)
       return .send(
         .repositories(.showToast(.warning(String(localized: "Couldn't launch “\(profile.name)”"))))
       )

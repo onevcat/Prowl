@@ -38,7 +38,7 @@ nonisolated struct MirrorSavedConnection: Codable, Equatable {
       do {
         return try load(account: account, service: service, copyMatching: copyMatching)
       } catch {
-        ProwlLogger("RemoteMirror").warning("Skipped an unreadable saved Host: \(error)")
+        ProwlLogger("RemoteMirror").warning("Skipped an unreadable saved Host", error: error)
         return nil
       }
     }

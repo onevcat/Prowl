@@ -273,7 +273,7 @@ struct WorkflowRunsFeature {
                   "Workflow history: \(result.interrupted.count) interrupted, \(result.unreadable.count) unreadable.")
               }
               _ = try WorkflowHistory(storage: storage).maintenance(now: date())
-            } catch { Self.logger.warning("Workflow history maintenance failed: \(error)") }
+            } catch { Self.logger.warning("Workflow history maintenance failed", error: error) }
           }.value
         }
 
@@ -844,7 +844,7 @@ struct WorkflowRunsFeature {
         try store.ensureLayout(runID: runID)
         try store.writeRecord(WorkflowRunRecord(run: session.run))
       } catch {
-        Self.logger.warning("[Workflow] Could not persist run \(runID): \(error)")
+        Self.logger.warning("[Workflow] Could not persist run \(runID)", error: error)
       }
 
     case .log(let line):
@@ -857,7 +857,7 @@ struct WorkflowRunsFeature {
       let timestamp = now
       await Task.detached(priority: .utility) {
         do { _ = try WorkflowHistory(storage: storage).maintenance(now: timestamp) } catch {
-          Self.logger.warning("Workflow history maintenance failed: \(error)")
+          Self.logger.warning("Workflow history maintenance failed", error: error)
         }
       }.value
     }
@@ -869,7 +869,7 @@ struct WorkflowRunsFeature {
       try store.ensureLayout(runID: runID)
       try store.appendLog(runID: runID, line: line, now: now)
     } catch {
-      Self.logger.warning("[Workflow] Could not append to the log of run \(runID): \(error)")
+      Self.logger.warning("[Workflow] Could not append to the log of run \(runID)", error: error)
     }
   }
 }

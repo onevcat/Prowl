@@ -140,7 +140,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.
 - Prefer `@Shared` directly in reducers for app storage and shared settings; do not introduce new dependency clients solely to wrap `@Shared`.
-- Use `ProwlLogger` for all logging. Never use `print()` or `os.Logger` directly. `ProwlLogger` prints in DEBUG and uses `os.Logger` in release.
+- Use `ProwlLogger` for all logging. Never use `print()` or `os.Logger` directly. `ProwlLogger` prints in DEBUG and uses `os.Logger` in release. Release logs show the message as public data, so never interpolate an error or its description: pass it to `warning(_:error:)`, or pass error text to `warning(_:privateDetail:)`. SwiftLint rule `public_error_in_log` enforces this.
 - UI copy is localized (`docs-ai/070-app-localization/000-plan.md`). Write it so the compiler can extract it: a literal passed straight to SwiftUI (`Text("…")`, `.help("…")`), `String(localized: "…")` when you need a `String`, a `String.LocalizationValue` parameter for a helper that turns copy into a `String`, and a `LocalizedStringKey` or `LocalizedStringResource` parameter for a helper that passes copy straight to SwiftUI. Never call `String(localized:)` with a `LocalizedStringResource`: on macOS 26 each call parses the whole strings table again (#1074). Write long copy as one multi-line literal, not a `+` chain. Do not translate during feature work: the `sync-l10n` skill adds translations and removes unused entries at release time. Tests run in English (pinned in the scheme), so assert on literal English copy.
 
 ### Formatting & Linting

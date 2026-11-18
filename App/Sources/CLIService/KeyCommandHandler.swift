@@ -116,7 +116,7 @@ final class KeyCommandHandler: CommandHandler {
         data: RawJSON(encoding: payload)
       )
     } catch {
-      keyLogger.warning("Failed to encode key payload: \(error)")
+      keyLogger.warning("Failed to encode key payload", error: error)
       return errorResponse(code: CLIErrorCode.keyDeliveryFailed, message: "Failed to encode response.")
     }
   }

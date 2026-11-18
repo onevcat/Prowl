@@ -143,7 +143,7 @@ extension RepositoriesFeature {
         }
         await send(.workspaceEditing(.workspaceSaved(repositoryID, cleanupFailures: cleanupFailures)))
       } catch {
-        workspaceEditingLog.warning("Workspace save failed: \(error.localizedDescription)")
+        workspaceEditingLog.warning("Workspace save failed", error: error)
         await send(.workspaceEditing(.workspaceSaveFailed(error.localizedDescription)))
       }
     }
