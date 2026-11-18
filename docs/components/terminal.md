@@ -186,6 +186,8 @@ Edit menu: **Find…** (`start_search`), **Find Next/Previous**
 Selection for Find** (`search_selection`). These are Ghostty-managed.
 
 **Find…** (⌘F by default) opens the find bar and puts keyboard focus in its search field.
+Press ⌘F again to select the current query. If the editor text differs from the query,
+Find keeps the current selection and does not select the text on a later edit.
 The query stays while the find bar is open, also when the split layout or the Shelf view
 changes. Split zoom keeps focus in the search field.
 

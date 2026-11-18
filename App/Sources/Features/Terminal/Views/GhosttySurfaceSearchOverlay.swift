@@ -357,6 +357,7 @@ struct GhosttySearchField: NSViewRepresentable {
     /// nothing and `viewDidMoveToWindow` applies the request.
     func takePendingFocus(
       for request: GhosttySurfaceState.SearchFocusRequest,
+      onWindowAttachment: Bool = false,
       requests: GhosttySurfaceView.FocusRequests = .shared
     ) {
       guard let owner, owner.searchFocusRequest == request, let window else { return }
@@ -367,13 +368,17 @@ struct GhosttySearchField: NSViewRepresentable {
       guard self.owner === owner,
         owner.searchFocusRequest == request,
         let editor = currentEditor() as? NSTextView,
-        window.firstResponder === editor,
-        request != .find || editor.string == owner.searchNeedle
+        window.firstResponder === editor
       else {
         return
       }
       if request == .find {
-        editor.selectAll(nil)
+        if editor.string == owner.searchNeedle {
+          editor.selectAll(nil)
+        } else if onWindowAttachment {
+          // The field can attach before its first text update.
+          return
+        }
       }
       // Do not complete this surface's request if SwiftUI rebound the field.
       guard self.owner === owner else { return }
@@ -385,7 +390,7 @@ struct GhosttySearchField: NSViewRepresentable {
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
       guard let request = owner?.searchFocusRequest else { return }
-      takePendingFocus(for: request)
+      takePendingFocus(for: request, onWindowAttachment: true)
     }
 
     override func cancelOperation(_ sender: Any?) {

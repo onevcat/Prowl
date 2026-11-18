@@ -220,6 +220,34 @@ struct GhosttySearchFieldFocusTests {
     }
   }
 
+  @Test func findWithDivergentEditorTextDoesNotSelectAllOnALaterEdit() throws {
+    let window = makeWindow()
+    defer { window.close() }
+    let state = makeSearchState(focusRequest: nil)
+    state.searchNeedle = "query"
+    let field = makeField(owner: state)
+    field.stringValue = "query"
+    window.contentView?.addSubview(field)
+    try #require(window.makeFirstResponder(field))
+    let editor = try #require(field.currentEditor() as? NSTextView)
+    let insertion = NSRange(location: NSNotFound, length: 0)
+    editor.setSelectedRange(NSRange(location: 5, length: 0))
+    editor.setMarkedText("x", selectedRange: NSRange(location: 1, length: 0), replacementRange: insertion)
+    try #require(editor.hasMarkedText())
+    try #require(editor.string == "queryx")
+
+    state.transitionSearchFocus(.findRequested)
+    field.takePendingFocus(for: .find)
+    #expect(state.searchFocusRequest == nil)
+    #expect(editor.hasMarkedText())
+
+    editor.unmarkText()
+    state.searchNeedle = editor.string
+    field.takePendingFocus(for: .find)
+    editor.insertText("y", replacementRange: insertion)
+    #expect(editor.string == "queryxy")
+  }
+
   @Test func pendingFindSelectsTheQueryAfterWindowAttachment() throws {
     let window = makeWindow()
     defer { window.close() }
