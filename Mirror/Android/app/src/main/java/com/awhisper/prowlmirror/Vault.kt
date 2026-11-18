@@ -54,7 +54,23 @@ class Vault(context: Context) {
     @Synchronized
     fun save(host: Host) {
         require(host.credential != null)
-        val saved = hosts().filterNot { it.endpoint == host.endpoint } + host
+        val entries = hosts()
+        val previous = entries.firstOrNull { it.endpoint == host.endpoint }
+        val saved = entries.filterNot { it.endpoint == host.endpoint } + host.copy(name = host.name ?: previous?.name)
+        write(saved)
+    }
+
+    @Synchronized
+    fun forget(endpoint: String) {
+        write(hosts().filterNot { it.endpoint == endpoint })
+        if (selectedEndpoint == endpoint) selectedEndpoint = null
+    }
+
+    var selectedEndpoint: String?
+        get() = prefs.getString("selected-host", null)
+        set(value) { prefs.edit().putString("selected-host", value).apply() }
+
+    private fun write(saved: List<Host>) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = cipher.iv + cipher.doFinal(Gson().toJson(saved.takeLast(64)).toByteArray())

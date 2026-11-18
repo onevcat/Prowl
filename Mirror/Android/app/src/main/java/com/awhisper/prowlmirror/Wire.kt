@@ -36,6 +36,9 @@ fun JsonObject.optionalFlag(key: String): Boolean? =
 fun JsonObject.optionalString(key: String): String? =
     if (!has(key) || get(key).isJsonNull) null else string(key)
 
+fun JsonObject.optionalInteger(key: String): Int? =
+    if (!has(key) || get(key).isJsonNull) null else integer(key)
+
 fun JsonObject.integer(key: String): Int =
     stringNumber(key).toIntOrNull() ?: throw IOException("Invalid $key")
 
@@ -56,6 +59,13 @@ data class Pane(
     val conversation: String? = null,
     val agent: String? = null,
     val agentState: String? = null,
+    val displayState: String? = null,
+    val stateChangedAt: String? = null,
+    val tabTitle: String? = null,
+    val worktreeName: String? = null,
+    val repositoryColor: String? = null,
+    val projectOrder: Int? = null,
+    val groupName: String? = null,
 ) {
     val label: String
         get() = projectName ?: title
@@ -72,6 +82,13 @@ data class Pane(
                 o.optionalString("conversation"),
                 o.optionalString("agent"),
                 o.optionalString("agentState"),
+                o.optionalString("displayState"),
+                o.optionalString("stateChangedAt"),
+                o.optionalString("tabTitle"),
+                o.optionalString("worktreeName"),
+                o.optionalString("repositoryColor"),
+                o.optionalInteger("projectOrder"),
+                o.optionalString("groupName"),
             )
     }
 }
@@ -237,8 +254,7 @@ object Commands {
         if (item.record("pane").optionalString("agent") != null)
             return obj("agentsInput" to obj("_0" to obj("pane" to pane, "prompt" to text, "on_draft" to onDraft)))
         if (onDraft != null) throw IOException("The pane no longer hosts an agent")
-        if (item.record("task").optionalString("status") != "idle")
-            throw IOException("Shell is busy or its state is unknown")
+        // Worktree status is shared by sibling panes; shell readiness is checked by the Host.
         return obj(
             "send" to
                 obj(

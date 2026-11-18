@@ -13,7 +13,7 @@ class InterfaceTest {
 
     @Test
     fun contentExtendsBehindTransparentSystemBars() {
-        rule.onNodeWithText("Add Remote Pane").assertIsDisplayed()
+        rule.onNodeWithText("Pair with a Mac").assertIsDisplayed()
         rule.runOnIdle {
             val window = rule.activity.window
             org.junit.Assert.assertEquals(android.graphics.Color.TRANSPARENT, window.statusBarColor)
@@ -30,7 +30,7 @@ class InterfaceTest {
 
     @Test
     fun overflowKeysDoNotOverwriteSecondHalf() {
-        rule.onNodeWithText("Add Remote Pane").performClick()
+        rule.onNodeWithText("Pair with a Mac").performClick()
         rule.onNodeWithTag("code-first").performTextInput("ABCD")
         rule.onNodeWithTag("code-second").performTextInput("6789")
         for (chunk in listOf("23", "45")) {
@@ -42,7 +42,7 @@ class InterfaceTest {
 
     @Test
     fun typingPairingCodeCharacterByCharacterPreservesFocusAndBothHalves() {
-        rule.onNodeWithText("Add Remote Pane").performClick()
+        rule.onNodeWithText("Pair with a Mac").performClick()
         rule.onNodeWithTag("code-first").performClick()
         for (character in "ABCD") {
             rule.onNode(isFocused()).performTextInput(character.toString())
@@ -68,7 +68,7 @@ class InterfaceTest {
 
     @Test
     fun addHostPairingHalvesRemainEditable() {
-        rule.onNodeWithText("Add Remote Pane").performClick()
+        rule.onNodeWithText("Pair with a Mac").performClick()
         rule.onNodeWithTag("host-address").performTextInput("127.0.0.1")
         rule.onNodeWithTag("code-first").performTextInput("ABCD2345")
         rule.onNodeWithTag("code-first").assertTextContains("ABCD")
@@ -77,6 +77,6 @@ class InterfaceTest {
         rule.onNodeWithTag("code-first").assertTextContains("EFGH")
         rule.onNodeWithTag("code-second").assertTextContains("2345")
         rule.onNodeWithText("Cancel").performClick()
-        rule.onNodeWithText("Connect to Prowl").assertIsDisplayed()
+        rule.onNodeWithText("Prowl Mirror").assertIsDisplayed()
     }
 }

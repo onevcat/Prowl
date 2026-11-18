@@ -16,6 +16,8 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
     val sessions = mutableStateListOf<Session>()
     var selected by mutableStateOf<String?>(null)
     var saved by mutableStateOf<List<Host>>(emptyList())
+    var roster by mutableStateOf<Session?>(null)
+        private set
     var error by mutableStateOf<String?>(null)
 
     init {
@@ -50,28 +52,77 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun restoreHost() {
+        if (roster != null || sessions.isNotEmpty()) return
+        val last = saved.firstOrNull { it.endpoint == vault.selectedEndpoint } ?: saved.lastOrNull()
+        if (last != null) add(last, "")
+    }
+
     fun add(host: Host, code: String) {
-        val session = Session(host, viewModelScope, factory)
-        sessions += session
-        selected = session.id
+        closePane()
+        roster?.close()
+        val session = Session(host, viewModelScope, factory, onLaunch = ::openPane)
+        roster = session
+        vault.selectedEndpoint = host.endpoint
         session.connect(code)
     }
 
-    fun remove(session: Session) {
-        session.close()
-        sessions.remove(session)
-        if (selected == session.id) selected = sessions.lastOrNull()?.id
+    fun openPane(pane: Pane) {
+        val host = roster?.state?.value?.host ?: return
+        if (host.credential == null) return
+        closePane()
+        val session = Session(host, viewModelScope, factory)
+        sessions += session
+        selected = session.id
+        session.choose(pane)
+        session.connect()
+    }
+
+    fun closePane() {
+        sessions.forEach(Session::close)
+        sessions.clear()
+        selected = null
+        roster?.refreshPanes()
+    }
+
+    fun renameHost(host: Host, name: String) {
+        updateVault { vault.save(host.copy(name = name.trim().ifBlank { null })) }
+    }
+
+    fun forgetHost(host: Host) {
+        updateVault {
+            vault.forget(host.endpoint)
+            if (roster?.state?.value?.host?.endpoint == host.endpoint) {
+                closePane()
+                roster?.close()
+                roster = null
+            }
+        }
+        restoreHost()
+    }
+
+    private fun updateVault(action: () -> Unit) {
+        try {
+            action()
+            reloadHosts()
+        } catch (e: Exception) {
+            error = e.message ?: "Could not update saved Hosts"
+        }
     }
 
     fun foreground() {
+        restoreHost()
+        roster?.foreground()
         sessions.forEach(Session::foreground)
     }
 
     fun background() {
+        roster?.background()
         sessions.forEach(Session::background)
     }
 
     override fun onCleared() {
+        roster?.close()
         sessions.forEach(Session::close)
     }
 }

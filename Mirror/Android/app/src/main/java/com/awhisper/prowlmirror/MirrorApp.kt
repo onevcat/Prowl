@@ -3,6 +3,10 @@ package com.awhisper.prowlmirror
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,9 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MirrorApp(model: MirrorModel) {
     MaterialTheme(
@@ -37,49 +39,51 @@ fun MirrorApp(model: MirrorModel) {
         else lightColorScheme(primary = Color(0xFF0A7A72))
     ) {
         var add by remember { mutableStateOf(false) }
-        val drawer = rememberDrawerState(DrawerValue.Closed)
-        val scope = rememberCoroutineScope()
+        var pairingSession by remember { mutableStateOf<String?>(null) }
+        var manage by remember { mutableStateOf(false) }
         val session = model.sessions.firstOrNull { it.id == model.selected }
-        Surface(Modifier.fillMaxSize()) {
-            BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-                val wide = maxWidth >= 840.dp
-                val sidebar: @Composable () -> Unit = {
-                    Sidebar(model, { add = true }) {
-                        model.selected = it
-                        scope.launch { drawer.close() }
-                    }
+        val roster = model.roster
+        val pane = session?.state?.collectAsState()?.value?.pane
+        val rosterState = roster?.state?.collectAsState()?.value
+        LaunchedEffect(roster, rosterState?.status) {
+            if (roster != null && rosterState?.status == Status.choosing) {
+                while (true) {
+                    kotlinx.coroutines.delay(3_000)
+                    roster.refreshPanes()
                 }
-                if (wide)
-                    Row {
-                        Surface(
-                            Modifier.width(300.dp).fillMaxHeight(),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                        ) {
-                            sidebar()
-                        }
-                        Box(Modifier.weight(1f)) {
-                            Detail(
-                                session,
-                                { scope.launch { drawer.open() } },
-                                { add = true },
-                                false,
-                            )
-                        }
-                    }
-                else
-                    ModalNavigationDrawer(
-                        drawerState = drawer,
-                        drawerContent = { ModalDrawerSheet(Modifier.width(300.dp)) { sidebar() } },
-                    ) {
-                        Detail(session, { scope.launch { drawer.open() } }, { add = true }, true)
-                    }
             }
         }
-        if (add)
-            HostDialog(model.saved, null, { add = false }) { host, code ->
-                model.add(host, code)
+        LaunchedEffect(session, rosterState?.panes) {
+            rosterState?.panes?.firstOrNull { it.id == pane?.id }?.let { session?.updatePane(it) }
+        }
+        androidx.activity.compose.BackHandler(session != null) { model.closePane() }
+        Surface(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                when {
+                    session != null -> key(session.id) { Detail(session, model::closePane) }
+                    roster != null && rosterState != null -> AgentsHome(
+                        roster, rosterState, model.saved, model::openPane,
+                        selectHost = { model.add(it, "") }, addHost = { add = true }, manageHosts = { manage = true },
+                    )
+                    else -> MirrorOnboarding { add = true }
+                }
+            }
+        }
+        val pairing = rosterState.takeIf { pairingSession != null && pairingSession == roster?.id }
+        LaunchedEffect(pairing?.status) {
+            if (pairing?.status == Status.choosing) {
+                pairingSession = null
                 add = false
             }
+        }
+        if (add) HostDialog(model.saved, pairing, { add = false; pairingSession = null }) { host, code ->
+            model.add(host, code)
+            pairingSession = model.roster?.id
+        }
+        if (manage) ManageHosts(model, { manage = false }) {
+            manage = false
+            add = true
+        }
         model.error?.let { message ->
             AlertDialog(
                 onDismissRequest = { model.error = null },
@@ -91,218 +95,106 @@ fun MirrorApp(model: MirrorModel) {
     }
 }
 
-@Composable
-private fun Sidebar(model: MirrorModel, add: () -> Unit, select: (String) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Prowl Mirror",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = add) { Icon(Icons.Default.Add, "Add Host") }
-        }
-        Text(
-            "Remote panes",
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(vertical = 20.dp),
-        )
-        LazyColumn {
-            itemsIndexed(model.sessions, key = { _, item -> item.id }) { _, session ->
-                val state by session.state.collectAsState()
-                Surface(
-                    onClick = { select(session.id) },
-                    shape = MaterialTheme.shapes.medium,
-                    color =
-                        if (model.selected == session.id)
-                            MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surface,
-                ) {
-                    Row(
-                        Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                state.pane?.label ?: state.host.address,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                            )
-                            Text(
-                                state.pane?.subtitle ?: state.host.endpoint,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2,
-                            )
-                            Text(
-                                state.status.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = statusColor(state.status),
-                            )
-                        }
-                        IconButton(onClick = { model.remove(session) }) {
-                            Icon(Icons.Default.Close, "Close mirror")
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun statusColor(status: Status) =
-    when (status) {
-        Status.live -> Color(0xFF239B56)
-        Status.connecting,
-        Status.choosing,
-        Status.subscribing -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.error
-    }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Detail(session: Session?, menu: () -> Unit, add: () -> Unit, compact: Boolean) {
-    var edit by remember(session?.id) { mutableStateOf(false) }
-    var launch by remember(session?.id) { mutableStateOf(false) }
-    val state = session?.state?.collectAsState()?.value
+private fun Detail(session: Session, back: () -> Unit) {
+    val state by session.state.collectAsState()
+    val pane = state.pane
+    val agentState = if (state.chat) state.conversation.agentState ?: pane?.displayState else pane?.displayState
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val composing = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val compact = LocalConfiguration.current.screenHeightDp < 500
+    val hideKeyboard = { focus.clearFocus(); keyboard?.hide(); Unit }
+    var menu by remember { mutableStateOf(false) }
+    var confirmTakeover by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(state?.pane?.label ?: "Prowl Mirror", maxLines = 1) },
-            navigationIcon = {
-                if (compact) IconButton(onClick = menu) { Icon(Icons.Default.Menu, "Open sidebar") }
+            title = {
+                Column {
+                    Text(pane?.tabTitle ?: pane?.title ?: "Prowl Mirror", maxLines = 1)
+                    val subtitle = listOfNotNull(
+                        agentState?.replaceFirstChar { it.uppercase() },
+                        listOfNotNull(pane?.projectName, pane?.worktreeName).joinToString(" / ").ifBlank { null },
+                    ).joinToString(" · ")
+                    if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
             },
+            navigationIcon = { IconButton(onClick = back) { Icon(Icons.Default.ArrowBack, "Agents") } },
             actions = {
-                if (state?.status == Status.live && !state.chat)
-                    IconButton(onClick = { session.loadHistory(refresh = true) }) {
-                        Icon(Icons.Default.History, "History")
+                if (composing && compact) IconButton(onClick = hideKeyboard) {
+                    Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
+                }
+                if (pane?.conversation == "available" && "conversation-v1" in state.capabilities)
+                    IconButton(onClick = { session.showChat(!state.chat) }) {
+                        Icon(if (state.chat) Icons.Default.Terminal else Icons.Default.ChatBubbleOutline,
+                            if (state.chat) "Terminal" else "Chat")
                     }
-                if (session != null)
-                    IconButton(onClick = { edit = true }) {
-                        Icon(Icons.Default.Settings, "Edit Host")
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, "Pane actions") }
+                    DropdownMenu(menu, { menu = false }) {
+                        if (!state.chat) DropdownMenuItem(
+                            text = { Text(if (state.showsHistory) "Live Output" else "History") },
+                            enabled = state.showsHistory || (state.status == Status.live && "history" in state.capabilities),
+                            onClick = {
+                                menu = false
+                                if (state.showsHistory) session.showLive() else session.loadHistory(refresh = true)
+                            },
+                        )
+                        if (state.status == Status.takenOver) DropdownMenuItem(
+                            text = { Text("Take Over") }, onClick = { menu = false; confirmTakeover = true },
+                        ) else if (state.status !in setOf(Status.live, Status.connecting, Status.subscribing))
+                            DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; session.retry() })
+                        DropdownMenuItem(text = { Text("Disconnect") }, onClick = { menu = false; back() })
                     }
-                IconButton(onClick = add) { Icon(Icons.Default.Add, "Add remote pane") }
+                }
             },
         )
-        if (session == null || state == null) {
-            Column(
-                Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(Icons.Default.Public, null, Modifier.size(54.dp))
-                Spacer(Modifier.height(20.dp))
-                Text("Connect to Prowl", style = MaterialTheme.typography.headlineSmall)
-                Text("Choose an open pane on your Mac.", modifier = Modifier.padding(16.dp))
-                Button(onClick = add) { Text("Add Remote Pane") }
+        if (state.status != Status.live || state.error != null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(state.error ?: state.status.label, Modifier.weight(1f),
+                    color = if (state.error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
+                if (state.status == Status.takenOver) TextButton(onClick = { confirmTakeover = true }) { Text("Take Over") }
             }
-        } else {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    state.status.label,
-                    color = statusColor(state.status),
-                    modifier = Modifier.weight(1f),
-                )
-                if (
-                    state.status in
-                        setOf(
-                            Status.disconnected,
-                            Status.hostStopped,
-                            Status.paneClosed,
-                            Status.takenOver,
-                        )
-                )
-                    TextButton(onClick = session::retry) { Text("Retry") }
-                if (state.status == Status.takenOver)
-                    TextButton(onClick = session::takeOver) { Text("Take Over") }
+        }
+        Box(Modifier.weight(1f)) {
+            if (state.chat) ConversationReader(session, state.conversation) else Reading(session, state, hideLatest = composing && compact)
+            if (composing && !compact) {
+                Box(
+                    Modifier.align(Alignment.BottomCenter).widthIn(max = if (state.chat) 720.dp else Dp.Unspecified)
+                        .fillMaxWidth().padding(horizontal = 12.dp),
+                ) {
+                    FilledTonalIconButton(onClick = hideKeyboard, modifier = Modifier.align(Alignment.CenterStart)) {
+                        Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
+                    }
+                }
             }
-            state.error?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-            if (state.status == Status.choosing || state.status == Status.paneClosed) {
-                LazyColumn(Modifier.weight(1f).padding(16.dp)) {
-                    item {
-                        Text("Select a Host pane", style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.height(16.dp))
-                    }
-                    val groups = state.panes.groupBy { it.projectName ?: it.directory.ifBlank { "Other panes" } }
-                    for ((project, panes) in groups) {
-                        item(key = "project:$project") {
-                            Text(project, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
-                        }
-                        itemsIndexed(panes, key = { _, pane -> pane.id }) { _, pane ->
-                            ListItem(
-                                headlineContent = { Text(pane.title) },
-                                supportingContent = {
-                                    Text(listOfNotNull(pane.agent, pane.agentState, pane.subtitle).joinToString(" · ")
-                                        .ifBlank { pane.directory })
-                                },
-                                trailingContent = {
-                                    TextButton(onClick = { session.choose(pane, takeover = pane.busy) }) {
-                                        Text(if (pane.busy) "Take over" else "Mirror")
-                                    }
-                                },
-                            )
-                            HorizontalDivider()
-                        }
-                    }
-                    item {
-                        TextButton(onClick = session::refreshPanes) { Text("Refresh Panes") }
-                        if (
-                            "launch-profile" in state.capabilities &&
-                                state.status == Status.choosing
-                        )
-                            Button(onClick = { launch = true }) { Text("New Agent Pane") }
-                        if (state.panes.isEmpty())
-                            Text("No running panes. Open one on Host or create an Agent pane.")
-                    }
-                }
-            } else {
-                if (state.pane?.conversation == "available" && "conversation-v1" in state.capabilities) {
-                    Row(Modifier.align(Alignment.CenterHorizontally)) {
-                        FilterChip(selected = state.chat, onClick = { session.showChat(true) }, label = { Text("Chat") })
-                        Spacer(Modifier.width(8.dp))
-                        FilterChip(selected = !state.chat, onClick = { session.showChat(false) }, label = { Text("Terminal") })
-                    }
-                }
-                Box(Modifier.weight(1f)) {
-                    if (state.chat) ConversationReader(state.conversation)
-                    else Reading(session, state)
-                }
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(Modifier.widthIn(max = if (state.chat) 720.dp else Dp.Unspecified).fillMaxWidth()) {
-                        Column {
-                            MirrorActions(session, state)
-                            Composer(session, state)
-                        }
-                    }
-                }
+        }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(max = if (state.chat) 720.dp else Dp.Unspecified).fillMaxWidth()) {
+                MirrorActions(session, state)
+                Composer(session, state)
             }
         }
     }
-    if (edit && session != null && state != null)
-        HostDialog(emptyList(), state.host, { edit = false }) { host, code ->
-            session.editHost(host, code)
-            edit = false
-        }
-    if (launch && session != null) LaunchDialog(session) { launch = false }
+    if (confirmTakeover) AlertDialog(
+        onDismissRequest = { confirmTakeover = false },
+        title = { Text("Take over this pane?") },
+        text = { Text("The other device will disconnect from this pane.") },
+        confirmButton = { TextButton(onClick = { confirmTakeover = false; session.takeOver() }) { Text("Take Over") } },
+        dismissButton = { TextButton(onClick = { confirmTakeover = false }) { Text("Cancel") } },
+    )
 }
 
 @Composable
 private fun HostDialog(
     saved: List<Host>,
-    initial: Host?,
+    pairing: SessionState?,
     dismiss: () -> Unit,
     connect: (Host, String) -> Unit,
 ) {
-    var chosen by remember { mutableStateOf(initial ?: saved.lastOrNull()) }
+    var chosen by remember { mutableStateOf<Host?>(null) }
+    val connecting = pairing?.status == Status.connecting
     var address by remember { mutableStateOf(chosen?.address ?: "") }
     var port by remember { mutableStateOf((chosen?.port ?: DEFAULT_HOST_PORT).toString()) }
     var first by remember { mutableStateOf("") }
@@ -310,13 +202,13 @@ private fun HostDialog(
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = dismiss,
-        title = { Text("Remote Mirror Host") },
+        title = { Text("Pair with a Mac") },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                PairingScanButton(connect = connect, failed = { error = it })
+                if (!connecting) PairingScanButton(connect = connect, failed = { error = it })
                 saved.takeLast(5).reversed().forEach { host ->
                     TextButton(
                         onClick = {
@@ -363,12 +255,14 @@ private fun HostDialog(
                     "Open Add a Device on Host. Leave code blank for a saved device.",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                (error ?: pairing?.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = !connecting,
                 onClick = {
+                    error = null
                     try {
                         val hostAddress = address.trim()
                         val hostPort = port.toIntOrNull()
@@ -389,7 +283,8 @@ private fun HostDialog(
                     }
                 }
             ) {
-                Text("Connect")
+                if (connecting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("Connect")
             }
         },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
@@ -397,7 +292,7 @@ private fun HostDialog(
 }
 
 @Composable
-private fun Reading(session: Session, state: SessionState) {
+private fun Reading(session: Session, state: SessionState, hideLatest: Boolean) {
     val source = if (state.showsHistory) state.history.joinToString("\n") else state.text
     val blocks = remember(source) { Document.blocks(source) }
     var detail by remember(session.id) { mutableStateOf<Block?>(null) }
@@ -467,10 +362,11 @@ private fun Reading(session: Session, state: SessionState) {
                         enabled = state.canScrollRemote(ScrollDirection.DOWN),
                     ) { Text("Scroll down") }
                 }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
-                Modifier.weight(1f).fillMaxWidth().testTag("mirror-output"),
+                Modifier.fillMaxSize().testTag("mirror-output"),
                 state = scroll,
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 56.dp),
             ) {
                 itemsIndexed(blocks) { _, block ->
                     when (block) {
@@ -520,14 +416,17 @@ private fun Reading(session: Session, state: SessionState) {
                     }
                 }
             }
-            if (!state.showsHistory)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (!state.showsHistory) {
                     if (state.truncated)
-                        Text("Snapshot truncated", style = MaterialTheme.typography.labelSmall)
-                    TextButton(onClick = { session.setFollow(true) }) {
-                        Text(if (state.follow) "Following latest" else "Follow latest")
-                    }
+                        Text("Snapshot truncated", Modifier.align(Alignment.BottomStart).padding(12.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    if (!hideLatest && !state.follow && scroll.canScrollForward)
+                        FilledTonalIconButton(
+                            onClick = { session.setFollow(true) },
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(horizontal = 12.dp),
+                        ) { Icon(Icons.Default.ArrowDownward, "Latest") }
                 }
+            }
         }
     }
     detail?.let { frozen ->
@@ -579,6 +478,10 @@ internal fun Composer(session: Session, state: SessionState) {
     var value by remember(session.id) { mutableStateOf(TextFieldValue(state.draft)) }
     var focused by remember { mutableStateOf(false) }
     val gesture = remember(session.id) { DoubleReturn() }
+    val currentAgentState = if (state.chat) state.conversation.agentState ?: state.pane?.agentState else state.pane?.agentState
+    val showStop = currentAgentState == "working" && state.pane?.agent != null &&
+        state.keysAvailable && state.draft.isBlank() && state.delivery != Delivery.PENDING
+    var stop by remember(session.id) { mutableStateOf(false) }
     LaunchedEffect(state.draft) {
         if (state.draft != value.text)
             value = TextFieldValue(state.draft, TextRange(state.draft.length))
@@ -601,7 +504,14 @@ internal fun Composer(session: Session, state: SessionState) {
                 }
             }
         }
-        OutlinedTextField(
+        if (state.hostDraft == null && state.delivery in setOf(Delivery.UNKNOWN, Delivery.REJECTED)) {
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+                Text(state.hint, Modifier.fillMaxWidth().padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+        TextField(
             value,
             { next ->
                 if (next.composition != null || !next.selection.collapsed) gesture.cancel()
@@ -609,7 +519,27 @@ internal fun Composer(session: Session, state: SessionState) {
                 value = next
                 session.setDraft(next.text)
             },
-            placeholder = { Text("Message Host…") },
+            placeholder = { Text(if (state.pane?.agent == null) "Type a command" else "Message") },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            trailingIcon = {
+                IconButton(
+                    enabled = if (showStop) state.canAct else state.canSend && value.composition == null,
+                    onClick = {
+                        gesture.cancel()
+                        if (showStop) stop = true else session.submit()
+                    },
+                ) {
+                    when {
+                        state.delivery == Delivery.PENDING -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        showStop -> Icon(Icons.Default.Stop, "Stop")
+                        else -> Icon(Icons.Default.ArrowUpward, "Send")
+                    }
+                }
+            },
             minLines = 1,
             maxLines = if (focused) 6 else 1,
             modifier =
@@ -670,28 +600,12 @@ internal fun Composer(session: Session, state: SessionState) {
                         }
                     },
         )
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                state.hint,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall,
-                color =
-                    if (state.delivery in setOf(Delivery.UNKNOWN, Delivery.REJECTED))
-                        MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(
-                onClick = {
-                    gesture.cancel()
-                    session.submit()
-                },
-                enabled = state.canSend && value.composition == null,
-            ) {
-                if (state.delivery == Delivery.PENDING) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else Text("Send")
-            }
-        }
+        if (stop) AlertDialog(
+            onDismissRequest = { stop = false },
+            title = { Text("Stop this agent?") },
+            confirmButton = { TextButton(onClick = { stop = false; session.sendKey("esc") }) { Text("Stop") } },
+            dismissButton = { TextButton(onClick = { stop = false }) { Text("Cancel") } },
+        )
         if (state.delivery == Delivery.UNKNOWN)
             Row {
                 TextButton(onClick = session::queryReceipt) { Text("Check receipt") }
@@ -724,80 +638,81 @@ internal fun Composer(session: Session, state: SessionState) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun LaunchDialog(session: Session, dismiss: () -> Unit) {
+internal fun LaunchDialog(session: Session, project: String? = null, dismiss: () -> Unit) {
     val model = session.launch
     val state by model.state.collectAsState()
-    LaunchedEffect(model) { model.open() }
+    var worktrees by remember { mutableStateOf(false) }
+    var profiles by remember { mutableStateOf(false) }
+    val worktree = state.worktrees.firstOrNull { it.string("id") == state.worktree }
+    val profile = state.profiles.firstOrNull { it.string("id") == state.profile }
+    LaunchedEffect(model, project) { model.open(project) }
     LaunchedEffect(state.created) { if (state.created != null) dismiss() }
-    AlertDialog(
-        onDismissRequest = { if (!state.creating) dismiss() },
-        title = { Text("New Agent Pane") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (state.loading) CircularProgressIndicator()
-                Text("Workspace")
-                state.worktrees.forEach { item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = state.worktree == item.string("id"),
-                            onClick = { model.selectWorktree(item.string("id")) },
-                            enabled = !state.creating,
-                        )
-                        Text(
-                            item.string("root_path").substringAfterLast('/') +
-                                " · " +
-                                item.string("name")
-                        )
-                    }
-                }
-                Text("Agent Profile")
-                state.profiles.forEach { item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = state.profile == item.string("id"),
-                            onClick = { model.selectProfile(item.string("id")) },
-                            enabled = !state.creating,
-                        )
-                        Text(item.string("name"))
-                    }
-                }
-                if (!state.loading && state.profiles.isEmpty())
-                    Text("Configure an available Agent Profile on Host first.")
-                OutlinedTextField(
-                    state.prompt,
-                    model::setPrompt,
-                    label = { Text("Initial message (optional)") },
-                    maxLines = 6,
-                    enabled = !state.creating,
-                )
-                Text(
-                    "Model and permissions come from the Host Profile.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (state.uncertain) {
-                    TextButton(
-                        onClick = {
-                            session.refreshPanes()
-                            dismiss()
+    ModalBottomSheet(onDismissRequest = { if (!state.creating) dismiss() }) {
+        Column(
+            Modifier.align(Alignment.CenterHorizontally).widthIn(max = 720.dp).fillMaxWidth()
+                .verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+        ) {
+            Text("New Session", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                state.prompt, model::setPrompt, placeholder = { Text("What would you like to work on?") },
+                modifier = Modifier.fillMaxWidth(), maxLines = 6, enabled = !state.creating,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
+                Box {
+                    AssistChip(
+                        onClick = { worktrees = true }, leadingIcon = { Icon(Icons.Default.Folder, null) },
+                        label = { Text(worktree?.string("name") ?: "Project") },
+                        enabled = state.worktrees.isNotEmpty() && !state.creating,
+                    )
+                    DropdownMenu(worktrees, { worktrees = false }) {
+                        state.worktrees.forEach { tree ->
+                            DropdownMenuItem(
+                                text = { Text(tree.string("root_path").substringAfterLast('/') + " · " + tree.string("name")) },
+                                onClick = { model.selectWorktree(tree.string("id")); worktrees = false },
+                            )
                         }
-                    ) {
-                        Text("Review Host panes")
                     }
-                    TextButton(onClick = model::acknowledgeUnknown) {
-                        Text("I checked Host; allow another creation")
+                }
+                Box {
+                    AssistChip(
+                        onClick = { profiles = true },
+                        leadingIcon = { profile?.optionalString("runtime")?.let { AgentMark(it) } },
+                        label = { Text(profile?.string("name") ?: "Agent Profile") },
+                        enabled = state.profiles.isNotEmpty() && !state.creating,
+                    )
+                    DropdownMenu(profiles, { profiles = false }) {
+                        state.profiles.forEach { entry ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(entry.string("name"))
+                                        val detail = listOfNotNull(entry.optionalString("model"), entry.optionalString("reasoning_effort")).joinToString(" · ")
+                                        if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                leadingIcon = { entry.optionalString("runtime")?.let { AgentMark(it) } },
+                                onClick = { model.selectProfile(entry.string("id")); profiles = false },
+                            )
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(enabled = state.canCreate, onClick = model::create) {
-                Text(if (state.creating) "Creating…" else "Create")
+            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (state.uncertain) {
+                TextButton(onClick = { session.refreshPanes(); dismiss() }) { Text("Review Host panes") }
+                TextButton(onClick = model::acknowledgeUnknown) { Text("I checked Host; allow another creation") }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = dismiss, enabled = !state.creating) { Text("Cancel") }
-        },
-    )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = dismiss, enabled = !state.creating) { Text("Cancel") }
+                Button(onClick = model::create, enabled = state.canCreate) {
+                    if (state.creating || state.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.ArrowUpward, "Create session")
+                }
+            }
+        }
+    }
 }

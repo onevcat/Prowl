@@ -52,7 +52,7 @@ class LaunchModel(
         state.update { it.copy(uncertain = false, error = null) }
     }
 
-    fun open() {
+    fun open(project: String? = null) {
         if (state.value.creating || state.value.loading) return
         state.update { it.copy(loading = true, created = null) }
         scope.launch {
@@ -81,7 +81,9 @@ class LaunchModel(
                         worktrees = worktrees,
                         profiles = profiles,
                         worktree =
-                            it.worktree.takeIf { id -> worktrees.any { w -> w.string("id") == id } }
+                            worktrees.firstOrNull { tree ->
+                                project != null && tree.string("root_path").substringAfterLast('/') == project
+                            }?.string("id") ?: it.worktree.takeIf { id -> worktrees.any { w -> w.string("id") == id } }
                                 ?: worktrees.firstOrNull()?.string("id").orEmpty(),
                         profile =
                             it.profile.takeIf { id -> profiles.any { p -> p.string("id") == id } }
@@ -125,6 +127,9 @@ class LaunchModel(
                             false,
                             tree.string("root_path").substringAfterLast('/'),
                             tree.string("name"),
+                            agent = pane.optionalString("agent") ?: snapshot.profiles
+                                .firstOrNull { it.string("id") == snapshot.profile }?.optionalString("runtime"),
+                            worktreeName = tree.string("name"),
                         )
                     choose(descriptor, false)
                     state.update { it.copy(created = descriptor.id) }

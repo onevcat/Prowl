@@ -157,8 +157,8 @@ class CoreTest {
             Commands.input(listing("claude", "running"), pane, "hello").has("agentsInput")
         )
         assertTrue(Commands.input(listing(null, "idle"), pane, "hello").has("send"))
-        assertThrows(Exception::class.java) { Commands.input(listing(null, "running"), pane, "x") }
-        assertThrows(Exception::class.java) { Commands.input(listing(null, null), pane, "x") }
+        assertTrue(Commands.input(listing(null, "running"), pane, "x").has("send"))
+        assertTrue(Commands.input(listing(null, null), pane, "x").has("send"))
     }
 
     @Test

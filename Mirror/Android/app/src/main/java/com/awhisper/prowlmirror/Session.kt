@@ -30,6 +30,7 @@ data class HostDraft(val text: String, val complete: Boolean, val replaceable: B
 
 data class SessionState(
     val host: Host,
+    val hostName: String? = null,
     val status: Status = Status.disconnected,
     val panes: List<Pane> = emptyList(),
     val pane: Pane? = null,
@@ -66,6 +67,10 @@ data class SessionState(
 
     fun canScrollRemote(direction: ScrollDirection): Boolean =
         canScrollRemote && scrollBounds.allows(direction)
+
+    val needsPairing: Boolean
+        get() = host.credential == null || error == "Device authentication failed" ||
+            error == "Host identity changed. Pair again."
 
     val openPrompt: JsonObject?
         get() = if (chat) conversation.openPrompt else screenPrompt
@@ -148,15 +153,19 @@ class Session(
     host: Host,
     private val scope: CoroutineScope,
     private val factory: TransportFactory,
+    onLaunch: ((Pane) -> Unit)? = null,
 ) {
     val id = uuid()
     val state = MutableStateFlow(SessionState(host))
-    val launch = LaunchModel(scope, ::command, ::choose)
+    val launch = LaunchModel(scope, ::command) { pane, takeover ->
+        if (onLaunch == null) choose(pane, takeover) else onLaunch(pane)
+    }
     private var transport: Transport? = null
     private var generation = 0
     private var lease: String? = null
     private var runID: String? = null
     private var intent = "ifFree"
+    private var choseMode = false
     private var retryJob: Job? = null
     private var retryCount = 0
     private var suspended = false
@@ -184,6 +193,9 @@ class Session(
     )
 
     private var submission: Submission? = null
+    var chatScrollIndex = 0
+    var chatScrollOffset = 0
+    var chatFollowsLatest = true
     var liveScrollIndex = 0
     var liveScrollOffset = 0
     var historyScrollIndex = 0
@@ -287,12 +299,16 @@ class Session(
     fun background() {
         suspended = true
         retryJob?.cancel()
+        if (transport != null) {
+            detach()
+            state.update { it.copy(status = Status.disconnected) }
+        }
     }
 
     fun foreground() {
         suspended = false
         retryCount = 0
-        if (state.value.status == Status.disconnected) retry()
+        if (state.value.status == Status.disconnected && !state.value.needsPairing) retry()
         else if (state.value.status == Status.live) {
             lease?.let { send(control("refresh", obj("subscriptionID" to it))) }
             queryReceipt()
@@ -341,16 +357,27 @@ class Session(
     }
 
     fun refreshPanes() {
+        if (suspended) return
         send(control("list"))
     }
 
+    fun updatePane(pane: Pane) {
+        val previous = state.value.pane
+        if (previous?.id != pane.id) return
+        state.update { it.copy(pane = pane) }
+        if (!choseMode && previous.conversation != "available" && pane.conversation == "available")
+            switchMode(true)
+        else if (state.value.chat && pane.conversation == "unsupported") switchMode(false)
+    }
+
     fun choose(pane: Pane, takeover: Boolean = false) {
+        choseMode = false
         submission = null
         historyGate.reset()
         state.update {
             it.copy(
                 pane = pane,
-                chat = pane.conversation == "available" && "conversation-v1" in it.capabilities,
+                chat = pane.conversation == "available",
                 conversation = ConversationFeed(),
                 answeredPrompt = null,
                 hostDraft = null,
@@ -370,14 +397,19 @@ class Session(
     }
 
     fun showChat(chat: Boolean) {
+        if (switchMode(chat)) choseMode = true
+    }
+
+    private fun switchMode(chat: Boolean): Boolean {
         val current = state.value
         if (current.chat == chat || current.status != Status.live || current.loadingHistory ||
             current.delivery == Delivery.PENDING || commandPending != null || current.scrolling != null
-        ) return
-        if (chat && (current.pane?.conversation != "available" || "conversation-v1" !in current.capabilities)) return
+        ) return false
+        if (chat && (current.pane?.conversation != "available" || "conversation-v1" !in current.capabilities)) return false
         state.update { it.copy(chat = chat) }
         intent = "ifFree"
         subscribe()
+        return true
     }
 
     private fun subscribe() {
@@ -713,6 +745,7 @@ class Session(
                     val updatedPane = panes.firstOrNull { pane -> pane.id == it.pane?.id }
                     it.copy(
                         panes = panes,
+                        hostName = p.optionalString("hostName") ?: it.hostName,
                         pane = updatedPane ?: it.pane,
                         capabilities = caps,
                         chat = if (it.status == Status.live) it.chat else
@@ -724,7 +757,11 @@ class Session(
                 if (state.value.pane == null) state.update { it.copy(status = Status.choosing) }
                 else if (panes.none { it.id == state.value.pane?.id })
                     state.update { it.copy(status = Status.paneClosed) }
-                else if (state.value.status != Status.live) subscribe()
+                else if (state.value.status != Status.live) {
+                    if (!choseMode && "conversation-v1" in caps && state.value.pane?.conversation == "available")
+                        state.update { it.copy(chat = true) }
+                    subscribe()
+                }
             }
             "subscribed" -> {
                 clearScroll()

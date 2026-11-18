@@ -113,13 +113,11 @@ class RemoteScrollTest {
         show()
         val outputBounds = rule.onNodeWithTag("mirror-output").fetchSemanticsNode().boundsInRoot
         val upBounds = rule.onNodeWithText("Scroll up").fetchSemanticsNode().boundsInRoot
-        val followBounds = rule.onNodeWithText("Follow latest").fetchSemanticsNode().boundsInRoot
         val downBounds = rule.onNodeWithText("Scroll down").fetchSemanticsNode().boundsInRoot
         assertTrue(upBounds.left <= outputBounds.left + outputBounds.width * 0.2f)
         assertTrue(downBounds.right >= outputBounds.right - outputBounds.width * 0.2f)
         assertTrue(downBounds.left - upBounds.right > outputBounds.width * 0.4f)
         assertTrue(upBounds.bottom <= outputBounds.top)
-        assertTrue(followBounds.top >= outputBounds.bottom)
         rule.onNodeWithText("Scroll up").assertIsEnabled().performClick()
         rule.onNodeWithText("Scroll up").assertIsNotEnabled()
         rule.onNodeWithText("Scroll down").assertIsNotEnabled()
@@ -223,8 +221,8 @@ class RemoteScrollTest {
             assertEquals(0, session.liveScrollOffset)
         }
         screenshot("local-reading")
-        rule.onNodeWithText("Follow latest").performClick()
-        rule.onNodeWithText("Following latest").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Latest").performClick()
+        rule.onNodeWithContentDescription("Latest").assertDoesNotExist()
         rule.runOnIdle {
             assertTrue(session.state.value.follow)
             assertEquals(2, sent.count { it.kind == "scroll" })
@@ -262,7 +260,8 @@ class RemoteScrollTest {
     @Test
     fun historyKeepsItsOwnScrollingOnHostsThatSupportRemoteScrolling() {
         show()
-        rule.onNodeWithContentDescription("History").performClick()
+        rule.onNodeWithContentDescription("Pane actions").performClick()
+        rule.onNodeWithText("History").performClick()
         rule.runOnIdle {
             receive(control("historyPage", obj(
                 "subscriptionID" to lease, "historyID" to uuid(), "offset" to 0,

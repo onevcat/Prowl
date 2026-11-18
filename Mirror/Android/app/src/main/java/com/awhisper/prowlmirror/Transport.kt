@@ -16,7 +16,7 @@ data class Credential(val hostID: String, val deviceID: String, val key: String)
 
 const val DEFAULT_HOST_PORT = 7880
 
-data class Host(val address: String, val port: Int = DEFAULT_HOST_PORT, val credential: Credential? = null) {
+data class Host(val address: String, val port: Int = DEFAULT_HOST_PORT, val credential: Credential? = null, val name: String? = null) {
     val endpoint: String
         get() = "$address:$port"
 }

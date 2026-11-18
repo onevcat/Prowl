@@ -2,13 +2,14 @@ package com.awhisper.prowlmirror
 
 import com.google.gson.JsonObject
 
-data class ConversationEvent(val sequence: Long, val kind: String, val source: String, val data: JsonObject) {
+data class ConversationEvent(val sequence: Long, val kind: String, val source: String, val data: JsonObject, val timestamp: String?) {
     companion object {
         fun parse(json: JsonObject) = ConversationEvent(
             json.longInteger("seq"),
             json.string("kind"),
             json.string("source"),
             json.record("data"),
+            json.optionalString("ts"),
         )
     }
 }
