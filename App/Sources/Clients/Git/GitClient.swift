@@ -213,22 +213,11 @@ struct GitClient {
 
   nonisolated func defaultRemoteBranchRef(for repoRoot: URL) async throws -> String? {
     let path = repoRoot.path(percentEncoded: false)
-    do {
-      let output = try await runGit(
-        operation: .defaultRemoteBranchRef,
-        arguments: ["-C", path, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"]
-      )
-      let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-      if let resolved = normalizeRemoteRef(trimmed),
-        await refExists(resolved, repoRoot: repoRoot)
-      {
-        return resolved
-      }
-    } catch {
-      let rootPath = repoRoot.path(percentEncoded: false)
-      gitLogger.warning(
-        "Default remote branch ref failed for \(rootPath): \(error.localizedDescription)"
-      )
+    if let output = try? await runGit(
+      operation: .defaultRemoteBranchRef,
+      arguments: ["-C", path, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"]
+    ), let resolved = normalizeRemoteRef(output), await refExists(resolved, repoRoot: repoRoot) {
+      return resolved
     }
     let fallback = "origin/main"
     if await refExists(fallback, repoRoot: repoRoot) {
