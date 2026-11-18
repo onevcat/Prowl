@@ -519,12 +519,12 @@ final class GhosttySurfaceBridge {
       }
       state.searchTotal = nil
       state.searchSelected = nil
-      state.searchFocusPending = true
+      state.transitionSearchFocus(.findRequested)
       return true
 
     case GHOSTTY_ACTION_END_SEARCH:
       state.searchNeedle = nil
-      state.searchFocusPending = false
+      state.transitionSearchFocus(.searchEnded)
       state.searchTotal = nil
       state.searchSelected = nil
       return true

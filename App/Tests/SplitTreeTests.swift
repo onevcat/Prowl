@@ -158,7 +158,10 @@ struct SplitTreeTests {
     #expect(visibleLeaves.first === second)
   }
 
-  @Test func splitZoomKeepsFocusInTheTargetSearchField() async throws {
+  @Test(arguments: [nil, GhosttySurfaceState.SearchFocusRequest.find])
+  func splitZoomKeepsFocusInTheTargetSearchField(
+    pendingRequest: GhosttySurfaceState.SearchFocusRequest?
+  ) async throws {
     let state = makeWorktreeTerminalState()
     let tabID = try #require(state.createTab())
     let firstID = try #require(state.focusedSurfaceId(in: tabID))
@@ -175,18 +178,30 @@ struct SplitTreeTests {
     target.bridge.state.searchNeedle = "query"
     let field = GhosttySearchField.SearchField(frame: NSRect(x: 0, y: 40, width: 180, height: 24))
     field.owner = target.bridge.state
+    field.stringValue = "query"
     window.contentView?.addSubview(field)
     try #require(window.makeFirstResponder(field))
-    let editor = try #require(field.currentEditor())
+    let editor = try #require(field.currentEditor() as? NSTextView)
+    let selection = NSRange(location: 1, length: 2)
+    editor.setSelectedRange(selection)
+    if let pendingRequest {
+      switch pendingRequest {
+      case .find:
+        target.bridge.state.transitionSearchFocus(.findRequested)
+      case .restore:
+        target.bridge.state.transitionSearchFocus(.restoreRequested)
+      }
+    }
 
     #expect(state.performSplitAction(.toggleSplitZoom, for: targetID))
-    #expect(target.bridge.state.searchFocusPending)
+    #expect(target.bridge.state.searchFocusRequest == (pendingRequest ?? .restore))
     // SwiftUI updates the Find field after the layout change.
-    field.takePendingFocus()
+    field.takePendingFocus(for: pendingRequest ?? .restore)
     await Task.megaYield()
 
     #expect(window.firstResponder === editor)
-    #expect(!target.bridge.state.searchFocusPending)
+    #expect(editor.selectedRange() == (pendingRequest == .find ? NSRange(location: 0, length: 5) : selection))
+    #expect(target.bridge.state.searchFocusRequest == nil)
     #expect(state.activeSurfaceID(for: tabID) == targetID)
     #expect(state.splitTree(for: tabID).zoomed == state.splitTree(for: tabID).find(id: targetID))
   }
@@ -213,7 +228,7 @@ struct SplitTreeTests {
     #expect(state.performSplitAction(.toggleSplitZoom, for: targetID))
     await Task.megaYield()
 
-    #expect(!target.bridge.state.searchFocusPending)
+    #expect(target.bridge.state.searchFocusRequest == nil)
     #expect(state.activeSurfaceID(for: tabID) == targetID)
   }
 
