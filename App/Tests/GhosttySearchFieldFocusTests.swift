@@ -2,6 +2,7 @@ import AppKit
 import Clocks
 import ConcurrencyExtras
 import GhosttyKit
+import SwiftUI
 import Testing
 
 @testable import Prowl
@@ -218,6 +219,55 @@ struct GhosttySearchFieldFocusTests {
       result.insertText("next", replacementRange: NSRange(location: NSNotFound, length: 0))
       #expect(result.string == "next")
     }
+  }
+
+  @Test(arguments: [false, true])
+  func findDuringCompositionPreservesMarkedText(bindingIncludesMarkedText: Bool) throws {
+    let window = makeWindow()
+    defer { window.close() }
+    let state = makeSearchState(focusRequest: .find)
+    state.searchNeedle = "query"
+    func searchField() -> GhosttySearchField {
+      GhosttySearchField(
+        text: Binding(get: { state.searchNeedle ?? "" }, set: { state.searchNeedle = $0 }),
+        owner: state, focusRequest: state.searchFocusRequest, onSubmit: { _ in }, onEscape: {}
+      )
+    }
+    let host = NSHostingView(rootView: searchField())
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    let editor = try #require(window.firstResponder as? NSTextView)
+    try #require(editor.string == "query")
+    try #require(state.searchFocusRequest == nil)
+    // Render the consumed request before issuing another Find.
+    host.rootView = searchField()
+    host.layoutSubtreeIfNeeded()
+
+    let insertion = NSRange(location: NSNotFound, length: 0)
+    editor.setSelectedRange(NSRange(location: 5, length: 0))
+    editor.setMarkedText("x", selectedRange: NSRange(location: 1, length: 0), replacementRange: insertion)
+    try #require(editor.hasMarkedText())
+    try #require(editor.string == "queryx")
+    if bindingIncludesMarkedText {
+      state.searchNeedle = editor.string
+    } else {
+      try #require(state.searchNeedle == "query")
+    }
+
+    state.transitionSearchFocus(.findRequested)
+    host.rootView = searchField()
+    host.layoutSubtreeIfNeeded()
+    #expect(state.searchFocusRequest == nil)
+    #expect(editor.hasMarkedText())
+    #expect(editor.string == "queryx")
+    #expect(editor.selectedRange() == NSRange(location: 6, length: 0))
+
+    editor.insertText("x", replacementRange: insertion)
+    host.rootView = searchField()
+    host.layoutSubtreeIfNeeded()
+    editor.insertText("y", replacementRange: insertion)
+    #expect(editor.string == "queryxy")
+    #expect(state.searchNeedle == "queryxy")
   }
 
   @Test func pendingFindSelectsTheQueryAfterWindowAttachment() throws {
