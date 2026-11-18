@@ -298,7 +298,8 @@ struct GhosttySearchField: NSViewRepresentable {
   }
 
   func updateNSView(_ nsView: SearchField, context: Context) {
-    if nsView.stringValue != text {
+    // The binding can still contain the committed query while the editor composes new text.
+    if nsView.stringValue != text, (nsView.currentEditor() as? NSTextView)?.hasMarkedText() != true {
       nsView.stringValue = text
     }
     nsView.onSubmit = onSubmit
@@ -372,7 +373,7 @@ struct GhosttySearchField: NSViewRepresentable {
       else {
         return
       }
-      if request == .find {
+      if request == .find, !editor.hasMarkedText() {
         if editor.string == owner.searchNeedle {
           editor.selectAll(nil)
         } else if onWindowAttachment {
