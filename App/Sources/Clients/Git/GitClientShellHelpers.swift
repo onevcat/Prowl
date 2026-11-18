@@ -84,11 +84,19 @@ nonisolated func gitFailureLogLine(operation: GitOperation, exitCode: Int32, kin
   "git command failed operation=\(operation.rawValue) exit_code=\(exitCode) failure_kind=\(kind.rawValue)"
 }
 
+/// The directory that a `git -C <path> …` command runs in.
+nonisolated func gitWorkingDirectory(_ arguments: [String]) -> String? {
+  guard arguments.count > 1, arguments[0] == "-C" else { return nil }
+  return arguments[1]
+}
+
 /// Converts a failed command into a `GitClientError` and records the failure.
+/// `directory` is where the command ran. The log shows only a hash of it.
 nonisolated func wrapShellError(
   _ error: Error,
   operation: GitOperation,
-  command: String
+  command: String,
+  directory: String?
 ) -> GitClientError {
   let kind = gitFailureKind(for: error, isCancelled: Task.isCancelled)
   let gitError: GitClientError
@@ -115,7 +123,12 @@ nonisolated func wrapShellError(
     return gitError
   }
   let exitCode = (error as? ShellClientError)?.exitCode ?? -1
-  gitLogger.warning(gitFailureLogLine(operation: operation, exitCode: exitCode, kind: kind))
+  let line = gitFailureLogLine(operation: operation, exitCode: exitCode, kind: kind)
+  if let directory {
+    gitLogger.warning(line, hashedField: "directory", value: directory)
+  } else {
+    gitLogger.warning(line)
+  }
   #if !DEBUG
     SentrySDK.logger.error(
       "git command failed",

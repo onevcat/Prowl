@@ -49,6 +49,17 @@ nonisolated struct ProwlLogger: Sendable {
     #endif
   }
 
+  /// Logs `message` followed by `name=value`. The unified log shows `value` only as a hash.
+  /// The hash is the same for the same value in one app process, so log lines can be
+  /// grouped by a private value, such as a path, without showing it.
+  func warning(_ message: String, hashedField name: StaticString, value: String) {
+    #if DEBUG
+      print("[\(category)] \(message) \(name)=\(value)")
+    #else
+      logger.warning("\(message, privacy: .public) \(name)=\(value, privacy: .private(mask: .hash))")
+    #endif
+  }
+
   /// Emits to the unified log (`log stream`, Console, `make log-stream`) in
   /// every build configuration. Unlike `debug`/`info`, which `print` in DEBUG
   /// so they surface in the Xcode console, `notice` is for opt-in diagnostics

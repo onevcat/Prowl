@@ -58,7 +58,7 @@ struct GitShellErrorSummaryTests {
       exitCode: 1
     )
 
-    let wrapped = wrapShellError(error, operation: .worktreeList, command: "wt ls --json")
+    let wrapped = wrapShellError(error, operation: .worktreeList, command: "wt ls --json", directory: nil)
 
     guard case .directoryAccessDenied(let command, let message) = wrapped else {
       Issue.record("Expected directoryAccessDenied, got \(wrapped)")
@@ -109,10 +109,18 @@ struct GitShellErrorSummaryTests {
     #expect(line == "git command failed operation=repo_root exit_code=128 failure_kind=other")
   }
 
+  @Test func workingDirectoryComesFromTheDashCArgument() {
+    #expect(gitWorkingDirectory(["-C", "/repo", "status"]) == "/repo")
+    #expect(gitWorkingDirectory(["status", "-C", "/repo"]) == nil)
+    #expect(gitWorkingDirectory(["-C"]) == nil)
+  }
+
 }
 
 private func gitErrorMessage(for error: ShellClientError) -> String {
-  guard case .commandFailed(_, let message) = wrapShellError(error, operation: .worktreeCreate, command: "wt sw")
+  guard
+    case .commandFailed(_, let message) = wrapShellError(
+      error, operation: .worktreeCreate, command: "wt sw", directory: nil)
   else {
     Issue.record("Expected commandFailed")
     return ""
