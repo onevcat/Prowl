@@ -62,7 +62,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
         } catch {
           let path = repositorySettingsURL.path(percentEncoded: false)
           ProwlLogger("Settings").warning(
-            "Unable to write migrated repository settings to \(path): \(error.localizedDescription)"
+            "Unable to write migrated repository settings to \(path)", error: error
           )
         }
         continuation.resume(returning: legacySettings)

@@ -540,7 +540,6 @@ extension RepositoriesFeature {
               }
             } catch {
               let errorMessage = "git fetch failed: \(error.localizedDescription)"
-              worktreeCreationLogger.warning(errorMessage)
               progress.appendOutputLine(errorMessage, maxLines: worktreeCreationProgressLineLimit)
             }
           }
@@ -781,8 +780,6 @@ extension RepositoriesFeature {
     }
   }
 }
-
-private nonisolated let worktreeCreationLogger = ProwlLogger("WorktreeCreation")
 
 extension RepositoriesFeature {
   /// The placement of new worktrees in `repository`; nil for a remote repository whose

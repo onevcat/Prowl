@@ -313,7 +313,9 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     // The save is committed; the branch that was explicitly requested but
     // not deleted must still be surfaced to the user.
     #expect(ProjectWorkspace.load(from: rootURL)?.repositories.map(\.id) == ["app"])
-    #expect(store.state.alert != nil)
+    let message = try #require(store.state.alert?.message.map { String(state: $0) })
+    #expect(message.contains("git branch -D feature/api"))
+    #expect(message.contains("checked out elsewhere"))
   }
 
   @Test func saveWorkspaceFailureKeepsEditorOpenWithMessage() async throws {

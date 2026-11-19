@@ -58,7 +58,7 @@ nonisolated func discardTerminalLayoutSnapshot(
     return true
   } catch {
     terminalLayoutPersistenceLogger.warning(
-      "Unable to remove terminal layout snapshot: \(error.localizedDescription)"
+      "Unable to remove terminal layout snapshot", error: error
     )
     return false
   }
@@ -125,7 +125,7 @@ nonisolated func saveTerminalLayoutSnapshot(
     return true
   } catch {
     terminalLayoutPersistenceLogger.warning(
-      "[LayoutRestore] save: write failed: \(error.localizedDescription)"
+      "[LayoutRestore] save: write failed", error: error
     )
     return false
   }

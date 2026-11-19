@@ -833,7 +833,7 @@ final class WorktreeTerminalState {
       )
       return true
     } catch {
-      terminalStateLogger.warning("Agent profile home provisioning failed: \(error)")
+      terminalStateLogger.warning("Agent profile home provisioning failed", error: error)
       return false
     }
   }

@@ -449,7 +449,7 @@ final class GhosttyRuntime {
     do {
       try contents.write(to: url, atomically: true, encoding: .utf8)
     } catch {
-      ghosttyLogger.warning("Failed to write CJK font fallback file: \(error.localizedDescription)")
+      ghosttyLogger.warning("Failed to write CJK font fallback file", error: error)
       return
     }
     url.path.withCString { path in
@@ -463,7 +463,7 @@ final class GhosttyRuntime {
     do {
       try terminalProgramOverrides(version: appVersion).write(to: url, atomically: true, encoding: .utf8)
     } catch {
-      ghosttyLogger.warning("Failed to write TERM_PROGRAM override file: \(error.localizedDescription)")
+      ghosttyLogger.warning("Failed to write TERM_PROGRAM override file", error: error)
       return
     }
     url.path.withCString { path in

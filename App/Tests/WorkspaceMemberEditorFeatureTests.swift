@@ -45,19 +45,20 @@ struct WorkspaceMemberEditorFeatureTests {
   }
 
   @Test func baseRefLoadFailureIsShownButKeepsTheDraft() async {
+    let error = GitClientError.commandFailed(command: "git for-each-ref", message: "private member diagnostic")
     let store = TestStore(initialState: .add(openedCandidates: [candidate])) {
       WorkspaceMemberEditorFeature()
     } withDependencies: {
       $0.gitClient.repoRoot = { url in url }
       $0.gitClient.automaticWorktreeBaseRef = { _ in nil }
-      $0.gitClient.branchRefOptions = { _ in throw GitClientError.notRepository }
+      $0.gitClient.branchRefOptions = { _ in throw error }
     }
     store.exhaustivity = .off
 
     await store.send(.openedCandidateChosen("/tmp/source/app"))
     await store.receive(\.baseRefsLoaded) {
       $0.isLoadingBaseRefs = false
-      $0.validationMessage = "Could not read branches for App: \(GitClientError.notRepository.localizedDescription)"
+      $0.validationMessage = "Could not read branches for App: \(error.localizedDescription)"
     }
     #expect(store.state.draft?.baseRefOptions == [])
   }

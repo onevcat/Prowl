@@ -49,6 +49,48 @@ nonisolated struct ProwlLogger: Sendable {
     #endif
   }
 
+  /// Logs `message` followed by `name=value`. The unified log shows `value` only as a hash.
+  /// The hash is the same for the same value in one app process, so log lines can be
+  /// grouped by a private value, such as a path, without showing it.
+  func warning(_ message: String, hashedField name: StaticString, value: String) {
+    #if DEBUG
+      print("[\(category)] \(message) \(name)=\(value)")
+    #else
+      logger.warning("\(message, privacy: .public) \(name)=\(value, privacy: .private(mask: .hash))")
+    #endif
+  }
+
+  /// Logs `message` followed by `error`. An error description can contain command output,
+  /// paths, or credentials, so the unified log shows it only as private data. The error
+  /// domain and code stay public: they identify the error type and case, not its data.
+  func warning(_ message: String, error: any Error) {
+    let detail = String(describing: error)
+    let identity = Self.errorIdentity(error)
+    #if DEBUG
+      print("[\(category)] \(message): \(detail) \(identity)")
+    #else
+      logger.warning(
+        "\(message, privacy: .public): \(detail, privacy: .private) \(identity, privacy: .public)")
+    #endif
+  }
+
+  /// Logs `message` followed by `detail`, which the unified log shows only as private data.
+  /// Use it for text that came from an error, such as an error description kept as a string.
+  func warning(_ message: String, privateDetail detail: String) {
+    #if DEBUG
+      print("[\(category)] \(message): \(detail)")
+    #else
+      logger.warning("\(message, privacy: .public): \(detail, privacy: .private)")
+    #endif
+  }
+
+  /// The public identity of `error`: the domain and code of its `NSError` bridge. For a
+  /// Swift error, the domain is the type name and the code identifies the case.
+  static func errorIdentity(_ error: any Error) -> String {
+    let error = error as NSError
+    return "error_domain=\(error.domain) error_code=\(error.code)"
+  }
+
   /// Emits to the unified log (`log stream`, Console, `make log-stream`) in
   /// every build configuration. Unlike `debug`/`info`, which `print` in DEBUG
   /// so they surface in the Xcode console, `notice` is for opt-in diagnostics

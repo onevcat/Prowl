@@ -40,7 +40,10 @@ struct GitClient {
       _ = try await git.run(["rev-parse", "--git-dir"], in: normalizedPath, shell: shell)
     } catch {
       if isConfirmedNonRepository(error, at: normalizedPath) { throw GitClientError.notRepository }
-      throw wrapShellError(error, operation: .repoRoot, command: "git rev-parse --git-dir")
+      throw wrapShellError(
+        error, operation: .repoRoot,
+        command: "\(git.url.path(percentEncoded: false)) rev-parse --git-dir",
+        directory: normalizedPath.path(percentEncoded: false))
     }
     let wtURL = try wtScriptURL()
     let output = try await runBundledWtProcess(
@@ -211,22 +214,11 @@ struct GitClient {
 
   nonisolated func defaultRemoteBranchRef(for repoRoot: URL) async throws -> String? {
     let path = repoRoot.path(percentEncoded: false)
-    do {
-      let output = try await runGit(
-        operation: .defaultRemoteBranchRef,
-        arguments: ["-C", path, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"]
-      )
-      let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-      if let resolved = normalizeRemoteRef(trimmed),
-        await refExists(resolved, repoRoot: repoRoot)
-      {
-        return resolved
-      }
-    } catch {
-      let rootPath = repoRoot.path(percentEncoded: false)
-      gitLogger.warning(
-        "Default remote branch ref failed for \(rootPath): \(error.localizedDescription)"
-      )
+    if let output = try? await runGit(
+      operation: .defaultRemoteBranchRef,
+      arguments: ["-C", path, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"]
+    ), let resolved = normalizeRemoteRef(output), await refExists(resolved, repoRoot: repoRoot) {
+      return resolved
     }
     let fallback = "origin/main"
     if await refExists(fallback, repoRoot: repoRoot) {
@@ -368,7 +360,9 @@ struct GitClient {
               continuation.finish(throwing: gitError)
             } else {
               continuation.finish(
-                throwing: wrapShellError(error, operation: .worktreeCreate, command: command)
+                throwing: wrapShellError(
+                  error, operation: .worktreeCreate, command: command,
+                  directory: repositoryRootURL.path(percentEncoded: false))
               )
             }
           }
@@ -1329,7 +1323,8 @@ struct GitClient {
       // A remote host that cannot be reached is not a git failure (docs-ai 084 B3b).
       throw error
     } catch {
-      throw wrapShellError(error, operation: operation, command: command)
+      throw wrapShellError(
+        error, operation: operation, command: command, directory: gitWorkingDirectory(arguments))
     }
   }
 
@@ -1363,7 +1358,9 @@ struct GitClient {
         currentDirectoryURL
       ).stdout
     } catch {
-      throw wrapShellError(error, operation: operation, command: command)
+      throw wrapShellError(
+        error, operation: operation, command: command,
+        directory: currentDirectoryURL?.path(percentEncoded: false))
     }
   }
 

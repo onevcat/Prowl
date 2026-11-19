@@ -165,7 +165,7 @@ nonisolated enum RemoteGitShell {
       guard result.exitCode == 0 else {
         throw ShellClientError(
           command: ([command.executable] + command.arguments).joined(separator: " "),
-          stdout: stdout(of: result), stderr: result.errorOutput, exitCode: result.exitCode)
+          stdout: stdout(of: result), stderr: result.errorOutput, exitCode: result.exitCode, isRemote: true)
       }
       return result
     }

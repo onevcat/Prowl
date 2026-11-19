@@ -132,8 +132,6 @@ extension RepositoriesFeature {
                 "Skipped deleting protected branch \(branchName) in \(sourceLocation)")
             }
           } catch {
-            workspaceEditingLog.warning(
-              "Could not delete branch \(branchName) in \(sourceLocation): \(error.localizedDescription)")
             cleanupFailures.append(
               ProjectWorkspaceCleanupFailure(
                 entryID: removal.entry.id,
@@ -145,7 +143,7 @@ extension RepositoriesFeature {
         }
         await send(.workspaceEditing(.workspaceSaved(repositoryID, cleanupFailures: cleanupFailures)))
       } catch {
-        workspaceEditingLog.warning("Workspace save failed: \(error.localizedDescription)")
+        workspaceEditingLog.warning("Workspace save failed", error: error)
         await send(.workspaceEditing(.workspaceSaveFailed(error.localizedDescription)))
       }
     }

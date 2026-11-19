@@ -85,7 +85,7 @@ extension GhosttyRuntime {
         try appKeybindOverrideContents.write(to: url, atomically: true, encoding: .utf8)
         overrideURLs.append(url)
       } catch {
-        ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
+        ghosttyLogger.warning("Failed to write ghostty keybind override file", error: error)
         return
       }
     }
@@ -97,7 +97,7 @@ extension GhosttyRuntime {
         try themeFallbackOverrideContents.write(to: url, atomically: true, encoding: .utf8)
         overrideURLs.append(url)
       } catch {
-        ghosttyLogger.warning("Failed to write ghostty theme override file: \(error.localizedDescription)")
+        ghosttyLogger.warning("Failed to write ghostty theme override file", error: error)
         return
       }
     }
@@ -227,7 +227,7 @@ extension GhosttyRuntime {
     } catch {
       let command = arguments.joined(separator: " ")
       ghosttyLogger.warning(
-        "Failed to run ghostty command \(command): \(error.localizedDescription)"
+        "Failed to run ghostty command \(command)", error: error
       )
       return nil
     }

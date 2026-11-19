@@ -43,7 +43,7 @@ nonisolated struct SidebarLayoutKey: SharedKey {
         let backupURL = url.appendingPathExtension("unreadable")
         try? storage.save(data, backupURL)
         sidebarLayoutLogger.warning(
-          "Cannot read \(url.lastPathComponent); kept a copy at \(backupURL.lastPathComponent): \(error)")
+          "Cannot read \(url.lastPathComponent); kept a copy at \(backupURL.lastPathComponent)", error: error)
       }
     }
     @Shared(.appStorage("repositoryOrderIDs")) var legacyOrder: [Repository.ID] = []

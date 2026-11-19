@@ -54,7 +54,16 @@ plain folder. The sidebar shows **Git is unavailable** or **Unable to read
 repository**. Click the warning icon for guidance and **Copy Details**. After
 fixing Git, permissions, or repository configuration, click **Retry** or use
 **Refresh Worktrees** (`⌘⇧R`). Failed loads use the error row rather than retaining
-an old worktree list. Existing terminal sessions for failed projects stay running.
+an old worktree list. When macOS denies Git access to a local folder (`Operation not
+permitted`), the details start with **macOS denied access to this folder**: check
+Prowl under **Files and Folders** or **Full Disk Access** in System Settings >
+Privacy & Security. For remote folders, the details show the error from the SSH
+host. Each failed Git command writes its operation, exit code, failure kind, and
+a hash of its folder to the unified log (category `Git`). In one app session, lines
+with the same hash came from the same folder; the log does not show the path. Use
+**Copy Details** for the folder and command output.
+Commands that a newer refresh cancels are not logged as failures. Existing
+terminal sessions for failed projects stay running.
 Removing a failed project from Prowl closes its retained terminals; other projects'
 terminals stay open. Background refreshes do not repeatedly open error dialogs.
 

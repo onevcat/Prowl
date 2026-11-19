@@ -34,7 +34,7 @@ final class LiveWorkflowActivationBridge: WorkflowActivationBridge {
     do {
       _ = try terminalManager.abandonAgentDispatch(dispatchID: dispatchID, reason: reason)
     } catch {
-      appLogger.warning("[Workflow] Could not abandon activation \(dispatchID): \(error)")
+      appLogger.warning("[Workflow] Could not abandon activation \(dispatchID)", error: error)
     }
   }
 
@@ -49,7 +49,7 @@ final class LiveWorkflowActivationBridge: WorkflowActivationBridge {
       _ = try terminalManager.completeAgentDispatch(
         dispatchID: dispatchID, outcome: .succeeded, summary: summary, callerSurfaceID: surfaceID)
     } catch {
-      appLogger.warning("[Workflow] Could not complete activation \(dispatchID): \(error)")
+      appLogger.warning("[Workflow] Could not complete activation \(dispatchID)", error: error)
     }
   }
 
