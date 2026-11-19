@@ -79,6 +79,8 @@ PI_FAMILY_HARNESS = textwrap.dedent(
       };
       await handler(step.payload ?? { type: step.event }, ctx);
     }
+    // Oh My Pi's print mode exits as soon as the last handler's promise settles.
+    if (process.env.PROWL_TEST_EXIT_AFTER_STEPS) process.exit(0);
     await quiesce();
     """
 )
@@ -133,7 +135,7 @@ class AgentHookExtensionTests(unittest.TestCase):
             target.mkdir(parents=True)
             shutil.copy(HOOKS / runtime / "prowl-hooks.ts", target / "prowl-hooks.ts")
 
-    def run_harness(self, harness, extension, steps, token="token-1"):
+    def run_harness(self, harness, extension, steps, token="token-1", exit_after_steps=False):
         harness_path = self.tmp / "harness.mjs"
         harness_path.write_text(harness)
         script_path = self.tmp / "steps.json"
@@ -143,6 +145,9 @@ class AgentHookExtensionTests(unittest.TestCase):
         env.pop("PROWL_AGENT_HOOK_TOKEN", None)
         if token is not None:
             env["PROWL_AGENT_HOOK_TOKEN"] = token
+        env.pop("PROWL_TEST_EXIT_AFTER_STEPS", None)
+        if exit_after_steps:
+            env["PROWL_TEST_EXIT_AFTER_STEPS"] = "1"
         completed = subprocess.run(
             [NODE, "--experimental-strip-types", "--no-warnings", str(harness_path), str(extension), str(script_path)],
             env=env,
@@ -158,8 +163,9 @@ class AgentHookExtensionTests(unittest.TestCase):
             forwarded.append((argv.split(" "), json.loads(payload)))
         return forwarded
 
-    def pi_family(self, runtime, steps, token="token-1"):
-        return self.run_harness(PI_FAMILY_HARNESS, self.tmp / "agent-hooks" / runtime / "prowl-hooks.ts", steps, token)
+    def pi_family(self, runtime, steps, token="token-1", exit_after_steps=False):
+        extension = self.tmp / "agent-hooks" / runtime / "prowl-hooks.ts"
+        return self.run_harness(PI_FAMILY_HARNESS, extension, steps, token, exit_after_steps)
 
     # Pi
 
@@ -313,6 +319,24 @@ class AgentHookExtensionTests(unittest.TestCase):
         )
         self.assertTrue(all(argv[:3] == ["agents", "_hook", "omp"] for argv, _ in forwarded))
         self.assertFalse(any("secret" in json.dumps(payload) for _, payload in forwarded))
+
+    def test_omp_print_mode_exit_waits_for_the_turn_end_and_shutdown(self):
+        # `omp -p` emits `session_stop` and `session_shutdown` and exits milliseconds later; it
+        # waits only for a promise that a handler returns.
+        forwarded = self.pi_family(
+            "omp",
+            [
+                {"event": "session_start", "hasUI": False, "session": "main-1", "file": self.MAIN_1},
+                {"event": "session_stop", "hasUI": False, "session": "main-1", "file": self.MAIN_1},
+                {"event": "agent_end", "hasUI": False, "session": "main-1", "file": self.MAIN_1},
+                {"event": "session_shutdown", "hasUI": False, "session": "main-1", "file": self.MAIN_1},
+            ],
+            exit_after_steps=True,
+        )
+        self.assertEqual(
+            [payload["hook_event_name"] for _, payload in forwarded],
+            ["session_start", "session_stop", "session_shutdown"],
+        )
 
     # OpenCode
 
