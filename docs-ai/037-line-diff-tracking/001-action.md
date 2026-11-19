@@ -9,6 +9,7 @@
 | 2026-05-30 | Per-repository "Observe line diffs automatically" and "Fetch pull request state" toggles (default on, no schema bump); reducer-level gating at the work sites | PR #377 |
 | 2026-06-22 | Adaptive per-repo debounce tiers from git index entry count (1–2 s small / 2–5 s medium / 5–15 s large); untracked file lines folded into the `+N` count | PR #491, [002](002-adaptive-debounce-and-untracked-lines.md) |
 | 2026-06-25 | Fix badge not refreshing for up to 5 min after commit (`deferredLineChangeIDs` gate swallowed HEAD watcher events); deterministic HEAD watcher test seam | PR #508, #511, [003](003-deferred-refresh-after-commit.md) |
+| 2026-11-19 | Refresh cached local repository tiers on app foreground, off the main actor; retain the last known tier if the index cannot be read | #561, PR #1125 |
 
 ## Outcome & current state (as of 2026-07-12)
 
@@ -64,15 +65,12 @@ Verified against the working tree:
   values match the plan exactly.
 - The plan's `indexEntryCount` sketch read the count without validation; the
   implementation additionally checks the `DIRC` signature and index version 2–4.
-- The plan proposed refreshing the per-repo file-count cache "on `setWorktrees` or once
-  per app-foreground cycle"; the implementation populates only from `setWorktrees`
-  (missing roots only) and drops obsolete roots — there is no foreground re-read, so a
-  repo's tier is effectively fixed for the app run once computed.
-
-## Open questions
-
-- `repositoryLineChangesTimings` never re-tiers an existing root (populated only when
-  the root is absent from the cache). A repository whose index grows or shrinks across a
-  tier boundary mid-run keeps its stale tier until the root set changes or the app
-  relaunches. Likely acceptable (tiers span 4x ranges) but diverges from the plan's
-  stated refresh intent.
+- The initial implementation populated only missing roots on `setWorktrees`, so
+  existing roots kept a stale tier after index growth or shrinkage. The #561 fix
+  rereads each current local root once on app-foreground `refreshLineChanges`.
+  The foreground reread runs on a background queue so a slow or mounted volume
+  cannot stall activation; a newer refresh supersedes an earlier one, and results
+  for roots removed during the read are dropped. Ordinary `setWorktrees` calls
+  still reuse cached tiers and drop obsolete roots (the first read of a new root
+  stays synchronous); an unreadable index retains the last known tier, or the
+  default if none was read.
