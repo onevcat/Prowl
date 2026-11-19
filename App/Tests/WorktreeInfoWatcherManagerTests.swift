@@ -887,17 +887,23 @@ struct WorktreeInfoWatcherManagerTests {
     let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
     defer { try? FileManager.default.removeItem(at: tempRepository.tempRoot) }
     let worktree = try #require(tempRepository.worktrees.first)
+    let root = tempRepository.tempRoot.standardizedFileURL
     let fileMonitorStore = TestWorktreeFileEventMonitorStore()
     let headMonitorStore = TestWorktreeHeadEventMonitorStore()
     let count = LockIsolated<Int?>(4_999)
+    let reads = LockIsolated(0)
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .seconds(3_600),
       unfocusedInterval: .seconds(3_600),
       lineChangesSafetyRefreshInterval: .seconds(3_600),
-      lineChangePhaseOffset: { _, _ in .zero },
+      // The foreground refresh must not fire while a test waits for the reread.
+      lineChangePhaseOffset: { _, interval in interval },
       worktreeFileEventMonitorFactory: fileMonitorStore.makeMonitor,
       worktreeHeadEventMonitorFactory: headMonitorStore.makeMonitor,
-      indexEntryCountProvider: { _ in count.value },
+      indexEntryCountProvider: { _ in
+        reads.withValue { $0 += 1 }
+        return count.value
+      },
       clock: clock
     )
     let (collector, task) = startCollecting(manager.eventStream())
@@ -918,7 +924,10 @@ struct WorktreeInfoWatcherManagerTests {
 
     for (entryCount, timing) in refreshes {
       count.withValue { $0 = entryCount }
+      let readsBefore = reads.value
       manager.handleCommand(.refreshLineChanges)
+      await waitUntil { reads.value > readsBefore && manager.repositoryLineChangesTimings[root] == timing }
+      await drainAsyncEvents(120)
       fileMonitor.emit()
       await clock.advance(by: timing.eventDebounce - .milliseconds(1))
       await drainAsyncEvents(120)
@@ -942,7 +951,7 @@ struct WorktreeInfoWatcherManagerTests {
     await task.value
   }
 
-  @Test func refreshLineChangesRereadsOnlyCurrentLocalRoots() throws {
+  @Test func refreshLineChangesRereadsOnlyCurrentLocalRoots() async throws {
     let first = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
     let second = try makeTempRepository(worktreeNames: ["finch"])
     defer {
@@ -969,12 +978,13 @@ struct WorktreeInfoWatcherManagerTests {
     manager.handleCommand(.setWorktrees(worktrees))
     #expect(reads.value.isEmpty)
     manager.handleCommand(.refreshLineChanges)
-    #expect(reads.value.count == 2)
+    await waitUntil { reads.value.count == 2 }
     #expect(Set(reads.value) == roots)
     reads.withValue { $0.removeAll() }
 
     manager.handleCommand(.setWorktrees(second.worktrees + remote.worktrees))
     manager.handleCommand(.refreshLineChanges)
+    await waitUntil { !reads.value.isEmpty }
     #expect(reads.value == [second.tempRoot.standardizedFileURL])
     reads.withValue { $0.removeAll() }
 
@@ -983,6 +993,79 @@ struct WorktreeInfoWatcherManagerTests {
     #expect(reads.value.isEmpty)
     manager.handleCommand(.setWorktrees(first.worktrees))
     #expect(reads.value == [first.tempRoot.standardizedFileURL])
+  }
+
+  @Test func refreshLineChangesReadsIndexOffTheMainThread() async throws {
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
+    defer { try? FileManager.default.removeItem(at: tempRepository.tempRoot) }
+    let root = tempRepository.tempRoot.standardizedFileURL
+    let suspendsRead = LockIsolated(false)
+    let readOnMainThread = LockIsolated<Bool?>(nil)
+    let gate = DispatchSemaphore(value: 0)
+    let manager = WorktreeInfoWatcherManager(
+      indexEntryCountProvider: { _ in
+        guard suspendsRead.value else { return 4_999 }
+        readOnMainThread.setValue(Thread.isMainThread)
+        // Blocking the main thread would hang the test instead of failing it.
+        if !Thread.isMainThread {
+          gate.wait()
+        }
+        return 20_000
+      }, clock: TestClock()
+    )
+    defer { manager.handleCommand(.stop) }
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees(tempRepository.worktrees))
+    #expect(manager.repositoryLineChangesTimings[root] == .small)
+
+    suspendsRead.setValue(true)
+    manager.handleCommand(.refreshLineChanges)
+    #expect(manager.repositoryLineChangesTimings[root] == .small)
+    await waitUntil { readOnMainThread.value != nil }
+    #expect(readOnMainThread.value == false)
+    #expect(manager.repositoryLineChangesTimings[root] == .small)
+
+    gate.signal()
+    await waitUntil { manager.repositoryLineChangesTimings[root] == .large }
+  }
+
+  @Test func refreshLineChangesIgnoresRootsRemovedDuringRead() async throws {
+    let first = try makeTempRepository(worktreeNames: ["sparrow"])
+    let second = try makeTempRepository(worktreeNames: ["finch"])
+    defer {
+      try? FileManager.default.removeItem(at: first.tempRoot)
+      try? FileManager.default.removeItem(at: second.tempRoot)
+    }
+    let firstRoot = first.tempRoot.standardizedFileURL
+    let secondRoot = second.tempRoot.standardizedFileURL
+    let suspendsRead = LockIsolated(false)
+    let suspendedReads = LockIsolated(0)
+    let gate = DispatchSemaphore(value: 0)
+    let manager = WorktreeInfoWatcherManager(
+      indexEntryCountProvider: { _ in
+        guard suspendsRead.value, !Thread.isMainThread else { return 4_999 }
+        suspendedReads.withValue { $0 += 1 }
+        gate.wait()
+        return 20_000
+      }, clock: TestClock()
+    )
+    defer { manager.handleCommand(.stop) }
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees(first.worktrees + second.worktrees))
+    #expect(manager.repositoryLineChangesTimings[firstRoot] == .small)
+    #expect(manager.repositoryLineChangesTimings[secondRoot] == .small)
+
+    suspendsRead.setValue(true)
+    manager.handleCommand(.refreshLineChanges)
+    await waitUntil { suspendedReads.value == 1 }
+    manager.handleCommand(.setWorktrees(second.worktrees))
+    #expect(manager.repositoryLineChangesTimings[firstRoot] == nil)
+
+    gate.signal()
+    await waitUntil { suspendedReads.value == 2 }
+    gate.signal()
+    await waitUntil { manager.repositoryLineChangesTimings[secondRoot] == .large }
+    #expect(manager.repositoryLineChangesTimings[firstRoot] == nil)
   }
 
   @Test func canceledSelectionCooldownDoesNotClearReplacementCooldown() async throws {

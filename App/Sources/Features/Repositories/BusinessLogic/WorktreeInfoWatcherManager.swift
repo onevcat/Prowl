@@ -97,7 +97,8 @@ final class WorktreeInfoWatcherManager {
   private let remoteConfigEventDebounceInterval: Duration
   private let lineChangesSafetyRefreshInterval: Duration
   private let indexEntryCountProvider: IndexEntryCountProvider
-  private var repositoryLineChangesTimings: [URL: LineChangesTiming] = [:]
+  private(set) var repositoryLineChangesTimings: [URL: LineChangesTiming] = [:]
+  private var repositoryTimingRefreshTask: Task<Void, Never>?
   private let pullRequestSelectionRefreshCooldown: Duration
   private let refreshTiming: RefreshTiming
   private let lineChangePhaseOffset: WorktreePhaseOffset
@@ -199,8 +200,7 @@ final class WorktreeInfoWatcherManager {
     case .setSelectedWorktreeID(let worktreeID):
       setSelectedWorktreeID(worktreeID)
     case .refreshLineChanges:
-      let localRoots = Set(worktrees.values.compactMap { $0.repositoryLocation.localURL?.standardizedFileURL })
-      refreshRepositoryTimings(for: localRoots, includingCached: true)
+      rereadRepositoryTimings()
       scheduleLineChangesRefreshForAllWorktrees()
     case .setPullRequestTrackingEnabled(let isEnabled):
       setPullRequestTrackingEnabled(isEnabled)
@@ -458,6 +458,8 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func stopAll() {
+    repositoryTimingRefreshTask?.cancel()
+    repositoryTimingRefreshTask = nil
     for watcher in headWatchers.values {
       watcher.monitor.cancel()
     }
@@ -727,14 +729,64 @@ final class WorktreeInfoWatcherManager {
     return repositoryLineChangesTimings[root] ?? defaultLineChangesTiming
   }
 
-  private func refreshRepositoryTimings(for localRoots: Set<URL>, includingCached: Bool = false) {
+  private func refreshRepositoryTimings(for localRoots: Set<URL>) {
     let obsoleteRoots = repositoryLineChangesTimings.keys.filter { !localRoots.contains($0) }
     for root in obsoleteRoots {
       repositoryLineChangesTimings.removeValue(forKey: root)
     }
-    for root in localRoots where includingCached || repositoryLineChangesTimings[root] == nil {
+    for root in localRoots where repositoryLineChangesTimings[root] == nil {
       if let count = indexEntryCountProvider(root) {
         repositoryLineChangesTimings[root] = LineChangesTiming.tier(forIndexEntryCount: count)
+      }
+    }
+  }
+
+  /// Rereads the index count of every current local root, so a repository that crossed a tier
+  /// boundary gets new delays. The reads run off the main actor: a root on a slow or mounted
+  /// volume must not stall app activation. A newer refresh supersedes an earlier one, a root
+  /// removed during the read is ignored, and a failed read keeps the last known tier.
+  private func rereadRepositoryTimings() {
+    repositoryTimingRefreshTask?.cancel()
+    let roots = localRepositoryRoots()
+    guard !roots.isEmpty else {
+      repositoryTimingRefreshTask = nil
+      return
+    }
+    let provider = indexEntryCountProvider
+    repositoryTimingRefreshTask = Task { [weak self] in
+      let counts = await Self.readIndexEntryCounts(for: roots, using: provider)
+      guard !Task.isCancelled, let self else { return }
+      let currentRoots = self.localRepositoryRoots()
+      for (root, count) in counts where currentRoots.contains(root) {
+        self.repositoryLineChangesTimings[root] = LineChangesTiming.tier(forIndexEntryCount: count)
+      }
+    }
+  }
+
+  private func localRepositoryRoots() -> Set<URL> {
+    Set(worktrees.values.compactMap { $0.repositoryLocation.localURL?.standardizedFileURL })
+  }
+
+  nonisolated private static let indexEntryCountQueue = DispatchQueue(
+    label: "com.onevcat.prowl.worktree-info.index-entry-count",
+    qos: .utility
+  )
+
+  // A dispatch queue, not a detached task: the provider blocks on file I/O, and a blocked
+  // task would hold a cooperative thread.
+  nonisolated private static func readIndexEntryCounts(
+    for roots: Set<URL>,
+    using provider: @escaping IndexEntryCountProvider
+  ) async -> [URL: Int] {
+    await withCheckedContinuation { continuation in
+      indexEntryCountQueue.async {
+        var counts: [URL: Int] = [:]
+        for root in roots {
+          if let count = provider(root) {
+            counts[root] = count
+          }
+        }
+        continuation.resume(returning: counts)
       }
     }
   }
