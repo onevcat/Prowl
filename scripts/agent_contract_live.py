@@ -151,7 +151,8 @@ def runtime_configuration(runtime, route, directory):
                            COPILOT_PROVIDER_BASE_URL=base, COPILOT_PROVIDER_WIRE_API='completions',
                            COPILOT_PROVIDER_MODEL=model, COPILOT_PROVIDER_MAX_OUTPUT_TOKENS='512',
                            COPILOT_OFFLINE='true')
-        arguments = ['--no-custom-instructions', '--no-auto-update', '--no-remote', '--no-ask-user',
+        # Copilot 1.0.114 removed `--no-remote`; remote access is now set in a session with `/remote`.
+        arguments = ['--no-custom-instructions', '--no-auto-update', '--no-ask-user',
                      '--available-tools=', '--disable-builtin-mcps', '--stream', 'off']
     elif runtime == 'droid':
         config = state / 'settings.json'
