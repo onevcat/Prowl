@@ -23625,6 +23625,16 @@
         }
       }
     },
+    "macOS denied access to this folder. In System Settings > Privacy & Security, check that Prowl has access to it under Files and Folders or Full Disk Access, then retry.\nGit command failed: %@\n%@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 拒绝了对此文件夹的访问。请在“系统设置 > 隐私与安全性”中，确认 Prowl 在“文件与文件夹”或“完全磁盘访问权限”下拥有访问权限，然后重试。\nGit 命令失败：%@\n%@"
+          }
+        }
+      }
+    },
     "main branch" : {
       "localizations" : {
         "zh-Hans" : {
