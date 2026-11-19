@@ -76,6 +76,15 @@ steps:
       problems, realistic UX regressions, and architecture problems with concrete impact.
       Focus on P0/P1 and P2 findings with practical impact. Avoid style-only corrections,
       speculative abstractions, and edge cases without a plausible trigger.
+      When you find a problem, name its pattern: the shared cause, not only the symptom.
+      Before you report it, search the whole scope for other instances of that pattern.
+      Report one finding per pattern with all instances you found. State how you searched
+      (for example the search command and folders) and whether the search was complete,
+      so that main can repeat it.
+      Classify the origin of each finding. It is introduced if the change adds or edits
+      the code, or makes existing code reachable or worse. Otherwise it is pre-existing.
+      Report pre-existing findings with brief evidence in a ### Pre-existing subsection of
+      ## Findings. They inform main and do not block verdict clean.
       You share the worktree with main. Do not edit, commit, push, or comment on the PR
       unless main explicitly delegates that work. You may run useful verification tests;
       coordinate expensive tests or shared build resources with main through your report.
@@ -85,9 +94,9 @@ steps:
       is blocked or incomplete; report the limitation with verdict issues.
       Deliver ## Findings and ## Verification. In ## Verification, list the files or areas
       you inspected and those you did not, so later rounds can cover the gaps.
-      Use verdict clean only when no material
-      findings remain, otherwise issues. Complete only this assigned round, then wait
-      for the workflow's next task. Do not dispatch messages or start another review loop.
+      Use verdict clean only when no material introduced findings remain, otherwise issues.
+      Complete only this assigned round, then wait for the workflow's next task.
+      Do not dispatch messages or start another review loop.
       This is round 1 of at most {{ inputs.max_rounds }}; minimum {{ inputs.min_rounds }}.
       Additional focus: {{ inputs.focus }}
     expect:
@@ -108,10 +117,23 @@ steps:
         prompt: |
           Review Loop round {{ state.round }} of {{ inputs.max_rounds }}.
           Read the review: {{ state.findings }} (reviewer verdict: {{ state.verdict }}).
-          Verify every finding against the agreed plan and actual code. Fix real, worthwhile
-          problems; for logic changes, first add a regression test and observe failure,
-          then fix and run the relevant checks. For UI or other hard-to-test behavior,
-          use practical verification and state what remains unverified.
+          Verify every finding against the agreed plan, the actual code, and the earlier
+          rounds of this loop (earlier findings and your earlier dispositions). For each
+          finding, decide to accept, reject, or defer it, and choose the fix direction.
+          For a pattern finding, fix the pattern, not only the listed instances: repeat the
+          reviewer's search, or a better one, and fix every in-scope instance.
+          Pre-existing findings are not required for this change. Fix one only if the fix is
+          small and inside the task's scope; otherwise defer it as a follow-up for the user.
+          If the reviewer reports a design signal, or the same pattern comes back after a
+          fix, consider a design change before you add another local fix, and record the
+          decision and its reason.
+          If you are not sure about a decision, for example because it changes scope,
+          behavior, or the design, or because the evidence supports both sides, do not
+          decide alone. List it under ### Needs User Decision in ## Disposition with the
+          reviewer's view, your view, and your recommendation, and do not apply it.
+          Fix real, worthwhile problems; for logic changes, first add a regression test and
+          observe failure, then fix and run the relevant checks. For UI or other
+          hard-to-test behavior, use practical verification and state what remains unverified.
           Explain with evidence any finding rejected, deferred, or already addressed.
           Main owns fixes, tests, commits, pushes, and existing PR updates/comments by
           default, subject to the original task's restrictions. Do not create a PR merely
@@ -126,13 +148,16 @@ steps:
           Use verdict changed if any in-scope artifact changed after the review, including
           code, tests, documentation, or configuration. Use follow-up if verification is
           blocked or failed, a new concern needs review, or delegated work is still pending.
+          Use decision only if reviewed artifacts did not change and the only remaining work
+          is the items under ### Needs User Decision.
           Use unchanged only if reviewed artifacts did not change and no further work,
-          verification blockers, or delegation remain. Rejection is not reviewer-confirmed clean.
+          verification blockers, delegation, or user decisions remain.
+          Rejection is not reviewer-confirmed clean.
           Do not make further changes after this delivery; wait for the next workflow task.
         expect:
           delivery: assessment
           sections: ['## Disposition', '## Verification', '## Review State']
-          verdicts: [changed, unchanged, follow-up]
+          verdicts: [changed, unchanged, follow-up, decision]
           strict: true
       - id: retain_assessment
         set:
@@ -144,6 +169,14 @@ steps:
             set:
               outcome: "'clean'"
           - id: stop_clean
+            break: true
+      - id: decision_exit
+        if: state.verdict == 'clean' && deliveries.assessment.verdict == 'decision' && state.round >= inputs.min_rounds
+        then:
+          - id: mark_decision
+            set:
+              outcome: "'needs user decision'"
+          - id: stop_for_decision
             break: true
       - id: maximum_exit
         if: state.round >= inputs.max_rounds
@@ -158,8 +191,8 @@ steps:
           Original scope and plan: {{ deliveries.brief.path }}
           Previous review: {{ state.findings }}
           Main's disposition and verification: {{ state.disposition }}
-          Read all three, then inspect the current changes. This round has two parts of
-          equal weight.
+          Read all three, then inspect the current changes. This round has three parts.
+          Parts 1 and 2 have equal weight.
           Part 1, carried-over findings: verify each fix and reassess rejected findings
           using main's evidence. Do not repeat a resolved finding without new evidence.
           Keep stable IDs for carried-over findings.
@@ -169,16 +202,27 @@ steps:
           material correctness problems, realistic UX regressions, and architecture problems
           with concrete impact. Give new findings new IDs. A round that only re-checks
           earlier findings is incomplete, even when every fix is confirmed.
+          As in round 1, report one finding per pattern after you search the whole scope for
+          all instances, and state how you searched. Put pre-existing findings in
+          ### Pre-existing; they do not block clean. Items that main lists under
+          ### Needs User Decision do not block clean either; report them again only with
+          new evidence.
+          Part 3, recurring patterns: if a new finding has the same pattern as an earlier
+          finding, or code added by a fix has the problem that the fix addressed, report a
+          design signal. Name the earlier IDs, describe the shared cause, and say whether
+          main should change the design (for example, enforce the rule at one boundary)
+          instead of another local fix.
           Avoid trivial style issues and implausible edge cases.
           A prior clean report does not replace this round's independent inspection.
           You may run useful tests. Edit or publish only if main explicitly delegated it
           in the latest disposition; report exactly what you changed and verified.
           If delegated implementation remains unreviewed, report issues and that limitation.
           Do not claim clean when inspection is blocked or incomplete.
-          Deliver ## Findings with subsections ### Carried Over and ### New (write "none"
-          when a subsection is empty), and ## Verification with evidence, actual test
-          results, and the files or areas you inspected and did not inspect.
-          Choose clean only if no material findings remain; otherwise issues.
+          Deliver ## Findings with subsections ### Carried Over, ### New, ### Pre-existing,
+          and ### Design Signal (write "none" when a subsection is empty), and
+          ## Verification with evidence, actual test results, and the files or areas you
+          inspected and did not inspect.
+          Choose clean only if no material introduced findings remain; otherwise issues.
           Finish this round and wait. Do not dispatch messages or start another workflow.
           Additional focus: {{ inputs.focus }}
         expect:
@@ -200,9 +244,14 @@ steps:
       Last main disposition: {{ state.disposition }}
       Deliver a concise ## Summary and ## Remaining Work. Include scope/current HEAD,
       material findings and dispositions, verification, and PR status when applicable.
-      If not clean, explicitly state that the round limit was reached and distinguish
-      unresolved findings, rejected/deferred findings, blocked verification, and final fixes
-      that the reviewer has not reviewed. Never describe those fixes as reviewer-approved.
+      In ## Remaining Work, list first each item that needs a user decision, with the
+      reviewer's view, your view, and your recommendation. Then list deferred pre-existing
+      findings and design signals that were not resolved.
+      If the outcome is needs user decision, state that the loop stopped because only
+      user decisions remain. If the outcome is not clean, explicitly state that the round
+      limit was reached and distinguish unresolved findings, rejected/deferred findings,
+      blocked verification, and final fixes that the reviewer has not reviewed.
+      Never describe those fixes as reviewer-approved.
       Do not modify code, run another review round, or silently extend the limit in this step.
       The reviewer pane remains available; workflow completion alone does not mean clean.
     expect:
