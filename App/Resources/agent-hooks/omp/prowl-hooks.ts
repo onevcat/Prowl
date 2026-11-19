@@ -48,9 +48,14 @@ function parentSessionId(ctx: any): string | undefined {
 // processes and could reach Prowl out of order, where a late session start clears the terminal
 // evidence a wait relies on. The queue lives on `globalThis` because the runtime loads a fresh
 // module instance on `/reload` and for every sub-agent session (measured), and those instances
-// must share one order. The runtime callback never waits on the queue, and a bridge that hangs
-// is killed after a bound so later events keep flowing.
+// must share one order. A bridge that hangs is killed after a bound so later events keep flowing.
+//
+// Only the main session's `session_shutdown` waits on the queue. Oh My Pi waits for a promise
+// that a handler returns, and its print mode (`omp -p`) exits milliseconds after the shutdown;
+// without the wait, the `session_stop` and the shutdown queued just before are lost. A turn end
+// never waits, so the TUI does not stall on the bridge.
 const DELIVERY_TIMEOUT_MS = 5000;
+const EXIT_DRAIN_TIMEOUT_MS = 5000;
 const QUEUE_KEY = "__prowlHookDeliveries";
 const shared = globalThis as unknown as Record<string, Promise<void> | undefined>;
 
@@ -91,19 +96,31 @@ function enqueue(name: string, payload: Record<string, unknown>): void {
   shared[QUEUE_KEY] = previous.then(() => deliver(name, payload)).catch(() => {});
 }
 
-function relay(name: string, event: any, ctx: any): void {
+function drain(): Promise<void> {
+  const pending = shared[QUEUE_KEY] ?? Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, EXIT_DRAIN_TIMEOUT_MS);
+    pending.then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// Returns whether the event was queued for delivery.
+function relay(name: string, event: any, ctx: any): boolean {
   try {
-    if (!process.env[TOKEN_VARIABLE]) return;
+    if (!process.env[TOKEN_VARIABLE]) return false;
     // `/reload` swaps the extension instances: the old one reports `session_shutdown` and the
     // new one `session_start`, both with reason "reload" and the same session id. The session
     // neither ends nor changes, so neither is forwarded — a late shutdown would otherwise read
     // as the live session ending.
-    if (event?.reason === "reload") return;
+    if (event?.reason === "reload") return false;
     let sessionId = ctx?.sessionManager?.getSessionId?.();
-    if (typeof sessionId !== "string" || sessionId.length === 0) return;
+    if (typeof sessionId !== "string" || sessionId.length === 0) return false;
     const parent = parentSessionId(ctx);
     if (parent !== undefined) {
-      if (name !== "tool_approval_requested") return;
+      if (name !== "tool_approval_requested") return false;
       sessionId = parent;
     }
     const reason = typeof event?.reason === "string" ? event.reason : event?.toolName;
@@ -114,8 +131,10 @@ function relay(name: string, event: any, ctx: any): void {
       reason: typeof reason === "string" ? reason : undefined,
     };
     enqueue(name, payload);
+    return true;
   } catch {
     // fail-open: the runtime must never notice a hook problem
+    return false;
   }
 }
 
@@ -123,7 +142,8 @@ export default function (pi: any): void {
   for (const name of FORWARDED_EVENTS) {
     try {
       pi.on(name, (event: any, ctx: any) => {
-        relay(name, event, ctx);
+        const queued = relay(name, event, ctx);
+        if (queued && name === "session_shutdown") return drain();
       });
     } catch {
       // an unknown event name on a newer Oh My Pi is not an error worth surfacing
