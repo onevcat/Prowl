@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.11.20](https://github.com/onevcat/Prowl/releases/tag/v2026.11.20)
+
+### New
+
+- Review Loop groups findings with the same cause and flags patterns that recur across rounds. Pre-existing issues no longer block a clean review, and when only your decisions remain, the loop stops and lists them first in the summary.
+
+### Fixed
+
+- Fixed a freeze that could occur when switching away from Prowl.
+- Press ⌘F again in a terminal to select the current Find query and type a replacement. Find also preserves text you’re composing with an input method.
+- Antigravity CLI sessions started with Homebrew’s `agy` now appear in Active Agents and `prowl agents`.
+- Prowl now detects when an OMP 19 session ends, both after `omp -p` finishes and when you type `/exit`.
+- When you return to Prowl, line-diff updates now adapt to changes in the size of local repositories without requiring a restart.
+- Release logs now keep error descriptions private, including any command output or credentials those descriptions contain.
+- When macOS denies Prowl access to a folder, the Git error now explains how to grant access in System Settings > Privacy & Security.
+
 ## [2026.11.16](https://github.com/onevcat/Prowl/releases/tag/v2026.11.16)
 
 This release is about speed: switching projects and worktrees is more than twice as fast on macOS 26 and over 20% faster on macOS 27, and Shelf book switching is much smoother. It also adds more control over how agents and sidebar details appear.
