@@ -583,6 +583,26 @@ extension RepositoriesFeature.State {
   }
 
   func worktreeRowSections(in repository: Repository) -> WorktreeRowSections {
+    worktreeRowSections(in: repository, keepingUnfolded: selectedWorktreeIDsKeptUnfolded)
+  }
+
+  /// The selected worktrees, which never fold: the sidebar multi-selection and the
+  /// selected worktree.
+  var selectedWorktreeIDsKeptUnfolded: Set<Worktree.ID> {
+    var worktreeIDs = sidebarSelectedWorktreeIDs
+    if let selectedWorktreeID {
+      worktreeIDs.insert(selectedWorktreeID)
+    }
+    return worktreeIDs
+  }
+
+  /// Splits the repository's rows with `keptWorktreeIDs` standing in for the selection.
+  /// A view passes the selected worktrees its parent resolved, so that its body reads no
+  /// selection state (docs-ai 093).
+  func worktreeRowSections(
+    in repository: Repository,
+    keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>
+  ) -> WorktreeRowSections {
     let mainWorktree = repository.worktrees.first(where: { isMainWorktree($0) })
     let pinnedWorktrees = orderedPinnedWorktrees(in: repository)
     let unpinnedWorktrees = orderedUnpinnedWorktrees(in: repository)
@@ -622,7 +642,7 @@ extension RepositoriesFeature.State {
         isPinned: false,
         isMainWorktree: false
       )
-      if isWorktreeFolded(worktree.id) {
+      if isWorktreeFolded(worktree.id, keepingUnfolded: keptWorktreeIDs) {
         inactiveRows.append(row)
       } else {
         unpinnedRows.append(row)
@@ -638,18 +658,16 @@ extension RepositoriesFeature.State {
   }
 
   /// A worktree folds into its repository's Inactive group when it has no open
-  /// tab. The selected worktrees stay out of the group:
+  /// tab. The selected worktrees (`keptWorktreeIDs`) stay out of the group:
   /// closing the last tab of the selected worktree leaves it tabless
   /// (`ensureInitialTab` runs only when the tabs view mounts), and a row must
   /// not fold away under the cursor. A worktree selected from the expanded
   /// group stays in it (`retainedInactiveWorktreeIDs`). Callers pass unpinned,
   /// non-main rows only, which keeps main, pinned, and pending worktrees out
   /// of the group.
-  func isWorktreeFolded(_ worktreeID: Worktree.ID) -> Bool {
+  func isWorktreeFolded(_ worktreeID: Worktree.ID, keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>) -> Bool {
     if retainedInactiveWorktreeIDs.contains(worktreeID) { return true }
-    return !openedWorktreeIDs.contains(worktreeID)
-      && selectedWorktreeID != worktreeID
-      && !sidebarSelectedWorktreeIDs.contains(worktreeID)
+    return !openedWorktreeIDs.contains(worktreeID) && !keptWorktreeIDs.contains(worktreeID)
   }
 
   /// Whether the row for `worktreeID` is in an Inactive group that is expanded now.
@@ -700,6 +718,10 @@ extension RepositoriesFeature.State {
 
   func orderedWorktreeRows() -> [WorktreeRowModel] {
     orderedWorktreeRows(includingRepositoryIDs: Set(repositories.map(\.id)))
+  }
+
+  func navigableWorktreeRows() -> [WorktreeRowModel] {
+    navigableWorktreeRows(includingRepositoryIDs: Set(repositories.map(\.id)))
   }
 
   /// Rows that keyboard navigation and the numbered shortcuts walk: every row

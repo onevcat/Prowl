@@ -13,7 +13,7 @@ import Testing
 struct FoldInactiveWorktreesTests {
   // MARK: - Section split
 
-  @Test func worktreesWithoutAnOpenTabFoldWithNoSettingInvolved() {
+  @Test func everyUnpinnedWorktreeFoldsWhenNoneHasATab() {
     let fixture = makeFixture()
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
@@ -58,6 +58,36 @@ struct FoldInactiveWorktreesTests {
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
     #expect(sections.inactive.map(\.id) == [fixture.bravo.id])
+  }
+
+  @Test func viewSplitWithTheParentsSelectionMatchesTheStateSplit() {
+    var fixture = makeFixture()
+    fixture.state.openedWorktreeIDs = [fixture.alpha.id]
+    fixture.state.selection = .worktree(fixture.bravo.id)
+    fixture.state.sidebarSelectedWorktreeIDs = [fixture.bravo.id, fixture.charlie.id]
+    // The rows view passes the selected worktrees `SidebarListView` resolved for its repository.
+    let parentSelection = SidebarListView.selectedWorktreeIDs(in: fixture.state)
+      .filter { fixture.repository.worktrees[id: $0] != nil }
+
+    let stateSections = fixture.state.worktreeRowSections(in: fixture.repository)
+    let viewSections = fixture.state.worktreeRowSections(
+      in: fixture.repository,
+      keepingUnfolded: parentSelection
+    )
+
+    #expect(viewSections == stateSections)
+    #expect(viewSections.unpinned.map(\.id) == [fixture.alpha.id, fixture.bravo.id, fixture.charlie.id])
+    #expect(viewSections.inactive.isEmpty)
+  }
+
+  @Test func viewSplitFoldsWhatTheParentDidNotSelect() {
+    var fixture = makeFixture()
+    fixture.state.selection = .worktree(fixture.bravo.id)
+
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository, keepingUnfolded: [])
+
+    #expect(sections.unpinned.isEmpty)
+    #expect(sections.inactive.map(\.id) == [fixture.alpha.id, fixture.bravo.id, fixture.charlie.id])
   }
 
   @Test func inactiveRowsKeepTheStoredUnpinnedOrder() {

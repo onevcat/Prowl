@@ -33,7 +33,7 @@ struct WorktreeRowsView: View {
 
   private var expandedRowsView: some View {
     let state = store.state
-    let sections = state.worktreeRowSections(in: repository)
+    let sections = state.worktreeRowSections(in: repository, keepingUnfolded: selectedWorktreeIDs)
     let isRepositoryRemoving = state.isRemovingRepository(repository)
     let isSidebarDragActive = state.isSidebarDragActive
     let shortcutHintTextByID = Dictionary(

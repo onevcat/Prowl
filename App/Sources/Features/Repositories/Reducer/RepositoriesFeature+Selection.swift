@@ -151,21 +151,14 @@ func setSingleWorktreeSelection(
 }
 
 /// Selecting a row of an expanded Inactive group keeps that row in the group, so
-/// walking the group does not reorder it. Selecting a row outside the group
-/// releases the rows kept so far. Call before the selection changes.
+/// walking the group does not reorder it. The reducer releases the kept rows when
+/// the selection lands elsewhere. Call before the selection changes.
 private func updateRetainedInactiveWorktrees(
   selecting worktreeID: Worktree.ID?,
   state: inout RepositoriesFeature.State
 ) {
-  guard let worktreeID else {
-    state.retainedInactiveWorktreeIDs = []
-    return
-  }
-  if state.isInExpandedInactiveGroup(worktreeID) {
-    state.retainedInactiveWorktreeIDs.insert(worktreeID)
-  } else if !state.retainedInactiveWorktreeIDs.contains(worktreeID) {
-    state.retainedInactiveWorktreeIDs = []
-  }
+  guard let worktreeID, state.isInExpandedInactiveGroup(worktreeID) else { return }
+  state.retainedInactiveWorktreeIDs.insert(worktreeID)
 }
 
 /// Picking a terminal target from the sidebar while the archived list is showing
