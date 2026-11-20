@@ -205,9 +205,15 @@ in Prowl. Prowl gathers the ones with no open tab into one row.
   collapsed group hides it with the rest of the repository's rows.
 - Folded rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
   collapsed repository. They count again while the group is expanded, and a row
-  you select from the expanded group keeps its place there, so the shortcuts walk
-  the group in order. The rows you opened leave the group when you select a row
-  outside it or fold it. The command palette lists every worktree either way.
+  you select from the expanded group, by click or `⌘`-click, keeps its place
+  there, so the shortcuts walk the group in order. Selecting a worktree opens a
+  tab in it, so each row the walk passes becomes active. The rows you opened
+  leave the group when you select a row outside it or fold it. The command
+  palette lists every worktree either way.
+- Archiving or deleting the selected worktree selects the next row on screen,
+  never a folded one.
+- At launch, while Prowl restores the terminal layout, nothing folds. Rows whose
+  tabs did not come back fold once the restore finishes.
 - Dragging stays inside a group. Both groups share the repository's one stored
   order.
 

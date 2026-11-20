@@ -32,6 +32,21 @@
   selection is not one of the kept rows (another worktree, a plain folder, a workspace
   child, Canvas, the archived list), and `toggleInactiveWorktreesExpanded` releases the
   repository's rows.
+- `nextWorktreeID(afterRemoving:)` picks the neighbor among the navigable rows, so
+  archiving or deleting the selected worktree never selects a folded row; the stored
+  order decides only when the removed worktree is not among them.
+- Every reducer write to `openedWorktreeIDs` goes through `addOpenedWorktreeID` and
+  `removeOpenedWorktreeID`, which write only when the set changes. `@ObservableState`
+  notifies on every write to a `Set`, and `WorktreeRowsView` reads the set, so a
+  no-op insert on each `.selectWorktree` would re-evaluate every expanded
+  repository's rows.
+- `isLaunchLayoutRestorePending`, mirrored from `AppFeature.isRestoringLaunchLayout`
+  at `appLaunched` and cleared in `finishLaunchLayoutRestore`, holds folding off
+  while the launch layout restore re-creates tabs, so the sidebar does not show every
+  row folded and then expand as `tabCreated` events arrive.
+- `retainInactiveWorktree` keeps one repository's rows at a time. A `⌘`-click on a
+  row of an expanded group keeps it there too, and the release reducer keeps the rows
+  while the selection or a row of the multi-selection is one of them.
 - With repository groups (086), the Inactive row stays per repository inside the
   group that holds it. Hotkey rows and offset navigation read `navigableWorktreeRows`
   over 086's visible repositories, so collapsed groups and folded rows both drop out.
@@ -51,7 +66,9 @@
 ## Verification
 
 - `FoldInactiveWorktreesTests`: the section split, the view-side split matching the
-  state-side one, each
+  state-side one, the next selection after removing the selected worktree, no
+  observer notification on reopening an open worktree, no folding during the launch
+  restore, `⌘`-click and cross-repository kept rows, each
   always-active exception, plain and remote folders producing no rows, a worktree
   moving between groups on its first tab and its last tab closing, ⌘⌃↑/↓ and offset
   navigation skipping folded rows and including them when expanded, palette rows
