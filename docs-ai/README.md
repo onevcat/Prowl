@@ -95,7 +95,7 @@ keep the old paths. Use this table to find a file that an old entry names:
 | 011 | [canvas-multiselect-broadcast](011-canvas-multiselect-broadcast/000-plan.md) | 2026-03-25 | Multi-select cards, broadcast input |
 | 012 | [keybinding-system](012-keybinding-system/000-plan.md) | 2026-03-27 | Config-driven keybindings M1–M3, recorder UI, Ghostty key ownership |
 | 013 | [prowl-cli](013-prowl-cli/000-plan.md) | 2026-03-30 | Contract-first `prowl` CLI: socket service, v1 commands, hardening, agents |
-| 014 | [terminal-layout-persistence](014-terminal-layout-persistence/000-plan.md) | 2026-03-31 | Layout snapshot save/restore; font-size persistence; launch races |
+| 014 | [terminal-layout-persistence](014-terminal-layout-persistence/000-plan.md) | 2026-03-31 | Layout snapshot save/restore; font-size persistence; launch races; provisional restore from the cached list |
 | 015 | [repositories-feature-refactor](015-repositories-feature-refactor/000-plan.md) | 2026-04-03 | TCA decomposition of RepositoriesFeature and later code-health splits |
 | 016 | [dev-build-and-ci-workflow](016-dev-build-and-ci-workflow/000-plan.md) | 2026-04-04 | Build/test tooling, CI parallelism, Debug identity, incremental caching, Shared module boundary, CAS fallback and cache save scope, test hang watchdog, stable incremental state in CI, test shards, lighter build job |
 | 017 | [upstream-sync-process](017-upstream-sync-process/000-plan.md) | 2026-04-08 | Upstream review discipline, baselines, batch decisions (retired 2026-10-18) |

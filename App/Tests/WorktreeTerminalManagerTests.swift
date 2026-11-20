@@ -1005,6 +1005,114 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .layoutRestored(selectedWorktreeID: nil))
   }
 
+  @Test func provisionalRestoreWaitsWhenCachedListLacksASavedWorktree() async throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let listed = makeWorktree(id: directory.path(percentEncoded: false))
+    let created = makeWorktree(id: "/tmp/repo/created-after-cache")
+    let snapshot = TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: created.id,
+      worktrees: [singleTabSnapshot(listed.id), singleTabSnapshot(created.id)]
+    )
+    let loadCount = LockIsolated(0)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: {
+          loadCount.withValue { $0 += 1 }
+          return snapshot
+        },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [listed], isProvisional: true)
+
+    // Restoring now would drop the tabs of the worktree that the cache does not list.
+    #expect(manager.stateIfExists(for: listed.id) == nil)
+
+    await manager.restoreLayoutSnapshot(from: [listed, created])
+
+    let event = await nextEvent(stream) { event in
+      switch event {
+      case .layoutRestored, .layoutRestoreFailed: true
+      default: false
+      }
+    }
+    #expect(event == .layoutRestored(selectedWorktreeID: created.id))
+    #expect(manager.stateIfExists(for: listed.id)?.tabManager.tabs.count == 1)
+    #expect(manager.stateIfExists(for: created.id)?.tabManager.tabs.count == 1)
+    #expect(loadCount.value == 1)
+  }
+
+  @Test func provisionalRestoreWaitsWhenSavedDirectoryIsGone() async {
+    let gone = makeWorktree(id: "/tmp/prowl-missing-\(UUID().uuidString)")
+    let snapshot = TerminalLayoutSnapshotPayload(worktrees: [singleTabSnapshot(gone.id)])
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+
+    await manager.restoreLayoutSnapshot(from: [gone], isProvisional: true)
+
+    #expect(manager.stateIfExists(for: gone.id) == nil)
+  }
+
+  @Test func provisionalRestoreSettlesAndIgnoresTheFinalRequest() async throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let listed = makeWorktree(id: directory.path(percentEncoded: false))
+    let snapshot = TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: listed.id,
+      worktrees: [singleTabSnapshot(listed.id)]
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [listed], isProvisional: true)
+
+    let event = await nextEvent(stream) { event in
+      switch event {
+      case .layoutRestored, .layoutRestoreFailed: true
+      default: false
+      }
+    }
+    #expect(event == .layoutRestored(selectedWorktreeID: listed.id))
+    let restored = try #require(manager.stateIfExists(for: listed.id))
+    let tabIDs = restored.tabManager.tabs.map(\.id)
+    #expect(tabIDs.count == 1)
+
+    // The live load asks again; the restored layout must stay as it is.
+    await manager.restoreLayoutSnapshot(from: [listed])
+
+    #expect(manager.stateIfExists(for: listed.id) === restored)
+    #expect(restored.tabManager.tabs.map(\.id) == tabIDs)
+  }
+
+  @Test func firstUnrestorableWorktreeIDAcceptsListedExistingDirectories() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let listed = makeWorktree(id: directory.path(percentEncoded: false))
+    let payload = TerminalLayoutSnapshotPayload(worktrees: [singleTabSnapshot(listed.id)])
+
+    #expect(WorktreeTerminalManager.firstUnrestorableWorktreeID(in: payload, availableWorktrees: [listed]) == nil)
+    #expect(
+      WorktreeTerminalManager.firstUnrestorableWorktreeID(in: payload, availableWorktrees: []) == listed.id)
+  }
+
   @Test func persistLayoutSnapshotWithoutTabsClearsSnapshot() async {
     let clearCount = LockIsolated(0)
     let saveCount = LockIsolated(0)
@@ -1312,6 +1420,29 @@ struct WorktreeTerminalManagerTests {
     await manager.persistLayoutSnapshot()
 
     #expect(saved.value?.worktrees.map(\.worktreeID) == [unloaded.id])
+  }
+
+  private func singleTabSnapshot(_ worktreeID: Worktree.ID) -> TerminalLayoutSnapshotPayload.SnapshotWorktree {
+    let tabID = UUID().uuidString
+    return TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktreeID,
+      selectedTabID: tabID,
+      tabs: [
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tabID,
+          title: nil,
+          icon: nil,
+          splitRoot: .leaf(surfaceID: UUID().uuidString)
+        )
+      ]
+    )
+  }
+
+  private func makeTemporaryDirectory() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory.appending(
+      path: "prowl-restore-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
   }
 
   private func makeWorktree(

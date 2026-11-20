@@ -73,6 +73,9 @@ persistence"), `docs/components/settings.md` (Advanced pane), and
 - The launch sequencing around restore proved fragile well after the feature stabilized;
   two races surfaced months later (see
   [002-launch-restore-races.md](002-launch-restore-races.md)).
+- Restore no longer always waits for the live repository load: it runs from the cached
+  repository list when that list holds every saved worktree (see
+  [003-provisional-launch-restore.md](003-provisional-launch-restore.md)).
 
 ## Promotion decision (2026-11-01, #573)
 

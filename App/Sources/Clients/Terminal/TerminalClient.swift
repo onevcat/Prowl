@@ -74,8 +74,11 @@ struct TerminalClient {
     case setRemoteAgentDetection(RemoteAgentDetectionConsent)
     case setSelectedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot
-    /// Saved worktrees that `worktrees` does not hold are skipped.
-    case restoreLayoutSnapshot(worktrees: [Worktree])
+    /// Saved worktrees that `worktrees` does not hold are skipped. A provisional restore runs
+    /// from the cached repository list before the live load. It restores only when that list
+    /// holds every saved worktree, so a stale cache does not drop part of the layout; otherwise
+    /// the restore waits for the final list. The layout restores once per launch.
+    case restoreLayoutSnapshot(worktrees: [Worktree], isProvisional: Bool = false)
     case presentTabIconPicker(Worktree)
   }
 

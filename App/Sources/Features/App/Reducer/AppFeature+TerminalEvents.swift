@@ -107,10 +107,12 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch event {
     case .layoutRestored(let selectedWorktreeID):
+      finishLaunchLayoutRestore(state: &state)
       return layoutRestoredEffect(selectedWorktreeID: selectedWorktreeID, state: &state)
 
     case .layoutRestoreFailed(let message):
       appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
+      finishLaunchLayoutRestore(state: &state)
       let fallbackSelection = layoutRestoreFallbackSelectionEffect(state: state)
       return .merge(
         .send(.repositories(.showToast(.warning(message)))),
@@ -268,6 +270,15 @@ extension AppFeature {
       )
     }
     return .send(.commandPalette(.setPresented(true)))
+  }
+
+  /// The restore settles once, after a provisional or a final request, so a live load that
+  /// arrives later must not request it again.
+  func finishLaunchLayoutRestore(state: inout State) {
+    state.isRestoringLaunchLayout = false
+    if state.launchRestoreMode == .restoreLayout {
+      state.launchRestoreMode = .lastFocusedWorktree
+    }
   }
 
   func layoutRestoredEffect(
