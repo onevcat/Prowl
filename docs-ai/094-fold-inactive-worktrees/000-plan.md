@@ -4,7 +4,7 @@
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Status**      | Implemented                                                                                                                                                                                                                         |
 | **Anchor date** | 2026-11-20                                                                                                                                                                                                                          |
-| **Primary PRs** | discussed in #939                                                                                                                                                                                                                   |
+| **Primary PRs** | #1138; discussed in #939                                                                                                                                                                                                            |
 | **Related**     | [018-archived-worktrees](../018-archived-worktrees/000-plan.md), [050-sidebar-expand-active-and-worktree-tab-badges](../050-sidebar-expand-active-and-worktree-tab-badges/000-plan.md), [086-sidebar-repository-groups](../086-sidebar-repository-groups/000-plan.md), `docs/components/repositories-and-worktrees.md` |
 
 ## Background

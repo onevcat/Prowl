@@ -4,7 +4,7 @@
 
 | Date | Change | Ref |
 | --- | --- | --- |
-| 2026-11-20 | Fold worktrees with no open tab into a per-repository "Inactive (N)" group | #939 |
+| 2026-11-20 | Fold worktrees with no open tab into a per-repository "Inactive (N)" group | #1138 |
 
 ## Outcome & current state (as of 2026-11-20)
 
