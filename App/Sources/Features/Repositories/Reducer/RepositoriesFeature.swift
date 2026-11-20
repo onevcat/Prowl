@@ -445,6 +445,9 @@ struct RepositoriesFeature {
     /// The Shelf's book list is derived from this set so a sidebar
     /// worktree that's never been touched does not appear as a spine.
     var openedWorktreeIDs: Set<Worktree.ID> = []
+    /// Set while the launch layout restore re-creates tabs. `openedWorktreeIDs` fills only
+    /// as tabs come back, so nothing folds until the restore finishes.
+    var isLaunchLayoutRestorePending = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -820,8 +823,9 @@ struct RepositoriesFeature {
         state.pendingRenameBranchRequest = nil
         return .none
       }
-      // A row stays in an expanded Inactive group only while the selection is one of
-      // the rows kept there. Every selection change that lands elsewhere (another
+      // A row stays in an expanded Inactive group only while the selection, or a row of
+      // the sidebar multi-selection, is one of the rows kept there. Every selection
+      // change that lands elsewhere (another
       // worktree, a plain folder, a workspace child, Canvas, the archived list)
       // releases them, whichever action made it.
       Reduce { state, _ in
@@ -829,6 +833,9 @@ struct RepositoriesFeature {
         if let selectedID = state.selection?.worktreeID,
           state.retainedInactiveWorktreeIDs.contains(selectedID)
         {
+          return .none
+        }
+        if !state.sidebarSelectedWorktreeIDs.isDisjoint(with: state.retainedInactiveWorktreeIDs) {
           return .none
         }
         state.retainedInactiveWorktreeIDs = []

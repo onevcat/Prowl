@@ -25,7 +25,22 @@ func requestCanvasFocus(
     target: target,
     viewport: viewport
   )
-  state.openedWorktreeIDs.insert(openedWorktreeID)
+  state.addOpenedWorktreeID(openedWorktreeID)
+}
+
+extension RepositoriesFeature.State {
+  /// Writes only when the set changes. `@ObservableState` notifies observers of every
+  /// write to a `Set`, even one that leaves it equal, and the sidebar rows read this set.
+  mutating func addOpenedWorktreeID(_ worktreeID: Worktree.ID) {
+    guard !openedWorktreeIDs.contains(worktreeID) else { return }
+    openedWorktreeIDs.insert(worktreeID)
+  }
+
+  /// Writes only when the set changes; see `addOpenedWorktreeID(_:)`.
+  mutating func removeOpenedWorktreeID(_ worktreeID: Worktree.ID) {
+    guard openedWorktreeIDs.contains(worktreeID) else { return }
+    openedWorktreeIDs.remove(worktreeID)
+  }
 }
 
 /// Drops expanded-group IDs of repositories that are no longer configured, so storage

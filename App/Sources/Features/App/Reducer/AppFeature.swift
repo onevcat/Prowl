@@ -166,6 +166,7 @@ struct AppFeature {
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
         state.isRestoringLaunchLayout = state.launchRestoreMode == .restoreLayout
+        state.repositories.isLaunchLayoutRestorePending = state.isRestoringLaunchLayout
         analyticsClient.capture("app_launched", nil)
         return .merge(
           .send(.repositories(.task)),

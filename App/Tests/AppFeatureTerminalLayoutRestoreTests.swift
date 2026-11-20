@@ -140,6 +140,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     settings.restoreTerminalLayoutOnLaunch = true
     var appState = AppFeature.State(repositories: repositoriesState, settings: settings)
     appState.isRestoringLaunchLayout = true
+    appState.repositories.isLaunchLayoutRestorePending = true
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(initialState: appState) {
@@ -155,6 +156,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
     await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: worktree.id))) {
       $0.isRestoringLaunchLayout = false
+      $0.repositories.isLaunchLayoutRestorePending = false
       $0.launchRestoreMode = .lastFocusedWorktree
     }
     await store.receive(\.repositories.selectWorktree)
@@ -177,6 +179,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
   @Test(.dependencies) func layoutRestoreFailedEndsLaunchRestore() async {
     var appState = AppFeature.State()
     appState.isRestoringLaunchLayout = true
+    appState.repositories.isLaunchLayoutRestorePending = true
     let store = TestStore(initialState: appState) {
       AppFeature()
     }
@@ -184,6 +187,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
     await store.send(.terminalEvent(.layoutRestoreFailed(message: "reset"))) {
       $0.isRestoringLaunchLayout = false
+      $0.repositories.isLaunchLayoutRestorePending = false
     }
   }
 

@@ -158,7 +158,19 @@ private func updateRetainedInactiveWorktrees(
   state: inout RepositoriesFeature.State
 ) {
   guard let worktreeID, state.isInExpandedInactiveGroup(worktreeID) else { return }
-  state.retainedInactiveWorktreeIDs.insert(worktreeID)
+  state.retainInactiveWorktree(worktreeID)
+}
+
+extension RepositoriesFeature.State {
+  /// Keeps `worktreeID` in its expanded Inactive group. Rows kept in other repositories
+  /// leave, because the selection has left their group.
+  mutating func retainInactiveWorktree(_ worktreeID: Worktree.ID) {
+    guard let repository = repositories.first(where: { $0.worktrees[id: worktreeID] != nil }) else { return }
+    var kept = retainedInactiveWorktreeIDs.filter { repository.worktrees[id: $0] != nil }
+    kept.insert(worktreeID)
+    guard kept != retainedInactiveWorktreeIDs else { return }
+    retainedInactiveWorktreeIDs = kept
+  }
 }
 
 /// Picking a terminal target from the sidebar while the archived list is showing
@@ -210,7 +222,7 @@ func navigateWorktreeHistory(
     pushWorktreeHistoryID(currentID, onto: &state.worktreeHistoryBackStack)
   }
   setSingleWorktreeSelection(destinationID, state: &state, recordHistory: false)
-  state.openedWorktreeIDs.insert(destinationID)
+  state.addOpenedWorktreeID(destinationID)
   // Match sidebar/arrow navigation: focus the terminal of the worktree we land on.
   state.pendingTerminalFocusWorktreeIDs.insert(destinationID)
   return .send(.delegate(.selectedWorktreeChanged(state.worktree(for: destinationID))))
@@ -444,13 +456,26 @@ func findWorktreeAndRepository(
   return nil
 }
 
+/// The row after the removed one in the sidebar, or the one before it at the end. Rows
+/// in a folded Inactive group are not on screen, so the visible rows decide; the stored
+/// order decides only when the removed worktree is not among them.
 func nextWorktreeID(
   afterRemoving worktree: Worktree,
   in repository: Repository,
   state: RepositoriesFeature.State
 ) -> Worktree.ID? {
-  let orderedIDs = state.orderedWorktrees(in: repository).map(\.id)
-  guard let index = orderedIDs.firstIndex(of: worktree.id) else { return nil }
+  let visibleIDs = state.worktreeRowSections(in: repository)
+    .navigableRows(isInactiveExpanded: state.isInactiveWorktreesExpanded(in: repository.id))
+    .filter { !$0.isPending }
+    .map(\.id)
+  if visibleIDs.contains(worktree.id) {
+    return neighborID(of: worktree.id, in: visibleIDs)
+  }
+  return neighborID(of: worktree.id, in: state.orderedWorktrees(in: repository).map(\.id))
+}
+
+private func neighborID(of worktreeID: Worktree.ID, in orderedIDs: [Worktree.ID]) -> Worktree.ID? {
+  guard let index = orderedIDs.firstIndex(of: worktreeID) else { return nil }
   let nextIndex = index + 1
   if nextIndex < orderedIDs.count {
     return orderedIDs[nextIndex]

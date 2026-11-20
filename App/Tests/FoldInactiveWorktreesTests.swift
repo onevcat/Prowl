@@ -3,6 +3,7 @@ import CustomDump
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Observation
 import Sharing
 import Testing
 
@@ -570,6 +571,136 @@ struct FoldInactiveWorktreesTests {
     #expect(ids.count == 3)
     #expect(ids.last == remoteGit.worktrees.first?.id)
     #expect(!ids.contains(plain.id))
+  }
+
+  // MARK: - Removing the selected worktree
+
+  @Test func removingTheSelectedWorktreeSelectsTheNextVisibleRowPastAFoldedGroup() {
+    var fixture = makeFixture()
+    fixture.state.openedWorktreeIDs = [fixture.main.id, fixture.alpha.id, fixture.charlie.id]
+    fixture.state.selection = .worktree(fixture.alpha.id)
+
+    // Stored order a, b, c; b is folded, so the row after a on screen is c.
+    let next = nextWorktreeID(afterRemoving: fixture.alpha, in: fixture.repository, state: fixture.state)
+
+    #expect(next == fixture.charlie.id)
+  }
+
+  @Test func removingTheLastVisibleRowSelectsTheVisibleRowBeforeIt() {
+    var fixture = makeFixture()
+    fixture.state.openedWorktreeIDs = [fixture.main.id, fixture.alpha.id, fixture.charlie.id]
+    fixture.state.selection = .worktree(fixture.charlie.id)
+
+    let next = nextWorktreeID(afterRemoving: fixture.charlie, in: fixture.repository, state: fixture.state)
+
+    #expect(next == fixture.alpha.id)
+  }
+
+  @Test func removingTheSelectedWorktreeWalksAnExpandedGroupInRowOrder() {
+    var fixture = makeFixture()
+    fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id] }
+    fixture.state.openedWorktreeIDs = [fixture.main.id, fixture.alpha.id, fixture.charlie.id]
+    fixture.state.selection = .worktree(fixture.charlie.id)
+
+    // Rows on screen: main, a, c, then the expanded group with b.
+    let next = nextWorktreeID(afterRemoving: fixture.charlie, in: fixture.repository, state: fixture.state)
+
+    #expect(next == fixture.bravo.id)
+  }
+
+  // MARK: - Observation
+
+  @Test func reopeningAnOpenWorktreeNotifiesNoObserver() {
+    var fixture = makeFixture()
+    fixture.state.openedWorktreeIDs = [fixture.alpha.id]
+    let store = Store(initialState: fixture.state) {
+      RepositoriesFeature()
+    }
+
+    let notifiedOnReopen = LockIsolated(false)
+    withObservationTracking {
+      _ = store.openedWorktreeIDs
+    } onChange: {
+      notifiedOnReopen.setValue(true)
+    }
+    store.send(.markWorktreeOpened(fixture.alpha.id))
+    #expect(!notifiedOnReopen.value)
+
+    // Control: opening a worktree that had no tab notifies.
+    let notifiedOnOpen = LockIsolated(false)
+    withObservationTracking {
+      _ = store.openedWorktreeIDs
+    } onChange: {
+      notifiedOnOpen.setValue(true)
+    }
+    store.send(.markWorktreeOpened(fixture.bravo.id))
+    #expect(notifiedOnOpen.value)
+  }
+
+  // MARK: - Launch
+
+  @Test func nothingFoldsWhileTheLaunchLayoutRestoreIsPending() {
+    var fixture = makeFixture()
+    fixture.state.isLaunchLayoutRestorePending = true
+    let pending = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(pending.inactive.isEmpty)
+    #expect(pending.unpinned.map(\.id) == [fixture.alpha.id, fixture.bravo.id, fixture.charlie.id])
+
+    fixture.state.isLaunchLayoutRestorePending = false
+    #expect(fixture.state.worktreeRowSections(in: fixture.repository).unpinned.isEmpty)
+  }
+
+  // MARK: - Multi-selection and kept rows
+
+  @Test func commandClickInAnExpandedGroupKeepsTheRowInTheGroup() async {
+    let fixture = makeExpandedGroupFixture()
+    let store = TestStore(initialState: fixture.state) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.setSidebarSelectedWorktreeIDs([fixture.main.id, fixture.bravo.id]))
+    var sections = store.state.worktreeRowSections(in: fixture.repository)
+    #expect(sections.inactive.map(\.id) == [fixture.alpha.id, fixture.bravo.id, fixture.charlie.id])
+    #expect(sections.unpinned.isEmpty)
+
+    // A plain click outside the group releases the row.
+    await store.send(.selectWorktree(fixture.main.id))
+    await store.skipReceivedActions()
+    #expect(store.state.retainedInactiveWorktreeIDs.isEmpty)
+    sections = store.state.worktreeRowSections(in: fixture.repository)
+    #expect(sections.inactive.map(\.id) == [fixture.alpha.id, fixture.bravo.id, fixture.charlie.id])
+  }
+
+  @Test func selectingInAnotherRepositorysGroupReleasesTheRowsKeptInTheFirst() async {
+    var fixture = makeExpandedGroupFixture()
+    let otherRoot = "/tmp/other"
+    let otherMain = makeWorktree(id: otherRoot, name: "main", repoRoot: otherRoot)
+    let otherAlpha = makeWorktree(id: "/tmp/other/a", name: "a", repoRoot: otherRoot)
+    let other = Repository(
+      id: otherRoot,
+      rootURL: URL(fileURLWithPath: otherRoot),
+      name: "other",
+      worktrees: IdentifiedArray(uniqueElements: [otherMain, otherAlpha])
+    )
+    fixture.state.repositories.append(other)
+    fixture.state.repositoryRoots.append(other.location)
+    fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id, other.id] }
+    let store = TestStore(initialState: fixture.state) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectWorktree(fixture.alpha.id))
+    await store.skipReceivedActions()
+    #expect(store.state.retainedInactiveWorktreeIDs == [fixture.alpha.id])
+
+    await store.send(.selectWorktree(otherAlpha.id))
+    await store.skipReceivedActions()
+    #expect(store.state.retainedInactiveWorktreeIDs == [otherAlpha.id])
+    // a has a tab now, so it leaves the first repository's group.
+    #expect(store.state.worktreeRowSections(in: fixture.repository).unpinned.map(\.id) == [fixture.alpha.id])
   }
 
   // MARK: - Fixtures

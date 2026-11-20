@@ -664,8 +664,9 @@ extension RepositoriesFeature.State {
   /// not fold away under the cursor. A worktree selected from the expanded
   /// group stays in it (`retainedInactiveWorktreeIDs`). Callers pass unpinned,
   /// non-main rows only, which keeps main, pinned, and pending worktrees out
-  /// of the group.
+  /// of the group. Nothing folds while the launch layout restore is pending.
   func isWorktreeFolded(_ worktreeID: Worktree.ID, keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>) -> Bool {
+    if isLaunchLayoutRestorePending { return false }
     if retainedInactiveWorktreeIDs.contains(worktreeID) { return true }
     return !openedWorktreeIDs.contains(worktreeID) && !keptWorktreeIDs.contains(worktreeID)
   }
