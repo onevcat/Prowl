@@ -3,8 +3,8 @@
 |                 |                                                                                                                                                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Status**      | Implemented                                                                                                                                                                                                                         |
-| **Anchor date** | 2026-10-27                                                                                                                                                                                                                          |
-| **Primary PRs** | (fill in as they merge); discussed in #939                                                                                                                                                                                          |
+| **Anchor date** | 2026-11-20                                                                                                                                                                                                                          |
+| **Primary PRs** | discussed in #939                                                                                                                                                                                                                   |
 | **Related**     | [018-archived-worktrees](../018-archived-worktrees/000-plan.md), [050-sidebar-expand-active-and-worktree-tab-badges](../050-sidebar-expand-active-and-worktree-tab-badges/000-plan.md), [086-sidebar-repository-groups](../086-sidebar-repository-groups/000-plan.md), `docs/components/repositories-and-worktrees.md` |
 
 ## Background
@@ -99,7 +99,7 @@ one list.
 **Docs.** `docs/components/repositories-and-worktrees.md` (the folded group) and
 `docs/reference/keyboard-shortcuts.md` (folded rows are skipped).
 
-**Tests.** Reducer and state-query tests for: the section split with no setting involved;
+**Tests.** Reducer and state-query tests for: the section split;
 each always-active exception; folders producing no rows; a worktree moving between groups
 on its first tab and its last tab closing; ⌘⌃↑/↓ and ⌃1–9 skipping folded rows and
 including them when expanded; palette rows unchanged; a drag inside each group producing
@@ -116,11 +116,9 @@ the expected `worktreeOrderByRepository`; fold-state pruning.
 - **A separate sidebar group for worktrees running an agent.** Rejected for the same
   reason; the Active Agents panel already shows which worktrees run agents.
 - **Reuse archiving.** Archiving closes terminals and blocks selection. Rejected.
-- **Behind a setting, default off.** The first version added `foldInactiveWorktrees` and a
-  Sidebar section in General settings, so that existing sidebars stayed unchanged. The
-  maintainer's decision on #939: listing every worktree with no open tab is a shortcoming,
-  so the change replaces that behavior, with no setting and no new settings section.
-  Chosen: always on.
+- **Behind a setting, default off.** A setting would leave existing sidebars unchanged.
+  Rejected on #939: listing every worktree with no open tab is a shortcoming, so the
+  change replaces that behavior. Chosen: always on.
 
 ## Open questions
 

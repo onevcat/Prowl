@@ -2,21 +2,21 @@
 
 ## Timeline
 
-| Date       | Change                                                                                                                                                                                                       | Ref                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| 2026-10-18 | First version: fold worktrees with no open tab into a per-repository "Inactive (N)" group behind a `foldInactiveWorktrees` setting                                                                           | fork review PR       |
-| 2026-10-27 | Reworked per the maintainer's request on #939: always on, no setting, no Sidebar settings section; renumbered after 083 and 084 were taken                                                                   | PR (see Primary PRs) |
-| 2026-10-31 | Merged upstream with repository groups (086) and renumbered to 087 after 085 and 086 were taken; walking an expanded group keeps its order, and any selection outside the group releases the rows kept there | PR (see Primary PRs) |
-| 2026-11-20 | Merged upstream with the worktree-switch view work (093) and renumbered to 094 after 087–093 were taken; the hotkey rows pass their IDs, now from the navigable rows                                         | PR (see Primary PRs) |
+| Date | Change | Ref |
+| --- | --- | --- |
+| 2026-11-20 | Fold worktrees with no open tab into a per-repository "Inactive (N)" group | #939 |
 
-## Outcome & current state (as of 2026-10-31)
+## Outcome & current state (as of 2026-11-20)
 
 - `worktreeRowSections(in:)` splits the unpinned worktrees into `unpinned` and
   `inactive`. A worktree is inactive when it is not in `openedWorktreeIDs`, is not the
   selected worktree, and is not in the sidebar multi-selection (`isWorktreeFolded`).
   Main, pinned, and pending worktrees are never in the unpinned list, so they never
-  fold. There is no setting: `GlobalSettings`, `SettingsFeature`, and `AppFeature` carry
-  nothing for it.
+  fold.
+- `WorktreeRowsView` splits its rows with `worktreeRowSections(in:keepingUnfolded:)`,
+  passing the selected worktrees its parent resolved, so its body reads no selection
+  state and a worktree switch evaluates only the rows whose inputs change (093). The
+  reducer-side callers use the state-derived set, `selectedWorktreeIDsKeptUnfolded`.
 - Plain folders, workspaces, and remote folders have an empty `repository.worktrees`
   and produce no rows, so they cannot fold and shift no other repository's rows. A
   remote git repository lists its root worktree, which is main.
@@ -28,7 +28,7 @@
   ⌘⌃↑/↓ and ⌃1–9 skip folded rows.
 - `retainedInactiveWorktreeIDs` keeps a worktree selected from an expanded group in
   that group, so ⌘⌃↑/↓ and ⌃1–9 walk it in row order. `setSingleWorktreeSelection`
-  adds to it, a reducer at the end of `RepositoriesFeature.body` clears it whenever the
+  adds to it, and a reducer at the end of `RepositoriesFeature.body` clears it whenever the
   selection is not one of the kept rows (another worktree, a plain folder, a workspace
   child, Canvas, the archived list), and `toggleInactiveWorktreesExpanded` releases the
   repository's rows.
@@ -50,7 +50,8 @@
 
 ## Verification
 
-- `FoldInactiveWorktreesTests`: the section split with no setting involved, each
+- `FoldInactiveWorktreesTests`: the section split, the view-side split matching the
+  state-side one, each
   always-active exception, plain and remote folders producing no rows, a worktree
   moving between groups on its first tab and its last tab closing, ⌘⌃↑/↓ and offset
   navigation skipping folded rows and including them when expanded, palette rows
@@ -68,10 +69,6 @@
   fold the row away under the cursor.
 - The expand/fold action is a top-level `RepositoriesFeature` action next to
   `revealSelectedWorktreeInSidebar`, because it is sidebar state rather than ordering.
-- The first version put the feature behind a setting. The maintainer asked for it to
-  replace the current behavior instead (see the plan's alternatives), so the setting,
-  its settings section, and its decode default are gone.
-
 ## Open questions
 
 Resolved: the selected-worktree exception is needed. `ensureInitialTab` runs when

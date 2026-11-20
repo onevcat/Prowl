@@ -188,8 +188,7 @@ change that a watcher missed.
 ## Folding inactive worktrees
 
 A repository that other tools also drive can accumulate worktrees you never open
-in Prowl. Prowl gathers the ones with no open tab into one row, with no setting
-to turn on.
+in Prowl. Prowl gathers the ones with no open tab into one row.
 
 - **Inactive** means the worktree has no open terminal tab in Prowl. Agent
   detection plays no part, so a row does not move when an agent starts or exits.
