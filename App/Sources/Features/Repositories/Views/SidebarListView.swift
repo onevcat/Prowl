@@ -178,7 +178,8 @@ struct SidebarListView: View {
           .padding(.vertical, 4)
       }
       .overlay {
-        if repositoryItems.isEmpty {
+        // Before the first load, an empty list does not mean that there are no repositories.
+        if repositoryItems.isEmpty, store.isInitialLoadComplete {
           Text("Repositories you add will appear here")
             .font(.callout)
             .foregroundStyle(.secondary)

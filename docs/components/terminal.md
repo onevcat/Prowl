@@ -317,8 +317,9 @@ since you last switched away. Notification bodies are not persisted.
 Launch restores the layout from the cached repository list, before Git finishes
 listing the worktrees again, when that list holds every saved worktree and each
 local worktree folder still exists. Otherwise the restore waits for the fresh
-list. Until the restore selects a worktree, the detail area shows a loading view,
-not the empty "Open Repository" state.
+list. The window shows the sidebar and the detail area from launch. Until the
+repository list loads and the restore selects a worktree, the detail area shows a
+loading view, not the empty "Open Repository" state.
 
 If a saved worktree is gone at launch (it was removed outside Prowl, or its
 repository failed to load), Prowl skips it and restores the rest. The next save

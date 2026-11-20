@@ -27,6 +27,13 @@ later launches of the same build loaded in about 1 s.
 - `AppFeature.State.isRestoringLaunchLayout` keeps the detail area on `AppLoadingView`, not
   `EmptyStateView`, until the restore settles. `AppLoadingView` now starts at a random message
   and shows the messages in a shuffled order.
+- `ContentView` no longer shows a full-window `AppLoadingView` until
+  `isInitialLoadComplete`. That made launch a two-step change: the full-window view, then the
+  split view with a second loading view and a new message. The split view now shows from
+  launch. The detail area shows one `AppLoadingView` branch for both "first list not loaded"
+  and "restore not settled", so the view keeps its identity and its message. The sidebar hides
+  its "Repositories you add will appear here" text until the first load, and the collapsed
+  repository list is not pruned on the change from no repositories.
 
 ## Verification
 

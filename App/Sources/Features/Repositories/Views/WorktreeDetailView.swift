@@ -668,9 +668,12 @@ struct WorktreeDetailView: View {
             .repositories(.workspaceEditing(.promptRequested(selectedRepository.id, removingChildID: nil))))
         }
       )
-    } else if store.isRestoringLaunchLayout, !repositories.repositories.isEmpty {
-      // Until the launch restore selects its worktree, "Open Repository" would read as if the
-      // repositories were gone.
+    } else if !repositories.isInitialLoadComplete
+      || (store.isRestoringLaunchLayout && !repositories.repositories.isEmpty)
+    {
+      // Until the first repository list loads and the launch restore selects its worktree,
+      // "Open Repository" would read as if the repositories were gone. One branch covers both
+      // phases, so the loading view keeps its identity and its message.
       AppLoadingView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
