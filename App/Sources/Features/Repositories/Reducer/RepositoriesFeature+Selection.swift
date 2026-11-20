@@ -140,12 +140,31 @@ func setSingleWorktreeSelection(
   if recordHistory {
     recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: worktreeID, state: &state)
   }
+  updateRetainedInactiveWorktrees(selecting: worktreeID, state: &state)
   state.selection = worktreeID.map(SidebarSelection.worktree)
   state.selectedWorkspaceChildID = nil
   if let worktreeID {
     state.sidebarSelectedWorktreeIDs = [worktreeID]
   } else {
     state.sidebarSelectedWorktreeIDs = []
+  }
+}
+
+/// Selecting a row of an expanded Inactive group keeps that row in the group, so
+/// walking the group does not reorder it. Selecting a row outside the group
+/// releases the rows kept so far. Call before the selection changes.
+private func updateRetainedInactiveWorktrees(
+  selecting worktreeID: Worktree.ID?,
+  state: inout RepositoriesFeature.State
+) {
+  guard let worktreeID else {
+    state.retainedInactiveWorktreeIDs = []
+    return
+  }
+  if state.isInExpandedInactiveGroup(worktreeID) {
+    state.retainedInactiveWorktreeIDs.insert(worktreeID)
+  } else if !state.retainedInactiveWorktreeIDs.contains(worktreeID) {
+    state.retainedInactiveWorktreeIDs = []
   }
 }
 

@@ -70,7 +70,7 @@ extension RepositoriesFeature.State {
   }
 
   func worktreeID(byOffset offset: Int) -> Worktree.ID? {
-    let rows = orderedWorktreeRows(includingRepositoryIDs: visibleExpandedRepositoryIDs)
+    let rows = navigableWorktreeRows(includingRepositoryIDs: visibleExpandedRepositoryIDs)
     guard !rows.isEmpty else { return nil }
     if let currentID = selectedWorktreeID,
       let currentIndex = rows.firstIndex(where: { $0.id == currentID })
@@ -614,22 +614,83 @@ extension RepositoriesFeature.State {
       pendingRows.append(makePendingWorktreeRow(pending))
     }
     var unpinnedRows: [WorktreeRowModel] = []
+    var inactiveRows: [WorktreeRowModel] = []
     for worktree in unpinnedWorktrees {
-      unpinnedRows.append(
-        makeWorktreeRow(
-          worktree,
-          repositoryID: repository.id,
-          isPinned: false,
-          isMainWorktree: false
-        )
+      let row = makeWorktreeRow(
+        worktree,
+        repositoryID: repository.id,
+        isPinned: false,
+        isMainWorktree: false
       )
+      if isWorktreeFolded(worktree.id) {
+        inactiveRows.append(row)
+      } else {
+        unpinnedRows.append(row)
+      }
     }
     return WorktreeRowSections(
       main: mainRow,
       pinned: pinnedRows,
       pending: pendingRows,
-      unpinned: unpinnedRows
+      unpinned: unpinnedRows,
+      inactive: inactiveRows
     )
+  }
+
+  /// A worktree folds into its repository's Inactive group when it has no open
+  /// tab. The selected worktrees stay out of the group:
+  /// closing the last tab of the selected worktree leaves it tabless
+  /// (`ensureInitialTab` runs only when the tabs view mounts), and a row must
+  /// not fold away under the cursor. A worktree selected from the expanded
+  /// group stays in it (`retainedInactiveWorktreeIDs`). Callers pass unpinned,
+  /// non-main rows only, which keeps main, pinned, and pending worktrees out
+  /// of the group.
+  func isWorktreeFolded(_ worktreeID: Worktree.ID) -> Bool {
+    if retainedInactiveWorktreeIDs.contains(worktreeID) { return true }
+    return !openedWorktreeIDs.contains(worktreeID)
+      && selectedWorktreeID != worktreeID
+      && !sidebarSelectedWorktreeIDs.contains(worktreeID)
+  }
+
+  /// Whether the row for `worktreeID` is in an Inactive group that is expanded now.
+  func isInExpandedInactiveGroup(_ worktreeID: Worktree.ID) -> Bool {
+    guard let repository = repositories.first(where: { $0.worktrees[id: worktreeID] != nil }),
+      isInactiveWorktreesExpanded(in: repository.id)
+    else { return false }
+    return worktreeRowSections(in: repository).inactive.contains { $0.id == worktreeID }
+  }
+
+  func isInactiveWorktreesExpanded(in repositoryID: Repository.ID) -> Bool {
+    expandedInactiveRepositoryIDs.contains(repositoryID)
+  }
+
+  /// Maps a move inside one sidebar group to offsets in the repository's full
+  /// unpinned order, the list `unpinnedWorktreesMoved` reorders. Returns nil
+  /// for a group the move cannot address.
+  func fullUnpinnedOrderMove(
+    in repository: Repository,
+    section: SidebarWorktreeSection,
+    offsets: IndexSet,
+    destination: Int
+  ) -> (offsets: IndexSet, destination: Int)? {
+    let sections = worktreeRowSections(in: repository)
+    let groupRows =
+      switch section {
+      case .unpinned: sections.unpinned
+      case .inactive: sections.inactive
+      case .pinned: [WorktreeRowModel]()
+      }
+    let groupIDs = Set(groupRows.map(\.id))
+    let fullOrder = orderedUnpinnedWorktreeIDs(in: repository)
+    let positions = fullOrder.indices.filter { groupIDs.contains(fullOrder[$0]) }
+    guard offsets.allSatisfy({ positions.indices.contains($0) }),
+      (0...positions.count).contains(destination)
+    else { return nil }
+    let mappedDestination =
+      destination < positions.count
+      ? positions[destination]
+      : (positions.last.map { $0 + 1 } ?? 0)
+    return (IndexSet(offsets.map { positions[$0] }), mappedDestination)
   }
 
   func worktreeRows(in repository: Repository) -> [WorktreeRowModel] {
@@ -639,6 +700,22 @@ extension RepositoriesFeature.State {
 
   func orderedWorktreeRows() -> [WorktreeRowModel] {
     orderedWorktreeRows(includingRepositoryIDs: Set(repositories.map(\.id)))
+  }
+
+  /// Rows that keyboard navigation and the numbered shortcuts walk: every row
+  /// of an expanded repository except those in a folded Inactive group.
+  func navigableWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
+    let repositoriesByID = Dictionary(
+      repositories.map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    return orderedRepositoryIDs()
+      .filter { includingRepositoryIDs.contains($0) }
+      .compactMap { repositoriesByID[$0] }
+      .flatMap {
+        worktreeRowSections(in: $0)
+          .navigableRows(isInactiveExpanded: isInactiveWorktreesExpanded(in: $0.id))
+      }
   }
 
   func orderedWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
@@ -658,8 +735,14 @@ struct WorktreeRowSections: Equatable {
   let pinned: [WorktreeRowModel]
   let pending: [WorktreeRowModel]
   let unpinned: [WorktreeRowModel]
+  let inactive: [WorktreeRowModel]
 
   var allRows: [WorktreeRowModel] {
+    navigableRows(isInactiveExpanded: true)
+  }
+
+  /// `allRows` minus the folded Inactive group.
+  func navigableRows(isInactiveExpanded: Bool) -> [WorktreeRowModel] {
     var rows: [WorktreeRowModel] = []
     if let main {
       rows.append(main)
@@ -667,6 +750,9 @@ struct WorktreeRowSections: Equatable {
     rows.append(contentsOf: pinned)
     rows.append(contentsOf: pending)
     rows.append(contentsOf: unpinned)
+    if isInactiveExpanded {
+      rows.append(contentsOf: inactive)
+    }
     return rows
   }
 }

@@ -19,7 +19,7 @@ struct SidebarView: View {
       expandedRepoIDs: expandedRepoIDs
     )
     // Hotkeys and navigation skip the rows of collapsed groups (docs-ai 086).
-    let visibleHotkeyRows = state.orderedWorktreeRows(
+    let visibleHotkeyRows = state.navigableWorktreeRows(
       includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs))
     let visibleWorktreeIDs = Set(visibleHotkeyRows.map(\.id))
     let effectiveSelectedRows = selectedRows(state: state)

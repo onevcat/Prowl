@@ -20,7 +20,10 @@ an unread-notification bell, and run/agent status. In place of the branch icon, 
 working agent shows the animated bagua indicator that Active Agents uses, an agent
 waiting for input shows a red exclamation mark, and the row's own work (create,
 archive, delete) or a command that reports progress shows a plain spinner. With
-Reduce Motion on, a working agent shows the plain spinner too.
+Reduce Motion on, a working agent shows the plain spinner too. The rest splits again:
+worktrees with an open tab stay in place, and the others fold into a collapsed
+**Inactive (N)** row at the bottom (see
+[Folding inactive worktrees](#folding-inactive-worktrees)).
 
 ## Repository kinds
 
@@ -181,6 +184,33 @@ change that a watcher missed.
   expanding a git repo moves the count onto the individual worktree rows
   (hidden at zero). Workspaces and plain folders always show the count on the
   header.
+
+## Folding inactive worktrees
+
+A repository that other tools also drive can accumulate worktrees you never open
+in Prowl. Prowl gathers the ones with no open tab into one row, with no setting
+to turn on.
+
+- **Inactive** means the worktree has no open terminal tab in Prowl. Agent
+  detection plays no part, so a row does not move when an agent starts or exits.
+- Each repository shows a collapsed **Inactive (N)** row after its other
+  worktrees. Click it to expand or fold the group; the state is remembered per
+  repository. Folded rows keep their context menu, badges, and archive and delete
+  actions. Opening one (click, command palette, CLI) gives it a tab, and it
+  moves back among the active rows.
+- **Never folded:** the main worktree, pinned worktrees, worktrees being created,
+  and selected worktrees. Plain folders, workspaces, and remote folders have no
+  worktree list, so they have nothing to fold.
+- **Groups:** the Inactive row belongs to its repository, so a repository in a
+  [group](#repository-groups) shows its Inactive row inside that group. A
+  collapsed group hides it with the rest of the repository's rows.
+- Folded rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
+  collapsed repository. They count again while the group is expanded, and a row
+  you select from the expanded group keeps its place there, so the shortcuts walk
+  the group in order. The rows you opened leave the group when you select a row
+  outside it or fold it. The command palette lists every worktree either way.
+- Dragging stays inside a group. Both groups share the repository's one stored
+  order.
 
 ## Repository groups
 

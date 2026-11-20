@@ -1,5 +1,6 @@
 import Foundation
 import IdentifiedCollections
+import Sharing
 
 struct FailedWorktreeCleanup {
   let didRemoveWorktree: Bool
@@ -25,6 +26,18 @@ func requestCanvasFocus(
     viewport: viewport
   )
   state.openedWorktreeIDs.insert(openedWorktreeID)
+}
+
+/// Drops expanded-group IDs of repositories that are no longer configured, so storage
+/// does not grow with removed repositories. A repository whose load failed is absent
+/// from `state.repositories` but still has a root, so its saved state survives the
+/// failure.
+func pruneExpandedInactiveRepositoryIDs(state: inout RepositoriesFeature.State) {
+  var knownIDs = Set(state.repositories.map(\.id))
+  knownIDs.formUnion(state.repositoryRoots.map(\.standardized.id))
+  let kept = state.expandedInactiveRepositoryIDs.filter { knownIDs.contains($0) }
+  guard kept != state.expandedInactiveRepositoryIDs else { return }
+  state.$expandedInactiveRepositoryIDs.withLock { $0 = kept }
 }
 
 func updatePendingWorktreeProgress(

@@ -24,7 +24,9 @@ struct WorktreeCommands: Commands {
     let hasActiveWorktree =
       repositories.selectedTerminalWorktree != nil
       || (repositories.isShowingCanvas && !store.selectedCustomCommands.isEmpty)
-    let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
+    let orderedRows =
+      visibleHotkeyWorktreeRows
+      ?? repositories.navigableWorktreeRows(includingRepositoryIDs: Set(repositories.repositories.map(\.id)))
     let codeHostWorktreeID = selectedCodeHostWorktreeID
     let codeHost = repositories.codeHost(forWorktreeID: codeHostWorktreeID)
     let codeHostLabel: String.LocalizationValue =
