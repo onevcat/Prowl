@@ -314,6 +314,12 @@ outside the worktree falls back to the worktree root. It saves when you quit and
 each time Prowl stops being the active app, so a crash loses only the changes made
 since you last switched away. Notification bodies are not persisted.
 
+Launch restores the layout from the cached repository list, before Git finishes
+listing the worktrees again, when that list holds every saved worktree and each
+local worktree folder still exists. Otherwise the restore waits for the fresh
+list. Until the restore selects a worktree, the detail area shows a loading view,
+not the empty "Open Repository" state.
+
 If a saved worktree is gone at launch (it was removed outside Prowl, or its
 repository failed to load), Prowl skips it and restores the rest. The next save
 no longer holds the skipped worktree, so its layout does not return if the folder

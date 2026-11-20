@@ -668,6 +668,11 @@ struct WorktreeDetailView: View {
             .repositories(.workspaceEditing(.promptRequested(selectedRepository.id, removingChildID: nil))))
         }
       )
+    } else if store.isRestoringLaunchLayout, !repositories.repositories.isEmpty {
+      // Until the launch restore selects its worktree, "Open Repository" would read as if the
+      // repositories were gone.
+      AppLoadingView()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
     }

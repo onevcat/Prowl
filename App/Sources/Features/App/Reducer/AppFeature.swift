@@ -28,6 +28,9 @@ struct AppFeature {
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
+    /// True from launch until the launch layout restore has selected its worktree. The detail
+    /// area shows the loading view meanwhile, not the empty state.
+    var isRestoringLaunchLayout = false
     var hasAppliedInitialViewMode = false
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
@@ -162,6 +165,7 @@ struct AppFeature {
         )
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
+        state.isRestoringLaunchLayout = state.launchRestoreMode == .restoreLayout
         analyticsClient.capture("app_launched", nil)
         return .merge(
           .send(.repositories(.task)),
@@ -327,19 +331,27 @@ struct AppFeature {
         let worktrees = state.repositories.worktreesForInfoWatcher()
         let openedWorktreeIDs = openedWorktreeIDsForInfoWatcher(from: state.repositories)
         let plainRepositoryRoots = state.repositories.plainRepositoryRootsForInfoWatcher()
-        // A failed repository must not block the restore for the others; the deferred
-        // default view mode waits for this restore to finish.
+        // The cached repository list restores the layout at once when it holds every saved
+        // worktree (a provisional restore); the live load restores it otherwise. A failed
+        // repository must not block the restore for the others; the deferred default view mode
+        // waits for this restore to finish.
+        let isWaitingForLayoutRestore = state.launchRestoreMode == .restoreLayout
+        let phase = state.repositories.snapshotPersistencePhase
+        let isProvisionalRestore = phase == .restoring
         let shouldRestoreLayout =
-          state.launchRestoreMode == .restoreLayout
-          && state.repositories.snapshotPersistencePhase.hasLoadedLiveRepositories
-        let shouldDeferDefaultView = state.launchRestoreMode == .restoreLayout
+          isWaitingForLayoutRestore && (isProvisionalRestore || phase.hasLoadedLiveRepositories)
+        let shouldDeferDefaultView = isWaitingForLayoutRestore
         appLogger.info(
           "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
             + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
-            + " → shouldRestore=\(shouldRestoreLayout)"
+            + " → shouldRestore=\(shouldRestoreLayout) provisional=\(isProvisionalRestore)"
         )
         if shouldRestoreLayout {
-          state.launchRestoreMode = .lastFocusedWorktree
+          // A provisional restore that the terminal declines leaves the mode set, so the live
+          // load still restores.
+          if !isProvisionalRestore {
+            state.launchRestoreMode = .lastFocusedWorktree
+          }
           state.repositories.selection = nil
         }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter {
@@ -379,7 +391,8 @@ struct AppFeature {
           if shouldRestoreLayout {
             effects.append(
               .run { _ in
-                await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+                await terminalClient.send(
+                  .restoreLayoutSnapshot(worktrees: restorableWorktrees, isProvisional: isProvisionalRestore))
               }
             )
           }
@@ -405,7 +418,8 @@ struct AppFeature {
         if shouldRestoreLayout {
           effects.append(
             .run { _ in
-              await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+              await terminalClient.send(
+                .restoreLayoutSnapshot(worktrees: restorableWorktrees, isProvisional: isProvisionalRestore))
             }
           )
         }
