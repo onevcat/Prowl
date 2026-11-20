@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct AppLoadingView: View {
-  // Each appearance shows the messages in a new random order. The view can appear twice
-  // during one launch (full window, then the detail area), and should not restart the same list.
+  // Each appearance shows the messages in a new random order, so a launch does not always
+  // start with the same message.
   @State private var order = Self.messages.indices.shuffled()
   @State private var position = 0
 
