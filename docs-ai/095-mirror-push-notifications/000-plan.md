@@ -69,8 +69,8 @@ subscription.
 4. The Host listens to agent state changes (`AgentObservationStore.publishAgentChanged`
    publishes `.changed(ActiveAgentEntry)`). On a transition to `blocked` or `done` it posts
    `POST /v1/push {pushToken, collapseID, sealed}` for each device that has a target, wants
-   that kind, and is not online (`MirrorHost.isOnline(_:)`), subject to the outbound traffic
-   gate below.
+   that kind, and is not online (`MirrorHost.isOnline(_:)`), when the user is away from the
+   Mac (see "Presence") and subject to the outbound traffic gate below.
 5. The gateway checks the entitlement of the device's `appUserID` (cached, refreshed by
    RevenueCat webhooks). If active, it sends an APNs alert with `mutable-content: 1`, a
    generic localized fallback text, `apns-collapse-id` per pane, and `sealed` as custom data.
@@ -115,8 +115,6 @@ lists exactly what leaves the Mac.
   period of at least 10 s. A newer event on the same pane replaces the older one.
 - Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key, so the gateway does
   not see pane IDs.
-- Skip a pane the user looks at on the active Mac (same rule as
-  `muteNotificationsForActiveSurface`).
 - Gateway `410` (token gone) or `402` (no entitlement) → drop the target. After a subscription
   ends, at most one request per device goes out; the next `pushRegister` from an entitled app
   adds the target again. Network errors → no retry; a lost notification is acceptable.
@@ -124,6 +122,30 @@ lists exactly what leaves the Mac.
   who build their own iOS app and run their own gateway.
 - **Remote Mirror** settings show per device whether notifications are on, and the Mac user
   can turn them off for that device (drops the target).
+
+### Presence
+
+Principle: no push while the user sits at the Mac, and a timely push once they leave it.
+
+- **Present** = the screen is not locked, the display is not asleep, and there was keyboard or
+  mouse input in the last 2 minutes. Anything else is **away**.
+  - Idle time: `CGEventSource.secondsSinceLastEventType(.combinedSessionState, …)`; needs no
+    permission. Lock and display sleep come from the system lock and screen sleep
+    notifications, so locking the screen and leaving counts as away at once.
+  - A small presence monitor in `App/Sources/Features/RemoteMirror/` owns this state; the
+    push sender reads it. It runs only while the push sender has a target to serve.
+- **Present**: no push for any pane. The Mac's own notifications cover that case. This
+  replaces the earlier per-pane rule: `isViewedSurface` only checks window focus, so it says
+  "viewed" when the user left with Prowl in front.
+- **Away**: push `blocked` and `done` as they happen.
+- **On the change to away**: push once for each pane that is still `blocked` and whose
+  `blocked` push was held back while the user was present. Example: an agent blocks at 10:00,
+  the user does not see it and leaves at 10:01; the phone gets it about 10:03. `done` is not
+  sent late: it is not urgent, and a burst of late `done` pushes is noise.
+- Live Activity updates are silent and keep following the counts, so the lock screen stays
+  correct; they never alert while the user is present.
+- The 2-minute threshold is a constant for now, not a setting. A user who watches a video at
+  the Mac without input counts as away; an extra push is better than a missed one.
 
 ### Mac setting and Mirror Pro entry
 
@@ -187,7 +209,7 @@ entitlement check; it is also where a Mac user learns that Mirror Pro exists.
 | --- | --- |
 | S0 | Done 2026-11-21: gateway platform and APNs keys (see Spike results). Left for S1/S3: App Store Connect products, RevenueCat project and webhook |
 | S1 | Gateway: device registration, push, entitlement cache, rate limits, delete |
-| S2 | Host: `push-v1` capability, `pushRegister`, `pushEnabled`, target storage, event trigger, encryption, the **Send Notifications to Paired Devices** switch with per-device states and the Mirror Pro hint, wire and feature docs |
+| S2 | Host: `push-v1` capability, `pushRegister`, `pushEnabled`, target storage, event trigger, presence monitor and catch-up push, encryption, the **Send Notifications to Paired Devices** switch with per-device states and the Mirror Pro hint, wire and feature docs |
 | S3 | iOS: APNs registration, Service Extension, paywall, settings, tap to open; first end-to-end test with real APNs on a device |
 | S4 (P2) | Answer from the notification |
 | S5 (P2) | Live Activity |
@@ -214,6 +236,11 @@ entitlement check; it is also where a Mac user learns that Mirror Pro exists.
   APNs over HTTP/2 and signs the ES256 provider token with WebCrypto. No server to operate.
 - **Live Activity with counts only** — chosen. Titles would need the push key at render time;
   the spike showed that the Keychain is not available there on a device.
+- **Presence instead of the viewed pane** — chosen. The viewed-pane rule
+  (`muteNotificationsForActiveSurface`) checks only selection and window focus, so it holds
+  pushes back exactly when the user left the Mac with Prowl in front. It also let other panes
+  push while the user sat at the Mac. Presence (lock, display sleep, input idle time) fixes
+  both; the catch-up push on the change to away covers a block the user missed before leaving.
 - **Mac switch off by default** — chosen. The Mac is the machine that sends the traffic, so
   the Mac user turns it on, and both sides agree before anything leaves the Mac. The cost is
   one more step for a new Pro user; the iOS app points to the switch, and the Mac switch is
