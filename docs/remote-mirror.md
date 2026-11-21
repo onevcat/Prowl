@@ -379,6 +379,33 @@ phone. A draft the screen cannot carry (an
 image, a collapsed paste) can only be replaced or left. After a replacement, the receipt note
 says where the draft went.
 
+## Notifications to paired devices
+
+**Settings → Remote Mirror → Connect to This Mac → Send notifications to paired devices** (off
+by default) lets a paired iPhone or iPad get a notification when an agent on this Mac becomes
+blocked or finishes (docs-ai 095). The phone turns notifications on in Prowl Mirror and sends
+its push token to the Mac; the Mac sends nothing until both sides are on.
+
+- Prowl sends a notification only while you are **away** from this Mac: the screen is locked,
+  the display sleeps, or there was no keyboard or mouse input for 2 minutes. While you sit at
+  the Mac, its own notifications cover the event.
+- A prompt that opened while you were at the Mac, or while the phone was connected, is sent
+  once when you leave the Mac or the phone disconnects, if the agent still waits. A finished
+  agent is never sent late, and only after it worked for at least 10 seconds.
+- Each paired device in the list shows **Notifications on**, **Notifications off for this
+  device**, or **Notifications not set up**. **Turn Off** stops notifications to that device;
+  a new registration from the phone does not turn them on again. **Turn On** allows them again.
+- Nothing is sent while Remote Mirror is off, the Host does not listen, the switch is off, or
+  no paired device registered. Debug builds use the development push service; release builds
+  send nothing until the production service is available.
+
+What leaves the Mac: one HTTPS request per notification to the Prowl push service, with the
+device's push token, a collapse identifier derived from the pane with a key the service does
+not have, and the end-to-end encrypted content (the agent's tab and worktree name and the
+event). The service and Apple cannot read the content. There is no other request: no health
+check and no registration of the Mac. Developers can point the Mac at another push service
+with `defaults write com.onevcat.prowl remoteMirrorPushGatewayURL <URL>`.
+
 ## Protocol and development
 
 See [wire contract](remote-mirror-wire.md). This replaces the earlier experimental

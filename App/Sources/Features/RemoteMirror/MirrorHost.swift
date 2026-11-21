@@ -241,6 +241,17 @@ final class MirrorHost {
 
   static let maximumPushControlsPerConnection = 16
 
+  /// The Host UUID, which salts each device's push key; `nil` until the identity is loaded.
+  var hostIdentityID: UUID? { identity?.id }
+
+  /// The gateway no longer knows this token (docs-ai 095): forget the registration, unless the
+  /// phone registered a newer token meanwhile.
+  func dropPushRegistration(_ deviceID: UUID, token: String) {
+    guard devices.first(where: { $0.id == deviceID })?.push?.token == token else { return }
+    updateDevice(deviceID, reportsError: false) { $0.push = nil }
+    sendPushStatus(to: [deviceID])
+  }
+
   /// Tells the open connections of these devices the current push state. Only a connection
   /// that has sent a push control gets it: an older client closes on an unknown control, and
   /// another connection's registration does not prove that this one understands it.

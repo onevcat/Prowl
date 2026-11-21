@@ -12,6 +12,8 @@ struct MirrorDeviceRow: View {
   let host: MirrorHost
   let device: MirrorPairedDevice
   var revoke: (() -> Void)?
+  /// Settings shows the device's push notification state and the Mac's control for it.
+  var showsNotifications = false
   let disconnect: (MirrorDisconnectTarget) -> Void
 
   var body: some View {
@@ -25,6 +27,9 @@ struct MirrorDeviceRow: View {
         VStack(alignment: .leading, spacing: 4) {
           Text(device.name).lineLimit(1)
           Text(status(mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
+          if showsNotifications {
+            MirrorDeviceNotificationsRow(host: host, device: device)
+          }
         }
         Spacer()
         if let revoke {
@@ -70,6 +75,38 @@ struct MirrorDeviceRow: View {
     }
     guard let seen = device.lastSeen else { return String(localized: "Paired · never connected") }
     return String(localized: "Last seen \(seen.formatted(.relative(presentation: .named)))")
+  }
+}
+
+/// A device's push notification state, and the Mac user's control for it (docs-ai 095).
+private struct MirrorDeviceNotificationsRow: View {
+  let host: MirrorHost
+  let device: MirrorPairedDevice
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Text(state).font(.caption).foregroundStyle(.secondary)
+      // The Mac's choice persists without a registration, so its control shows either way.
+      if !device.isPushAllowedByMac {
+        Button("Turn On") { host.setPushAllowed(true, for: device.id) }
+          .help("Allow notifications to this device again")
+          .accessibilityIdentifier("remote-mirror-device-notifications-on-\(device.id)")
+      } else if device.push != nil {
+        Button("Turn Off") { host.setPushAllowed(false, for: device.id) }
+          .help("Stop notifications to this device; the device cannot turn them on again")
+          .accessibilityIdentifier("remote-mirror-device-notifications-off-\(device.id)")
+      }
+    }
+    .buttonStyle(.link)
+    .font(.caption)
+  }
+
+  private var state: String {
+    guard device.isPushAllowedByMac else { return String(localized: "Notifications off for this device") }
+    guard device.push != nil else {
+      return String(localized: "Notifications not set up · turn them on in Prowl Mirror on this device")
+    }
+    return String(localized: "Notifications on")
   }
 }
 
