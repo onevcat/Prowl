@@ -151,13 +151,61 @@ installation may register keys for it. The proposal to finalize:
 
 ## Slices
 
-| Slice | Content |
-| --- | --- |
-| R0 | Spikes on a temporary private DERP: a real Mirror session through the tunnel (first registration on Wi-Fi → Wi-Fi off → TLS-PSK and device proof → list panes → open a pane), again with relay only, and with the Mac listener restricted to the Wi-Fi address; `derper` admission through a Worker, with fail-open off and the Worker down; helper download, hash and signature check, Gatekeeper with and without network, start and stop; two phones, revoke one, the other recovers |
-| R1 | Authorization model fixed; Mac: helper target and release asset, Remote Access setting, download and removal, process lifecycle, `remote-v1`, `remoteRegister` |
-| R2 | iOS: tunnel transport, LAN-then-tunnel connection, client rebuild on failure |
-| R3 | Gateway admission, RevenueCat, paywall, multi-device rules, privacy manifest and App Store privacy labels |
-| R4 | Relay deployment (Oracle Tokyo), derp map, monitoring |
+G slices live outside this repository (gateway, relay infrastructure). Prowl PRs R1–R4 form
+one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`, and updates
+`docs/` where behavior changes. 095 ships first; R0 can run in parallel.
+
+**R0 — spikes** (no PR; results and the authorization model go into this plan)
+- Accept: on a temporary private DERP, a real Mirror session works over 5G: first
+  registration on Wi-Fi → Wi-Fi off → TLS-PSK and device proof → list panes → open a pane and
+  type; the same with relay only; the same with the Mac listener restricted to its Wi-Fi
+  address; a key without a grant is refused; with the admission Worker down and fail-open off,
+  new connections are refused; with two phones, revoking one lets the other reconnect within
+  10 s; a helper with a wrong hash does not start; Gatekeeper runs the notarized helper with
+  and without network. The authorization model is final.
+
+**G2 — admission and grants** (gateway)
+- Accept: keys of an active grant are admitted; a key without one is refused; a refund or
+  expiry refuses the next connection; the grant cap holds; a Host key stays admitted while
+  any grant names it; every grant request carries a valid App Attest assertion.
+
+**G3 — relay deployment** (infrastructure)
+- Accept: a dedicated instance (not the telemetry VM) serves DERP on 443 and STUN on 3478;
+  `--verify-client-url-fail-open=false` is set and tested; certificates renew without help;
+  an alert fires when the relay is down.
+
+**R1 — helper build and release**
+- Content: `prowl-mirror-tunnel` built from TailcatKit per architecture, signing,
+  notarization, `tunnel-vN` release with SHA-256, start contract v1.
+- Accept: one `make` target builds both architectures; the release assets pass `codesign
+  --verify` and notarization; the helper refuses to start with an empty allowlist or an
+  unknown contract version.
+
+**R2 — Mac Remote Access**
+- Content: Settings switch (the first entry point) and manual install, download, checks and
+  removal, process lifecycle, dedicated loopback listener, `remote-v1`/`remoteRegister`,
+  revocation by restart, documentation.
+- Accept: with the switch off there is no helper file, no process and no relay traffic;
+  turning it on downloads (or accepts a chosen file) and checks it; a changed file is refused
+  at the next start; turning off any condition ends the process within 1 s; revoking one device
+  restarts the server and others reconnect; removing the last device stops the helper; an app
+  update with the same pin downloads nothing; **Remove** deletes the file; unit tests cover
+  the conditions and the start contract.
+
+**R3 — iOS tunnel**
+- Content: TailcatKit, loopback forwarder, LAN first then tunnel, client rebuild.
+- Accept: with the test relay, over 5G, the phone opens a pane, scrolls, sends keys and answers
+  a prompt; on the LAN it uses the LAN path; after the helper restarts, the phone reconnects
+  within 5 s (not the 20 s timeout); after 3 minutes in the background it resumes; without Pro
+  or with remote access off, no tailcat client exists.
+
+**R4 — iOS Mirror Pro**
+- Content: RevenueCat, user-initiated paywall, grant registration, Mac confirmation request,
+  privacy manifest and labels.
+- Accept: a sandbox purchase works; a Host that only advertises `remote-v1` shows no paywall;
+  the first setup needs the LAN and a confirmation on the Mac; the same purchase on an iPhone
+  and an iPad both connect; after the iPhone is removed the iPad still connects; a refund
+  refuses the next connection; the App Store privacy labels match `docs/remote-mirror.md`.
 
 ## Alternatives & decisions
 

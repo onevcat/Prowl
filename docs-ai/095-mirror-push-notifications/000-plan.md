@@ -184,13 +184,61 @@ on. The Mac does not know about subscriptions.
 
 ## Slices
 
-| Slice | Content |
-| --- | --- |
-| S0 | Done: gateway platform, APNs keys, Live Activity and NSE spikes (see Spike results). Left: one real APNs push to iPhone One with a Debug Mirror build and the NSE (Keychain read, decrypt, fallback text) |
-| S1 | Gateway: tokens, App Attest, push, activity mapping, rate limits, expiry |
-| S2 | Host: `push-v1`, `pushRegister`/`pushUnregister`, registration state, Mac switch and device states, presence, encryption, wire and feature docs |
-| S3 | iOS: APNs registration, Service Extension, settings, deep link, end-to-end test on a device |
-| S4 (P2) | Live Activity |
+The gateway lives in a separate private repository; its slices are named G. Prowl PRs P1–P3
+form one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`, and updates
+`docs/` where behavior changes.
+
+**S0 — real push on a device** (no PR; results go into this plan)
+- Goal: prove the first notification a user sees.
+- Accept: on iPhone One (Debug Mirror build with an NSE prototype, sandbox key), a push
+  arrives on the locked screen; the NSE reads the shared Keychain and decrypts; a corrupt
+  `sealed` or a missing key shows the generic text.
+
+**G1 — push gateway** (private repository)
+- Content: installations with App Attest, tokens, `POST /v1/push` to APNs, rate limits,
+  expiry.
+- Accept: a valid push reaches APNs sandbox (200); a deleted token gets `410`; a management
+  request without a valid assertion is refused (401); a `pushToken` cannot call management
+  (403); over the rate limit gets `429`; tokens unused for 90 days expire; no payload or event
+  appears in logs.
+
+**P1 — Host registration protocol** (no sends yet)
+- Content: `push-v1`, `pushRegister`/`pushUnregister`, registration state on
+  `MirrorPairedDevice`, persisted Mac permission, wire documentation.
+- Accept (unit tests): registrations survive a restart; a device turned off on the Mac stays
+  off after a new `pushRegister`; `pushUnregister` and unpairing remove the registration; a
+  client without `push-v1` is unaffected; the reply carries `pushEnabled` and
+  `pushAllowedByMac`.
+
+**P2 — Host sender**
+- Content: presence monitor, event trigger and debounce, catch-up, encryption, gateway client,
+  outbound gate, the Mac switch and device states, outbound list in `docs/remote-mirror.md`.
+- Accept (unit tests with a test clock, fake presence and fake gateway): zero gateway calls
+  when Remote Mirror is off, the Host stops, the switch is off, no registration exists, or the
+  Mac disallows the device; no push while present; a push when away; locking the screen
+  counts as away at once; catch-up at the change to away and when the device goes offline,
+  once per opening and only while still blocked; `done` only after 10 s of working and never
+  late; `410` drops the registration; no retry on network errors; the sealed payload opens
+  with a shared test vector; the collapse ID does not contain the pane UUID. Manual: a Debug
+  instance with the switch off makes no request to the gateway host (checked with a fake
+  gateway); Settings screenshots of the three device states.
+
+**P3 — iOS receiving**
+- Content: APNs registration, App Attest, `pushRegister`, NSE, generic text and **Show
+  Details**, settings, deep link.
+- Accept: unit tests for key derivation (same vector as the Host) and NSE decryption.
+  End to end on iPhone One with G1 and a Debug Host: Mac locked, an agent blocks → the
+  notification arrives within 10 s; a tap opens that pane with the current prompt; generic
+  text unless **Show Details** is on; no push while the user works at the Mac; reading pane A
+  on the phone while pane B blocks, then locking the phone → pane B is pushed; turning
+  notifications off on the phone stops pushes, also from a Host that was offline at the time.
+
+**P4 — Live Activity** (P2 phase)
+- Content: gateway activity mapping, Host `activityStart`/`activityEnd` and stop rules, widget
+  extension.
+- Accept: the activity starts from the foreground; counts change on the lock screen while the
+  app is suspended; after `end`, `expiresAt`, `activityEnd` or a gateway `404`, the Host sends
+  no further activity request; activity payloads contain no titles; no alert while present.
 
 ## Alternatives & decisions
 
