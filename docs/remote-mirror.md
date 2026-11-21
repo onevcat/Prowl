@@ -334,7 +334,10 @@ blocks and tables), and each run of tool calls between two messages as one quiet
 ("6 tool calls", with failures counted in red and the running call shown with a turning
 hourglass while the agent works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
-Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
+Codex's reasoning summary) is its own row between the steps, in secondary type. When a
+background command, agent or monitor of Claude Code finishes, Claude Code wakes the model with
+a task notification; the chat shows its summary as one line (orange when the task failed or was
+killed), not as a message. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
 trust question Claude Code and Codex ask before the first turn in a new folder), a panel
 above the composer shows the question, what it is about (the command to approve and, when
 Claude Code gives one, its note on why the command needs approval; the folder for a trust
