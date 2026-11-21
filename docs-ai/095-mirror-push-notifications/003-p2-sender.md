@@ -46,5 +46,5 @@ Second Prowl slice of 095, stacked on P1. The Host sends push events through the
 
 ## Refs
 
-PR (this slice). Tests: `MirrorPushPlannerTests`, `MirrorPushCryptoTests`, two sender tests in
+PR #1145. Tests: `MirrorPushPlannerTests`, `MirrorPushCryptoTests`, two sender tests in
 `MirrorHostTests` (one with seven gate cases).

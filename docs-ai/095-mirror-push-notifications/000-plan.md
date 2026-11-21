@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-21 |
-| **Primary PRs** | #1142 (plan), #1143 (S0), #1144 (P1) |
+| **Primary PRs** | #1142 (plan), #1143 (S0), #1144 (P1), #1145 (P2) |
 | **Related** | [096-mirror-remote-access](../096-mirror-remote-access/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [091-remote-mirror-alpha-settings](../091-remote-mirror-alpha-settings/000-plan.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md` |
 
 ## Background
