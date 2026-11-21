@@ -100,6 +100,11 @@ default); a paired device has a registration that the Mac allows. The Mac makes 
 gateway request. Each request carries only `pushToken`, a collapse ID and ciphertext.
 `docs/remote-mirror.md` lists exactly what leaves the Mac.
 
+The gateway stores only token records (push token, APNs token, environment, last use). It
+keeps no log of events or payloads beyond rate-limit counters. A leaked `pushToken` can only
+make one device show the generic text; per-token rate limits and revocation by the phone
+bound that.
+
 ### Presence
 
 No push while the user sits at the Mac; a timely push once they leave.
@@ -114,6 +119,8 @@ No push while the user sits at the Mac; a timely push once they leave.
 - Debounce: `blocked` once per prompt opening; `done` only after at least 10 s of `working`.
 - Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key.
 - Gateway `410` → drop the registration. Network errors → no retry.
+- Mac asleep: nothing is sent, and the agents are paused too. Keeping the Mac awake while
+  agents work is planned separately.
 
 ### Encryption and content
 
@@ -145,7 +152,7 @@ on. The Mac does not know about subscriptions.
   Dynamic Island compact shows the most urgent state color and the blocked count.
 - ActivityKit starts an activity only while the app is in the foreground, so the app starts it
   from the foreground (when the user opens the Host, or with a control); verify the exact
-  trigger in S5.
+  trigger in S4.
 - The app uploads the activity push token, and each rotation, to the gateway:
   `PUT /v1/tokens/{pushToken}/activity`. The Host keeps sending to its `pushToken`
   (`POST /v1/activity {pushToken, counts, changedAt}`); the gateway maps it to the current
@@ -164,7 +171,7 @@ on. The Mac does not know about subscriptions.
 | S1 | Gateway: tokens, App Attest, push, activity mapping, rate limits, expiry |
 | S2 | Host: `push-v1`, `pushRegister`/`pushUnregister`, registration state, Mac switch and device states, presence, encryption, wire and feature docs |
 | S3 | iOS: APNs registration, Service Extension, settings, deep link, end-to-end test on a device |
-| S5 (P2) | Live Activity |
+| S4 (P2) | Live Activity |
 
 ## Alternatives & decisions
 

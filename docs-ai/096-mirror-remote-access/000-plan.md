@@ -55,8 +55,14 @@ notarized executable, built per architecture and published as a release asset. E
 version pins the helper version and its SHA-256.
 
 - The download happens only when the user turns on **Remote Access (Mirror Pro)** in the
-  Remote Mirror settings (off by default). Before the first start, the app checks the hash and
-  that the code signature is valid for the same Team ID. A **Remove** control deletes it.
+  Remote Mirror settings (off by default). This switch is the first and main entry point.
+  The helper is stored in the app's Application Support folder, which the user can write, so
+  the app checks the hash and the code signature (same Team ID) **before every start**, not
+  only after the download. When an app update pins a new helper version, the app downloads it
+  at the next start of the feature and deletes the old one. A **Remove** control deletes it.
+- The phone cannot turn the feature on for the Mac. After a purchase, while on the LAN, the
+  phone can send a request; the Mac shows a confirmation, and only the Mac user's consent
+  starts the download.
 - The helper process runs only while all are true: Remote Mirror is on and the Host runs;
   **Remote Access** is on; at least one paired device registered remote access. Turning any of
   them off stops the process at once.
@@ -66,15 +72,18 @@ version pins the helper version and its SHA-256.
 ### Connection
 
 1. While on the LAN, a Pro phone sends `remoteRegister {nodeKey}` (its tailcat public key),
-   only when the Host advertises the `remote-v1` capability. The Host adds the key to the
-   helper's `allowedClients` and replies with its tailcat address, which the phone keeps in the
-   Keychain (the address grants access; treat it as a secret).
-2. The helper runs `TailcatServer` with a persistent identity (private key in the Mac
+   only when the Host advertises the `remote-v1` capability. The Host stores the key, starts
+   the helper if this was the missing condition, adds the key to `allowedClients`, and replies
+   with its tailcat address and node key. The phone keeps the address in the Keychain (the
+   address grants access; treat it as a secret).
+2. The phone then registers both node keys with the gateway (see Relays and admission). Until
+   that is done, the relays refuse the helper, which retries.
+3. The helper runs `TailcatServer` with a persistent identity (private key in the Mac
    Keychain, passed to the helper at start) and the derp map of our relays. It accepts on one
    tunnel port and forwards to the Host listener on `127.0.0.1`.
-3. The phone tries the LAN address first, then the tunnel. The iOS transport reads and writes
+4. The phone tries the LAN address first, then the tunnel. The iOS transport reads and writes
    a `TailcatKit` `Connection` under the existing TLS-PSK session.
-4. If a reused client times out (for example after the helper restarted), the app drops it
+5. If a reused client times out (for example after the helper restarted), the app drops it
    and makes a new one at once, instead of waiting for the full timeout.
 
 ### Relays and admission
@@ -87,6 +96,14 @@ version pins the helper version and its SHA-256.
   gateway together with its RevenueCat app user ID; the gateway allows both keys while the
   entitlement is active.
 - Most sessions go direct after NAT traversal; relays carry bootstrap and the rest.
+- The relays check a node only when it connects. When a subscription ends, the change takes
+  effect at the next connection; a session that is already up is not cut.
+- Revocation: unpairing a device on the Mac removes its key from `allowedClients` at once and
+  asks the gateway (through the phone, or at the next relay admission check) to drop it. A
+  phone that turns remote access off deletes its keys at the gateway.
+- `docs/remote-mirror.md` lists what the relays and the gateway see: node keys, IP addresses,
+  connection times, the RevenueCat app user ID; never terminal content (it is inside
+  WireGuard and TLS-PSK).
 
 ### Subscription
 
@@ -105,7 +122,7 @@ version pins the helper version and its SHA-256.
 | R0 | Spikes: `derper` client verification against a Worker; helper download, hash and signature check, Gatekeeper with and without network, start and stop |
 | R1 | Mac: helper target and release asset, Remote Access setting, download and removal, process lifecycle, `remote-v1`, `remoteRegister` |
 | R2 | iOS: tunnel transport, LAN-then-tunnel connection, client rebuild on failure |
-| R3 | Gateway admission, RevenueCat, paywall, multi-device rules |
+| R3 | Gateway admission, RevenueCat, paywall, multi-device rules, privacy manifest and App Store privacy labels |
 | R4 | Relay deployment (Oracle Tokyo), derp map, monitoring |
 
 ## Alternatives & decisions
@@ -152,5 +169,8 @@ Wi-Fi network, Tailscale's public relays, one echo server on the Mac.
 - Whether `derper` client verification can call an HTTPS endpoint as planned.
 - How the helper receives its private key safely (stdin, XPC, or a Keychain item it can read).
 - Battery cost of a long-lived tunnel on the phone.
+- Whether `derper` can re-check admission for long-lived connections, if cutting them at the
+  end of a subscription turns out to matter.
+- Android: `libtailcat` builds for Android; the client is not in scope of this plan.
 
 ## Amendments
