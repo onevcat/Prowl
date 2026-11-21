@@ -198,7 +198,11 @@ final class MirrorPushSender {
         // Delivered from here on, whatever the network result: no retry.
         self.planner.attempted(push)
         let result = await gateway.push(token: token, collapseID: request.collapseID, sealed: request.sealed)
-        guard result == .tokenGone else { return }
+        // A 410 for a token the phone has since replaced says nothing about the new one: leave
+        // both the registration and the planner's state for the device alone.
+        guard result == .tokenGone,
+          self.host.devices.first(where: { $0.id == push.deviceID })?.push?.token == token
+        else { return }
         self.planner.forget(push.deviceID)
         self.host.dropPushRegistration(push.deviceID, token: token)
       }

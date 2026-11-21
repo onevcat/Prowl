@@ -1450,6 +1450,80 @@ struct MirrorHostTests {
     #expect(await gateway.calls.count == 2)
   }
 
+  @Test(.timeLimit(.minutes(1))) func aLateTokenGoneForAnOldTokenKeepsTheNewRegistrationAndItsPrompts() async throws {
+    let old = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    let new = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210_-ZyXwV"
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(token: old, kinds: [.blocked])
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let gateway = HoldingPushGateway()
+    let first = UUID()
+    let second = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [first: .working, second: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { true }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    // A push with the old token is in flight.
+    states[first] = .blocked
+    sender.refresh()
+    var started = gateway.started.makeAsyncIterator()
+    _ = await started.next()
+    // Meanwhile the phone connects with a new token, and another prompt opens while it is online.
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    var messages = client.messages.makeAsyncIterator()
+    client.connection.send(.pushRegister(.init(pushToken: new, kinds: ["blocked"])))
+    #expect(Self.pushStatus(await messages.next())?.registered == true)
+    sender.refresh()
+    states[second] = .blocked
+    sender.refresh()
+    // The old request ends with 410.
+    await gateway.release(.tokenGone)
+    await sender.settle()
+    #expect(saved.devices[0].push?.token == new)
+    // The phone leaves: the prompt held while it was online goes out once, with the new token.
+    client.connection.close()
+    for await online in Observations({ host.isOnline(identity.devices[0].id) }) where !online { break }
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.tokens == [old, new])
+  }
+
+  private actor HoldingPushGateway: MirrorPushGateway {
+    private(set) var tokens: [String] = []
+    private var held: CheckedContinuation<MirrorPushGatewayResult, Never>?
+    nonisolated let started: AsyncStream<Void>
+    private let startedContinuation: AsyncStream<Void>.Continuation
+
+    init() { (started, startedContinuation) = AsyncStream.makeStream() }
+
+    /// The first request waits until `release`; later ones are accepted at once.
+    func push(token: String, collapseID: String, sealed: String) async -> MirrorPushGatewayResult {
+      tokens.append(token)
+      guard tokens.count == 1 else { return .accepted }
+      startedContinuation.yield()
+      return await withCheckedContinuation { held = $0 }
+    }
+
+    func release(_ result: MirrorPushGatewayResult) {
+      held?.resume(returning: result)
+      held = nil
+    }
+  }
+
   private actor RecordingPushGateway: MirrorPushGateway {
     private(set) var calls: [PushGatewayCall] = []
     let result: MirrorPushGatewayResult

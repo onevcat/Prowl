@@ -27,6 +27,9 @@ Second Prowl slice of 095, stacked on P1. The Host sends push events through the
   drained right after activation and after each refresh when the user is already away, so a
   device allowed while away, or a prompt that opened while the sender was stopped, does not
   wait for another presence or connection change.
+- Review round 3 of #1145: a `410` acts only when the device's current registration still
+  has the token of that request; a late answer for a token the phone has replaced changes
+  neither the registration nor the planner's state for the device.
 - `MacPresenceMonitor`: present = screen unlocked, display awake, input in the last 2 minutes
   (`CGEventSource` idle time, lock and screen-sleep notifications, 10 s poll). It runs only
   while the sender is active.
