@@ -84,9 +84,15 @@ same pin, so an app update usually downloads nothing.
    that is done, the relays refuse the helper, which retries.
 3. The helper runs `TailcatServer` with a persistent identity (private key in the Mac
    Keychain, passed to the helper at start) and the derp map of our relays. It accepts on one
-   tunnel port and forwards to the Host listener on `127.0.0.1`.
-4. The phone tries the LAN address first, then the tunnel. The iOS transport reads and writes
-   a `TailcatKit` `Connection` under the existing TLS-PSK session.
+   tunnel port and forwards to a **dedicated loopback listener** that the Host opens only for
+   the helper (`127.0.0.1`, any port, given to the helper in its start contract). It is
+   separate from the user-facing listener, whose address the user may restrict to Wi-Fi or a
+   VPN (`requiredLocalEndpoint` in `MirrorHost.swift`), so that choice cannot break the last
+   hop. The same TLS-PSK and device proof apply on it.
+4. The phone tries the LAN address first, then the tunnel. For the tunnel, the app opens a
+   loopback forwarder (`127.0.0.1`, in-app, foreground only) that pipes to a `TailcatKit`
+   `Connection`, and points the existing `NWConnection` with TLS-PSK at it, so the TLS and
+   authentication code is unchanged.
 5. If a reused client times out (for example after the helper restarted), the app drops it
    and makes a new one at once, instead of waiting for the full timeout.
 
@@ -102,12 +108,32 @@ same pin, so an app update usually downloads nothing.
 - Most sessions go direct after NAT traversal; relays carry bootstrap and the rest.
 - The relays check a node only when it connects. When a subscription ends, the change takes
   effect at the next connection; a session that is already up is not cut.
-- Revocation: unpairing a device on the Mac removes its key from `allowedClients` at once and
-  asks the gateway (through the phone, or at the next relay admission check) to drop it. A
-  phone that turns remote access off deletes its keys at the gateway.
+- Revocation on the Mac: `TailcatServer.allow(_:)` only adds keys and leaves existing flows
+  up, so removing a device closes the server and starts it again with the remaining keys;
+  other devices reconnect briefly, which is expected. An empty `allowedClients` allows anyone
+  who has the address, so the helper never starts with an empty list: removing the last
+  device stops it. A phone that turns remote access off deletes its grant at the gateway.
+- `derper` has `--verify-client-url` and defaults `--verify-client-url-fail-open` to `true`.
+  Production sets it to `false`: if the gateway cannot be reached, new relay connections are
+  refused.
 - `docs/remote-mirror.md` lists what the relays and the gateway see: node keys, IP addresses,
   connection times, the RevenueCat app user ID; never terminal content (it is inside
   WireGuard and TLS-PSK).
+
+### Authorization model (decide before R1 fixes the wire format)
+
+A client-supplied RevenueCat app user ID proves that someone has a subscription, not that this
+installation may register keys for it. The proposal to finalize:
+
+- A **grant** = (subscription, iOS installation, phone node key, Host node key). The
+  installation proves itself with App Attest (as in 095); the purchase with the signed
+  StoreKit 2 transaction (`originalTransactionID`), checked through RevenueCat or Apple's
+  signature. Grants per subscription are capped (for example 5 installations).
+- A phone node key is admitted while its grant is active. A Host node key is admitted while
+  **any** active grant names it, so two phones on one Mac do not depend on each other.
+- Removing one installation (in the app, on the Mac, or by the cap) ends only its grants.
+- Acceptance: the same purchase restored on an iPhone and an iPad both connect; after the
+  iPhone is removed, the iPad still connects to the shared Mac; a refund ends all grants.
 
 ### Subscription
 
@@ -116,15 +142,19 @@ same pin, so an app update usually downloads nothing.
   works for an iPhone and an iPad on the same Apple ID (RevenueCat restore behavior and app
   user IDs), and test: two devices, reinstall, refund, removing one device.
 - The Mac setting is the entry point on the Mac: with **Remote Access** off, a short text says
-  that it needs Mirror Pro in the iOS app and links to the App Store page. The phone shows a
-  paywall when the Host advertises `remote-v1` and the user has no Pro.
+  that it needs Mirror Pro in the iOS app and links to the App Store page.
+- The phone shows the paywall only when the user asks for remote access: **Enable Remote
+  Access** in the Host settings, or a connection that fails off the LAN (for example after a
+  notification tap) with an offer to enable it. A Host that merely advertises `remote-v1`
+  shows no purchase prompt. Before the purchase, the paywall says that the first setup needs
+  the phone on the same network as the Mac and a confirmation on the Mac.
 
 ## Slices
 
 | Slice | Content |
 | --- | --- |
-| R0 | Spikes: `derper` client verification against a Worker; helper download, hash and signature check, Gatekeeper with and without network, start and stop |
-| R1 | Mac: helper target and release asset, Remote Access setting, download and removal, process lifecycle, `remote-v1`, `remoteRegister` |
+| R0 | Spikes on a temporary private DERP: a real Mirror session through the tunnel (first registration on Wi-Fi → Wi-Fi off → TLS-PSK and device proof → list panes → open a pane), again with relay only, and with the Mac listener restricted to the Wi-Fi address; `derper` admission through a Worker, with fail-open off and the Worker down; helper download, hash and signature check, Gatekeeper with and without network, start and stop; two phones, revoke one, the other recovers |
+| R1 | Authorization model fixed; Mac: helper target and release asset, Remote Access setting, download and removal, process lifecycle, `remote-v1`, `remoteRegister` |
 | R2 | iOS: tunnel transport, LAN-then-tunnel connection, client rebuild on failure |
 | R3 | Gateway admission, RevenueCat, paywall, multi-device rules, privacy manifest and App Store privacy labels |
 | R4 | Relay deployment (Oracle Tokyo), derp map, monitoring |
@@ -170,7 +200,7 @@ Wi-Fi network, Tailscale's public relays, one echo server on the Mac.
 
 ## Open questions
 
-- Whether `derper` client verification can call an HTTPS endpoint as planned.
+- Whether the admission request carries enough to identify the grant (node key only).
 - How the helper receives its private key safely (stdin, XPC, or a Keychain item it can read).
 - Battery cost of a long-lived tunnel on the phone.
 - Whether `derper` can re-check admission for long-lived connections, if cutting them at the
@@ -178,3 +208,7 @@ Wi-Fi network, Tailscale's public relays, one echo server on the Mac.
 - Android: `libtailcat` builds for Android; the client is not in scope of this plan.
 
 ## Amendments
+
+- Updated 2026-11-21: dedicated loopback listener for the helper, revocation by server
+  restart, fail-open off, authorization model, user-initiated paywall, R0 real Mirror session.
+  From a second review of #1142.

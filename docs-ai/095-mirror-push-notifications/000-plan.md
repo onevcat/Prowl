@@ -53,11 +53,15 @@ source-available, with no entitlement check.
 
 ### Registration and revocation
 
-One **push token per (device, Host)**. The app registers it with the gateway:
-`POST /v1/tokens {apnsToken, environment, attestation}` → `{pushToken}`. `pushToken` is a
-random opaque bearer (32 bytes) that can push to that device only; `attestation` is an App
-Attest assertion that limits abuse of the free service. An APNs token change is a
-`PUT /v1/tokens/{pushToken}`; the Host does not see it.
+One **push token per (device, Host)**. Two kinds of authority are kept apart:
+
+- **Send**: `pushToken`, a random opaque bearer (32 bytes) that the Host holds. It permits
+  only `POST /v1/push` and `POST /v1/activity` for that one device.
+- **Manage**: only the iOS installation that created the record. The app attests once with
+  App Attest (`POST /v1/installations`), and every management request carries an App Attest
+  assertion over the request: create a token (`POST /v1/tokens {apnsToken, environment}` →
+  `{pushToken}`), change the APNs token, delete a token, register or end a Live Activity.
+  A `pushToken` alone cannot change or delete anything.
 
 State on the Host, per paired device (`MirrorPairedDevice` in `MirrorAuthentication.swift`,
 new optional fields):
@@ -97,13 +101,16 @@ There is no lasting connection from the Mac to the gateway: one HTTPS request pe
 The Mac makes **no** request to the gateway unless all are true: Remote Mirror is on and the
 Host runs (`MirrorHost.isRunning`); **Send Notifications to Paired Devices** is on (off by
 default); a paired device has a registration that the Mac allows. The Mac makes no other
-gateway request. Each request carries only `pushToken`, a collapse ID and ciphertext.
+gateway request. Each push request carries only `pushToken`, a collapse ID and ciphertext (Live Activity
+requests are listed under P2).
 `docs/remote-mirror.md` lists exactly what leaves the Mac.
 
-The gateway stores only token records (push token, APNs token, environment, last use). It
-keeps no log of events or payloads beyond rate-limit counters. A leaked `pushToken` can only
-make one device show the generic text; per-token rate limits and revocation by the phone
-bound that.
+The gateway stores installation records (App Attest key ID, public key, assertion counter,
+creation time) and token records (push token, owning installation, APNs token, environment,
+current activity token and its expiry, last use). It keeps no log of events or payloads beyond
+rate-limit counters. A leaked `pushToken` can only make one device show the generic text, or
+change the counts of an active Live Activity; per-token rate limits and revocation by the
+phone bound that.
 
 ### Presence
 
@@ -114,8 +121,12 @@ No push while the user sits at the Mac; a timely push once they leave.
   sleep from system notifications). Anything else is **away**. The monitor runs only while the
   sender has a registration to serve.
 - Present: no push. Away: push as events happen.
-- On the change to away: one push for each pane still `blocked` whose push was held back.
-  `done` is not sent late.
+- Catch-up: the Host keeps, per device, the `blocked` prompt openings that were held back
+  (user present, or the device online) and not yet delivered. It checks them at two moments:
+  the Mac changes to away, and the device goes offline while the Mac is away. Each opening is
+  pushed at most once, and only while it is still `blocked`. Example: the Mac is locked, the
+  user reads pane A on the phone, pane B blocks (held back: device online), the user locks
+  the phone → the device goes offline → pane B is pushed. `done` is not sent late.
 - Debounce: `blocked` once per prompt opening; `done` only after at least 10 s of `working`.
 - Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key.
 - Gateway `410` → drop the registration. Network errors → no retry.
@@ -153,15 +164,23 @@ on. The Mac does not know about subscriptions.
 - ActivityKit starts an activity only while the app is in the foreground, so the app starts it
   from the foreground (when the user opens the Host, or with a control); verify the exact
   trigger in S4.
-- The app uploads the activity push token, and each rotation, to the gateway:
-  `PUT /v1/tokens/{pushToken}/activity`. The Host keeps sending to its `pushToken`
-  (`POST /v1/activity {pushToken, counts, changedAt}`); the gateway maps it to the current
-  activity token. The Host never needs the activity token, and the app needs no Host
-  connection after it goes to the background.
-- The payload is plaintext to the gateway and Apple: Host-level `pushToken`, counts, times.
-  No titles: the spike showed that the view cannot read the Keychain on a device.
-- Updates follow count changes and never alert while the user is present; `end` after all
-  agents are idle or done for a few minutes.
+- Registration: when it starts an activity, the app tells the Host over the live
+  connection (`activityStart {expiresAt}`, at most 8 hours, the ActivityKit limit) and uploads
+  the activity push token, and each rotation, to the gateway (a management request). The Host
+  never sees the activity token, and the app needs no Host connection after it goes to the
+  background.
+- Sending: the Host sends `POST /v1/activity {pushToken, counts, changedAt}` only while it has
+  an unexpired `activityStart` for that device, and only when a count changes. The gateway
+  maps it to the current activity token.
+- Stopping: the Host stops at `expiresAt`, after it sends `end` (all agents idle or done for a
+  few minutes), when the app sends `activityEnd` (the user ended it in the app), or when the
+  gateway answers `404` (the app reported the activity as dismissed or ended, or it has no
+  activity token). A dismissal while the app is suspended reaches the gateway when the app
+  next runs; until then at most the remaining time to `expiresAt` of count updates can go out.
+- Outbound content, separate from the push gate above: these requests carry plaintext counts
+  and times with the `pushToken`. They exist only for a device whose user started a Live
+  Activity. No titles: the spike showed that the view cannot read the Keychain on a device.
+- Updates never alert while the user is present.
 
 ## Slices
 
@@ -186,6 +205,11 @@ on. The Mac does not know about subscriptions.
   so it held pushes back when the user left with Prowl in front.
 - **Mac switch off by default** — chosen: the Mac sends the traffic, so the Mac user opts in.
 - **Gateway on Cloudflare Workers** — chosen after the S0 spike.
+- **Send and manage authority apart** — chosen. The Host holds a send-only token; changes
+  need App Attest assertions from the creating installation, so a leaked token cannot
+  redirect or delete anything.
+- **Catch-up when the device goes offline** — chosen, besides the change to away; otherwise a
+  prompt held back while the phone was connected was never sent.
 - **Live Activity tokens through the gateway** — chosen; the app is suspended in the
   background, so the Host cannot receive token updates.
 
@@ -212,3 +236,5 @@ Throwaway projects only.
   [096](../096-mirror-remote-access/000-plan.md); registration and revocation state, generic
   default content, tap-to-open instead of lock-screen answers, Live Activity tokens through the
   gateway. From a plan review of #1142.
+- Updated 2026-11-21: send-only `pushToken` with App Attest for management, catch-up when the
+  device goes offline, Live Activity registration and stop rules. From a second review.
