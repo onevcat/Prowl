@@ -7957,6 +7957,16 @@
         }
       }
     },
+    "Every worktree has an open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个 worktree 都有打开的标签页"
+          }
+        }
+      }
+    },
     "Evicting polite overcommit" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9345,6 +9355,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有 Agent 会话运行时隐藏该栏。默认关闭。"
+          }
+        }
+      }
+    },
+    "Hide the worktrees with no open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏没有打开标签页的 worktree"
           }
         }
       }
@@ -18496,6 +18516,16 @@
         }
       }
     },
+    "Show %lld More" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再显示 %lld 个"
+          }
+        }
+      }
+    },
     "Show Active Agents" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18562,6 +18592,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示隐藏文件夹"
+          }
+        }
+      }
+    },
+    "Show Less" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起"
           }
         }
       }
@@ -18872,6 +18912,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Prowl 程序坞图标上显示未读 worktree 数量。"
+          }
+        }
+      }
+    },
+    "Show the worktrees with no open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示没有打开标签页的 worktree"
           }
         }
       }
