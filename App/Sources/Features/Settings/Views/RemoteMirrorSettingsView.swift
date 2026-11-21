@@ -125,7 +125,7 @@ struct RemoteMirrorSettingsView: View {
       }
       ForEach(host.devices) { device in
         MirrorDeviceRow(
-          host: host, device: device, revoke: { deviceToRevoke = device },
+          host: host, device: device, revoke: { deviceToRevoke = device }, showsNotifications: true,
           disconnect: { mirrorToDisconnect = $0 })
       }
       HStack {
@@ -229,6 +229,16 @@ private struct ConnectToThisMacSection: View {
       .accessibilityIdentifier("remote-mirror-listener-status")
       Toggle("Start listening when Prowl opens", isOn: $startsOnLaunch)
         .help("Start the listener at launch, so paired devices can connect without a click here")
+      Toggle(isOn: $host.pushEnabled) {
+        Text("Send notifications to paired devices")
+        Text(
+          """
+          When an agent needs you or finishes while you are away from this Mac, paired devices \
+          get a notification through the Prowl push service. The content is end-to-end encrypted.
+          """)
+      }
+      .help("Notify paired iPhones and iPads when you are away from this Mac")
+      .accessibilityIdentifier("remote-mirror-push-enabled")
       if editable {
         Picker("Listen on", selection: $host.address) {
           ForEach(options) { Text($0.label).tag($0.address) }

@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-21 |
-| **Primary PRs** | #1142 (plan), #1143 (S0), #1144 (P1) |
+| **Primary PRs** | #1142 (plan), #1143 (S0), #1144 (P1), #1145 (P2) |
 | **Related** | [096-mirror-remote-access](../096-mirror-remote-access/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [091-remote-mirror-alpha-settings](../091-remote-mirror-alpha-settings/000-plan.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md` |
 
 ## Background
@@ -302,3 +302,4 @@ S0 notes for P3:
 - Updated 2026-11-21: send-only `pushToken` with App Attest for management, catch-up when the
   device goes offline, Live Activity registration and stop rules. From a second review.
 - Updated 2026-11-21: P1 Host registration protocol — see [002-p1-registration.md](002-p1-registration.md)
+- Updated 2026-11-22: P2 Host sender — see [003-p2-sender.md](003-p2-sender.md)

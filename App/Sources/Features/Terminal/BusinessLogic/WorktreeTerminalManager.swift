@@ -1340,6 +1340,9 @@ final class WorktreeTerminalManager {
     emitNotificationIndicatorCountIfNeeded()
   }
 
+  /// Every worktree state, including ones without tabs.
+  var allWorktreeStates: [WorktreeTerminalState] { Array(states.values) }
+
   var activeWorktreeStates: [WorktreeTerminalState] {
     states.values.filter { !$0.tabManager.tabs.isEmpty }
   }
