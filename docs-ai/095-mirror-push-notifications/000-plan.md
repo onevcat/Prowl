@@ -99,7 +99,9 @@ gateway unless all of these are true:
 
 1. **Remote Mirror** is on in Settings (`remoteMirrorEnabled`) and the Host runs
    (`MirrorHost.isRunning`). Turning either off stops all sends at once.
-2. A paired device has a push target. The iOS app sends `pushRegister` only while it has an
+2. **Send Notifications to Paired Devices** is on in the Remote Mirror settings (off by
+   default; see "Mac setting and Mirror Pro entry").
+3. A paired device has a push target. The iOS app sends `pushRegister` only while it has an
    active Mirror Pro entitlement and the user has turned notifications on. Without Pro, no
    target exists and the Mac sends nothing.
 
@@ -122,6 +124,27 @@ lists exactly what leaves the Mac.
   who build their own iOS app and run their own gateway.
 - **Remote Mirror** settings show per device whether notifications are on, and the Mac user
   can turn them off for that device (drops the target).
+
+### Mac setting and Mirror Pro entry
+
+The **Connect to This Mac** group of the Remote Mirror settings gets a switch **Send
+Notifications to Paired Devices**, off by default. It is a free Mac setting with no
+entitlement check; it is also where a Mac user learns that Mirror Pro exists.
+
+- Off: the Host still accepts and stores `pushRegister`, but sends nothing. Turning it on
+  starts sends at once, with no new connection from the phone.
+- Under the switch, each paired device shows one state: **On** (it has a push target),
+  **Not set up** (no target), or **Off for this device** (the Mac user turned it off). For
+  **Not set up**, a short text says that notifications need Mirror Pro in the iOS app (free
+  trial) and gives a link to the App Store page of the iOS app.
+- The Host reports the switch to clients as `pushEnabled` on `panes` (next to the `push-v1`
+  capability). The iOS app uses it in both directions:
+  - `pushEnabled` and no Pro: a banner "Your Mac can send you notifications" that opens the
+    paywall. This is the main upsell path from the Mac.
+  - Pro and not `pushEnabled`: the notification settings say "Turn on Send Notifications to
+    Paired Devices in Prowl Settings → Remote Mirror on your Mac".
+- The Mac does not know the subscription state. A push target exists only when the phone has
+  Pro, so **On** vs. **Not set up** is enough for the Mac UI.
 
 ### iOS
 
@@ -164,7 +187,7 @@ lists exactly what leaves the Mac.
 | --- | --- |
 | S0 | Done 2026-11-21: gateway platform and APNs keys (see Spike results). Left for S1/S3: App Store Connect products, RevenueCat project and webhook |
 | S1 | Gateway: device registration, push, entitlement cache, rate limits, delete |
-| S2 | Host: `push-v1` capability, `pushRegister`, target storage, event trigger, encryption, settings row, wire and feature docs |
+| S2 | Host: `push-v1` capability, `pushRegister`, `pushEnabled`, target storage, event trigger, encryption, the **Send Notifications to Paired Devices** switch with per-device states and the Mirror Pro hint, wire and feature docs |
 | S3 | iOS: APNs registration, Service Extension, paywall, settings, tap to open; first end-to-end test with real APNs on a device |
 | S4 (P2) | Answer from the notification |
 | S5 (P2) | Live Activity |
@@ -191,8 +214,14 @@ lists exactly what leaves the Mac.
   APNs over HTTP/2 and signs the ES256 provider token with WebCrypto. No server to operate.
 - **Live Activity with counts only** — chosen. Titles would need the push key at render time;
   the spike showed that the Keychain is not available there on a device.
+- **Mac switch off by default** — chosen. The Mac is the machine that sends the traffic, so
+  the Mac user turns it on, and both sides agree before anything leaves the Mac. The cost is
+  one more step for a new Pro user; the iOS app points to the switch, and the Mac switch is
+  also the entry point that leads Mac users to Mirror Pro. On by default would make the phone
+  subscription alone enough to start traffic from the Mac.
 - **No managed preference (MDM) to turn off push** — deferred. The traffic gate (Remote
-  Mirror on, Host running, an entitled device registered) is enough for now.
+  Mirror on, Host running, the Mac switch on, an entitled device registered) is enough for
+  now.
 
 ## Spike results (2026-11-21)
 
