@@ -69,7 +69,8 @@ subscription.
 4. The Host listens to agent state changes (`AgentObservationStore.publishAgentChanged`
    publishes `.changed(ActiveAgentEntry)`). On a transition to `blocked` or `done` it posts
    `POST /v1/push {pushToken, collapseID, sealed}` for each device that has a target, wants
-   that kind, and is not online (`MirrorHost.isOnline(_:)`).
+   that kind, and is not online (`MirrorHost.isOnline(_:)`), subject to the outbound traffic
+   gate below.
 5. The gateway checks the entitlement of the device's `appUserID` (cached, refreshed by
    RevenueCat webhooks). If active, it sends an APNs alert with `mutable-content: 1`, a
    generic localized fallback text, `apns-collapse-id` per pane, and `sealed` as custom data.
@@ -91,17 +92,39 @@ per event, only when a paired device has a target.
   extension. The device secret stays in the app's own group
   (`Mirror/iOS/ProwlMirror-iOS/Infrastructure/MirrorAuthentication.swift`).
 
+### Outbound traffic gate
+
+Some users work in companies that watch outbound traffic. The Mac makes **no** request to the
+gateway unless all of these are true:
+
+1. **Remote Mirror** is on in Settings (`remoteMirrorEnabled`) and the Host runs
+   (`MirrorHost.isRunning`). Turning either off stops all sends at once.
+2. A paired device has a push target. The iOS app sends `pushRegister` only while it has an
+   active Mirror Pro entitlement and the user has turned notifications on. Without Pro, no
+   target exists and the Mac sends nothing.
+3. The managed preference `RemoteMirrorPushDisabled` is not set. An administrator can set it
+   with a configuration profile; the Host then ignores `pushRegister`, stores no target, and
+   does not advertise `push-v1`.
+
+The Mac makes no other gateway request: no health check, no prefetch, no registration of its
+own. Each request carries only `pushToken`, a collapse ID, and ciphertext. `docs/remote-mirror.md`
+lists exactly what leaves the Mac.
+
 ### Host rules
 
 - Debounce per pane: send `blocked` once per prompt opening, `done` only after a `working`
-  period of at least 10 s. A newer event on the same pane replaces the older one (collapse ID).
+  period of at least 10 s. A newer event on the same pane replaces the older one.
+- Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key, so the gateway does
+  not see pane IDs.
 - Skip a pane the user looks at on the active Mac (same rule as
   `muteNotificationsForActiveSurface`).
-- Gateway `410` → drop the target. `402` (no entitlement) → keep it; the gateway drops cheaply.
-  Network errors → no retry; a lost notification is acceptable.
+- Gateway `410` (token gone) or `402` (no entitlement) → drop the target. After a subscription
+  ends, at most one request per device goes out; the next `pushRegister` from an entitled app
+  adds the target again. Network errors → no retry; a lost notification is acceptable.
 - Gateway base URL: a constant, with a `UserDefaults` override for development and for people
   who build their own iOS app and run their own gateway.
-- **Remote Mirror** settings show per device whether notifications are on.
+- **Remote Mirror** settings show per device whether notifications are on, and the Mac user
+  can turn them off for that device (drops the target).
 
 ### iOS
 
