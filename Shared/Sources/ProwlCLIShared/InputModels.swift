@@ -510,10 +510,35 @@ public struct CreateLaunchInput: Codable, Sendable, Equatable {
 
   public let profile: String
   public let prompt: String?
+  /// A person's kickoff, not automation: the prompt goes in as typed, with no dispatch receipt
+  /// and no completion protocol. Only the Remote Mirror Host sets it; the CLI has no flag.
+  public let interactive: Bool
 
-  public init(profile: String, prompt: String? = nil) {
+  enum CodingKeys: String, CodingKey {
+    case profile
+    case prompt
+    case interactive
+  }
+
+  public init(profile: String, prompt: String? = nil, interactive: Bool = false) {
     self.profile = profile
     self.prompt = prompt
+    self.interactive = interactive
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    profile = try container.decode(String.self, forKey: .profile)
+    prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
+    interactive = try container.decodeIfPresent(Bool.self, forKey: .interactive) ?? false
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(profile, forKey: .profile)
+    try container.encodeIfPresent(prompt, forKey: .prompt)
+    // Absent unless set, so a CLI request encodes as it did before.
+    if interactive { try container.encode(true, forKey: .interactive) }
   }
 }
 

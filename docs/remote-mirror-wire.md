@@ -32,6 +32,9 @@ The `launch-profile` capability permits Profile-backed background tab creation.
 `launch-shell` additionally permits a background `create tab` with no `launch`
 field. Neither capability permits arbitrary initial Shell input. Mac clients gate
 Shell creation on `launch-shell`; existing Profile requests remain unchanged.
+The Host marks every remote Profile launch `interactive`: a prompt goes into the agent as
+typed, with no dispatch receipt and no completion instruction, so the `create` result has no
+`dispatch` field. The CLI cannot set this field; `prowl create --prompt` keeps its dispatch.
 The remote `list` command result adds optional `data.worktrees`, using the same
 worktree fields as `data.items[].worktree`, to include known worktrees without
 terminal panes. Clients without that field can still use worktrees from `items`.

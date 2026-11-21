@@ -122,6 +122,62 @@ struct ClaudeConversationAdapterTests {
     #expect(origins == [.automation, .system, .automation])
   }
 
+  /// Claude Code wakes the model with a `<task-notification>` user turn when a background
+  /// command, agent or monitor finishes (2.1.312–2.1.330). It is not the person's message: the
+  /// chat shows its summary as one line, not the XML (and an agent's whole report) in a bubble.
+  @Test func taskNotificationsAreNoticesNotMessages() {
+    func notification(status: String, summary: String) -> String {
+      """
+      <task-notification>
+      <task-id>bxwno5hfw</task-id>
+      <tool-use-id>toolu_01FFMW2msxAKNDrmmf1LLtzY</tool-use-id>
+      <output-file>/private/tmp/tasks/bxwno5hfw.output</output-file>
+      <status>\(status)</status>
+      <summary>\(summary)</summary>
+      <result>## Report
+
+      A long report from the agent.</result>
+      <usage>subagent_tokens: 36847
+      tool_uses: 4
+      duration_ms: 18516</usage>
+      </task-notification>
+      """
+    }
+    let events = run([
+      base(
+        "user",
+        [
+          "message": [
+            "role": "user",
+            "content": notification(
+              status: "completed",
+              summary: "Background command \"make test &gt; log 2&gt;&amp;1\" completed (exit code 0)"),
+          ],
+          "promptId": "p1", "origin": ["kind": "task-notification"], "promptSource": "system",
+        ]),
+      base(
+        "user",
+        [
+          "message": [
+            "role": "user",
+            "content": [["type": "text", "text": notification(status: "failed", summary: "Agent \"Review\" failed")]],
+          ],
+          "promptId": "p2", "turnOrigin": "task_notification",
+        ]),
+    ])
+    #expect(events.map(\.kind) == [.sessionStarted, .turnStarted, .notice, .turnStarted, .notice])
+    let notices = events.compactMap { event -> Event.Notice? in
+      if case .notice(let notice) = event.payload { return notice }
+      return nil
+    }
+    #expect(
+      notices.map(\.text) == [
+        "Background command \"make test > log 2>&1\" completed (exit code 0)", "Agent \"Review\" failed",
+      ])
+    #expect(notices.map(\.level) == [.info, .warning])
+    #expect(notices.allSatisfy { $0.subtype == "task-notification" })
+  }
+
   /// A thinking-block signature in the shape Claude Code 2.1.319 writes: base64 protobuf with
   /// the kind at field 2 → 1 → 8 (`narration` or `thinking`), next to other fields.
   static func signature(kind: String) -> String {
@@ -389,6 +445,27 @@ struct ClaudeConversationAdapterTests {
         "user.queued:first", "user.queued:second", "user.unqueued:first", "user.queued:third",
         "user.unqueued:third:absorbed_mid_turn", "user.unqueued:second",
       ])
+  }
+
+  /// A task notification that arrives while the agent works waits in the same queue. It holds
+  /// its place, so `dequeue` still releases the right message, but the chat never shows it.
+  @Test func queuedTaskNotificationsStayOutOfTheChat() {
+    let notification = "<task-notification>\n<task-id>b1</task-id>\n<summary>Done</summary>\n</task-notification>"
+    let events = run([
+      ["type": "queue-operation", "operation": "enqueue", "content": notification],
+      ["type": "queue-operation", "operation": "enqueue", "content": "typed"],
+      ["type": "queue-operation", "operation": "dequeue"],
+      ["type": "queue-operation", "operation": "dequeue"],
+      ["type": "queue-operation", "operation": "enqueue", "content": notification],
+      ["type": "queue-operation", "operation": "remove", "content": notification],
+      ["type": "queue-operation", "operation": "enqueue", "content": notification],
+      ["type": "queue-operation", "operation": "popAll"],
+    ])
+    let steps = events.compactMap { event -> String? in
+      guard case .message(let message) = event.payload else { return nil }
+      return "\(event.kind.rawValue):\(message.text.text)"
+    }
+    #expect(steps == ["user.queued:typed", "user.unqueued:typed"])
   }
 
   @Test func mapsSystemRecordsTitleAndCost() {

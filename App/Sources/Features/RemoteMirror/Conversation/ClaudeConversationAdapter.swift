@@ -95,6 +95,14 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
     _ text: String, record: MirrorConversationRecord, origin: Event.MessageOrigin, images: Int = 0, at timestamp: Date?
   ) -> [Event] {
     if text.hasPrefix("<local-command-stdout>") { return [] }
+    if let notice = taskNotice(text) {
+      // The turn the notification starts is the agent's; the notification itself is not a message.
+      let turn = Event.Turn(id: Value.string(record, "promptId"), origin: origin)
+      return [
+        Event(.turnStarted, .turn(turn), at: timestamp, source: .transcript),
+        Event(.notice, .notice(notice), at: timestamp, source: .transcript),
+      ]
+    }
     if text.hasPrefix("<command-name>") {
       guard let command = tag("command-name", in: text), !command.isEmpty else { return [] }
       let notice = Event.Notice(level: .info, text: Value.title(command, limit: 200), subtype: "command")
@@ -107,6 +115,25 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
       Event(.turnStarted, .turn(turn), at: timestamp, source: .transcript),
       Event(.userMessage, .message(message), at: timestamp, source: .transcript),
     ]
+  }
+
+  /// Claude Code wakes the model with a `<task-notification>` user turn when a background
+  /// command, agent or monitor finishes or reports (2.1.312–2.1.330). Its `<summary>` is one
+  /// line for people; the rest (ids, output file, an agent's whole `<result>`, `<usage>`) is for
+  /// the model. The summary keeps the XML escapes of the command it quotes.
+  private static func taskNotice(_ text: String) -> Event.Notice? {
+    guard text.hasPrefix("<task-notification>") else { return nil }
+    let summary = tag("summary", in: text).map(unescapedXML) ?? ""
+    let failed = ["failed", "killed"].contains(tag("status", in: text))
+    return Event.Notice(
+      level: failed ? .warning : .info,
+      text: Value.title(summary.isEmpty ? "Background task finished" : summary, limit: 200),
+      subtype: "task-notification")
+  }
+
+  private static func unescapedXML(_ text: String) -> String {
+    text.replacing("&lt;", with: "<").replacing("&gt;", with: ">").replacing("&quot;", with: "\"")
+      .replacing("&apos;", with: "'").replacing("&amp;", with: "&")
   }
 
   /// A paste of several lines, as Claude Code 2.1.322 records it: the text between an opening
@@ -287,30 +314,34 @@ nonisolated struct ClaudeConversationAdapter: MirrorConversationAdapter {
 
   /// `enqueue` carries the text; `dequeue` names nothing and releases the oldest queued
   /// message; `remove` and `popAll` carry the text they take back.
+  /// A queued task notification keeps its place, so `dequeue` releases the right message, but
+  /// it is not the person's message and makes no event.
   private mutating func queueEvents(_ record: MirrorConversationRecord, at timestamp: Date?) -> [Event] {
     let content = Value.string(record, "content")
     let reason = Value.string(record, "reason")
-    func unqueued(_ text: String) -> Event {
+    func unqueued(_ text: String) -> [Event] {
+      guard Self.taskNotice(text) == nil else { return [] }
       let message = Event.Message(text: .init(text, limit: 512), origin: .queued, reason: reason)
-      return Event(.userUnqueued, .message(message), at: timestamp, source: .transcript)
+      return [Event(.userUnqueued, .message(message), at: timestamp, source: .transcript)]
     }
     switch Value.string(record, "operation") {
     case "enqueue":
       guard let content else { return [] }
       queued.append(content)
+      guard Self.taskNotice(content) == nil else { return [] }
       let message = Event.Message(text: .init(content, limit: 512), origin: .queued)
       return [Event(.userQueued, .message(message), at: timestamp, source: .transcript)]
     case "dequeue":
       guard !queued.isEmpty else { return [] }
-      return [unqueued(queued.removeFirst())]
+      return unqueued(queued.removeFirst())
     case "remove":
       guard let content else { return [] }
       if let index = queued.firstIndex(of: content) { queued.remove(at: index) }
-      return [unqueued(content)]
+      return unqueued(content)
     case "popAll":
       let texts = queued.isEmpty ? [content].compactMap { $0 } : queued
       queued.removeAll()
-      return texts.map(unqueued)
+      return texts.flatMap(unqueued)
     default:
       return []
     }

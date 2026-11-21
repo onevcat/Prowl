@@ -241,7 +241,16 @@ out unavailable ones with the reason. The last Profile you started is chosen aga
 arrow starts the session and opens it. Host creates a normal background tab through its
 public CLI router. There is no special AI Control Console, bundled private control
 skill, or separate agent-launch implementation. Profile settings determine model
-and permissions.
+and permissions. The first message goes in as typed: unlike `prowl create --prompt`, a
+session started from the phone has no dispatch receipt and no completion instruction, because
+you read the reply yourself.
+
+A Claude Code or Codex session started with a first message opens in **Chat** at once: your
+message shows as the first bubble, with a playful line under it while the agent starts. The
+real conversation replaces it when the Host finds the agent's transcript, usually within a
+few seconds. If that takes more than 10 seconds, the pane shows the terminal instead (for
+example when the agent waits on a startup dialog). **Terminal** in the toolbar leaves the
+wait at any time. Other agents, and sessions without a first message, open on the terminal.
 
 Every Send first reads public `list`. A detected Agent uses structured `agentsInput`
 (`agents.input`), advertised by the `agent-input` capability. Update Host if this
@@ -325,7 +334,10 @@ blocks and tables), and each run of tool calls between two messages as one quiet
 ("6 tool calls", with failures counted in red and the running call shown with a turning
 hourglass while the agent works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
-Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
+Codex's reasoning summary) is its own row between the steps, in secondary type. When a
+background command, agent or monitor of Claude Code finishes, Claude Code wakes the model with
+a task notification; the chat shows its summary as one line (orange when the task failed or was
+killed), not as a message. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
 trust question Claude Code and Codex ask before the first turn in a new folder), a panel
 above the composer shows the question, what it is about (the command to approve and, when
 Claude Code gives one, its note on why the command needs approval; the folder for a trust

@@ -457,7 +457,8 @@ struct MirrorHostTests {
     let cancelled = mode != "disconnect"
     #expect(try response.response.decode(CommandResponse.self).ok == !cancelled)
     #expect(preparations == 1)
-    #expect(issues == (cancelled ? 0 : 1))
+    // A phone launch is interactive (docs-ai 089): it never issues a dispatch receipt.
+    #expect(issues == 0)
     #expect(launches == (cancelled ? 0 : 1))
     #expect(cleanups == (cancelled ? 1 : 0))
     _ = await service.execute(request)

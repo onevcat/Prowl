@@ -41,6 +41,14 @@ struct MirrorCommandServiceTests {
     #expect(handler.receivedPrompt == "first\nsecond")
   }
 
+  @Test func profileCreationIsAPersonalKickoffWithoutDispatch() async throws {
+    let handler = Handler()
+    let service = MirrorCommandService(router: CLICommandRouter(createHandler: handler))
+    #expect(try await service.execute(creation(id: UUID(), prompt: "fix it")).response.decode(CommandResponse.self).ok)
+    #expect(handler.receivedPrompt == "fix it")
+    #expect(handler.receivedInteractive == true)
+  }
+
   @Test func requestIDCannotBeReusedToCreateAnotherPane() async throws {
     let handler = Handler()
     let service = MirrorCommandService(router: CLICommandRouter(createHandler: handler))
@@ -278,6 +286,7 @@ struct MirrorCommandServiceTests {
   private final class Handler: CommandHandler {
     var count = 0
     var receivedPrompt: String?
+    var receivedInteractive: Bool?
     var expectedProfile: String? = "profile-1"
     func handle(envelope: CommandEnvelope) async -> CommandResponse {
       count += 1
@@ -287,6 +296,7 @@ struct MirrorCommandServiceTests {
         #expect(create.selector == .worktree("worktree-1"))
         #expect(create.launch?.profile == expectedProfile)
         receivedPrompt = create.launch?.prompt
+        receivedInteractive = create.launch?.interactive
       } else {
         Issue.record("Unexpected command")
       }

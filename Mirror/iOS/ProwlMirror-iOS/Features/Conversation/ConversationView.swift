@@ -228,6 +228,34 @@ struct ConversationItemView: View {
   }
 }
 
+/// Chat while an agent this device just started is not readable yet (docs-ai 089): the first
+/// message as the person's bubble, and a playful line until the Host finds the transcript.
+struct MirrorChatStartingView: View {
+  let kickoff: String
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        UserBubble(text: MirrorBoundedText(kickoff), origin: nil, images: nil, at: nil)
+        HStack(spacing: 6) {
+          MirrorBaguaIndicator()
+          ProwlRotatingMessage(ProwlLoadingMessages.general)
+        }
+        .font(.footnote.weight(.medium))
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("conversation-starting")
+      }
+      .frame(maxWidth: ConversationView.readableWidth, alignment: .leading)
+      .padding(.horizontal)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity)
+    }
+    .scrollEdgeEffectStyle(.soft, for: .bottom)
+    .defaultScrollAnchor(.bottom)
+  }
+}
+
 private struct UserBubble: View {
   let text: MirrorBoundedText
   let origin: MirrorConversationEvent.MessageOrigin?

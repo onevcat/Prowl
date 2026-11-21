@@ -441,6 +441,61 @@ struct CLILifecycleCommandHandlerTests {
     #expect(try #require(response.data).decode(as: LifecycleCommandPayload.self).dispatch == nil)
   }
 
+  @Test func interactivePromptedLaunchKeepsThePromptWithoutDispatch() async throws {
+    let target = makeTarget()
+    let profile = AgentProfile(name: "Reviewer", runtime: .codex)
+    var issued = false
+    var bound = false
+    var launchedPrompt: String?
+    let handler = LifecycleCommandHandler(
+      resolveCreateTarget: { _ in .success(target) },
+      resolveCloseTarget: { _ in .success(.init(resource: .pane, target: target)) },
+      createTab: { _, _ in nil },
+      createPane: { _, _ in nil },
+      profiles: { [profile] },
+      launchAgentProfile: { request in
+        #expect(request.dispatchID == nil)
+        launchedPrompt = request.prompt
+        return .success(target)
+      },
+      issueDispatch: {
+        issued = true
+        return .failure(.capacityExceeded)
+      },
+      bindDispatch: { _, _ in
+        bound = true
+        return .success(())
+      },
+      closeTab: { _, _ in true },
+      closePane: { _, _ in true }
+    )
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(
+        output: .json,
+        command: .create(
+          .init(
+            resource: .tab,
+            selector: .worktree("App"),
+            launch: .init(profile: "Reviewer", prompt: "Fix the tests", interactive: true),
+            background: true
+          ))
+      ))
+    #expect(response.ok)
+    #expect(!issued)
+    #expect(!bound)
+    #expect(launchedPrompt == "Fix the tests")
+    #expect(try #require(response.data).decode(as: LifecycleCommandPayload.self).dispatch == nil)
+  }
+
+  @Test func launchInputEncodesInteractiveOnlyWhenSet() throws {
+    let automation = try JSONEncoder().encode(CreateLaunchInput(profile: "Reviewer", prompt: "Go"))
+    #expect(String(bytes: automation, encoding: .utf8)?.contains("interactive") == false)
+    #expect(try JSONDecoder().decode(CreateLaunchInput.self, from: automation).interactive == false)
+    let person = try JSONEncoder().encode(CreateLaunchInput(profile: "Reviewer", prompt: "Go", interactive: true))
+    #expect(try JSONDecoder().decode(CreateLaunchInput.self, from: person).interactive)
+  }
+
   @Test func bindFailureRollsBackCreatedSurfaceAndCancelsDispatch() async {
     let anchor = makeTarget(paneID: "anchor")
     let created = makeTarget(paneID: "created")

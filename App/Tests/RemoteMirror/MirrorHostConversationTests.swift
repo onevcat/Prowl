@@ -442,6 +442,9 @@ struct MirrorHostConversationTests {
     let command = "env -u PROWL_LAUNCH_DISPATCH -u PROWL_LAUNCH_HOOK_ARG_0 claude"
     #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: "Opus", agent: .claude) == "Opus")
     #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: command, profileName: nil, agent: .claude) == "claude")
+    // A mirror launch has no dispatch; its command names only the prompt and hook carriers.
+    let interactive = "env -u PROWL_LAUNCH_PROMPT -u PROWL_LAUNCH_HOOK_TOKEN codex"
+    #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: interactive, profileName: "Luna", agent: .codex) == "Luna")
     #expect(GhosttyMirrorPaneSource.rosterTitle(paneTitle: " ", profileName: nil, agent: nil) == "Shell")
     #expect(
       GhosttyMirrorPaneSource.rosterTitle(paneTitle: "Fix tests", profileName: "Opus", agent: .claude) == "Fix tests")

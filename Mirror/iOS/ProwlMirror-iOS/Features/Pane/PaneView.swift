@@ -8,7 +8,12 @@ struct PaneView: View {
   private let pane: MirrorPaneDescriptor
   private let opensOnAppear: Bool
   private let launched: Bool
+  /// The first message of an agent this device just started, when it has one.
+  private let kickoff: String?
   @State private var session: MirrorSession
+  /// Chat shows the kickoff while the Host finds the new agent's transcript, instead of the
+  /// terminal; after `chatStartTimeout` without it, the terminal shows.
+  @State private var startsInChat: Bool
   @State private var userChoseMode = false
   @State private var isComposing = false
   @Environment(MirrorHostSessions.self) private var sessions
@@ -21,6 +26,8 @@ struct PaneView: View {
     pane = route.pane
     opensOnAppear = true
     launched = route.launched
+    kickoff = route.kickoff
+    _startsInChat = State(initialValue: route.kickoff != nil && Self.startsInChat(agent: route.pane.agent))
     _session = State(initialValue: session)
   }
 
@@ -30,8 +37,21 @@ struct PaneView: View {
     self.pane = pane
     opensOnAppear = false
     launched = false
+    kickoff = nil
+    _startsInChat = State(initialValue: false)
     _session = State(initialValue: session)
   }
+
+  /// The agents whose Chat the Host serves (`MirrorConversationAdapters` on the Mac). Another
+  /// agent never gets a conversation, so its pane opens on the terminal at once.
+  static func startsInChat(agent: String?) -> Bool {
+    agent == "claude" || agent == "codex"
+  }
+
+  /// How long Chat waits for a new agent's transcript. Measured on a Mac (2026-11-21): the Host
+  /// has it about 3 s (Claude Code) and 4 s (Codex) after the launch, and the roster asks every
+  /// second meanwhile. A startup dialog that holds the agent gets the terminal soon.
+  static let chatStartTimeout: Duration = .seconds(10)
 
   /// The roster keeps refreshing behind this screen; it knows first when an agent appears.
   private var rosterPane: MirrorPaneDescriptor? {
@@ -57,7 +77,22 @@ struct PaneView: View {
   @ScaledMetric(relativeTo: .body) private var floatingRowHeight: CGFloat = 36
   /// The composer's width; the floating buttons line up with its edges.
   private var barWidth: CGFloat {
-    session.mode == .conversation ? ConversationView.readableWidth + 8 : .infinity
+    session.mode == .conversation || startsInChat ? ConversationView.readableWidth + 8 : .infinity
+  }
+
+  /// While Chat shows the kickoff: asks for the roster every second instead of every 3 s, moves
+  /// to the conversation once the Host has it, and gives up on it after `chatStartTimeout`.
+  private func awaitChat() async {
+    guard startsInChat else { return }
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: Self.chatStartTimeout)
+    while clock.now < deadline {
+      if support == .available, session.supportsConversation { session.switchMode(.conversation) }
+      if session.mode == .conversation { break }
+      if let host { sessions.existing(for: host)?.refresh() }
+      do { try await clock.sleep(for: .seconds(1)) } catch { return }
+    }
+    withAnimation(.snappy) { startsInChat = false }
   }
 
   /// The menu the agent waits on: Chat reads it from the conversation, Terminal from the Host's
@@ -73,7 +108,12 @@ struct PaneView: View {
         ConversationView(
           session: session, showsLatest: !compactWhileComposing,
           endClearance: isComposing && !compactWhileComposing ? floatingRowHeight : 0)
-      case .screen: ScreenView(session: session, showsControls: !compactWhileComposing)
+      case .screen:
+        if startsInChat, let kickoff {
+          MirrorChatStartingView(kickoff: kickoff)
+        } else {
+          ScreenView(session: session, showsControls: !compactWhileComposing)
+        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -117,7 +157,7 @@ struct PaneView: View {
             kind: session.conversation.status?.kind, answersWithKeys: session.keysAvailable,
             showTerminal: terminalAnswer)
         }
-        if session.mode == .screen, session.keysAvailable, !compactWhileComposing {
+        if session.mode == .screen, !startsInChat, session.keysAvailable, !compactWhileComposing {
           MirrorKeyBar(session: session)
         }
         ComposerBar(session: session, isEditing: $isComposing)
@@ -140,17 +180,22 @@ struct PaneView: View {
         if compactWhileComposing {
           hideKeyboardButton
         }
-        if chatAvailable || session.mode == .conversation {
+        if chatAvailable || session.mode == .conversation || startsInChat {
+          let showsChat = session.mode == .conversation || startsInChat
           Button {
             userChoseMode = true
-            session.switchMode(session.mode == .conversation ? .screen : .conversation)
+            if startsInChat {
+              startsInChat = false
+            } else {
+              session.switchMode(session.mode == .conversation ? .screen : .conversation)
+            }
           } label: {
             Label(
-              session.mode == .conversation ? "Terminal" : "Chat",
-              systemImage: session.mode == .conversation ? "apple.terminal" : "text.bubble")
+              showsChat ? "Terminal" : "Chat",
+              systemImage: showsChat ? "apple.terminal" : "text.bubble")
           }
           .accessibilityIdentifier("pane-mode")
-          .help(session.mode == .conversation ? "Show the terminal screen" : "Show the agent's conversation")
+          .help(showsChat ? "Show the terminal screen" : "Show the agent's conversation")
         }
         menu
       }
@@ -182,6 +227,7 @@ struct PaneView: View {
         session.switchMode(.conversation)
       }
     }
+    .task(id: startsInChat) { await awaitChat() }
   }
 
   /// A prompt the Host could not read as a menu has no answer buttons. The terminal screen shows
