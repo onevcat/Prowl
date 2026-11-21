@@ -21,11 +21,12 @@ whether the Mac user allows it, before any sending exists (P2).
   the registration. An unchanged registration (same token and kinds), which the phone sends on
   every connection, is not saved again.
 - `pushStatus` also goes to the device's open connections when the Mac user changes the switch
-  or the device's permission. At most 16 push controls per connection. A failed Keychain save
+  or the device's permission, but only to connections that sent a push control themselves
+  (older clients close on an unknown control; review round 1). At most 16 push controls per connection. A failed Keychain save
   of a phone registration is logged and the reply shows the old state; only the Mac user's own
   changes set the Host error. A stored registration with no known kind decodes as none.
 - Nothing is sent to the gateway in this slice.
 
 ## Refs
 
-PR #1144. Tests: `MirrorPushRegistrationTests`, five tests in `MirrorHostTests`.
+PR #1144. Tests: `MirrorPushRegistrationTests`, six tests in `MirrorHostTests`.

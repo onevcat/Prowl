@@ -1034,6 +1034,39 @@ struct MirrorHostTests {
     #expect(host.error == nil)
   }
 
+  @Test(.timeLimit(.minutes(1))) func pushStatusReachesOnlyConnectionsThatUsePushControls() async throws {
+    var saved = Self.identity
+    let deviceID = Self.identity.devices[0].id
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    // An older client of the same device never sends a push control and must not get one.
+    let legacy = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { legacy.connection.close() }
+    let current = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { current.connection.close() }
+    var legacyMessages = legacy.messages.makeAsyncIterator()
+    var currentMessages = current.messages.makeAsyncIterator()
+    current.connection.send(
+      .pushRegister(.init(pushToken: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: ["blocked"])))
+    #expect(Self.pushStatus(await currentMessages.next())?.registered == true)
+    host.pushEnabled = !host.pushEnabled
+    #expect(Self.pushStatus(await currentMessages.next()) != nil)
+    #expect(host.setPushAllowed(false, for: deviceID))
+    #expect(Self.pushStatus(await currentMessages.next())?.pushAllowedByMac == false)
+    #expect(host.setPushAllowed(true, for: deviceID))
+    #expect(Self.pushStatus(await currentMessages.next())?.pushAllowedByMac == true)
+    host.pushEnabled = !host.pushEnabled
+    #expect(Self.pushStatus(await currentMessages.next()) != nil)
+    // The legacy connection is still open and its next message answers its own request.
+    legacy.connection.send(.list)
+    #expect(await legacyMessages.next()?.kind == .panes)
+  }
+
   @Test(.timeLimit(.minutes(1))) func failedSaveOfAPhoneRegistrationIsNotAHostError() async throws {
     enum Failure: Error { case locked }
     var failSaves = false

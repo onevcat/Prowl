@@ -349,9 +349,10 @@ The Host answers both with its state for that device:
 {"pushStatus":{"_0":{"pushEnabled":false,"pushAllowedByMac":true,"registered":true}}}
 ```
 
-The Host also sends `pushStatus` to the open connections of a device when the Mac user
-changes the switch or that device's permission, so the phone can show where notifications are
-turned off. A connection may send at most 16 push controls; more closes it.
+The Host also sends `pushStatus` when the Mac user changes the switch or a device's
+permission, so the phone can show where notifications are turned off. It goes only to that
+device's connections that have sent a push control themselves: a client that never does gets
+no unsolicited `pushStatus`, because older clients close on an unknown control. A connection may send at most 16 push controls; more closes it.
 
 `pushEnabled` is the Mac switch **Send Notifications to Paired Devices** (off by default).
 `pushAllowedByMac` is `false` when the Mac user turned notifications off for this device; a

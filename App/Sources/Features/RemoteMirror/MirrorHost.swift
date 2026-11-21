@@ -77,6 +77,7 @@ final class MirrorHost {
   @ObservationIgnored private var challenges: [UUID: Data] = [:]
   @ObservationIgnored private var pendingPairings: [UUID: MirrorDeviceCredential] = [:]
   @ObservationIgnored private var devicePeers: [UUID: UUID] = [:]
+  /// Push controls sent on this connection; a connection with an entry understands `pushStatus`.
   @ObservationIgnored private var pushControlCounts: [UUID: Int] = [:]
   @ObservationIgnored private var authenticationDeadlines: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private let clock: any Clock<Duration>
@@ -240,9 +241,11 @@ final class MirrorHost {
 
   static let maximumPushControlsPerConnection = 16
 
-  /// Tells the open connections of these devices the current push state.
+  /// Tells the open connections of these devices the current push state. Only a connection
+  /// that has sent a push control gets it: an older client closes on an unknown control, and
+  /// another connection's registration does not prove that this one understands it.
   private func sendPushStatus(to deviceIDs: Set<UUID>) {
-    for (peerID, deviceID) in devicePeers where deviceIDs.contains(deviceID) {
+    for (peerID, deviceID) in devicePeers where deviceIDs.contains(deviceID) && pushControlCounts[peerID] != nil {
       guard let device = devices.first(where: { $0.id == deviceID }) else { continue }
       peers[peerID]?.send(
         .pushStatus(
