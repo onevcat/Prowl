@@ -188,7 +188,7 @@ The gateway lives in a separate private repository; its slices are named G. Prow
 form one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`, and updates
 `docs/` where behavior changes.
 
-**S0 — real push on a device** (no PR; results go into this plan)
+**S0 — real push on a device** (no PR; done 2026-11-21, see Spike results)
 - Goal: prove the first notification a user sees.
 - Accept: on iPhone One (Debug Mirror build with an NSE prototype, sandbox key), a push
   arrives on the locked screen; the NSE reads the shared Keychain and decrypts; a corrupt
@@ -272,6 +272,21 @@ Throwaway projects only.
 | Live Activity view decrypts a sealed field | Simulator: yes. Device (iPhone 15 Pro Max): Keychain read in the view returns `-25291` (`errSecNotAvailable`) |
 | `simctl push` runs the NSE / updates a Live Activity | No / no. Both need real APNs on a device |
 | Signing | Device Keychain groups need the `$(AppIdentifierPrefix)` prefix; an App Group must be made in the portal or Xcode first |
+| Real APNs to a locked device with the NSE (S0) | Yes. Debug Mirror build with a prototype NSE on iPhone One (iOS 27.2.1), sandbox key, phone locked: a valid `sealed` was decrypted with the key from the shared Keychain group (body ends "[decrypted]"); a corrupt `sealed` and a deleted key (`errSecItemNotFound`) both left the generic text. APNs answered 200 each time |
+
+S0 notes for P3:
+
+- Adding `keychain-access-groups` to the app changes its default Keychain group to the first
+  entry. List `$(AppIdentifierPrefix)com.onevcat.prowl.mirror` first, so the existing device
+  credentials (saved without an explicit group) stay in the same group.
+- Automatic signing turned on the Push capability of the App ID `com.onevcat.prowl.mirror`.
+  The NSE was signed with the wildcard team profile; a distribution build needs an explicit
+  App ID for it.
+- With "Show Previews: When Unlocked" (a common setting), the lock screen shows only a count;
+  the decrypted text appears after unlock. The NSE runs at delivery, while the phone is locked.
+- If a first build fails after the extension was embedded, the app keeps an unsigned copy and
+  the next build fails with "Embedded binary is not signed with the same certificate"; delete
+  the built app and build again.
 
 ## Open questions
 
