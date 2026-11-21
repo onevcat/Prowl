@@ -51,15 +51,19 @@ an official Swift package (`TailcatKit`, macOS 14+, iOS 17+) over a C API.
 ### Delivery on the Mac and when anything runs
 
 The Mac app does not link Go and does not ship tailcat. The helper is a separate, signed and
-notarized executable, built per architecture and published as a release asset. Each app
-version pins the helper version and its SHA-256.
+notarized executable, built per architecture. It has its own version and release (for example
+tag `tunnel-v3`), published only when the helper or tailcat changes, not with every app
+release. Each app version pins one helper version and its SHA-256; most app releases keep the
+same pin, so an app update usually downloads nothing.
 
 - The download happens only when the user turns on **Remote Access (Mirror Pro)** in the
   Remote Mirror settings (off by default). This switch is the first and main entry point.
   The helper is stored in the app's Application Support folder, which the user can write, so
   the app checks the hash and the code signature (same Team ID) **before every start**, not
-  only after the download. When an app update pins a new helper version, the app downloads it
-  at the next start of the feature and deletes the old one. A **Remove** control deletes it.
+  only after the download. Only when an app update pins a different helper version does the
+  app download it, at the next start of the feature, and delete the old one. The app and the
+  helper share a small versioned start contract (identity, allowed keys, derp map, ports), so
+  the pin also guards compatibility. A **Remove** control deletes it.
 - The phone cannot turn the feature on for the Mac. After a purchase, while on the LAN, the
   phone can send a request; the Mac shows a confirmation, and only the Mac user's consent
   starts the download.
