@@ -10,13 +10,13 @@
 ## Outcome & current state (as of 2026-11-21)
 
 - `WorktreeRowSections` keeps `main`, `pinned`, `pending`, and `unpinned` in row order and
-  adds `hideableIDs`: unpinned rows past the first `collapsedRowCount` (4) rows with no
+  adds `hideableIDs`: unpinned rows past the first `collapsedRowCount` (3) rows with no
   open tab and not selected (`isWorktreeHideable`). `visibleRows(isShowingAll:)` drops
   them unless the repository shows all; `allRows` lists everything for the palette and the
   Worktree menu.
 - `footer(isShowingAll:)` decides the control: **Show N More** when rows are hidden,
   **Show Less** (disabled when nothing could be hidden) when showing all with more than
-  four rows, else none. `WorktreeRowsView.worktreeListFooter` draws it.
+  three rows, else none. `WorktreeRowsView.worktreeListFooter` draws it.
 - `showAllWorktreesRepositoryIDs` (app storage `sidebarShowAllWorktreesRepositoryIDs`)
   and `toggleShowAllWorktrees` hold the per-repository state; `repositoriesLoaded` prunes
   removed repositories and keeps one whose load failed.
@@ -33,9 +33,9 @@
 
 ## Verification
 
-- `WorktreeListCollapseTests`: the first four rows, rows with tabs staying in place, a tab
+- `WorktreeListCollapseTests`: the first three rows, rows with tabs staying in place, a tab
   in the first rows showing no extra row, pinned rows taking the first places and all
-  showing past four, selected, multi-selected, and pending rows, a repository without a
+  showing past three, selected, multi-selected, and pending rows, a repository without a
   main worktree, the view split matching the state split, the launch restore, folders,
   palette rows, show all keeping stored order, Show Less disabled, the toggle and its
   pruning, a hidden row showing on its first tab and hiding on its last tab close, no

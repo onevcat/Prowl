@@ -188,17 +188,17 @@ change that a watcher missed.
 A repository that other tools also drive can accumulate worktrees you never open
 in Prowl. Its list collapses so the worktrees you work in stay in view.
 
-- A collapsed list shows the first four rows (the main worktree counts as one),
+- A collapsed list shows the first three rows (the main worktree counts as one),
   every pinned worktree, every worktree with an open terminal tab, and the
   selected worktree. **Show N More** below the rows lists the rest; **Show Less**
   collapses it again. The choice is remembered per repository.
 - Rows never move: collapsing hides rows in place, so a worktree that gets or
-  loses a tab keeps its position. The first four are positions in the list, so
+  loses a tab keeps its position. The first three are positions in the list, so
   opening a tab never hides another row.
 - Rows are newest first unless you reorder them by dragging, so the newest
-  worktrees take the first places. A list of four rows or fewer shows everything
+  worktrees take the first places. A list of three rows or fewer shows everything
   and has no control.
-- **Show Less** is unavailable while every row past the first four has an open
+- **Show Less** is unavailable while every row past the first three has an open
   tab. Agent detection plays no part.
 - Hidden rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
   collapsed repository. Selecting a worktree opens a tab in it, so a row you

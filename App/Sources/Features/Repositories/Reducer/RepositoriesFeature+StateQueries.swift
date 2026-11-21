@@ -729,7 +729,7 @@ extension RepositoriesFeature.State {
 
 struct WorktreeRowSections: Equatable {
   /// A collapsed list always shows this many rows first, counting the main worktree.
-  static let collapsedRowCount = 4
+  static let collapsedRowCount = 3
 
   let main: WorktreeRowModel?
   let pinned: [WorktreeRowModel]

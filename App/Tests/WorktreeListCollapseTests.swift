@@ -15,23 +15,23 @@ struct WorktreeListCollapseTests {
   // MARK: - Collapsed list
 
   @Test func shortListShowsEveryRowWithNoFooter() {
-    let fixture = makeFixture(names: ["a", "b", "c"])
+    let fixture = makeFixture(names: ["a", "b"])
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
-    #expect(sections.visibleRows(isShowingAll: false).map(\.id) == fixture.ids(["main", "a", "b", "c"]))
+    #expect(sections.visibleRows(isShowingAll: false).map(\.id) == fixture.ids(["main", "a", "b"]))
     #expect(sections.footer(isShowingAll: false) == nil)
     #expect(sections.footer(isShowingAll: true) == nil)
   }
 
-  @Test func collapsedListShowsTheFirstFourRowsAndCountsTheRest() {
+  @Test func collapsedListShowsTheFirstThreeRowsAndCountsTheRest() {
     let fixture = makeFixture(names: ["a", "b", "c", "d", "e", "f"])
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
     expectNoDifference(
       sections.visibleRows(isShowingAll: false).map(\.id),
-      fixture.ids(["main", "a", "b", "c"])
+      fixture.ids(["main", "a", "b"])
     )
-    #expect(sections.footer(isShowingAll: false) == .showMore(count: 3))
+    #expect(sections.footer(isShowingAll: false) == .showMore(count: 4))
   }
 
   @Test func rowWithATabStaysVisibleInItsPlace() {
@@ -41,9 +41,9 @@ struct WorktreeListCollapseTests {
 
     expectNoDifference(
       sections.visibleRows(isShowingAll: false).map(\.id),
-      fixture.ids(["main", "a", "b", "c", "e"])
+      fixture.ids(["main", "a", "b", "e"])
     )
-    #expect(sections.footer(isShowingAll: false) == .showMore(count: 2))
+    #expect(sections.footer(isShowingAll: false) == .showMore(count: 3))
   }
 
   @Test func tabInTheFirstRowsDoesNotShowAnotherRow() {
@@ -53,7 +53,7 @@ struct WorktreeListCollapseTests {
 
     expectNoDifference(
       sections.visibleRows(isShowingAll: false).map(\.id),
-      fixture.ids(["main", "a", "b", "c"])
+      fixture.ids(["main", "a", "b"])
     )
   }
 
@@ -65,12 +65,12 @@ struct WorktreeListCollapseTests {
 
     expectNoDifference(
       sections.visibleRows(isShowingAll: false).map(\.id),
-      fixture.ids(["main", "p1", "a", "b", "d"])
+      fixture.ids(["main", "p1", "a", "d"])
     )
-    #expect(sections.footer(isShowingAll: false) == .showMore(count: 1))
+    #expect(sections.footer(isShowingAll: false) == .showMore(count: 2))
   }
 
-  @Test func everyPinnedRowShowsPastTheFirstFour() {
+  @Test func everyPinnedRowShowsPastTheFirstThree() {
     var fixture = makeFixture(names: ["p1", "p2", "p3", "p4", "a", "b"])
     fixture.state.pinnedWorktreeIDs = fixture.ids(["p1", "p2", "p3", "p4"])
     fixture.state.openedWorktreeIDs = Set(fixture.ids(["b"]))
@@ -97,20 +97,20 @@ struct WorktreeListCollapseTests {
 
     expectNoDifference(
       sections.visibleRows(isShowingAll: false).map(\.id),
-      [fixture.id("main"), "/tmp/repo/pending"] + fixture.ids(["a", "b", "e"])
+      [fixture.id("main"), "/tmp/repo/pending"] + fixture.ids(["a", "e"])
     )
   }
 
   @Test func sidebarMultiSelectionStaysVisible() {
     var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
-    fixture.state.sidebarSelectedWorktreeIDs = Set(fixture.ids(["d", "e"]))
+    fixture.state.sidebarSelectedWorktreeIDs = Set(fixture.ids(["c", "d", "e"]))
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
     #expect(sections.footer(isShowingAll: false) == nil)
     #expect(sections.visibleRows(isShowingAll: false).count == 6)
   }
 
-  @Test func repositoryWithoutAMainWorktreeShowsItsFirstFourRows() {
+  @Test func repositoryWithoutAMainWorktreeShowsItsFirstThreeRows() {
     let repoRoot = "/tmp/bare"
     let worktrees = ["a", "b", "c", "d", "e"].map {
       makeWorktree(id: "\(repoRoot)/\($0)", name: $0, repoRoot: "\(repoRoot)/repo.git")
@@ -127,14 +127,14 @@ struct WorktreeListCollapseTests {
     let sections = state.worktreeRowSections(in: repository)
 
     #expect(sections.main == nil)
-    #expect(sections.visibleRows(isShowingAll: false).map(\.name) == ["a", "b", "c", "d"])
-    #expect(sections.footer(isShowingAll: false) == .showMore(count: 1))
+    #expect(sections.visibleRows(isShowingAll: false).map(\.name) == ["a", "b", "c"])
+    #expect(sections.footer(isShowingAll: false) == .showMore(count: 2))
   }
 
   @Test func viewSplitWithTheParentsSelectionMatchesTheStateSplit() {
     var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
     fixture.state.selection = .worktree(fixture.id("d"))
-    fixture.state.sidebarSelectedWorktreeIDs = Set(fixture.ids(["d", "e"]))
+    fixture.state.sidebarSelectedWorktreeIDs = Set(fixture.ids(["c", "d", "e"]))
     let parentSelection = SidebarListView.selectedWorktreeIDs(in: fixture.state)
       .filter { fixture.repository.worktrees[id: $0] != nil }
 
@@ -151,7 +151,7 @@ struct WorktreeListCollapseTests {
     #expect(fixture.state.worktreeRowSections(in: fixture.repository).hideableIDs.isEmpty)
 
     fixture.state.isLaunchLayoutRestorePending = false
-    #expect(fixture.state.worktreeRowSections(in: fixture.repository).hideableIDs == Set(fixture.ids(["d", "e"])))
+    #expect(fixture.state.worktreeRowSections(in: fixture.repository).hideableIDs == Set(fixture.ids(["c", "d", "e"])))
   }
 
   @Test func plainAndRemoteFoldersHaveNothingToHide() {
@@ -192,7 +192,7 @@ struct WorktreeListCollapseTests {
 
   @Test func showLessIsDisabledWhenNoRowCanBeHidden() {
     var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
-    fixture.state.openedWorktreeIDs = Set(fixture.ids(["d", "e"]))
+    fixture.state.openedWorktreeIDs = Set(fixture.ids(["c", "d", "e"]))
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
     #expect(sections.footer(isShowingAll: true) == .showLess(isEnabled: false))
@@ -213,7 +213,7 @@ struct WorktreeListCollapseTests {
     await store.send(.toggleShowAllWorktrees(fixture.repository.id)) {
       $0.$showAllWorktreesRepositoryIDs.withLock { $0 = [] }
     }
-    #expect(store.state.visibleWorktreeRows(in: fixture.repository).count == 4)
+    #expect(store.state.visibleWorktreeRows(in: fixture.repository).count == 3)
   }
 
   @Test func reloadPrunesTheStateOfRemovedRepositories() async {
@@ -305,13 +305,13 @@ struct WorktreeListCollapseTests {
 
     expectNoDifference(
       fixture.state.navigableWorktreeRows(includingRepositoryIDs: repositoryIDs).map(\.id),
-      fixture.ids(["main", "a", "b", "c"])
+      fixture.ids(["main", "a", "b"])
     )
-    fixture.state.selection = .worktree(fixture.id("c"))
+    fixture.state.selection = .worktree(fixture.id("b"))
     #expect(fixture.state.worktreeID(byOffset: 1) == fixture.id("main"))
 
     fixture.state.$showAllWorktreesRepositoryIDs.withLock { $0 = [fixture.repository.id] }
-    #expect(fixture.state.worktreeID(byOffset: 1) == fixture.id("d"))
+    #expect(fixture.state.worktreeID(byOffset: 1) == fixture.id("c"))
   }
 
   @Test func walkingAListThatShowsAllKeepsRowOrderAsTabsOpen() async {
@@ -363,10 +363,10 @@ struct WorktreeListCollapseTests {
 
   @Test func removingTheLastVisibleRowSelectsTheRowBeforeIt() {
     var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
-    fixture.state.selection = .worktree(fixture.id("c"))
-    let worktree = fixture.repository.worktrees[id: fixture.id("c")]!
+    fixture.state.selection = .worktree(fixture.id("b"))
+    let worktree = fixture.repository.worktrees[id: fixture.id("b")]!
 
-    #expect(nextWorktreeID(afterRemoving: worktree, in: fixture.repository, state: fixture.state) == fixture.id("b"))
+    #expect(nextWorktreeID(afterRemoving: worktree, in: fixture.repository, state: fixture.state) == fixture.id("a"))
   }
 
   // MARK: - Drag
@@ -375,10 +375,10 @@ struct WorktreeListCollapseTests {
     var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
     fixture.state.openedWorktreeIDs = Set(fixture.ids(["e"]))
 
-    // Visible unpinned rows a, b, c, e; d is hidden. Drag e before c: (3) -> 2 maps to (4) -> 2.
-    let move = fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [3], destination: 2)
+    // Visible unpinned rows a, b, e; c and d are hidden. Drag e before b: (2) -> 1 maps to (4) -> 1.
+    let move = fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [2], destination: 1)
     #expect(move?.offsets == [4])
-    #expect(move?.destination == 2)
+    #expect(move?.destination == 1)
 
     let store = TestStore(initialState: fixture.state) {
       RepositoriesFeature()
@@ -387,18 +387,17 @@ struct WorktreeListCollapseTests {
     await store.send(
       .worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: fixture.repository.id, move.offsets, move.destination))
     ) {
-      $0.worktreeOrderByRepository[fixture.repository.id] = fixture.ids(["a", "b", "e", "c", "d"])
+      $0.worktreeOrderByRepository[fixture.repository.id] = fixture.ids(["a", "e", "b", "c", "d"])
     }
   }
 
   @Test func moveToTheEndOfACollapsedListLandsAfterTheLastVisibleRow() {
-    var fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
-    fixture.state.openedWorktreeIDs = Set(fixture.ids(["c"]))
+    let fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
 
-    // Visible unpinned rows a, b, c; drag a to the end: (0) -> 3 maps to (0) -> 3, before hidden d.
-    let move = fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [0], destination: 3)
+    // Visible unpinned rows a, b; drag a to the end: (0) -> 2 maps to (0) -> 2, before hidden c.
+    let move = fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [0], destination: 2)
     #expect(move?.offsets == [0])
-    #expect(move?.destination == 3)
+    #expect(move?.destination == 2)
   }
 
   @Test func moveInAListThatShowsAllMapsToItself() {
@@ -413,7 +412,7 @@ struct WorktreeListCollapseTests {
   @Test func moveOutOfRangeIsRejected() {
     let fixture = makeFixture(names: ["a", "b", "c", "d", "e"])
 
-    #expect(fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [3], destination: 0) == nil)
+    #expect(fixture.state.fullUnpinnedOrderMove(in: fixture.repository, offsets: [2], destination: 0) == nil)
   }
 
   // MARK: - Fixtures

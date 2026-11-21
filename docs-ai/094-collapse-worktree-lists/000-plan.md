@@ -21,7 +21,7 @@ for a worktree that is merely idle in Prowl.
 
 ## Goals
 
-- A long worktree list collapses by default: it shows its first four rows, every pinned
+- A long worktree list collapses by default: it shows its first three rows, every pinned
   worktree, and every worktree with an open tab, and hides the rest behind
   **Show N More**. **Show Less** collapses it again.
 - The list keeps one order. Collapsing hides rows in place; it never moves a row, so a
@@ -47,11 +47,11 @@ dragged order come first, so without a drag the newest worktrees lead.
 **What a collapsed list hides.** `worktreeRowSections(in:)` in
 `App/Sources/Features/Repositories/Reducer/RepositoriesFeature+StateQueries.swift` marks
 an unpinned row as hideable (`WorktreeRowSections.hideableIDs`) when it is past the first
-`WorktreeRowSections.collapsedRowCount` (4) rows of the repository and
+`WorktreeRowSections.collapsedRowCount` (3) rows of the repository and
 `isWorktreeHideable` holds: it is not in `openedWorktreeIDs` and not selected. Main,
-pinned, and pending rows are never hideable, and they count toward the first four. The
-first four are a position, not a tab count, so opening a tab never changes which other
-rows show. A repository without a main worktree (a bare layout) shows its first four rows.
+pinned, and pending rows are never hideable, and they count toward the first three. The
+first three are a position, not a tab count, so opening a tab never changes which other
+rows show. A repository without a main worktree (a bare layout) shows its first three rows.
 
 **Open tabs.** `RepositoriesFeature.State.openedWorktreeIDs`, the Shelf's book set, is the
 source. A tab creation adds its worktree (`tabCreatedEffect`, layout restore included),
@@ -74,7 +74,7 @@ drops IDs of repositories that no longer exist and keeps those of a repository w
 failed.
 
 **Footer.** `WorktreeRowSections.footer(isShowingAll:)`: a collapsed list with hidden rows
-shows **Show N More**; a list that shows all and has more than four rows shows
+shows **Show N More**; a list that shows all and has more than three rows shows
 **Show Less**, disabled while no row could be hidden; otherwise nothing. `WorktreeRowsView`
 draws it below the rows in `.subheadline`, secondary, inset to the worktree names, so it
 does not read as another worktree.
@@ -103,6 +103,8 @@ of a repository's rows, so a collapsed sidebar group (086) hides it with them.
   users asking where their worktrees went. Replaced by hiding rows in place.
 - **A visible-row floor that counts open tabs.** Tried with a floor of three: opening a
   tab in a hidden worktree pushed another row out of view. A positional floor does not.
+- **Four rows before collapsing.** Tried after the in-place redesign; the visual check
+  showed too many idle rows. Chosen: three (main and two more).
 - **Hide entirely.** The palette would be the only way to reach a hidden worktree.
   Rejected: **Show N More** keeps it one click away.
 - **Agent detection as the criterion.** Detection drops an entry whenever the state reads
