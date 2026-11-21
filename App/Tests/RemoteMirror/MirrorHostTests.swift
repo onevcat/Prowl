@@ -938,6 +938,205 @@ struct MirrorHostTests {
     }
   }
 
+  @Test func pushSwitchIsOffByDefaultAndPersists() throws {
+    let suite = "MirrorPushSwitchTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let first = MirrorHost(source: Source(), defaults: defaults, enabled: false)
+    #expect(!first.pushEnabled)
+    first.pushEnabled = true
+    #expect(MirrorHost(source: Source(), defaults: defaults, enabled: false).pushEnabled)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func pushRegistrationPersistsAndTheMacChoiceSurvivesANewRegistration() async throws {
+    let suite = "MirrorPushTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    var saved = Self.identity
+    var saves = 0
+    let deviceID = Self.identity.devices[0].id
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved },
+      saveIdentity: {
+        saved = $0
+        saves += 1
+      })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { client.connection.close() }
+    var messages = client.messages.makeAsyncIterator()
+    let token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+
+    client.connection.send(.list)
+    guard case .panes(let panes) = await messages.next() else {
+      Issue.record("Expected panes")
+      return
+    }
+    #expect(panes.capabilities.contains("push-v1"))
+
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["blocked", "done", "someday"])))
+    var reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(!reply.pushEnabled && reply.pushAllowedByMac && reply.registered)
+    #expect(saved.devices[0].push?.token == token)
+    #expect(saved.devices[0].push?.kinds == [.blocked, .done])
+    // The same registration on a new connection is not saved again.
+    let savesAfterFirst = saves
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["done", "blocked"])))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(reply.registered && saves == savesAfterFirst)
+
+    // Mac-side changes reach the open connection at once.
+    #expect(host.setPushAllowed(false, for: deviceID))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(!reply.pushAllowedByMac && reply.registered)
+    host.pushEnabled = true
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(reply.pushEnabled)
+    #expect(saved.devices[0].pushAllowedByMac == false)
+    // An unchanged choice is not saved again; an unknown device reports failure.
+    let savesBeforeRepeat = saves
+    #expect(host.setPushAllowed(false, for: deviceID) && saves == savesBeforeRepeat)
+    #expect(!host.setPushAllowed(false, for: UUID()))
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["blocked"])))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(reply.pushEnabled && !reply.pushAllowedByMac && reply.registered)
+    #expect(saved.devices[0].pushAllowedByMac == false)
+    #expect(saved.devices[0].push?.kinds == [.blocked])
+
+    client.connection.send(.pushUnregister)
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(!reply.registered)
+    #expect(saved.devices[0].push == nil)
+    // Turning the device back on restores the default, not a stored `true`.
+    #expect(host.setPushAllowed(true, for: deviceID))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(reply.pushAllowedByMac && !reply.registered)
+    #expect(saved.devices[0].pushAllowedByMac == nil)
+
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["someday"])))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(!reply.registered && saved.devices[0].push == nil)
+
+    // A registration survives a restart and goes away with the device.
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["done"])))
+    reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(reply.registered)
+    let restarted = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    restarted.loadDevicesIfNeeded()
+    #expect(restarted.devices.first?.push?.kinds == [.done])
+    host.revoke(deviceID)
+    #expect(saved.devices.isEmpty)
+    #expect(host.error == nil)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func pushStatusReachesOnlyConnectionsThatUsePushControls() async throws {
+    var saved = Self.identity
+    let deviceID = Self.identity.devices[0].id
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    // An older client of the same device never sends a push control and must not get one.
+    let legacy = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { legacy.connection.close() }
+    let current = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { current.connection.close() }
+    var legacyMessages = legacy.messages.makeAsyncIterator()
+    var currentMessages = current.messages.makeAsyncIterator()
+    current.connection.send(
+      .pushRegister(.init(pushToken: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: ["blocked"])))
+    #expect(Self.pushStatus(await currentMessages.next())?.registered == true)
+    host.pushEnabled = !host.pushEnabled
+    #expect(Self.pushStatus(await currentMessages.next()) != nil)
+    #expect(host.setPushAllowed(false, for: deviceID))
+    #expect(Self.pushStatus(await currentMessages.next())?.pushAllowedByMac == false)
+    #expect(host.setPushAllowed(true, for: deviceID))
+    #expect(Self.pushStatus(await currentMessages.next())?.pushAllowedByMac == true)
+    host.pushEnabled = !host.pushEnabled
+    #expect(Self.pushStatus(await currentMessages.next()) != nil)
+    // The legacy connection is still open and its next message answers its own request.
+    legacy.connection.send(.list)
+    #expect(await legacyMessages.next()?.kind == .panes)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func failedSaveOfAPhoneRegistrationIsNotAHostError() async throws {
+    enum Failure: Error { case locked }
+    var failSaves = false
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { Self.identity },
+      saveIdentity: { _ in if failSaves { throw Failure.locked } })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { client.connection.close() }
+    var messages = client.messages.makeAsyncIterator()
+    failSaves = true
+    client.connection.send(
+      .pushRegister(.init(pushToken: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: ["blocked"])))
+    let reply = try #require(Self.pushStatus(await messages.next()))
+    #expect(!reply.registered)
+    #expect(host.error == nil)
+    // The Mac user's own change reports the failure.
+    #expect(!host.setPushAllowed(false, for: Self.identity.devices[0].id))
+    #expect(host.error != nil)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func pushControlsArePerConnectionLimited() async throws {
+    var saved = Self.identity
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    var messages = client.messages.makeAsyncIterator()
+    for _ in 0..<MirrorHost.maximumPushControlsPerConnection {
+      client.connection.send(.pushUnregister)
+      #expect(Self.pushStatus(await messages.next()) != nil)
+    }
+    client.connection.send(.pushUnregister)
+    #expect(await messages.next() == nil)
+  }
+
+  @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+  func invalidPushRegistrationClosesTheConnectionAndStoresNothing(tooManyKinds: Bool) async throws {
+    var saved = Self.identity
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    var messages = client.messages.makeAsyncIterator()
+    client.connection.send(
+      .pushRegister(
+        tooManyKinds
+          ? .init(
+            pushToken: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: Array(repeating: "blocked", count: 17))
+          : .init(pushToken: "not a token", kinds: ["blocked"])))
+    #expect(await messages.next() == nil)
+    #expect(saved.devices[0].push == nil)
+  }
+
+  private static func pushStatus(_ message: MirrorMessage?) -> MirrorMessage.PushStatusPayload? {
+    guard case .pushStatus(let payload) = message else { return nil }
+    return payload
+  }
+
   private static let identity = MirrorHostIdentity(
     id: UUID(),
     devices: [
