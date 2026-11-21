@@ -35,7 +35,7 @@ struct FoldInactiveWorktreesTests {
 
   @Test func mainPinnedPendingAndSelectedWorktreesNeverFold() {
     var fixture = makeFixture()
-    fixture.state.pinnedWorktreeIDs = [fixture.alpha.id]
+    fixture.state.pinnedWorktreeIDs.append(fixture.alpha.id)
     fixture.state.selection = .worktree(fixture.bravo.id)
     fixture.state.pendingWorktrees = [
       PendingWorktree(
@@ -47,7 +47,7 @@ struct FoldInactiveWorktreesTests {
     let sections = fixture.state.worktreeRowSections(in: fixture.repository)
 
     #expect(sections.main?.id == fixture.main.id)
-    #expect(sections.pinned.map(\.id) == [fixture.alpha.id])
+    #expect(sections.pinned.map(\.id) == [fixture.pinnedOne.id, fixture.pinnedTwo.id, fixture.alpha.id])
     #expect(sections.pending.map(\.id) == ["/tmp/repo/pending"])
     #expect(sections.unpinned.map(\.id) == [fixture.bravo.id])
     #expect(sections.inactive.map(\.id) == [fixture.charlie.id])
@@ -103,6 +103,69 @@ struct FoldInactiveWorktreesTests {
     #expect(sections.inactive.map(\.id) == [fixture.charlie.id, fixture.bravo.id])
   }
 
+  // MARK: - Minimum visible rows
+
+  @Test func repositoryWithFewWorktreesFoldsNothing() {
+    let fixture = makeSmallFixture(names: ["a", "b"])
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(sections.unpinned.map(\.id) == fixture.ids(["a", "b"]))
+    #expect(sections.inactive.isEmpty)
+  }
+
+  @Test func inactiveRowsFillTheFloorInRowOrderAndTheRestFold() {
+    let fixture = makeSmallFixture(names: ["a", "b", "c", "d"])
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(sections.main?.id == fixture.main.id)
+    #expect(sections.unpinned.map(\.id) == fixture.ids(["a", "b"]))
+    #expect(sections.inactive.map(\.id) == fixture.ids(["c", "d"]))
+  }
+
+  @Test func activeRowsCountTowardTheFloor() {
+    var fixture = makeSmallFixture(names: ["a", "b", "c", "d"])
+    fixture.state.openedWorktreeIDs = Set(fixture.ids(["c"]))
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(sections.unpinned.map(\.id) == fixture.ids(["a", "c"]))
+    #expect(sections.inactive.map(\.id) == fixture.ids(["b", "d"]))
+  }
+
+  @Test func pinnedAndPendingRowsCountTowardTheFloor() {
+    var fixture = makeSmallFixture(names: ["a", "b", "c", "d"])
+    fixture.state.pinnedWorktreeIDs = fixture.ids(["a"])
+    fixture.state.pendingWorktrees = [
+      PendingWorktree(
+        id: "/tmp/small/pending",
+        repositoryID: fixture.repository.id,
+        progress: WorktreeCreationProgress(stage: .choosingWorktreeName, worktreeName: "pending")
+      )
+    ]
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(sections.unpinned.isEmpty)
+    #expect(sections.inactive.map(\.id) == fixture.ids(["b", "c", "d"]))
+  }
+
+  @Test func rowsKeptInTheExpandedGroupDoNotFillTheFloor() {
+    var fixture = makeSmallFixture(names: ["a", "b", "c", "d"])
+    fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id] }
+    fixture.state.retainedInactiveWorktreeIDs = Set(fixture.ids(["a"]))
+    let sections = fixture.state.worktreeRowSections(in: fixture.repository)
+
+    #expect(sections.unpinned.map(\.id) == fixture.ids(["b", "c"]))
+    #expect(sections.inactive.map(\.id) == fixture.ids(["a", "d"]))
+  }
+
+  @Test func navigationWalksTheRowsThatFillTheFloor() {
+    let fixture = makeSmallFixture(names: ["a", "b", "c", "d"])
+
+    expectNoDifference(
+      fixture.state.navigableWorktreeRows(includingRepositoryIDs: [fixture.repository.id]).map(\.id),
+      [fixture.main.id] + fixture.ids(["a", "b"])
+    )
+  }
+
   // MARK: - Moving between groups
 
   @Test func firstTabMovesAWorktreeOutOfTheInactiveGroupAndLastTabCloseBack() async {
@@ -137,32 +200,35 @@ struct FoldInactiveWorktreesTests {
 
     expectNoDifference(
       fixture.state.navigableWorktreeRows(includingRepositoryIDs: repositoryIDs).map(\.id),
-      [fixture.main.id, fixture.bravo.id]
+      [fixture.main.id, fixture.pinnedOne.id, fixture.pinnedTwo.id, fixture.bravo.id]
     )
 
     fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id] }
     expectNoDifference(
       fixture.state.navigableWorktreeRows(includingRepositoryIDs: repositoryIDs).map(\.id),
-      [fixture.main.id, fixture.bravo.id, fixture.alpha.id, fixture.charlie.id]
+      [
+        fixture.main.id, fixture.pinnedOne.id, fixture.pinnedTwo.id, fixture.bravo.id, fixture.alpha.id,
+        fixture.charlie.id,
+      ]
     )
   }
 
   @Test func offsetNavigationSkipsFoldedRows() {
     var fixture = makeFixture()
     fixture.state.openedWorktreeIDs = [fixture.bravo.id]
-    fixture.state.selection = .worktree(fixture.main.id)
+    fixture.state.selection = .worktree(fixture.bravo.id)
 
-    #expect(fixture.state.worktreeID(byOffset: 1) == fixture.bravo.id)
-    #expect(fixture.state.worktreeID(byOffset: -1) == fixture.bravo.id)
+    #expect(fixture.state.worktreeID(byOffset: 1) == fixture.main.id)
+    #expect(fixture.state.worktreeID(byOffset: -1) == fixture.pinnedTwo.id)
 
     fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id] }
-    #expect(fixture.state.worktreeID(byOffset: -1) == fixture.charlie.id)
+    #expect(fixture.state.worktreeID(byOffset: 1) == fixture.alpha.id)
   }
 
   @Test func selectNextWorktreeLandsOnTheNextActiveRow() async {
     var fixture = makeFixture()
-    fixture.state.openedWorktreeIDs = [fixture.charlie.id]
-    fixture.state.selection = .worktree(fixture.main.id)
+    fixture.state.openedWorktreeIDs = [fixture.pinnedTwo.id, fixture.charlie.id]
+    fixture.state.selection = .worktree(fixture.pinnedTwo.id)
     let store = TestStore(initialState: fixture.state) {
       RepositoriesFeature()
     }
@@ -171,7 +237,7 @@ struct FoldInactiveWorktreesTests {
     await store.receive(\.selectWorktree) {
       $0.selection = .worktree(fixture.charlie.id)
       $0.sidebarSelectedWorktreeIDs = [fixture.charlie.id]
-      $0.worktreeHistoryBackStack = [fixture.main.id]
+      $0.worktreeHistoryBackStack = [fixture.pinnedTwo.id]
       $0.pendingTerminalFocusWorktreeIDs = [fixture.charlie.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -199,7 +265,9 @@ struct FoldInactiveWorktreesTests {
   }
 
   @Test func previousWalksAnExpandedGroupInRowOrder() async {
-    let fixture = makeExpandedGroupFixture()
+    var fixture = makeExpandedGroupFixture()
+    fixture.state.selection = .worktree(fixture.main.id)
+    fixture.state.sidebarSelectedWorktreeIDs = [fixture.main.id]
     let store = TestStore(initialState: fixture.state) {
       RepositoriesFeature()
     }
@@ -213,7 +281,7 @@ struct FoldInactiveWorktreesTests {
     }
     expectNoDifference(
       visited,
-      [fixture.charlie.id, fixture.bravo.id, fixture.alpha.id, fixture.main.id]
+      [fixture.charlie.id, fixture.bravo.id, fixture.alpha.id, fixture.pinnedTwo.id]
     )
   }
 
@@ -233,7 +301,7 @@ struct FoldInactiveWorktreesTests {
       await store.skipReceivedActions()
       visited.append(store.state.selectedWorktreeID)
     }
-    expectNoDifference(visited, [fixture.alpha.id, fixture.bravo.id, fixture.alpha.id, fixture.main.id])
+    expectNoDifference(visited, [fixture.alpha.id, fixture.bravo.id, fixture.alpha.id, fixture.pinnedTwo.id])
   }
 
   @Test func rowsKeepTheirPositionWhileTheGroupIsWalkedAndLeaveWhenSelectionLeavesIt() async {
@@ -247,7 +315,10 @@ struct FoldInactiveWorktreesTests {
     }
     store.exhaustivity = .off
     let repositoryIDs: Set<Repository.ID> = [fixture.repository.id]
-    let order = [fixture.main.id, fixture.alpha.id, fixture.bravo.id, fixture.charlie.id]
+    let order = [
+      fixture.main.id, fixture.pinnedOne.id, fixture.pinnedTwo.id, fixture.alpha.id, fixture.bravo.id,
+      fixture.charlie.id,
+    ]
 
     await store.send(.selectWorktree(fixture.bravo.id))
     await store.skipReceivedActions()
@@ -336,7 +407,7 @@ struct FoldInactiveWorktreesTests {
       .group(RepositoryGroup(id: groupID, title: "Product", repositoryIDs: [fixture.repository.id]))
     ])
     fixture.state.openedWorktreeIDs = [fixture.main.id, fixture.bravo.id]
-    fixture.state.selection = .worktree(fixture.main.id)
+    fixture.state.selection = .worktree(fixture.pinnedTwo.id)
     fixture.state.$collapsedGroupIDs.withLock { $0 = [] }
 
     // In an open group, the repository folds as it does at the top level.
@@ -567,8 +638,8 @@ struct FoldInactiveWorktreesTests {
 
     let ids = fixture.state.navigableWorktreeRows(includingRepositoryIDs: repositoryIDs).map(\.id)
 
-    #expect(ids.prefix(2) == [fixture.main.id, fixture.bravo.id])
-    #expect(ids.count == 3)
+    #expect(ids.prefix(4) == [fixture.main.id, fixture.pinnedOne.id, fixture.pinnedTwo.id, fixture.bravo.id])
+    #expect(ids.count == 5)
     #expect(ids.last == remoteGit.worktrees.first?.id)
     #expect(!ids.contains(plain.id))
   }
@@ -677,12 +748,16 @@ struct FoldInactiveWorktreesTests {
     var fixture = makeExpandedGroupFixture()
     let otherRoot = "/tmp/other"
     let otherMain = makeWorktree(id: otherRoot, name: "main", repoRoot: otherRoot)
-    let otherAlpha = makeWorktree(id: "/tmp/other/a", name: "a", repoRoot: otherRoot)
+    // Main, a, and b fill the floor, so c folds.
+    let otherWorktrees = ["a", "b", "c"].map {
+      makeWorktree(id: "/tmp/other/\($0)", name: $0, repoRoot: otherRoot)
+    }
+    let otherCharlie = otherWorktrees[2]
     let other = Repository(
       id: otherRoot,
       rootURL: URL(fileURLWithPath: otherRoot),
       name: "other",
-      worktrees: IdentifiedArray(uniqueElements: [otherMain, otherAlpha])
+      worktrees: IdentifiedArray(uniqueElements: [otherMain] + otherWorktrees)
     )
     fixture.state.repositories.append(other)
     fixture.state.repositoryRoots.append(other.location)
@@ -696,9 +771,9 @@ struct FoldInactiveWorktreesTests {
     await store.skipReceivedActions()
     #expect(store.state.retainedInactiveWorktreeIDs == [fixture.alpha.id])
 
-    await store.send(.selectWorktree(otherAlpha.id))
+    await store.send(.selectWorktree(otherCharlie.id))
     await store.skipReceivedActions()
-    #expect(store.state.retainedInactiveWorktreeIDs == [otherAlpha.id])
+    #expect(store.state.retainedInactiveWorktreeIDs == [otherCharlie.id])
     // a has a tab now, so it leaves the first repository's group.
     #expect(store.state.worktreeRowSections(in: fixture.repository).unpinned.map(\.id) == [fixture.alpha.id])
   }
@@ -709,14 +784,20 @@ struct FoldInactiveWorktreesTests {
     var state: RepositoriesFeature.State
     let repository: Repository
     let main: Worktree
+    let pinnedOne: Worktree
+    let pinnedTwo: Worktree
     let alpha: Worktree
     let bravo: Worktree
     let charlie: Worktree
   }
 
+  /// Main and two pinned worktrees fill `minimumVisibleWorktreeRows`, so a, b, and c
+  /// fold exactly when they are inactive.
   private func makeFixture() -> Fixture {
     let repoRoot = "/tmp/repo"
     let main = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let pinnedOne = makeWorktree(id: "/tmp/repo/p1", name: "p1", repoRoot: repoRoot)
+    let pinnedTwo = makeWorktree(id: "/tmp/repo/p2", name: "p2", repoRoot: repoRoot)
     let alpha = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
     let bravo = makeWorktree(id: "/tmp/repo/b", name: "b", repoRoot: repoRoot)
     let charlie = makeWorktree(id: "/tmp/repo/c", name: "c", repoRoot: repoRoot)
@@ -724,23 +805,61 @@ struct FoldInactiveWorktreesTests {
       id: repoRoot,
       rootURL: URL(fileURLWithPath: repoRoot),
       name: "repo",
-      worktrees: IdentifiedArray(uniqueElements: [main, alpha, bravo, charlie])
+      worktrees: IdentifiedArray(uniqueElements: [main, pinnedOne, pinnedTwo, alpha, bravo, charlie])
     )
     var state = RepositoriesFeature.State()
     state.repositories = IdentifiedArray(uniqueElements: [repository])
     state.repositoryRoots = [repository.location]
-    return Fixture(state: state, repository: repository, main: main, alpha: alpha, bravo: bravo, charlie: charlie)
+    state.pinnedWorktreeIDs = [pinnedOne.id, pinnedTwo.id]
+    return Fixture(
+      state: state,
+      repository: repository,
+      main: main,
+      pinnedOne: pinnedOne,
+      pinnedTwo: pinnedTwo,
+      alpha: alpha,
+      bravo: bravo,
+      charlie: charlie
+    )
   }
 
-  /// Main is open and selected; a, b, and c have no tab; the repository's
-  /// Inactive group is expanded.
+  /// The last pinned worktree is open and selected; a, b, and c have no tab; the
+  /// repository's Inactive group is expanded.
   private func makeExpandedGroupFixture() -> Fixture {
     var fixture = makeFixture()
     fixture.state.$expandedInactiveRepositoryIDs.withLock { $0 = [fixture.repository.id] }
-    fixture.state.openedWorktreeIDs = [fixture.main.id]
-    fixture.state.selection = .worktree(fixture.main.id)
-    fixture.state.sidebarSelectedWorktreeIDs = [fixture.main.id]
+    fixture.state.openedWorktreeIDs = [fixture.main.id, fixture.pinnedTwo.id]
+    fixture.state.selection = .worktree(fixture.pinnedTwo.id)
+    fixture.state.sidebarSelectedWorktreeIDs = [fixture.pinnedTwo.id]
     return fixture
+  }
+
+  private struct SmallFixture {
+    var state: RepositoriesFeature.State
+    let repository: Repository
+    let main: Worktree
+
+    func ids(_ names: [String]) -> [Worktree.ID] {
+      names.map { "/tmp/small/\($0)" }
+    }
+  }
+
+  /// Main plus the named worktrees, none pinned and none with a tab.
+  private func makeSmallFixture(names: [String]) -> SmallFixture {
+    let repoRoot = "/tmp/small"
+    let main = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let others = names.map { makeWorktree(id: "\(repoRoot)/\($0)", name: $0, repoRoot: repoRoot) }
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: URL(fileURLWithPath: repoRoot),
+      name: "small",
+      worktrees: IdentifiedArray(uniqueElements: [main] + others)
+    )
+    var state = RepositoriesFeature.State()
+    state.repositories = IdentifiedArray(uniqueElements: [repository])
+    state.repositoryRoots = [repository.location]
+    state.worktreeOrderByRepository[repository.id] = others.map(\.id)
+    return SmallFixture(state: state, repository: repository, main: main)
   }
 
   private func makeWorktree(id: String, name: String, repoRoot: String) -> Worktree {

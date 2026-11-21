@@ -129,3 +129,15 @@ the expected `worktreeOrderByRepository`; fold-state pruning.
   and pin rules.
 
 ## Amendments
+
+### 2026-11-21: minimum visible rows
+
+A repository with few worktrees folded down to its main worktree alone after a launch
+without layout restore. Each repository now shows at least three worktree rows before its
+Inactive group (`minimumVisibleWorktreeRows`). Main, pinned, pending, and active rows count
+first; `foldedWorktreeIDs` keeps the first inactive rows in row order until the floor is
+reached and folds the rest. Row order is newest first (`GitClient` sorts by creation date,
+and worktrees missing from the dragged order come first), so the newest worktrees fill the
+floor. A row kept in the expanded group (`retainedInactiveWorktreeIDs`) never fills the
+floor, so walking the group does not pull it out. Rejected: a lone-row rule (do not fold a
+group of one); it makes the rule harder to state for one saved row.

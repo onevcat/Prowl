@@ -5,12 +5,15 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-11-20 | Fold worktrees with no open tab into a per-repository "Inactive (N)" group | #1138 |
+| 2026-11-21 | Keep at least three worktree rows visible per repository before folding | takeover of #1138 |
 
 ## Outcome & current state (as of 2026-11-20)
 
 - `worktreeRowSections(in:)` splits the unpinned worktrees into `unpinned` and
   `inactive`. A worktree is inactive when it is not in `openedWorktreeIDs`, is not the
-  selected worktree, and is not in the sidebar multi-selection (`isWorktreeFolded`).
+  selected worktree, and is not in the sidebar multi-selection (`isWorktreeInactive`).
+  `foldedWorktreeIDs` folds the inactive rows except the first ones in row order that
+  bring the repository to `minimumVisibleWorktreeRows` (3) visible rows.
   Main, pinned, and pending worktrees are never in the unpinned list, so they never
   fold.
 - `WorktreeRowsView` splits its rows with `worktreeRowSections(in:keepingUnfolded:)`,

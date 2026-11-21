@@ -197,6 +197,11 @@ in Prowl. Prowl gathers the ones with no open tab into one row.
   repository. Folded rows keep their context menu, badges, and archive and delete
   actions. Opening one (click, command palette, CLI) gives it a tab, and it
   moves back among the active rows.
+- **At least three rows:** a repository always shows at least three worktree rows
+  before its Inactive row, counting the main, pinned, and active worktrees. When
+  fewer are active, the first inactive worktrees in row order fill the gap. Rows
+  are newest first unless you reorder them by dragging, so a repository with few
+  worktrees folds nothing.
 - **Never folded:** the main worktree, pinned worktrees, worktrees being created,
   and selected worktrees. Plain folders, workspaces, and remote folders have no
   worktree list, so they have nothing to fold.

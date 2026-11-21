@@ -633,6 +633,11 @@ extension RepositoriesFeature.State {
     for pending in pendingEntries {
       pendingRows.append(makePendingWorktreeRow(pending))
     }
+    let foldedIDs = foldedWorktreeIDs(
+      among: unpinnedWorktrees.map(\.id),
+      alwaysVisibleRowCount: (mainRow == nil ? 0 : 1) + pinnedRows.count + pendingRows.count,
+      keepingUnfolded: keptWorktreeIDs
+    )
     var unpinnedRows: [WorktreeRowModel] = []
     var inactiveRows: [WorktreeRowModel] = []
     for worktree in unpinnedWorktrees {
@@ -642,7 +647,7 @@ extension RepositoriesFeature.State {
         isPinned: false,
         isMainWorktree: false
       )
-      if isWorktreeFolded(worktree.id, keepingUnfolded: keptWorktreeIDs) {
+      if foldedIDs.contains(worktree.id) {
         inactiveRows.append(row)
       } else {
         unpinnedRows.append(row)
@@ -657,15 +662,42 @@ extension RepositoriesFeature.State {
     )
   }
 
-  /// A worktree folds into its repository's Inactive group when it has no open
-  /// tab. The selected worktrees (`keptWorktreeIDs`) stay out of the group:
-  /// closing the last tab of the selected worktree leaves it tabless
-  /// (`ensureInitialTab` runs only when the tabs view mounts), and a row must
-  /// not fold away under the cursor. A worktree selected from the expanded
-  /// group stays in it (`retainedInactiveWorktreeIDs`). Callers pass unpinned,
-  /// non-main rows only, which keeps main, pinned, and pending worktrees out
-  /// of the group. Nothing folds while the launch layout restore is pending.
-  func isWorktreeFolded(_ worktreeID: Worktree.ID, keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>) -> Bool {
+  /// A repository shows at least this many worktree rows before its Inactive group, so a
+  /// repository with few worktrees does not fold down to its main worktree alone.
+  static let minimumVisibleWorktreeRows = 3
+
+  /// The unpinned worktrees, given in row order, that fold into the Inactive group.
+  /// Inactive worktrees fold, except the first ones in row order that bring the visible
+  /// rows up to `minimumVisibleWorktreeRows`. A row kept in the expanded group
+  /// (`retainedInactiveWorktreeIDs`) never fills the floor, so walking the group does
+  /// not pull it out.
+  func foldedWorktreeIDs(
+    among unpinnedWorktreeIDs: [Worktree.ID],
+    alwaysVisibleRowCount: Int,
+    keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>
+  ) -> Set<Worktree.ID> {
+    let inactiveIDs = unpinnedWorktreeIDs.filter { isWorktreeInactive($0, keepingUnfolded: keptWorktreeIDs) }
+    var visibleRowCount = alwaysVisibleRowCount + unpinnedWorktreeIDs.count - inactiveIDs.count
+    var foldedIDs: Set<Worktree.ID> = []
+    for worktreeID in inactiveIDs {
+      if visibleRowCount < Self.minimumVisibleWorktreeRows, !retainedInactiveWorktreeIDs.contains(worktreeID) {
+        visibleRowCount += 1
+      } else {
+        foldedIDs.insert(worktreeID)
+      }
+    }
+    return foldedIDs
+  }
+
+  /// A worktree is inactive when it has no open tab, and `foldedWorktreeIDs` folds it
+  /// into its repository's Inactive group. The selected worktrees (`keptWorktreeIDs`)
+  /// are never inactive: closing the last tab of the selected worktree leaves it tabless
+  /// (`ensureInitialTab` runs only when the tabs view mounts), and a row must not fold
+  /// away under the cursor. A worktree selected from the expanded group stays in it
+  /// (`retainedInactiveWorktreeIDs`). Callers pass unpinned, non-main rows only, which
+  /// keeps main, pinned, and pending worktrees out of the group. Nothing is inactive
+  /// while the launch layout restore is pending.
+  func isWorktreeInactive(_ worktreeID: Worktree.ID, keepingUnfolded keptWorktreeIDs: Set<Worktree.ID>) -> Bool {
     if isLaunchLayoutRestorePending { return false }
     if retainedInactiveWorktreeIDs.contains(worktreeID) { return true }
     return !openedWorktreeIDs.contains(worktreeID) && !keptWorktreeIDs.contains(worktreeID)
