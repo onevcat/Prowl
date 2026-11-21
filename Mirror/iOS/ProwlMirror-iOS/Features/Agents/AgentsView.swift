@@ -31,10 +31,13 @@ struct AgentsView: View {
         }
       }
       if !all.counts.isEmpty {
+        // A header, not a row: an inset grouped row is masked to the section's larger corner
+        // radius, which cuts the outer corners of the edge tiles and their selection border.
         Section {
+        } header: {
           MirrorStateSummary(counts: all.counts, selection: $stateFilter)
+            .textCase(nil)
             .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
         }
       }
       ForEach(roster.projects) { project in
