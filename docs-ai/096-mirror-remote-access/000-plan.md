@@ -115,8 +115,12 @@ version pins the helper version and its SHA-256.
 - **Helper process, downloaded on demand** — chosen. Nothing tunnel-related is in the Mac app
   until the user asks for it, which keeps security reviews of the app simple, and Go stays out
   of the app process. A thin per-architecture download is also smaller than a universal
-  bundle. Fallback: the same helper bundled but never started unless the conditions above
-  hold. R0 decides, using these checks: endpoint security tools treat "download, then run" as
+  bundle. Most users will never use remote access, so bundling would cost every user about
+  12 MB of download and a tunnel binary in every install, while the risks of downloading fall
+  only on users who turn the feature on. For networks that block the download, the setting
+  also accepts the helper as a file that the user downloaded from the release page (same hash
+  and signature checks). Bundling it, never started unless the conditions above hold, stays
+  the fallback only if R0 shows that downloading fails broadly. R0 checks: endpoint security tools treat "download, then run" as
   a dropper pattern and may block or flag it more than a bundled binary; company proxies may
   block the asset host; binary allowlisting (for example Santa) may refuse an executable in a
   user-writable folder; Gatekeeper must accept the notarized helper with and without network
