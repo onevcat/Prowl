@@ -20,7 +20,8 @@ an unread-notification bell, and run/agent status. In place of the branch icon, 
 working agent shows the animated bagua indicator that Active Agents uses, an agent
 waiting for input shows a red exclamation mark, and the row's own work (create,
 archive, delete) or a command that reports progress shows a plain spinner. With
-Reduce Motion on, a working agent shows the plain spinner too.
+Reduce Motion on, a working agent shows the plain spinner too. A long list collapses
+behind **Show N More** (see [Collapsed worktree lists](#collapsed-worktree-lists)).
 
 ## Repository kinds
 
@@ -181,6 +182,33 @@ change that a watcher missed.
   expanding a git repo moves the count onto the individual worktree rows
   (hidden at zero). Workspaces and plain folders always show the count on the
   header.
+
+## Collapsed worktree lists
+
+A repository that other tools also drive can accumulate worktrees you never open
+in Prowl. Its list collapses so the worktrees you work in stay in view.
+
+- A collapsed list shows the first three rows (the main worktree counts as one),
+  every pinned worktree, every worktree with an open terminal tab, and the
+  selected worktree. **Show N More** below the rows lists the rest; **Show Less**
+  collapses it again. The choice is remembered per repository.
+- Rows never move: collapsing hides rows in place, so a worktree that gets or
+  loses a tab keeps its position. The first three are positions in the list, so
+  opening a tab never hides another row.
+- Rows are newest first unless you reorder them by dragging, so the newest
+  worktrees take the first places. A list of three rows or fewer shows everything
+  and has no control.
+- **Show Less** is unavailable while every row past the first three has an open
+  tab. Agent detection plays no part.
+- Hidden rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
+  collapsed repository. Selecting a worktree opens a tab in it, so a row you
+  walk to stays visible after **Show Less**. The command palette lists every
+  worktree either way; opening a hidden one shows it in place.
+- Archiving or deleting the selected worktree selects the next row on screen.
+- At launch, while Prowl restores the terminal layout, nothing is hidden.
+- Plain folders, workspaces, and remote folders have no worktree list to
+  collapse. A collapsed [group](#repository-groups) hides the control with the
+  repository's rows.
 
 ## Repository groups
 

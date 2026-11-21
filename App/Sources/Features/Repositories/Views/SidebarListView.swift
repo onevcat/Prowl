@@ -73,7 +73,7 @@ struct SidebarListView: View {
 
   var body: some View {
     let state = store.state
-    let hotkeyRowIDs = state.orderedWorktreeRows(
+    let hotkeyRowIDs = state.navigableWorktreeRows(
       includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs)
     ).map(\.id)
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: expandedRepoIDs)

@@ -256,6 +256,7 @@ extension WorktreeRowSections {
     main: nil,
     pinned: [],
     pending: [],
-    unpinned: []
+    unpinned: [],
+    hideableIDs: []
   )
 }

@@ -1,5 +1,6 @@
 import Foundation
 import IdentifiedCollections
+import Sharing
 
 struct FailedWorktreeCleanup {
   let didRemoveWorktree: Bool
@@ -24,7 +25,33 @@ func requestCanvasFocus(
     target: target,
     viewport: viewport
   )
-  state.openedWorktreeIDs.insert(openedWorktreeID)
+  state.addOpenedWorktreeID(openedWorktreeID)
+}
+
+extension RepositoriesFeature.State {
+  /// Writes only when the set changes. `@ObservableState` notifies observers of every
+  /// write to a `Set`, even one that leaves it equal, and the sidebar rows read this set.
+  mutating func addOpenedWorktreeID(_ worktreeID: Worktree.ID) {
+    guard !openedWorktreeIDs.contains(worktreeID) else { return }
+    openedWorktreeIDs.insert(worktreeID)
+  }
+
+  /// Writes only when the set changes; see `addOpenedWorktreeID(_:)`.
+  mutating func removeOpenedWorktreeID(_ worktreeID: Worktree.ID) {
+    guard openedWorktreeIDs.contains(worktreeID) else { return }
+    openedWorktreeIDs.remove(worktreeID)
+  }
+}
+
+/// Drops show-all IDs of repositories that are no longer configured, so storage does
+/// not grow with removed repositories. A repository whose load failed is absent from
+/// `state.repositories` but still has a root, so its saved state survives the failure.
+func pruneShowAllWorktreesRepositoryIDs(state: inout RepositoriesFeature.State) {
+  var knownIDs = Set(state.repositories.map(\.id))
+  knownIDs.formUnion(state.repositoryRoots.map(\.standardized.id))
+  let kept = state.showAllWorktreesRepositoryIDs.filter { knownIDs.contains($0) }
+  guard kept != state.showAllWorktreesRepositoryIDs else { return }
+  state.$showAllWorktreesRepositoryIDs.withLock { $0 = kept }
 }
 
 func updatePendingWorktreeProgress(

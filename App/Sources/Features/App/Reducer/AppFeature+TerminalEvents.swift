@@ -276,6 +276,7 @@ extension AppFeature {
   /// arrives later must not request it again.
   func finishLaunchLayoutRestore(state: inout State) {
     state.isRestoringLaunchLayout = false
+    state.repositories.isLaunchLayoutRestorePending = false
     if state.launchRestoreMode == .restoreLayout {
       state.launchRestoreMode = .lastFocusedWorktree
     }

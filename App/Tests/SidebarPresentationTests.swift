@@ -88,6 +88,7 @@ struct SidebarPresentationTests {
     let repository = makeRepository(id: repoRoot, worktrees: [main, pinned, unpinned])
     var state = makeState(repositories: [repository])
     state.pinnedWorktreeIDs = [pinned.id]
+    state.openedWorktreeIDs = [unpinned.id]
     state.pendingWorktrees = [
       PendingWorktree(
         id: "/tmp/repo/pending",

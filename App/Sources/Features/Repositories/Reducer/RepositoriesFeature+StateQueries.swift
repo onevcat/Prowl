@@ -70,7 +70,7 @@ extension RepositoriesFeature.State {
   }
 
   func worktreeID(byOffset offset: Int) -> Worktree.ID? {
-    let rows = orderedWorktreeRows(includingRepositoryIDs: visibleExpandedRepositoryIDs)
+    let rows = navigableWorktreeRows(includingRepositoryIDs: visibleExpandedRepositoryIDs)
     guard !rows.isEmpty else { return nil }
     if let currentID = selectedWorktreeID,
       let currentIndex = rows.firstIndex(where: { $0.id == currentID })
@@ -583,6 +583,26 @@ extension RepositoriesFeature.State {
   }
 
   func worktreeRowSections(in repository: Repository) -> WorktreeRowSections {
+    worktreeRowSections(in: repository, keepingVisible: selectedWorktreeIDsKeptVisible)
+  }
+
+  /// The selected worktrees, which a collapsed list never hides: the sidebar
+  /// multi-selection and the selected worktree.
+  var selectedWorktreeIDsKeptVisible: Set<Worktree.ID> {
+    var worktreeIDs = sidebarSelectedWorktreeIDs
+    if let selectedWorktreeID {
+      worktreeIDs.insert(selectedWorktreeID)
+    }
+    return worktreeIDs
+  }
+
+  /// Builds the repository's rows with `keptWorktreeIDs` standing in for the selection.
+  /// A view passes the selected worktrees its parent resolved, so that its body reads no
+  /// selection state (docs-ai 093).
+  func worktreeRowSections(
+    in repository: Repository,
+    keepingVisible keptWorktreeIDs: Set<Worktree.ID>
+  ) -> WorktreeRowSections {
     let mainWorktree = repository.worktrees.first(where: { isMainWorktree($0) })
     let pinnedWorktrees = orderedPinnedWorktrees(in: repository)
     let unpinnedWorktrees = orderedUnpinnedWorktrees(in: repository)
@@ -598,38 +618,75 @@ extension RepositoriesFeature.State {
       } else {
         nil
       }
-    var pinnedRows: [WorktreeRowModel] = []
-    for worktree in pinnedWorktrees {
-      pinnedRows.append(
-        makeWorktreeRow(
-          worktree,
-          repositoryID: repository.id,
-          isPinned: true,
-          isMainWorktree: false
-        )
-      )
+    let pinnedRows = pinnedWorktrees.map {
+      makeWorktreeRow($0, repositoryID: repository.id, isPinned: true, isMainWorktree: false)
     }
-    var pendingRows: [WorktreeRowModel] = []
-    for pending in pendingEntries {
-      pendingRows.append(makePendingWorktreeRow(pending))
+    let pendingRows = pendingEntries.map { makePendingWorktreeRow($0) }
+    let unpinnedRows = unpinnedWorktrees.map {
+      makeWorktreeRow($0, repositoryID: repository.id, isPinned: false, isMainWorktree: false)
     }
-    var unpinnedRows: [WorktreeRowModel] = []
-    for worktree in unpinnedWorktrees {
-      unpinnedRows.append(
-        makeWorktreeRow(
-          worktree,
-          repositoryID: repository.id,
-          isPinned: false,
-          isMainWorktree: false
-        )
-      )
+    // Main, pinned, and pending rows come first and are never hidden, so only unpinned
+    // rows past the leading rows can be.
+    let leadingRowCount = (mainRow == nil ? 0 : 1) + pinnedRows.count + pendingRows.count
+    var hideableIDs: Set<Worktree.ID> = []
+    for (index, row) in unpinnedRows.enumerated()
+    where leadingRowCount + index >= WorktreeRowSections.collapsedRowCount
+      && isWorktreeHideable(row.id, keepingVisible: keptWorktreeIDs)
+    {
+      hideableIDs.insert(row.id)
     }
     return WorktreeRowSections(
       main: mainRow,
       pinned: pinnedRows,
       pending: pendingRows,
-      unpinned: unpinnedRows
+      unpinned: unpinnedRows,
+      hideableIDs: hideableIDs
     )
+  }
+
+  /// Whether a collapsed list may hide this unpinned worktree when it is past the first
+  /// rows. A worktree with an open tab stays. The selected worktrees (`keptWorktreeIDs`)
+  /// stay too: closing the last tab of the selected worktree leaves it tabless
+  /// (`ensureInitialTab` runs only when the tabs view mounts), and a row must not vanish
+  /// under the cursor. Nothing is hidden while the launch layout restore is pending,
+  /// because `openedWorktreeIDs` fills only as the restored tabs come back.
+  func isWorktreeHideable(_ worktreeID: Worktree.ID, keepingVisible keptWorktreeIDs: Set<Worktree.ID>) -> Bool {
+    if isLaunchLayoutRestorePending { return false }
+    return !openedWorktreeIDs.contains(worktreeID) && !keptWorktreeIDs.contains(worktreeID)
+  }
+
+  func isShowingAllWorktrees(in repositoryID: Repository.ID) -> Bool {
+    showAllWorktreesRepositoryIDs.contains(repositoryID)
+  }
+
+  /// The rows the sidebar shows for the repository, in row order.
+  func visibleWorktreeRows(in repository: Repository) -> [WorktreeRowModel] {
+    worktreeRowSections(in: repository).visibleRows(isShowingAll: isShowingAllWorktrees(in: repository.id))
+  }
+
+  /// Maps a move among the visible unpinned rows to offsets in the repository's full
+  /// unpinned order, the list `unpinnedWorktreesMoved` reorders. Hidden rows keep their
+  /// place between the visible ones. Returns nil for offsets out of range.
+  func fullUnpinnedOrderMove(
+    in repository: Repository,
+    offsets: IndexSet,
+    destination: Int
+  ) -> (offsets: IndexSet, destination: Int)? {
+    let visibleIDs = Set(
+      worktreeRowSections(in: repository)
+        .visibleUnpinned(isShowingAll: isShowingAllWorktrees(in: repository.id))
+        .map(\.id)
+    )
+    let fullOrder = orderedUnpinnedWorktreeIDs(in: repository)
+    let positions = fullOrder.indices.filter { visibleIDs.contains(fullOrder[$0]) }
+    guard offsets.allSatisfy({ positions.indices.contains($0) }),
+      (0...positions.count).contains(destination)
+    else { return nil }
+    let mappedDestination =
+      destination < positions.count
+      ? positions[destination]
+      : (positions.last.map { $0 + 1 } ?? 0)
+    return (IndexSet(offsets.map { positions[$0] }), mappedDestination)
   }
 
   func worktreeRows(in repository: Repository) -> [WorktreeRowModel] {
@@ -639,6 +696,23 @@ extension RepositoriesFeature.State {
 
   func orderedWorktreeRows() -> [WorktreeRowModel] {
     orderedWorktreeRows(includingRepositoryIDs: Set(repositories.map(\.id)))
+  }
+
+  func navigableWorktreeRows() -> [WorktreeRowModel] {
+    navigableWorktreeRows(includingRepositoryIDs: Set(repositories.map(\.id)))
+  }
+
+  /// Rows that keyboard navigation and the numbered shortcuts walk: the visible rows of
+  /// each included repository, without the rows a collapsed list hides.
+  func navigableWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
+    let repositoriesByID = Dictionary(
+      repositories.map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    return orderedRepositoryIDs()
+      .filter { includingRepositoryIDs.contains($0) }
+      .compactMap { repositoriesByID[$0] }
+      .flatMap { visibleWorktreeRows(in: $0) }
   }
 
   func orderedWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
@@ -654,21 +728,56 @@ extension RepositoriesFeature.State {
 }
 
 struct WorktreeRowSections: Equatable {
+  /// A collapsed list always shows this many rows first, counting the main worktree.
+  static let collapsedRowCount = 3
+
   let main: WorktreeRowModel?
   let pinned: [WorktreeRowModel]
   let pending: [WorktreeRowModel]
   let unpinned: [WorktreeRowModel]
+  /// Unpinned rows that a collapsed list hides: past the first `collapsedRowCount` rows,
+  /// with no open tab, and not selected.
+  let hideableIDs: Set<Worktree.ID>
 
   var allRows: [WorktreeRowModel] {
+    visibleRows(isShowingAll: true)
+  }
+
+  var rowCount: Int {
+    (main == nil ? 0 : 1) + pinned.count + pending.count + unpinned.count
+  }
+
+  func visibleUnpinned(isShowingAll: Bool) -> [WorktreeRowModel] {
+    isShowingAll ? unpinned : unpinned.filter { !hideableIDs.contains($0.id) }
+  }
+
+  /// Every row in row order, without the hidden ones unless the list shows all.
+  func visibleRows(isShowingAll: Bool) -> [WorktreeRowModel] {
     var rows: [WorktreeRowModel] = []
     if let main {
       rows.append(main)
     }
     rows.append(contentsOf: pinned)
     rows.append(contentsOf: pending)
-    rows.append(contentsOf: unpinned)
+    rows.append(contentsOf: visibleUnpinned(isShowingAll: isShowingAll))
     return rows
   }
+
+  /// The control below the rows. A collapsed list offers to show the hidden rows. A list
+  /// that shows all offers to hide them again, disabled while no row can be hidden, and
+  /// shows no control when it is short enough that a collapsed list hides nothing.
+  func footer(isShowingAll: Bool) -> WorktreeListFooter? {
+    if isShowingAll {
+      guard rowCount > Self.collapsedRowCount else { return nil }
+      return .showLess(isEnabled: !hideableIDs.isEmpty)
+    }
+    return hideableIDs.isEmpty ? nil : .showMore(count: hideableIDs.count)
+  }
+}
+
+enum WorktreeListFooter: Equatable {
+  case showMore(count: Int)
+  case showLess(isEnabled: Bool)
 }
 
 extension RepositoriesFeature.State {
