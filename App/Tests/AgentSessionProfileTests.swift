@@ -852,6 +852,29 @@ struct AgentSessionProfileTests {
     #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: true, unresolvedStreak: 5) == 15)
   }
 
+  @Test func youngProcessRetriesEverySecondUntilItsTranscriptLands() {
+    // A launched agent creates its session file within seconds; a miss in that window must not
+    // hold the pane for the 5 s session lifetime or the 8 s wide-scan tier.
+    let young = AgentSessionResolver.youngProcessWindow - 1
+    #expect(
+      AgentSessionResolver.cacheLifetime(
+        hasSession: true, hasTranscript: false, usedWideScan: false, unresolvedStreak: 0, processAge: young) == 1)
+    #expect(
+      AgentSessionResolver.cacheLifetime(
+        hasSession: false, hasTranscript: false, usedWideScan: true, unresolvedStreak: 4, processAge: young) == 1)
+    #expect(
+      AgentSessionResolver.cacheLifetime(
+        hasSession: true, hasTranscript: true, usedWideScan: false, unresolvedStreak: 0, processAge: young) == 5)
+    // Once settled, the normal pacing applies, also to a session whose transcript never comes.
+    let settled = AgentSessionResolver.youngProcessWindow
+    #expect(
+      AgentSessionResolver.cacheLifetime(
+        hasSession: true, hasTranscript: false, usedWideScan: false, unresolvedStreak: 0, processAge: settled) == 5)
+    #expect(
+      AgentSessionResolver.cacheLifetime(
+        hasSession: false, hasTranscript: false, usedWideScan: true, unresolvedStreak: 0, processAge: settled) == 8)
+  }
+
   @Test func soleCandidateNeedsTwoConsistentSamples() {
     let sole = AgentSession(id: "abc", transcriptPath: nil, source: .recentFile)
     let first = AgentSessionResolver.confirmSole(sole, previousProvisionalID: nil)
