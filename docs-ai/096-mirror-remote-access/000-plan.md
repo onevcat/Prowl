@@ -102,7 +102,7 @@ version pins the helper version and its SHA-256.
 
 | Slice | Content |
 | --- | --- |
-| R0 | Spikes: `derper` client verification against a Worker; helper download, hash and signature check, start and stop |
+| R0 | Spikes: `derper` client verification against a Worker; helper download, hash and signature check, Gatekeeper with and without network, start and stop |
 | R1 | Mac: helper target and release asset, Remote Access setting, download and removal, process lifecycle, `remote-v1`, `remoteRegister` |
 | R2 | iOS: tunnel transport, LAN-then-tunnel connection, client rebuild on failure |
 | R3 | Gateway admission, RevenueCat, paywall, multi-device rules |
@@ -115,8 +115,12 @@ version pins the helper version and its SHA-256.
 - **Helper process, downloaded on demand** — chosen. Nothing tunnel-related is in the Mac app
   until the user asks for it, which keeps security reviews of the app simple, and Go stays out
   of the app process. A thin per-architecture download is also smaller than a universal
-  bundle. Fallback if the download proves impractical: the same helper bundled but never
-  started unless the conditions above hold.
+  bundle. Fallback: the same helper bundled but never started unless the conditions above
+  hold. R0 decides, using these checks: endpoint security tools treat "download, then run" as
+  a dropper pattern and may block or flag it more than a bundled binary; company proxies may
+  block the asset host; binary allowlisting (for example Santa) may refuse an executable in a
+  user-writable folder; Gatekeeper must accept the notarized helper with and without network
+  (a bare executable cannot carry a stapled ticket).
 - **Own relays with admission** — chosen. Public relays are not for products, and admission at
   the relay is what makes the subscription meaningful while the Mac stays free.
 - **Remote access as the paid product** — chosen over paid push (Guideline 4.10).
