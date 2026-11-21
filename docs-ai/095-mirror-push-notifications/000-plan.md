@@ -102,9 +102,6 @@ gateway unless all of these are true:
 2. A paired device has a push target. The iOS app sends `pushRegister` only while it has an
    active Mirror Pro entitlement and the user has turned notifications on. Without Pro, no
    target exists and the Mac sends nothing.
-3. The managed preference `RemoteMirrorPushDisabled` is not set. An administrator can set it
-   with a configuration profile; the Host then ignores `pushRegister`, stores no target, and
-   does not advertise `push-v1`.
 
 The Mac makes no other gateway request: no health check, no prefetch, no registration of its
 own. Each request carries only `pushToken`, a collapse ID, and ciphertext. `docs/remote-mirror.md`
@@ -143,9 +140,23 @@ lists exactly what leaves the Mac.
   `promptRespond` command. All Host safety checks still apply (`PROMPT_CLOSED`,
   `PROMPT_CHANGED`, …). The extension shows the result. If the Host is not reachable, it
   says so and offers to open the app.
-- **Live Activity**: counts of working, blocked and done agents per Host, updated with
-  ActivityKit pushes through the gateway. Live Activity payloads cannot be decrypted by an
-  extension, so they carry **only counts and states**, no titles or text.
+- **Live Activity**: one activity per Host that shows the counts of working, blocked and done
+  agents.
+  - Lock screen: Host name, the three counts, the time of the last change, **Open**, and
+    **Answer** while an agent is blocked. Dynamic Island compact: a glyph in the most urgent
+    state color (blocked > working > done) and the blocked count; expanded: the lock screen
+    content. Colors follow the Mac status colors.
+  - The app starts the activity locally when a Pro user leaves the app while agents work or
+    are blocked. Attributes (Host name, Host UUID) are set at that start and never travel
+    through the gateway. No push-to-start, because its attributes would be plaintext.
+  - The Host sends an update through the gateway only when a count changes: high priority for
+    a new `blocked`, low priority otherwise. When all agents are idle or done for a few
+    minutes, it sends `end` and the final state stays on the lock screen for a short time.
+  - The update payload is plaintext to the gateway and Apple, so the default content is only
+    counts, states and times. **Answer** targets the first blocked pane through a slot ID (the
+    same HMAC as the collapse ID) that the app maps back to a known pane.
+  - If the widget extension can decrypt a sealed field at render time, titles and the prompt
+    text can be shown too (see Spike results).
 
 ## Slices
 
