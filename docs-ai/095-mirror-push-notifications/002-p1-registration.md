@@ -28,4 +28,4 @@ whether the Mac user allows it, before any sending exists (P2).
 
 ## Refs
 
-PR (this slice). Tests: `MirrorPushRegistrationTests`, five tests in `MirrorHostTests`.
+PR #1144. Tests: `MirrorPushRegistrationTests`, five tests in `MirrorHostTests`.
