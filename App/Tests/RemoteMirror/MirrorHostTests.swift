@@ -1268,6 +1268,106 @@ struct MirrorHostTests {
     }
     await sender.settle()
     #expect(await gateway.calls.isEmpty)
+    // The prompt is still open. Once every gate is open again and the user is away, it is
+    // sent once: the skipped push was held again, not counted as delivered.
+    switch gate {
+    case .switchOff: host.pushEnabled = true
+    case .disallowed: host.setPushAllowed(true, for: identity.devices[0].id)
+    case .userBack: presence.screenLockChanged(true)
+    }
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.count == 1)
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.count == 1)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aDeviceAllowedWhileTheUserIsAlreadyAwayGetsTheOpenPromptAtOnce() async throws {
+    let token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    let other = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210_-ZyXwV"
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(token: token, kinds: [.done])
+    let second = MirrorPairedDevice(
+      id: UUID(), name: "Second", key: Data(repeating: 9, count: 32), pairedAt: Date(),
+      push: MirrorPushRegistration(token: other, kinds: [.blocked]), pushAllowedByMac: false)
+    identity.devices.append(second)
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let gateway = RecordingPushGateway()
+    let pane = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    presence.screenLockChanged(true)
+    states[pane] = .blocked
+    sender.refresh()
+    #expect(host.setPushAllowed(true, for: second.id))
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.map(\.token) == [other])
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aPromptOpenedWhileStoppedIsSentWhenTheSenderStartsAgainWhileAway() async throws {
+    let token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(token: token, kinds: [.blocked])
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let gateway = RecordingPushGateway()
+    let first = UUID()
+    let later = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [first: .working, later: .working]
+    var locked = true
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { locked }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    states[first] = .blocked
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.count == 1)
+    host.pushEnabled = false
+    sender.refresh()
+    states[later] = .blocked
+    host.pushEnabled = true
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.count == 2)
+    // Starting again with nothing new sends nothing.
+    host.pushEnabled = false
+    sender.refresh()
+    host.pushEnabled = true
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.count == 2)
+    locked = false
   }
 
   @Test(.timeLimit(.minutes(1))) func aPromptThatClosedBeforeThePhoneLeftIsNotSentLate() async throws {

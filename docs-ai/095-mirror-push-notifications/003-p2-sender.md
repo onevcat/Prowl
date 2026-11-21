@@ -21,6 +21,12 @@ Second Prowl slice of 095, stacked on P1. The Host sends push events through the
   prompt survives a catch-up during a short detection gap; `done` means a finished turn
   (`PaneAgentState.isCompletedTurn`: OSC `done`/`error` or a non-OSC busy-to-idle path), not
   an OSC `idle` after an interrupt, and it is sent even when the Mac shows the pane as seen.
+- Review round 2 of #1145: the planner hands a `blocked` push to the sender as pending; the
+  sender reports `attempted` (delivered from then on, no retry) or `skipped` (held again for
+  the next catch-up), so a push dropped by the send-time check is not lost. Held prompts are
+  drained right after activation and after each refresh when the user is already away, so a
+  device allowed while away, or a prompt that opened while the sender was stopped, does not
+  wait for another presence or connection change.
 - `MacPresenceMonitor`: present = screen unlocked, display awake, input in the last 2 minutes
   (`CGEventSource` idle time, lock and screen-sleep notifications, 10 s poll). It runs only
   while the sender is active.

@@ -6,6 +6,7 @@ import Testing
 
 struct MirrorPushPlannerTests {
   typealias Device = MirrorPushPlanner.Device
+  typealias Push = MirrorPushPlanner.Push
 
   private let pane = UUID()
   private let deviceID = UUID()
@@ -21,7 +22,15 @@ struct MirrorPushPlannerTests {
     return planner
   }
 
-  private func blocked() -> [MirrorPushPlanner.Push] { [.init(deviceID: deviceID, paneID: pane, kind: .blocked)] }
+  private func blocked(_ ordinal: Int = 1) -> [MirrorPushPlanner.Push] {
+    [.init(deviceID: deviceID, paneID: pane, kind: .blocked, ordinal: ordinal)]
+  }
+
+  /// The sender's report that each push was sent.
+  private func sent(_ pushes: [Push], _ planner: inout MirrorPushPlanner) -> [Push] {
+    for push in pushes { planner.attempted(push) }
+    return pushes
+  }
 
   @Test func blockedWhileAwayAndOfflineIsPushedAtOnce() {
     var planner = away()
@@ -63,7 +72,7 @@ struct MirrorPushPlannerTests {
     _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
     _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
-    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked(2))
   }
 
   @Test func doneNeedsTenSecondsOfWorkingAndTheUserAway() {
@@ -116,7 +125,7 @@ struct MirrorPushPlannerTests {
     // A pane that stayed away longer is a new prompt.
     planner.paneRemoved(pane, at: start.advanced(by: .seconds(4)))
     #expect(
-      planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(40)), devices: [device()]) == blocked())
+      planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(40)), devices: [device()]) == blocked(2))
   }
 
   @Test func aDetectionMissKeepsTheWorkingTimeForDone() {
@@ -161,6 +170,41 @@ struct MirrorPushPlannerTests {
     _ = planner.presenceChanged(to: true, devices: [device()])
     planner.deviceBecameEligible(device())
     #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aPushTheSenderSkippedIsHeldAgainAndSentOnce() {
+    var planner = away()
+    let first = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    #expect(first == blocked())
+    // The user came back before the request: the sender skips it.
+    for push in first { planner.skipped(push) }
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    #expect(sent(planner.presenceChanged(to: false, devices: [device()]), &planner) == blocked())
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aSkippedCatchUpIsHeldAgainForTheNextOne() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: true)])
+    _ = planner.presenceChanged(to: false, devices: [device(online: true)])
+    let catchUp = planner.deviceWentOffline(device())
+    #expect(catchUp == blocked())
+    // The phone reconnected before the request.
+    for push in catchUp { planner.skipped(push) }
+    #expect(sent(planner.deviceWentOffline(device()), &planner) == blocked())
+    #expect(planner.deviceWentOffline(device()).isEmpty)
+  }
+
+  @Test func drainSendsHeldPromptsOnlyWhileTheUserIsAway() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [])
+    planner.deviceBecameEligible(device())
+    #expect(planner.drain(devices: [device()]).isEmpty)
+    _ = planner.presenceChanged(to: false, devices: [])
+    #expect(planner.drain(devices: [device(online: true)]).isEmpty)
+    #expect(sent(planner.drain(devices: [device()]), &planner) == blocked())
+    #expect(planner.drain(devices: [device()]).isEmpty)
   }
 
   @Test func reactivationHoldsAnOpenPromptThatWasNeverPushed() {

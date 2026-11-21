@@ -14,6 +14,8 @@ nonisolated struct MirrorPushPlanner {
     let deviceID: UUID
     let paneID: UUID
     let kind: MirrorPushKind
+    /// For `blocked`: the prompt it is about, so the sender can report whether it was sent.
+    var ordinal: Int?
   }
 
   /// What the planner needs to know about a device that may receive pushes.
@@ -43,6 +45,8 @@ nonisolated struct MirrorPushPlanner {
   private var held: [UUID: Set<Opening>] = [:]
   /// Openings already pushed to a device; only the latest opening of each pane is kept.
   private var delivered: [UUID: Set<Opening>] = [:]
+  /// Openings handed to the sender and not yet reported as attempted or skipped.
+  private var pending: [UUID: Set<Opening>] = [:]
   private(set) var isPresent = true
 
   init() {}
@@ -57,7 +61,7 @@ nonisolated struct MirrorPushPlanner {
         // The same prompt is back: send what a catch-up during the gap could not.
         states[paneID] = state
         guard state == .blocked, !isPresent else { return [] }
-        return devices.filter { !$0.isOnline }.flatMap { catchUp($0, paneID: paneID) }
+        return devices.filter { !$0.isOnline }.flatMap { catchUp($0, only: paneID) }
       }
       previous = gap.state
     }
@@ -77,8 +81,8 @@ nonisolated struct MirrorPushPlanner {
         if isPresent || device.isOnline {
           held[device.id, default: []].insert(opening)
         } else {
-          delivered[device.id, default: []].insert(opening)
-          pushes.append(Push(deviceID: device.id, paneID: paneID, kind: .blocked))
+          pending[device.id, default: []].insert(opening)
+          pushes.append(Push(deviceID: device.id, paneID: paneID, kind: .blocked, ordinal: opening.ordinal))
         }
       }
       return pushes
@@ -122,10 +126,38 @@ nonisolated struct MirrorPushPlanner {
     guard device.kinds.contains(.blocked) else { return }
     for (paneID, state) in states where state == .blocked {
       let opening = Opening(paneID: paneID, ordinal: ordinals[paneID] ?? 0)
-      if delivered[device.id]?.contains(opening) != true {
+      if delivered[device.id]?.contains(opening) != true, pending[device.id]?.contains(opening) != true {
         held[device.id, default: []].insert(opening)
       }
     }
+  }
+
+  /// Sends what is held for offline devices when the user is already away. Activation and a
+  /// newly eligible device call this, because no presence or connection change follows.
+  mutating func drain(devices: [Device]) -> [Push] {
+    guard !isPresent else { return [] }
+    return devices.filter { !$0.isOnline }.flatMap { catchUp($0) }
+  }
+
+  /// The sender started a gateway request for this push: the prompt counts as delivered,
+  /// whatever the network result (no retry).
+  mutating func attempted(_ push: Push) {
+    guard let opening = opening(of: push), pending[push.deviceID]?.remove(opening) != nil else { return }
+    delivered[push.deviceID, default: []].insert(opening)
+  }
+
+  /// The sender dropped this push before any request (a gate closed, the user came back, the
+  /// device connected). The prompt is held again for the next catch-up if it is still current.
+  mutating func skipped(_ push: Push) {
+    guard let opening = opening(of: push), pending[push.deviceID]?.remove(opening) != nil,
+      ordinals[opening.paneID] == opening.ordinal
+    else { return }
+    held[push.deviceID, default: []].insert(opening)
+  }
+
+  private func opening(of push: Push) -> Opening? {
+    guard push.kind == .blocked, let ordinal = push.ordinal else { return nil }
+    return Opening(paneID: push.paneID, ordinal: ordinal)
   }
 
   /// The user arrived at or left the Mac. Leaving sends the held openings of offline devices.
@@ -146,6 +178,7 @@ nonisolated struct MirrorPushPlanner {
   mutating func forget(_ deviceID: UUID) {
     held.removeValue(forKey: deviceID)
     delivered.removeValue(forKey: deviceID)
+    pending.removeValue(forKey: deviceID)
   }
 
   private mutating func open(_ paneID: UUID) -> Opening {
@@ -157,11 +190,12 @@ nonisolated struct MirrorPushPlanner {
   private mutating func forgetOpenings(of paneID: UUID) {
     for deviceID in held.keys { held[deviceID] = held[deviceID]?.filter { $0.paneID != paneID } }
     for deviceID in delivered.keys { delivered[deviceID] = delivered[deviceID]?.filter { $0.paneID != paneID } }
+    for deviceID in pending.keys { pending[deviceID] = pending[deviceID]?.filter { $0.paneID != paneID } }
   }
 
   /// Sends the device's held openings that are still the latest prompt of a blocked pane.
   /// An opening whose pane is in a short detection gap stays held; others are dropped.
-  private mutating func catchUp(_ device: Device, paneID only: UUID? = nil) -> [Push] {
+  private mutating func catchUp(_ device: Device, only: UUID? = nil) -> [Push] {
     guard device.kinds.contains(.blocked), let openings = held[device.id] else { return [] }
     var keep: Set<Opening> = []
     var due: Set<Opening> = []
@@ -176,8 +210,8 @@ nonisolated struct MirrorPushPlanner {
       }
     }
     held[device.id] = keep.isEmpty ? nil : keep
-    delivered[device.id, default: []].formUnion(due)
+    pending[device.id, default: []].formUnion(due)
     return due.sorted { $0.paneID.uuidString < $1.paneID.uuidString }
-      .map { Push(deviceID: device.id, paneID: $0.paneID, kind: .blocked) }
+      .map { Push(deviceID: device.id, paneID: $0.paneID, kind: .blocked, ordinal: $0.ordinal) }
   }
 }

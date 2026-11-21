@@ -109,6 +109,9 @@ final class MirrorPushSender {
       send(planner.deviceWentOffline(device))
     }
     onlineDevices = online
+    // Held prompts that are due now, such as for a device that just became eligible while the
+    // user was already away: no presence or connection change will follow for them.
+    send(planner.drain(devices: devices))
   }
 
   private func reconcilePanes(devices: [MirrorPushPlanner.Device]) {
@@ -134,6 +137,9 @@ final class MirrorPushSender {
     eligibleKinds = Dictionary(devices.map { ($0.id, $0.kinds) }, uniquingKeysWith: { _, last in last })
     presence.start()
     send(planner.presenceChanged(to: presence.isPresent, devices: devices))
+    // The planner may still be "away" from before the stop, so no change fires: send what the
+    // activation held for offline devices now.
+    send(planner.drain(devices: devices))
   }
 
   private func deactivate() {
@@ -180,10 +186,17 @@ final class MirrorPushSender {
       let id = UUID()
       sends[id] = Task { [weak self] in
         defer { self?.sends.removeValue(forKey: id) }
-        guard let self, self.mayStillSend(push), let hostID = self.host.hostIdentityID,
+        guard let self else { return }
+        guard self.mayStillSend(push), let hostID = self.host.hostIdentityID,
           let device = self.host.devices.first(where: { $0.id == push.deviceID }), let token = device.push?.token,
           let request = Self.request(for: push, device: device, hostID: hostID, details: self.paneDetails(push.paneID))
-        else { return }
+        else {
+          // Nothing was sent: hold the prompt again for the next valid catch-up.
+          self.planner.skipped(push)
+          return
+        }
+        // Delivered from here on, whatever the network result: no retry.
+        self.planner.attempted(push)
         let result = await gateway.push(token: token, collapseID: request.collapseID, sealed: request.sealed)
         guard result == .tokenGone else { return }
         self.planner.forget(push.deviceID)
