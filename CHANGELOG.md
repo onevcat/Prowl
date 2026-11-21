@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.11.21](https://github.com/onevcat/Prowl/releases/tag/v2026.11.21)
+
+Prowl keeps long worktree lists compact and can restore your terminal layout sooner at launch.
+
+### New
+
+- Long worktree lists collapse in place, keeping the first three rows visible along with pinned worktrees, the selected worktree, and worktrees with open tabs. Click **Show N More** to expand the list or **Show Less** to collapse it. Prowl remembers your choice per repository.
+- The ⌘⌃↑/↓ and ⌃1–9 shortcuts skip hidden worktrees. The command palette still lists every worktree.
+
+### Improved
+
+- When Prowl can find all your saved worktrees in its cache, it restores your terminal layout while repositories refresh in the background.
+- The sidebar stays in place throughout launch, and the detail pane shows a loading message until your layout is ready. The new loading messages are also available in Simplified Chinese.
+
 ## [2026.11.20](https://github.com/onevcat/Prowl/releases/tag/v2026.11.20)
 
 ### New
