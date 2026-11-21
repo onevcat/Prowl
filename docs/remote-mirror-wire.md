@@ -24,7 +24,7 @@ fixed-byte vectors, independent of encode/decode round-trip tests.
 
 Controls: challenge, authenticate, pair, paired, authenticated; list, panes;
 subscribe, subscribed, acknowledge, input, refresh, scroll, scrollResult, viewport; history, historyPage; command,
-commandResult, commandReceipt; failure, ended, ping, pong. There is no private
+commandResult, commandReceipt; pushRegister, pushUnregister, pushStatus; failure, ended, ping, pong. There is no private
 Agent-state or private submission control. Command envelopes preserve the public
 CLI JSON and UUID request ID. See the feature documentation for command scope.
 
@@ -323,6 +323,40 @@ then presses the keys one at a time. Before each key, it checks that the connect
 the lease, that the pane still runs the same agent (or still none), and that nobody started
 editing on the Mac. A refusal after the first key says how many keys were
 pressed.
+
+## Push registration (`push-v1`)
+
+A Host that advertises `push-v1` keeps one push registration per paired device (docs-ai 095).
+A client sends these controls only after it sees the capability: an older Host closes the
+connection on an unknown control.
+
+```json
+{"pushRegister":{"_0":{"pushToken":"<token>","kinds":["blocked","done"]}}}
+{"pushUnregister":{}}
+```
+
+- `pushToken` is the send-only token that the push gateway issued for this device and Host:
+  URL-safe Base64, 16 to 256 characters. Any other value closes the connection.
+- `kinds` lists the events the device wants, at most 16 entries. The Host keeps `blocked` and
+  `done` and ignores other values. A list with no known kind removes the registration, like `pushUnregister`.
+- The client sends `pushRegister` again on every connection, so a new token or a changed
+  setting reaches the Host.
+- Only an authenticated device connection can register, and only for itself.
+
+The Host answers both with its state for that device:
+
+```json
+{"pushStatus":{"_0":{"pushEnabled":false,"pushAllowedByMac":true,"registered":true}}}
+```
+
+The Host also sends `pushStatus` to the open connections of a device when the Mac user
+changes the switch or that device's permission, so the phone can show where notifications are
+turned off. A connection may send at most 16 push controls; more closes it.
+
+`pushEnabled` is the Mac switch **Send Notifications to Paired Devices** (off by default).
+`pushAllowedByMac` is `false` when the Mac user turned notifications off for this device; a
+new `pushRegister` never changes it. `registered` says whether the Host keeps a registration
+now. Unpairing the device removes its registration.
 
 ## Conversation stream (`conversation-v1`)
 

@@ -30,6 +30,15 @@ final class MirrorHost {
       defaults.set(port, forKey: "remoteMirrorHostPort")
     }
   }
+  /// **Send Notifications to Paired Devices** (docs-ai 095). Off by default: the Mac sends
+  /// nothing to the push gateway until its user turns this on.
+  var pushEnabled: Bool {
+    didSet {
+      guard pushEnabled != oldValue else { return }
+      defaults.set(pushEnabled, forKey: "remoteMirrorPushEnabled")
+      sendPushStatus(to: Set(devicePeers.values))
+    }
+  }
   @ObservationIgnored var commandService: MirrorCommandService?
   @ObservationIgnored private var commandPeers: [UUID: MirrorCommandRequest] = [:]
   @ObservationIgnored private var commandDevices: [UUID: UUID] = [:]
@@ -68,6 +77,7 @@ final class MirrorHost {
   @ObservationIgnored private var challenges: [UUID: Data] = [:]
   @ObservationIgnored private var pendingPairings: [UUID: MirrorDeviceCredential] = [:]
   @ObservationIgnored private var devicePeers: [UUID: UUID] = [:]
+  @ObservationIgnored private var pushControlCounts: [UUID: Int] = [:]
   @ObservationIgnored private var authenticationDeadlines: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private let clock: any Clock<Duration>
   @ObservationIgnored private let loadIdentity: () throws -> MirrorHostIdentity?
@@ -185,6 +195,80 @@ final class MirrorHost {
     }
   }
 
+  /// The Mac user's per-device choice. It persists, and a later `pushRegister` from the phone
+  /// does not change it. Returns `false` when the device is unknown or the choice could not be
+  /// saved; the Host error then says why.
+  @discardableResult
+  func setPushAllowed(_ allowed: Bool, for deviceID: UUID) -> Bool {
+    guard let device = identity?.devices.first(where: { $0.id == deviceID }) else { return false }
+    let value: Bool? = allowed ? nil : false
+    guard device.pushAllowedByMac != value else { return true }
+    guard updateDevice(deviceID, reportsError: true, { $0.pushAllowedByMac = value }) else { return false }
+    sendPushStatus(to: [deviceID])
+    return true
+  }
+
+  private func updatePushRegistration(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard let deviceID = devicePeers[peer.id] else { throw MirrorProtocolError.invalidMessage }
+    // A phone sends this once per connection and when its settings change; many more is a
+    // loop, and each change is a Keychain write on the main actor.
+    let count = (pushControlCounts[peer.id] ?? 0) + 1
+    guard count <= Self.maximumPushControlsPerConnection else { throw MirrorProtocolError.invalidMessage }
+    pushControlCounts[peer.id] = count
+    let registration: MirrorPushRegistration?
+    switch message {
+    case .pushRegister(let payload):
+      guard MirrorPushRegistration.isValidToken(payload.pushToken), payload.kinds.count <= 16 else {
+        throw MirrorProtocolError.invalidMessage
+      }
+      // No kind this Host knows is the same as turning notifications off.
+      registration = MirrorPushRegistration(
+        token: payload.pushToken, kinds: Set(payload.kinds.compactMap(MirrorPushKind.init(rawValue:))))
+    case .pushUnregister:
+      registration = nil
+    default:
+      throw MirrorProtocolError.invalidMessage
+    }
+    // The phone repeats its registration on every connection; an unchanged one is not saved
+    // again. A failed save leaves the old state, and the reply says so; it is not a Host error
+    // that the Mac user caused.
+    if devices.first(where: { $0.id == deviceID })?.push != registration {
+      updateDevice(deviceID, reportsError: false) { $0.push = registration }
+    }
+    sendPushStatus(to: [deviceID])
+  }
+
+  static let maximumPushControlsPerConnection = 16
+
+  /// Tells the open connections of these devices the current push state.
+  private func sendPushStatus(to deviceIDs: Set<UUID>) {
+    for (peerID, deviceID) in devicePeers where deviceIDs.contains(deviceID) {
+      guard let device = devices.first(where: { $0.id == deviceID }) else { continue }
+      peers[peerID]?.send(
+        .pushStatus(
+          .init(pushEnabled: pushEnabled, pushAllowedByMac: device.isPushAllowedByMac, registered: device.push != nil)))
+    }
+  }
+
+  /// Persists first, so a failed vault write does not pretend that the change took effect.
+  @discardableResult
+  private func updateDevice(
+    _ deviceID: UUID, reportsError: Bool, _ change: (inout MirrorPairedDevice) -> Void
+  ) -> Bool {
+    guard var next = identity, let index = next.devices.firstIndex(where: { $0.id == deviceID }) else { return false }
+    change(&next.devices[index])
+    do {
+      try saveIdentity(next)
+      identity = next
+      devices = next.devices
+      return true
+    } catch {
+      ProwlLogger("RemoteMirror").warning("Host device operation failed", error: error)
+      if reportsError { self.error = error.localizedDescription }
+      return false
+    }
+  }
+
   func revokeAllDevices() {
     guard var next = identity else { return }
     next.devices.removeAll()
@@ -264,6 +348,7 @@ final class MirrorHost {
     self.defaults = defaults
     address = defaults.string(forKey: "remoteMirrorHostAddress") ?? "0.0.0.0"
     port = defaults.string(forKey: "remoteMirrorHostPort") ?? "7880"
+    pushEnabled = defaults.bool(forKey: "remoteMirrorPushEnabled")
   }
 
   func start() {
@@ -387,6 +472,7 @@ final class MirrorHost {
     challenges.removeAll()
     pendingPairings.removeAll()
     devicePeers.removeAll()
+    pushControlCounts.removeAll()
     onlineDeviceIDs.removeAll()
     hostRunID = nil
     retireListener()
@@ -480,6 +566,7 @@ final class MirrorHost {
       self.challenges.removeValue(forKey: peer.id)
       self.pendingPairings.removeValue(forKey: peer.id)
       self.devicePeers.removeValue(forKey: peer.id)
+      self.pushControlCounts.removeValue(forKey: peer.id)
       self.onlineDeviceIDs = Set(self.devicePeers.values)
       self.cancelCommand(peer.id)
       self.peers.removeValue(forKey: peer.id)
@@ -587,7 +674,7 @@ final class MirrorHost {
           .panes(
             .init(
               panes: panes,
-              capabilities: ["vt-v1", "text-v1", "conversation-v1", "takeover", "refresh"]
+              capabilities: ["vt-v1", "text-v1", "conversation-v1", "takeover", "refresh", "push-v1"]
                 + (commandService != nil
                   ? [
                     "launch-profile", "launch-shell", "agents-dispatch", "agent-input", "prompt-respond", "agent-keys",
@@ -624,6 +711,8 @@ final class MirrorHost {
         try scroll(message, peer: peer)
       case .history:
         try sendHistory(message, to: peer)
+      case .pushRegister, .pushUnregister:
+        try updatePushRegistration(message, peer: peer)
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch { peer.close(error.localizedDescription) }

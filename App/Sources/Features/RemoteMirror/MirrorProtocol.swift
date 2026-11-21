@@ -102,7 +102,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, viewport, acknowledge, input, history, historyPage, failure, ping, pong, ended,
       refresh, scroll, scrollResult, scrollState, command, commandResult, commandReceipt,
-      conversationSnapshot, conversationEvents, screenPrompt
+      conversationSnapshot, conversationEvents, screenPrompt, pushRegister, pushUnregister, pushStatus
   }
   case list
   case panes(PanesPayload)
@@ -181,6 +181,27 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   struct ScreenPromptPayload: Codable, Sendable {
     var prompt: MirrorConversationEvent.Prompt?
     var subscriptionID: UUID
+  }
+  /// `push-v1`: where the Host sends push events for this device, and which events
+  /// (docs-ai 095). The phone sends it on every connection.
+  case pushRegister(PushRegisterPayload)
+  struct PushRegisterPayload: Codable, Sendable {
+    /// The send-only token that the push gateway issued for this device and Host.
+    var pushToken: String
+    /// `blocked`, `done`. The Host ignores a kind that it does not know.
+    var kinds: [String]
+  }
+  /// `push-v1`: the phone turned notifications off for this Host.
+  case pushUnregister
+  /// The Host's reply to `pushRegister` and `pushUnregister`.
+  case pushStatus(PushStatusPayload)
+  struct PushStatusPayload: Codable, Sendable {
+    /// The Mac switch **Send Notifications to Paired Devices**.
+    var pushEnabled: Bool
+    /// `false` when the Mac user turned notifications off for this device.
+    var pushAllowedByMac: Bool
+    /// Whether the Host keeps a registration for this device now.
+    var registered: Bool
   }
   case acknowledge(AcknowledgePayload)
   struct AcknowledgePayload: Codable, Sendable {
@@ -289,6 +310,9 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .conversationSnapshot: .conversationSnapshot
     case .conversationEvents: .conversationEvents
     case .screenPrompt: .screenPrompt
+    case .pushRegister: .pushRegister
+    case .pushUnregister: .pushUnregister
+    case .pushStatus: .pushStatus
     }
   }
   var panes: [MirrorPaneDescriptor]? {

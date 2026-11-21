@@ -301,3 +301,4 @@ S0 notes for P3:
   gateway. From a plan review of #1142.
 - Updated 2026-11-21: send-only `pushToken` with App Attest for management, catch-up when the
   device goes offline, Live Activity registration and stop rules. From a second review.
+- Updated 2026-11-21: P1 Host registration protocol — see [002-p1-registration.md](002-p1-registration.md)
