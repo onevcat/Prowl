@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.agents/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "c5d9e568a9726e844a6b15f0e99fbb5c23f2c58f",
-  "last_synced_date": "2026-11-20",
-  "note": "Agy Homebrew wrapper detection, Find query selection and stale-request fix, line-diff refresh tiers, Review Loop finding patterns and Release log privacy updated the manual in their PRs; no further edits needed."
+  "last_synced_commit": "4b48676db362a25b3878d192639f1129fce73763",
+  "last_synced_date": "2026-11-21",
+  "note": "Collapsed worktree lists (Show N More), cached-list launch restore and the launch loading view updated the manual in their PRs; no further edits needed."
 }
