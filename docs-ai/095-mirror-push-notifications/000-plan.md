@@ -49,7 +49,7 @@ subscription.
 
 | Part | Where | Role |
 | --- | --- | --- |
-| Push gateway | separate private repository | Registers devices, checks entitlement, sends to APNs |
+| Push gateway | separate private repository, Cloudflare Workers | Registers devices, checks entitlement, sends to APNs |
 | Host push sender | `App/Sources/Features/RemoteMirror/` | Stores one push target per paired device, encrypts and posts events |
 | iOS client | `Mirror/iOS/` | APNs registration, Notification Service Extension, paywall, settings |
 | RevenueCat | external | Subscription state for the app and the gateway |
@@ -152,20 +152,20 @@ lists exactly what leaves the Mac.
   - The Host sends an update through the gateway only when a count changes: high priority for
     a new `blocked`, low priority otherwise. When all agents are idle or done for a few
     minutes, it sends `end` and the final state stays on the lock screen for a short time.
-  - The update payload is plaintext to the gateway and Apple, so the default content is only
-    counts, states and times. **Answer** targets the first blocked pane through a slot ID (the
-    same HMAC as the collapse ID) that the app maps back to a known pane.
-  - If the widget extension can decrypt a sealed field at render time, titles and the prompt
-    text can be shown too (see Spike results).
+  - The update payload is plaintext to the gateway and Apple, so the content is only counts,
+    states and times. **Answer** targets the first blocked pane through a slot ID (the same
+    HMAC as the collapse ID) that the app maps back to a known pane.
+  - No titles or prompt text: the view cannot read the push key from the Keychain on a device
+    (see Spike results). An App Group file is the only untested way and is not planned.
 
 ## Slices
 
 | Slice | Content |
 | --- | --- |
-| S0 | Spike: gateway platform can send HTTP/2 to APNs; App Store Connect products; RevenueCat project and webhook |
+| S0 | Done 2026-11-21: gateway platform and APNs keys (see Spike results). Left for S1/S3: App Store Connect products, RevenueCat project and webhook |
 | S1 | Gateway: device registration, push, entitlement cache, rate limits, delete |
 | S2 | Host: `push-v1` capability, `pushRegister`, target storage, event trigger, encryption, settings row, wire and feature docs |
-| S3 | iOS: APNs registration, Service Extension, paywall, settings, tap to open |
+| S3 | iOS: APNs registration, Service Extension, paywall, settings, tap to open; first end-to-end test with real APNs on a device |
 | S4 (P2) | Answer from the notification |
 | S5 (P2) | Live Activity |
 
@@ -179,7 +179,7 @@ lists exactly what leaves the Mac.
 - **Charge per notification** — rejected. Metering makes every notification feel like a cost.
 - **Host holds the APNs token** — rejected. With an opaque `pushToken`, the Host cannot see the
   device token or the user ID, and the gateway can revoke a token alone.
-- **RevenueCat vs. own StoreKit 2 validation** — recommended RevenueCat (pending confirmation).
+- **RevenueCat vs. own StoreKit 2 validation** — RevenueCat (confirmed by onevcat 2026-11-21).
   The gateway must check entitlement on every push anyway. RevenueCat gives it a REST lookup
   and webhooks, and handles renewal, grace period, refunds, trials and a later Google Play
   build. It is free below $2,500 monthly tracked revenue. Own validation means App Store Server
@@ -187,12 +187,37 @@ lists exactly what leaves the Mac.
 - **New control message vs. command envelope** — control message `pushRegister`, gated by the
   `push-v1` capability. It is not a CLI command, and an old Host closes the connection on an
   unknown control, so the client must check the capability first.
+- **Gateway on Cloudflare Workers** — chosen after the S0 spike showed that a Worker reaches
+  APNs over HTTP/2 and signs the ES256 provider token with WebCrypto. No server to operate.
+- **Live Activity with counts only** — chosen. Titles would need the push key at render time;
+  the spike showed that the Keychain is not available there on a device.
+- **No managed preference (MDM) to turn off push** — deferred. The traffic gate (Remote
+  Mirror on, Host running, an entitled device registered) is enough for now.
+
+## Spike results (2026-11-21)
+
+Throwaway projects only; nothing from them is in the repository.
+
+| Question | Result | Evidence |
+| --- | --- | --- |
+| Worker → APNs over HTTP/2 | Yes | Without a token: `403 MissingProviderToken` (785 ms). With a WebCrypto ES256 JWT from a random key: `403 InvalidProviderToken` (462 ms). Over HTTP/1.1 the connection fails, so these answers prove HTTP/2 |
+| APNs provider keys | Ready | Two keys, topic `com.onevcat.prowl.mirror`: one sandbox only, one production only, each refused by the other environment (`BadEnvironmentKeyInToken`). Held outside the repository; they go to the gateway as Worker secrets |
+| Live Activity view decrypts a sealed `ContentState` field | Simulator: yes (App Group file and shared Keychain). Device (iPhone 15 Pro Max): Keychain read returns `-25291` (`errSecNotAvailable`) in the view, with the right entitlement; the app reads the same item. App Group file not tested on a device | Screenshots of the throwaway project |
+| `simctl push` runs the Notification Service Extension | No (iOS 26.5 and 27.2): the alert shows the fallback text, the extension does not start | The fallback text is what users see when the extension fails, so it must read well |
+| `simctl push` updates a Live Activity | No: `simctl` treats every payload as a user notification. Activity and push-to-start tokens are issued (needs `aps-environment`) | |
+| Signing | Simulator: "Sign to Run Locally" carries App Group, Keychain group and `aps-environment`. Device: Keychain groups need the `$(AppIdentifierPrefix)` prefix; an App Group must be made in the portal or Xcode first (command-line automatic signing does not make it) | |
+
+Consequences:
+
+- The Service Extension and Live Activity push paths can only be tested with real APNs on a
+  device. S3 and S5 test them with a Debug build of the Mirror app and the sandbox key.
+- The Service Extension reading the shared Keychain on a device is not tested yet; it is a
+  common pattern. Verify it first in S3.
+- Reinstalling the app ends running Live Activities, and the first lock screen display asks
+  "Allow Live Activities?".
 
 ## Open questions
 
-- Gateway platform: Cloudflare Workers is preferred, but it is not verified that a Worker can
-  reach APNs over HTTP/2. Verify in S0; otherwise use a small server (for example Swift with
-  APNSwift).
 - Prices, trial length, and whether to offer a lifetime purchase.
 - Whether the gateway code stays private or is published for self-hosting.
 
