@@ -43,16 +43,15 @@ extension RepositoriesFeature.State {
   }
 }
 
-/// Drops expanded-group IDs of repositories that are no longer configured, so storage
-/// does not grow with removed repositories. A repository whose load failed is absent
-/// from `state.repositories` but still has a root, so its saved state survives the
-/// failure.
-func pruneExpandedInactiveRepositoryIDs(state: inout RepositoriesFeature.State) {
+/// Drops show-all IDs of repositories that are no longer configured, so storage does
+/// not grow with removed repositories. A repository whose load failed is absent from
+/// `state.repositories` but still has a root, so its saved state survives the failure.
+func pruneShowAllWorktreesRepositoryIDs(state: inout RepositoriesFeature.State) {
   var knownIDs = Set(state.repositories.map(\.id))
   knownIDs.formUnion(state.repositoryRoots.map(\.standardized.id))
-  let kept = state.expandedInactiveRepositoryIDs.filter { knownIDs.contains($0) }
-  guard kept != state.expandedInactiveRepositoryIDs else { return }
-  state.$expandedInactiveRepositoryIDs.withLock { $0 = kept }
+  let kept = state.showAllWorktreesRepositoryIDs.filter { knownIDs.contains($0) }
+  guard kept != state.showAllWorktreesRepositoryIDs else { return }
+  state.$showAllWorktreesRepositoryIDs.withLock { $0 = kept }
 }
 
 func updatePendingWorktreeProgress(

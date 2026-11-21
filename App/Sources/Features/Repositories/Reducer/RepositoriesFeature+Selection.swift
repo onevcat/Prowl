@@ -140,36 +140,12 @@ func setSingleWorktreeSelection(
   if recordHistory {
     recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: worktreeID, state: &state)
   }
-  updateRetainedInactiveWorktrees(selecting: worktreeID, state: &state)
   state.selection = worktreeID.map(SidebarSelection.worktree)
   state.selectedWorkspaceChildID = nil
   if let worktreeID {
     state.sidebarSelectedWorktreeIDs = [worktreeID]
   } else {
     state.sidebarSelectedWorktreeIDs = []
-  }
-}
-
-/// Selecting a row of an expanded Inactive group keeps that row in the group, so
-/// walking the group does not reorder it. The reducer releases the kept rows when
-/// the selection lands elsewhere. Call before the selection changes.
-private func updateRetainedInactiveWorktrees(
-  selecting worktreeID: Worktree.ID?,
-  state: inout RepositoriesFeature.State
-) {
-  guard let worktreeID, state.isInExpandedInactiveGroup(worktreeID) else { return }
-  state.retainInactiveWorktree(worktreeID)
-}
-
-extension RepositoriesFeature.State {
-  /// Keeps `worktreeID` in its expanded Inactive group. Rows kept in other repositories
-  /// leave, because the selection has left their group.
-  mutating func retainInactiveWorktree(_ worktreeID: Worktree.ID) {
-    guard let repository = repositories.first(where: { $0.worktrees[id: worktreeID] != nil }) else { return }
-    var kept = retainedInactiveWorktreeIDs.filter { repository.worktrees[id: $0] != nil }
-    kept.insert(worktreeID)
-    guard kept != retainedInactiveWorktreeIDs else { return }
-    retainedInactiveWorktreeIDs = kept
   }
 }
 
@@ -457,15 +433,14 @@ func findWorktreeAndRepository(
 }
 
 /// The row after the removed one in the sidebar, or the one before it at the end. Rows
-/// in a folded Inactive group are not on screen, so the visible rows decide; the stored
+/// that a collapsed list hides are not on screen, so the visible rows decide; the stored
 /// order decides only when the removed worktree is not among them.
 func nextWorktreeID(
   afterRemoving worktree: Worktree,
   in repository: Repository,
   state: RepositoriesFeature.State
 ) -> Worktree.ID? {
-  let visibleIDs = state.worktreeRowSections(in: repository)
-    .navigableRows(isInactiveExpanded: state.isInactiveWorktreesExpanded(in: repository.id))
+  let visibleIDs = state.visibleWorktreeRows(in: repository)
     .filter { !$0.isPending }
     .map(\.id)
   if visibleIDs.contains(worktree.id) {

@@ -20,10 +20,8 @@ an unread-notification bell, and run/agent status. In place of the branch icon, 
 working agent shows the animated bagua indicator that Active Agents uses, an agent
 waiting for input shows a red exclamation mark, and the row's own work (create,
 archive, delete) or a command that reports progress shows a plain spinner. With
-Reduce Motion on, a working agent shows the plain spinner too. The rest splits again:
-worktrees with an open tab stay in place, and the others fold into a collapsed
-**Inactive (N)** row at the bottom (see
-[Folding inactive worktrees](#folding-inactive-worktrees)).
+Reduce Motion on, a working agent shows the plain spinner too. A long list collapses
+behind **Show N More** (see [Collapsed worktree lists](#collapsed-worktree-lists)).
 
 ## Repository kinds
 
@@ -185,42 +183,32 @@ change that a watcher missed.
   (hidden at zero). Workspaces and plain folders always show the count on the
   header.
 
-## Folding inactive worktrees
+## Collapsed worktree lists
 
 A repository that other tools also drive can accumulate worktrees you never open
-in Prowl. Prowl gathers the ones with no open tab into one row.
+in Prowl. Its list collapses so the worktrees you work in stay in view.
 
-- **Inactive** means the worktree has no open terminal tab in Prowl. Agent
-  detection plays no part, so a row does not move when an agent starts or exits.
-- Each repository shows a collapsed **Inactive (N)** row after its other
-  worktrees. Click it to expand or fold the group; the state is remembered per
-  repository. Folded rows keep their context menu, badges, and archive and delete
-  actions. Opening one (click, command palette, CLI) gives it a tab, and it
-  moves back among the active rows.
-- **At least three rows:** a repository always shows at least three worktree rows
-  before its Inactive row, counting the main, pinned, and active worktrees. When
-  fewer are active, the first inactive worktrees in row order fill the gap. Rows
-  are newest first unless you reorder them by dragging, so a repository with few
-  worktrees folds nothing.
-- **Never folded:** the main worktree, pinned worktrees, worktrees being created,
-  and selected worktrees. Plain folders, workspaces, and remote folders have no
-  worktree list, so they have nothing to fold.
-- **Groups:** the Inactive row belongs to its repository, so a repository in a
-  [group](#repository-groups) shows its Inactive row inside that group. A
-  collapsed group hides it with the rest of the repository's rows.
-- Folded rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
-  collapsed repository. They count again while the group is expanded, and a row
-  you select from the expanded group, by click or `⌘`-click, keeps its place
-  there, so the shortcuts walk the group in order. Selecting a worktree opens a
-  tab in it, so each row the walk passes becomes active. The rows you opened
-  leave the group when you select a row outside it or fold it. The command
-  palette lists every worktree either way.
-- Archiving or deleting the selected worktree selects the next row on screen,
-  never a folded one.
-- At launch, while Prowl restores the terminal layout, nothing folds. Rows whose
-  tabs did not come back fold once the restore finishes.
-- Dragging stays inside a group. Both groups share the repository's one stored
-  order.
+- A collapsed list shows the first four rows (the main worktree counts as one),
+  every pinned worktree, every worktree with an open terminal tab, and the
+  selected worktree. **Show N More** below the rows lists the rest; **Show Less**
+  collapses it again. The choice is remembered per repository.
+- Rows never move: collapsing hides rows in place, so a worktree that gets or
+  loses a tab keeps its position. The first four are positions in the list, so
+  opening a tab never hides another row.
+- Rows are newest first unless you reorder them by dragging, so the newest
+  worktrees take the first places. A list of four rows or fewer shows everything
+  and has no control.
+- **Show Less** is unavailable while every row past the first four has an open
+  tab. Agent detection plays no part.
+- Hidden rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
+  collapsed repository. Selecting a worktree opens a tab in it, so a row you
+  walk to stays visible after **Show Less**. The command palette lists every
+  worktree either way; opening a hidden one shows it in place.
+- Archiving or deleting the selected worktree selects the next row on screen.
+- At launch, while Prowl restores the terminal layout, nothing is hidden.
+- Plain folders, workspaces, and remote folders have no worktree list to
+  collapse. A collapsed [group](#repository-groups) hides the control with the
+  repository's rows.
 
 ## Repository groups
 

@@ -245,7 +245,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
-      pruneExpandedInactiveRepositoryIDs(state: &state)
+      pruneShowAllWorktreesRepositoryIDs(state: &state)
       // A remote repository that this load did not keep as it was came through its host.
       let failedIDs = Set(failures.map(\.rootID))
       state.answeredRemoteRepositoryIDs = state.answeredRemoteRepositoryIDs
@@ -646,11 +646,6 @@ extension RepositoriesFeature {
       {
         nextWorktreeIDs.insert(selectedWorktreeID)
       }
-      // A row added from an expanded Inactive group stays in it, as with a plain click.
-      for worktreeID in nextWorktreeIDs.subtracting(state.sidebarSelectedWorktreeIDs)
-      where state.isInExpandedInactiveGroup(worktreeID) {
-        state.retainInactiveWorktree(worktreeID)
-      }
       state.sidebarSelectedWorktreeIDs = nextWorktreeIDs
       return .none
 
@@ -867,11 +862,8 @@ extension RepositoriesFeature {
       )
       return .none
 
-    case .toggleInactiveWorktreesExpanded(let repositoryID):
-      if let repository = state.repositories[id: repositoryID] {
-        state.retainedInactiveWorktreeIDs.subtract(repository.worktrees.ids)
-      }
-      state.$expandedInactiveRepositoryIDs.withLock {
+    case .toggleShowAllWorktrees(let repositoryID):
+      state.$showAllWorktreesRepositoryIDs.withLock {
         if let index = $0.firstIndex(of: repositoryID) {
           $0.remove(at: index)
         } else {

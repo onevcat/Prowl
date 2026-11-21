@@ -527,14 +527,10 @@ struct RepositoriesFeature {
     /// from WorkflowRunsFeature state (docs-ai 063 C2).
     var workflowRoleBadgesBySurfaceID: [UUID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
-    /// Repositories whose "Inactive (N)" group is expanded. Absent means folded.
-    @Shared(.appStorage("sidebarExpandedInactiveRepositoryIDs"))
-    var expandedInactiveRepositoryIDs: [Repository.ID] = []
-    /// Worktrees selected from an expanded Inactive group. They keep their row in the
-    /// group while the user walks it, so the navigation order does not change under
-    /// ⌘⌃↑/↓ and ⌃1–9 when a selection opens a tab. Cleared when the group folds or the
-    /// selection moves outside it.
-    var retainedInactiveWorktreeIDs: Set<Worktree.ID> = []
+    /// Repositories whose worktree list shows every row. Absent means collapsed: rows past
+    /// the first few that have no open tab are hidden (docs-ai 094).
+    @Shared(.appStorage("sidebarShowAllWorktreesRepositoryIDs"))
+    var showAllWorktreesRepositoryIDs: [Repository.ID] = []
     /// Collapsed sidebar groups, as UUID strings (docs-ai 086).
     @Shared(.appStorage("sidebarCollapsedGroupIDs")) var collapsedGroupIDs: [String] = []
     var groupTitlePrompt: GroupTitlePrompt?
@@ -637,7 +633,7 @@ struct RepositoriesFeature {
     case worktreeHistoryBack
     case worktreeHistoryForward
     case revealSelectedWorktreeInSidebar
-    case toggleInactiveWorktreesExpanded(Repository.ID)
+    case toggleShowAllWorktrees(Repository.ID)
     case consumePendingSidebarReveal(Int)
     case requestRenameBranchPrompt(Worktree.ID)
     case consumePendingRenameBranchRequest(Int)
@@ -821,24 +817,6 @@ struct RepositoriesFeature {
           return .none
         }
         state.pendingRenameBranchRequest = nil
-        return .none
-      }
-      // A row stays in an expanded Inactive group only while the selection, or a row of
-      // the sidebar multi-selection, is one of the rows kept there. Every selection
-      // change that lands elsewhere (another
-      // worktree, a plain folder, a workspace child, Canvas, the archived list)
-      // releases them, whichever action made it.
-      Reduce { state, _ in
-        guard !state.retainedInactiveWorktreeIDs.isEmpty else { return .none }
-        if let selectedID = state.selection?.worktreeID,
-          state.retainedInactiveWorktreeIDs.contains(selectedID)
-        {
-          return .none
-        }
-        if !state.sidebarSelectedWorktreeIDs.isDisjoint(with: state.retainedInactiveWorktreeIDs) {
-          return .none
-        }
-        state.retainedInactiveWorktreeIDs = []
         return .none
       }
       Reduce { state, _ in

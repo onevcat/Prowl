@@ -141,7 +141,6 @@ struct ArchivedWorktreesRowModel: Equatable, Identifiable {
 enum SidebarWorktreeSection: Equatable {
   case pinned
   case unpinned
-  case inactive
 }
 
 struct SidebarWorktreeDropTarget: Equatable {
@@ -154,7 +153,7 @@ struct SidebarWorktreeDropTarget: Equatable {
     switch section {
     case .pinned:
       return .pinnedWorktreesMoved(repositoryID: repositoryID, source, destination)
-    case .unpinned, .inactive:
+    case .unpinned:
       return .unpinnedWorktreesMoved(repositoryID: repositoryID, source, destination)
     }
   }
@@ -258,6 +257,6 @@ extension WorktreeRowSections {
     pinned: [],
     pending: [],
     unpinned: [],
-    inactive: []
+    hideableIDs: []
   )
 }
