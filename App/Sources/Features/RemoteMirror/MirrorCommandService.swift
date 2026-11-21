@@ -62,7 +62,7 @@ final class MirrorCommandService {
     }
     do {
       let data = try JSONEncoder().encode(message.request)
-      let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+      let envelope = Self.personalKickoff(try JSONDecoder().decode(CommandEnvelope.self, from: data))
       let task = Task { @MainActor [router, worktrees] in
         guard authorize(), !Task.isCancelled else {
           return Self.failure("The mirror no longer owns this pane.")
@@ -114,6 +114,19 @@ final class MirrorCommandService {
       else { return failure("Choose a valid Host Profile and a prompt within the size limit.") }
     }
     return nil
+  }
+
+  /// A person starts a mirror session and reads the reply, so a Profile launch is interactive: the
+  /// prompt goes in as typed, without a dispatch receipt and its completion protocol (docs-ai 089).
+  static func personalKickoff(_ envelope: CommandEnvelope) -> CommandEnvelope {
+    guard case .create(let input) = envelope.command, let launch = input.launch else { return envelope }
+    return CommandEnvelope(
+      output: envelope.output,
+      command: .create(
+        CreateInput(
+          resource: input.resource, selector: input.selector, path: input.path, direction: input.direction,
+          launch: CreateLaunchInput(profile: launch.profile, prompt: launch.prompt, interactive: true),
+          background: input.background)))
   }
 
   private func failure(_ message: String) -> MirrorJSON { Self.failure(message) }

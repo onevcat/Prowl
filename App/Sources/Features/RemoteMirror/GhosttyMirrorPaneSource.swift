@@ -159,7 +159,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   /// The name the phone shows for a pane (docs-ai 089). A tab renamed on the Mac keeps its
   /// name. Otherwise a Profile launch titles its pane with
-  /// the launch command (`env -u PROWL_LAUNCH_DISPATCH …`) until the agent sets a title;
+  /// the launch command (`env -u PROWL_LAUNCH_PROMPT …`) until the agent sets a title;
   /// that, an empty title or the default "Terminal" falls back to the Profile, then the agent.
   static func rosterTitle(
     customTitle: String? = nil, paneTitle: String, profileName: String?, agent: DetectedAgent?
@@ -175,7 +175,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
         .drop { $0.unicodeScalars.allSatisfy { (0x2800...0x28FF).contains($0.value) } || $0 == " " })
     let isPlaceholder =
       title.isEmpty || title == "Terminal"
-      || (title.hasPrefix("env ") && title.contains(AgentProfileLaunchPlanner.dispatchCarrierName))
+      || (title.hasPrefix("env ") && title.contains(AgentProfileLaunchPlanner.carrierNamePrefix))
     guard isPlaceholder else { return title }
     return profileName ?? agent?.displayName ?? String(localized: "Shell")
   }
