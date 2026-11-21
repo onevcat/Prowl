@@ -391,7 +391,8 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
   the Mac, its own notifications cover the event.
 - A prompt that opened while you were at the Mac, or while the phone was connected, is sent
   once when you leave the Mac or the phone disconnects, if the agent still waits. A finished
-  agent is never sent late, and only after it worked for at least 10 seconds.
+  turn is never sent late, and only after the agent worked for at least 10 seconds; an
+  interrupted agent is not a finished turn.
 - Each paired device in the list shows **Notifications on**, **Notifications off for this
   device**, or **Notifications not set up**. **Turn Off** stops notifications to that device;
   a new registration from the phone does not turn them on again. **Turn On** allows them again.

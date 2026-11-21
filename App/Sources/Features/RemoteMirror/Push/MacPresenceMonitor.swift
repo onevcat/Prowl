@@ -17,25 +17,41 @@ final class MacPresenceMonitor {
   private var observers: [(NotificationCenter, NSObjectProtocol)] = []
   private var pollTask: Task<Void, Never>?
   private let idleSeconds: () -> TimeInterval
+  private let screenLocked: () -> Bool
+  private let displayAsleep: () -> Bool
+  private let observesSystem: Bool
   private let clock: any Clock<Duration>
 
+  /// The defaults read this Mac. Tests pass fixed values and `observesSystem: false`, so the
+  /// real lock and display state cannot change their outcome.
   init(
     idleSeconds: @escaping () -> TimeInterval = {
       // Reading the idle time needs no permission.
       CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
     },
+    screenLocked: @escaping () -> Bool = { MacPresenceMonitor.screenIsLocked() },
+    displayAsleep: @escaping () -> Bool = { CGDisplayIsAsleep(CGMainDisplayID()) != 0 },
+    observesSystem: Bool = true,
     clock: any Clock<Duration> = ContinuousClock()
   ) {
     self.idleSeconds = idleSeconds
+    self.screenLocked = screenLocked
+    self.displayAsleep = displayAsleep
+    self.observesSystem = observesSystem
     self.clock = clock
   }
 
-  var isRunning: Bool { pollTask != nil }
+  private(set) var isRunning = false
 
   func start() {
-    guard pollTask == nil else { return }
-    isLocked = Self.screenIsLocked()
-    isDisplayAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+    guard !isRunning else { return }
+    isRunning = true
+    isLocked = screenLocked()
+    isDisplayAsleep = displayAsleep()
+    guard observesSystem else {
+      evaluate()
+      return
+    }
     let distributed = DistributedNotificationCenter.default()
     let workspace = NSWorkspace.shared.notificationCenter
     observe(distributed, "com.apple.screenIsLocked", .locked(true))
@@ -53,6 +69,7 @@ final class MacPresenceMonitor {
   }
 
   func stop() {
+    isRunning = false
     pollTask?.cancel()
     pollTask = nil
     for (center, token) in observers { center.removeObserver(token) }
@@ -95,7 +112,7 @@ final class MacPresenceMonitor {
     observers.append((center, token))
   }
 
-  private static func screenIsLocked() -> Bool {
+  nonisolated static func screenIsLocked() -> Bool {
     guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
     return session["CGSSessionScreenIsLocked"] as? Bool ?? false
   }

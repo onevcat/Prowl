@@ -1157,7 +1157,8 @@ struct MirrorHostTests {
     let gateway = RecordingPushGateway()
     let pane = UUID()
     var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
-    let presence = MacPresenceMonitor(idleSeconds: { 0 })
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
       host: host, enabled: { gate != .mirrorOff }, paneStates: { states },
       paneDetails: { _ in .init(title: "demo · main", stateChangedAt: nil) }, presence: presence,
@@ -1208,7 +1209,8 @@ struct MirrorHostTests {
     let gateway = RecordingPushGateway(result: .tokenGone)
     let pane = UUID()
     var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
-    let presence = MacPresenceMonitor(idleSeconds: { 0 })
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
       host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
       gateway: gateway)
@@ -1223,6 +1225,129 @@ struct MirrorHostTests {
     // With no registration left, the sender stops and makes no further requests.
     sender.refresh()
     #expect(!sender.isActive)
+  }
+
+  enum LateGate: String, CaseIterable, Sendable {
+    case switchOff, disallowed, userBack
+  }
+
+  @Test(.timeLimit(.minutes(1)), arguments: LateGate.allCases)
+  func aGateClosedAfterAPushWasQueuedStopsTheRequest(gate: LateGate) async throws {
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(
+      token: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: [.blocked])
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let gateway = RecordingPushGateway()
+    let pane = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    presence.screenLockChanged(true)
+    states[pane] = .blocked
+    sender.refresh()
+    // The push is queued; close a gate before its task runs.
+    switch gate {
+    case .switchOff: host.pushEnabled = false
+    case .disallowed: host.setPushAllowed(false, for: identity.devices[0].id)
+    case .userBack: presence.screenLockChanged(false)
+    }
+    await sender.settle()
+    #expect(await gateway.calls.isEmpty)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aPromptThatClosedBeforeThePhoneLeftIsNotSentLate() async throws {
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(
+      token: "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE", kinds: [.blocked])
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    let gateway = RecordingPushGateway()
+    let pane = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    presence.screenLockChanged(true)
+    // Held: the phone is connected.
+    states[pane] = .blocked
+    sender.refresh()
+    // The prompt is answered and the phone leaves before the next refresh.
+    states[pane] = .working
+    client.connection.close()
+    for await online in Observations({ host.isOnline(identity.devices[0].id) }) where !online { break }
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.isEmpty)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aDeviceAllowedAgainWhileAPromptIsOpenGetsItWhenTheUserLeaves() async throws {
+    let token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    let other = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210_-ZyXwV"
+    var identity = Self.identity
+    identity.devices[0].push = MirrorPushRegistration(token: token, kinds: [.blocked])
+    identity.devices.append(
+      .init(
+        id: UUID(), name: "Second", key: Data(repeating: 9, count: 32), pairedAt: Date(),
+        push: MirrorPushRegistration(token: other, kinds: [.blocked]), pushAllowedByMac: false))
+    var saved = identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let gateway = RecordingPushGateway()
+    let pane = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    states[pane] = .blocked
+    sender.refresh()
+    #expect(host.setPushAllowed(true, for: identity.devices[1].id))
+    sender.refresh()
+    sender.refresh()
+    presence.screenLockChanged(true)
+    await sender.settle()
+    #expect(await Set(gateway.calls.map(\.token)) == [token, other])
+    #expect(await gateway.calls.count == 2)
   }
 
   private actor RecordingPushGateway: MirrorPushGateway {

@@ -113,6 +113,15 @@ struct PaneAgentState: Equatable, Sendable {
     }
   }
 
+  /// The agent finished a turn and left a result (docs-ai 095 push `done`), whether or not
+  /// the user has seen it. An OSC `idle` (sent at mount, on interrupt, and on a session reset)
+  /// is not a finished turn; every other path to idle is.
+  var isCompletedTurn: Bool {
+    guard state == .idle else { return false }
+    if case .programStatus(let reason) = decision?.reason { return reason.earnsDoneBadge }
+    return true
+  }
+
   /// Whether this pane should count toward the worktree running indicator: a
   /// detected agent that is working or blocked (awaiting permission). Folded
   /// into `taskStatus` so the sidebar spinner and `prowl list` light up on agent

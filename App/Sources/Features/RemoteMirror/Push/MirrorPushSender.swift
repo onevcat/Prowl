@@ -23,6 +23,9 @@ final class MirrorPushSender {
   private var planner = MirrorPushPlanner()
   private var knownPaneStates: [UUID: MirrorPushPlanner.PaneState] = [:]
   private var onlineDevices: Set<UUID> = []
+  /// The kinds each eligible device asked for at the last refresh, to see devices that became
+  /// eligible while the sender was already active.
+  private var eligibleKinds: [UUID: Set<MirrorPushKind>] = [:]
   private(set) var isActive = false
   private var hostObservation: Task<Void, Never>?
   private var paneObservation: Task<Void, Never>?
@@ -80,20 +83,35 @@ final class MirrorPushSender {
     for send in Array(sends.values) { await send.value }
   }
 
+  /// Every condition under which the Mac may contact the gateway (docs-ai 095 "Outbound
+  /// traffic gate"), read from the current values.
+  private func gateIsOpen(_ devices: [MirrorPushPlanner.Device]) -> Bool {
+    gateway != nil && enabled() && host.isRunning && host.pushEnabled && !devices.isEmpty
+  }
+
   /// Reads the Host state and the panes, and acts on what changed.
   func refresh() {
     let devices = eligibleDevices()
-    let shouldBeActive = gateway != nil && enabled() && host.isRunning && host.pushEnabled && !devices.isEmpty
-    guard shouldBeActive else {
+    guard gateIsOpen(devices) else {
       deactivate()
       return
     }
     if !isActive { activate() }
+    // Pane changes first, so a catch-up below sees which prompts are still open.
+    reconcilePanes(devices: devices)
+    for device in devices {
+      let kinds = eligibleKinds[device.id] ?? []
+      if !kinds.contains(.blocked), device.kinds.contains(.blocked) { planner.deviceBecameEligible(device) }
+    }
+    eligibleKinds = Dictionary(devices.map { ($0.id, $0.kinds) }, uniquingKeysWith: { _, last in last })
     let online = Set(devices.filter(\.isOnline).map(\.id))
     for device in devices where onlineDevices.contains(device.id) && !online.contains(device.id) {
       send(planner.deviceWentOffline(device))
     }
     onlineDevices = online
+  }
+
+  private func reconcilePanes(devices: [MirrorPushPlanner.Device]) {
     let states = paneStates()
     let now = clock.now
     for (paneID, state) in states where knownPaneStates[paneID] != state {
@@ -113,6 +131,7 @@ final class MirrorPushSender {
     knownPaneStates = paneStates()
     planner.activate(states: knownPaneStates, at: clock.now, devices: devices)
     onlineDevices = Set(devices.filter(\.isOnline).map(\.id))
+    eligibleKinds = Dictionary(devices.map { ($0.id, $0.kinds) }, uniquingKeysWith: { _, last in last })
     presence.start()
     send(planner.presenceChanged(to: presence.isPresent, devices: devices))
   }
@@ -123,11 +142,27 @@ final class MirrorPushSender {
     presence.stop()
     knownPaneStates = [:]
     onlineDevices = []
+    eligibleKinds = [:]
+    // Nothing queued may go out once a gate is closed.
+    for send in sends.values { send.cancel() }
   }
 
   private func presenceChanged(_ present: Bool) {
-    guard isActive else { return }
-    send(planner.presenceChanged(to: present, devices: eligibleDevices()))
+    let devices = eligibleDevices()
+    guard isActive, gateIsOpen(devices) else { return }
+    reconcilePanes(devices: devices)
+    send(planner.presenceChanged(to: present, devices: devices))
+  }
+
+  /// Checked again right before each request, from current values: the gate, the device's
+  /// registration, permission, kind and connection, the user's presence, and for `blocked`
+  /// that the prompt is still open.
+  private func mayStillSend(_ push: MirrorPushPlanner.Push) -> Bool {
+    let devices = eligibleDevices()
+    guard isActive, !Task.isCancelled, gateIsOpen(devices), !presence.isPresent,
+      let device = devices.first(where: { $0.id == push.deviceID }), device.kinds.contains(push.kind), !device.isOnline
+    else { return false }
+    return push.kind != .blocked || paneStates()[push.paneID] == .blocked
   }
 
   private func eligibleDevices() -> [MirrorPushPlanner.Device] {
@@ -145,7 +180,7 @@ final class MirrorPushSender {
       let id = UUID()
       sends[id] = Task { [weak self] in
         defer { self?.sends.removeValue(forKey: id) }
-        guard let self, let hostID = self.host.hostIdentityID,
+        guard let self, self.mayStillSend(push), let hostID = self.host.hostIdentityID,
           let device = self.host.devices.first(where: { $0.id == push.deviceID }), let token = device.push?.token,
           let request = Self.request(for: push, device: device, hostID: hostID, details: self.paneDetails(push.paneID))
         else { return }

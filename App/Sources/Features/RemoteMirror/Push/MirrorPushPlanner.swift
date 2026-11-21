@@ -23,8 +23,10 @@ nonisolated struct MirrorPushPlanner {
     let isOnline: Bool
   }
 
+  /// `completed`: the agent finished a turn (OSC `done` or `error`, or a legacy busy-to-idle
+  /// path). `idle`: not busy without a finished turn, such as an interrupt or a session reset.
   enum PaneState: Sendable {
-    case working, blocked, done, idle, none
+    case working, blocked, completed, idle, none
   }
 
   /// `done` is pushed only after this much `working`, so short tool runs stay quiet.
@@ -52,8 +54,10 @@ nonisolated struct MirrorPushPlanner {
     var previous = states[paneID] ?? .none
     if let gap = missing.removeValue(forKey: paneID), gap.since.duration(to: now) < Self.redetectionGrace {
       guard gap.state != state else {
+        // The same prompt is back: send what a catch-up during the gap could not.
         states[paneID] = state
-        return []
+        guard state == .blocked, !isPresent else { return [] }
+        return devices.filter { !$0.isOnline }.flatMap { catchUp($0, paneID: paneID) }
       }
       previous = gap.state
     }
@@ -78,12 +82,15 @@ nonisolated struct MirrorPushPlanner {
         }
       }
       return pushes
-    case .done, .idle:
+    case .completed:
       guard previous == .working, let since = workingSince.removeValue(forKey: paneID),
         since.duration(to: now) >= Self.minimumWorking, !isPresent
       else { return [] }
       return devices.filter { $0.kinds.contains(.done) && !$0.isOnline }
         .map { Push(deviceID: $0.id, paneID: paneID, kind: .done) }
+    case .idle:
+      workingSince.removeValue(forKey: paneID)
+      return []
     case .working, .none:
       return []
     }
@@ -106,9 +113,16 @@ nonisolated struct MirrorPushPlanner {
     for paneID in states.keys where current[paneID] == nil {
       paneRemoved(paneID, at: now)
     }
+    for device in devices { deviceBecameEligible(device) }
+  }
+
+  /// A device can now receive `blocked` pushes (registered, allowed again, or asked for the
+  /// kind). Open prompts it never got are held for it, as at activation; `done` is not replayed.
+  mutating func deviceBecameEligible(_ device: Device) {
+    guard device.kinds.contains(.blocked) else { return }
     for (paneID, state) in states where state == .blocked {
       let opening = Opening(paneID: paneID, ordinal: ordinals[paneID] ?? 0)
-      for device in devices where device.kinds.contains(.blocked) && delivered[device.id]?.contains(opening) != true {
+      if delivered[device.id]?.contains(opening) != true {
         held[device.id, default: []].insert(opening)
       }
     }
@@ -145,10 +159,23 @@ nonisolated struct MirrorPushPlanner {
     for deviceID in delivered.keys { delivered[deviceID] = delivered[deviceID]?.filter { $0.paneID != paneID } }
   }
 
-  private mutating func catchUp(_ device: Device) -> [Push] {
-    guard let openings = held.removeValue(forKey: device.id), device.kinds.contains(.blocked) else { return [] }
-    // Only the latest opening of a pane that is still blocked.
-    let due = openings.filter { states[$0.paneID] == .blocked && ordinals[$0.paneID] == $0.ordinal }
+  /// Sends the device's held openings that are still the latest prompt of a blocked pane.
+  /// An opening whose pane is in a short detection gap stays held; others are dropped.
+  private mutating func catchUp(_ device: Device, paneID only: UUID? = nil) -> [Push] {
+    guard device.kinds.contains(.blocked), let openings = held[device.id] else { return [] }
+    var keep: Set<Opening> = []
+    var due: Set<Opening> = []
+    for opening in openings {
+      guard ordinals[opening.paneID] == opening.ordinal else { continue }
+      if let only, opening.paneID != only {
+        keep.insert(opening)
+      } else if states[opening.paneID] == .blocked {
+        due.insert(opening)
+      } else if missing[opening.paneID]?.state == .blocked {
+        keep.insert(opening)
+      }
+    }
+    held[device.id] = keep.isEmpty ? nil : keep
     delivered[device.id, default: []].formUnion(due)
     return due.sorted { $0.paneID.uuidString < $1.paneID.uuidString }
       .map { Push(deviceID: device.id, paneID: $0.paneID, kind: .blocked) }

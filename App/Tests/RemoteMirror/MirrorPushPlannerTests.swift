@@ -69,14 +69,15 @@ struct MirrorPushPlannerTests {
   @Test func doneNeedsTenSecondsOfWorkingAndTheUserAway() {
     var planner = away()
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
-    #expect(planner.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(9)), devices: [device()]).isEmpty)
+    #expect(planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(9)), devices: [device()]).isEmpty)
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
     #expect(
-      planner.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(10)), devices: [device()])
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(10)), devices: [device()])
         == [.init(deviceID: deviceID, paneID: pane, kind: .done)])
     var present = MirrorPushPlanner()
     _ = present.paneChanged(pane, to: .working, at: start, devices: [device()])
-    #expect(present.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(60)), devices: [device()]).isEmpty)
+    #expect(
+      present.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(60)), devices: [device()]).isEmpty)
     // `done` is never sent late.
     #expect(present.presenceChanged(to: false, devices: [device()]).isEmpty)
   }
@@ -85,7 +86,7 @@ struct MirrorPushPlannerTests {
     var planner = away()
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device(online: true)])
     #expect(
-      planner.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(30)), devices: [device(online: true)])
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(30)), devices: [device(online: true)])
         .isEmpty)
   }
 
@@ -94,8 +95,10 @@ struct MirrorPushPlannerTests {
     #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device(kinds: [.done])]).isEmpty)
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device(kinds: [.blocked])])
     #expect(
-      planner.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(30)), devices: [device(kinds: [.blocked])])
-        .isEmpty)
+      planner.paneChanged(
+        pane, to: .completed, at: start.advanced(by: .seconds(30)), devices: [device(kinds: [.blocked])]
+      )
+      .isEmpty)
   }
 
   @Test func aClosedPaneIsForgotten() {
@@ -121,8 +124,43 @@ struct MirrorPushPlannerTests {
     _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
     planner.paneRemoved(pane, at: start.advanced(by: .seconds(5)))
     #expect(
-      planner.paneChanged(pane, to: .done, at: start.advanced(by: .seconds(12)), devices: [device()])
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(12)), devices: [device()])
         == [.init(deviceID: deviceID, paneID: pane, kind: .done)])
+  }
+
+  @Test func anIdleWithoutAFinishedTurnIsNotDone() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(planner.paneChanged(pane, to: .idle, at: start.advanced(by: .seconds(30)), devices: [device()]).isEmpty)
+  }
+
+  @Test(arguments: [false, true])
+  func aHeldPromptSurvivesACatchUpDuringADetectionGap(offlineTrigger: Bool) {
+    var planner = MirrorPushPlanner()
+    let online = offlineTrigger
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: online)])
+    planner.paneRemoved(pane, at: start.advanced(by: .seconds(1)))
+    if offlineTrigger {
+      _ = planner.presenceChanged(to: false, devices: [device(online: true)])
+      #expect(planner.deviceWentOffline(device()).isEmpty)
+    } else {
+      #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+    }
+    #expect(
+      planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(3)), devices: [device()]) == blocked())
+    #expect(planner.presenceChanged(to: true, devices: [device()]).isEmpty)
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aDeviceThatBecomesEligibleGetsTheOpenPromptOnce() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [])
+    planner.deviceBecameEligible(device())
+    planner.deviceBecameEligible(device())
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    planner.deviceBecameEligible(device())
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
   }
 
   @Test func reactivationHoldsAnOpenPromptThatWasNeverPushed() {
@@ -174,5 +212,22 @@ enum ChaChaPolyNonce {
       index = next
     }
     return try ChaChaPoly.Nonce(data: bytes)
+  }
+}
+
+struct PaneAgentStateCompletedTurnTests {
+  private func state(_ raw: AgentRawState, reason: AgentStateDecisionReason?) -> PaneAgentState {
+    var pane = PaneAgentState(detectedAgent: .claude, state: raw, seen: true)
+    pane.decision = reason.map { AgentStateDecision(state: raw, reason: $0) }
+    return pane
+  }
+
+  @Test func onlyAFinishedTurnCountsAsCompletedEvenWhenSeen() {
+    #expect(state(.idle, reason: .programStatus(.done)).isCompletedTurn)
+    #expect(state(.idle, reason: .programStatus(.error)).isCompletedTurn)
+    #expect(!state(.idle, reason: .programStatus(.idle)).isCompletedTurn)
+    // A non-OSC path to idle is a finished turn, as for the done badge.
+    #expect(state(.idle, reason: nil).isCompletedTurn)
+    #expect(!state(.working, reason: .programStatus(.working)).isCompletedTurn)
   }
 }

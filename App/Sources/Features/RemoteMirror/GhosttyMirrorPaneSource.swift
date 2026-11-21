@@ -118,12 +118,14 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     // Not `activeWorktreeStates`: its tab filter would make tab changes wake the sender.
     for state in manager.allWorktreeStates {
       for (surfaceID, agent) in state.surfaceAgentStates where agent.detectedAgent != nil {
+        // Completion, not the display state: a finished turn in a pane the Mac shows as seen
+        // is still a finished turn while the user is away.
         result[surfaceID] =
-          switch agent.displayState {
+          switch agent.state {
           case .working: .working
           case .blocked: .blocked
-          case .done: .done
-          case .idle: .idle
+          case .idle: agent.isCompletedTurn ? .completed : .idle
+          case .unknown: .idle
           }
       }
     }

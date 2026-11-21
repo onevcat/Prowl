@@ -13,6 +13,14 @@ Second Prowl slice of 095, stacked on P1. The Host sends push events through the
   30 s and that comes back in the same state continues, so one prompt is not pushed twice.
   The planner survives a stop of the sender; at the next start, an open prompt that was never
   pushed to a device is held for it again.
+- Review round 1 of #1145: every request is checked again right before it goes out against
+  current values (gates, the device's registration, permission, kind and connection, the
+  user's presence, and for `blocked` that the prompt is still open), and closing a gate
+  cancels queued requests; pane changes are applied before any catch-up; a device that
+  becomes eligible while the sender is active gets the open prompts it never received; a held
+  prompt survives a catch-up during a short detection gap; `done` means a finished turn
+  (`PaneAgentState.isCompletedTurn`: OSC `done`/`error` or a non-OSC busy-to-idle path), not
+  an OSC `idle` after an interrupt, and it is sent even when the Mac shows the pane as seen.
 - `MacPresenceMonitor`: present = screen unlocked, display awake, input in the last 2 minutes
   (`CGEventSource` idle time, lock and screen-sleep notifications, 10 s poll). It runs only
   while the sender is active.
