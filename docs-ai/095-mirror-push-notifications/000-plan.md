@@ -1,47 +1,45 @@
-# 095 — Mirror Push Notifications and Mirror Pro: Plan
+# 095 — Mirror Push Notifications: Plan
 
 | | |
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-21 |
-| **Primary PRs** | (fill in as they merge) |
-| **Related** | [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [091-remote-mirror-alpha-settings](../091-remote-mirror-alpha-settings/000-plan.md), [087-mirror-conversation-events](../087-mirror-conversation-events/000-plan.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md` |
+| **Primary PRs** | #1142 (plan) |
+| **Related** | [096-mirror-remote-access](../096-mirror-remote-access/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [091-remote-mirror-alpha-settings](../091-remote-mirror-alpha-settings/000-plan.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md` |
 
 ## Background
 
 The iOS mirror only knows about an agent while it is in the foreground. iOS suspends the app
-soon after it goes to the background, the Host connection ends after eight seconds without
-traffic, and the phone cannot tell when an agent is blocked or finished. The user must open the
-app and check. A notification when an agent needs attention is the main value of a phone
-client.
+soon after it goes to the background (`sessions.suspendAll()` in
+`Mirror/iOS/ProwlMirror-iOS/ContentView.swift`), the Host connection ends, and the phone cannot
+tell when an agent is blocked or finished. A notification when an agent needs attention is the
+main value of a phone client.
 
-A notification for a suspended app needs APNs. APNs needs a provider key of the Apple
-developer team and the bundle ID of the app. That makes this the first Mirror feature that
-needs a service that we operate, and it is also the paid feature of the App Store build
-(**Mirror Pro**).
-
-Licensing boundary: Prowl for Mac stays free and source-available, with no paid feature and no
-license check. The Mac Host gets a generic outbound "push target" sender that works the same
-for every user. Only the iOS app (MIT) and the push gateway (our service) know about the
-subscription.
+A notification for a suspended app needs APNs, so we operate a small push gateway. Push is
+**free**. App Review Guideline 4.10 forbids charging for built-in capabilities such as Push
+Notifications, so the paid product (Mirror Pro) is remote access through our relays
+([096](../096-mirror-remote-access/000-plan.md)). Prowl for Mac stays free and
+source-available, with no entitlement check.
 
 ## Goals
 
 - **P1** — A paired iPhone or iPad gets a notification when an agent on the Mac becomes
-  **blocked** or **done**, while the app is not connected. A tap opens that pane.
+  **blocked** or **done**, while the app is not connected and the user is away from the Mac.
+  A tap opens the app on that pane; the app connects and shows the current prompt, if any.
 - The notification content is end-to-end encrypted between the Host and the phone. The gateway
   and Apple see only ciphertext and a generic fallback text.
-- The gateway sends only for devices with an active Mirror Pro entitlement (trial included).
-- **P2** — Answer a blocked prompt from the notification. Show agent state in a Live Activity.
+- No traffic from the Mac to the gateway unless the user turned the feature on, on both sides.
+- **P2** — A Live Activity with agent counts.
 
 ### Non-goals
 
-- A hosted relay for remote access outside the LAN. It is a later paid add-on (separate
-  entry). Until then, answering from a notification needs the same reachability as the app
-  (LAN, Tailscale or similar).
-- Metered pricing (per notification or per session). We sell the capability.
-- Android push (FCM). The design keeps it possible; it is not in scope.
-- Any paid feature or entitlement check in the Mac app.
+- Charging for notifications (Guideline 4.10).
+- Answering a prompt from the lock screen. The content extension has no pairing credential,
+  the payload has no prompt identity that the Host can check later, and the Host releases a
+  conversation feed 600 s after the last subscription ends
+  (`MirrorHost.conversationFeedRetention`). A tap that opens the pane covers the need.
+- Android push (FCM). The design keeps it possible.
+- A managed preference (MDM) to turn push off. Deferred.
 
 ## Design / Approach
 
@@ -49,232 +47,161 @@ subscription.
 
 | Part | Where | Role |
 | --- | --- | --- |
-| Push gateway | separate private repository, Cloudflare Workers | Registers devices, checks entitlement, sends to APNs |
-| Host push sender | `App/Sources/Features/RemoteMirror/` | Stores one push target per paired device, encrypts and posts events |
-| iOS client | `Mirror/iOS/` | APNs registration, Notification Service Extension, paywall, settings |
-| RevenueCat | external | Subscription state for the app and the gateway |
+| Push gateway | separate private repository, Cloudflare Workers | Issues push tokens, sends to APNs, rate limits |
+| Host push sender | `App/Sources/Features/RemoteMirror/` | Per paired device registration, presence, encryption, sends |
+| iOS client | `Mirror/iOS/` | APNs registration, Notification Service Extension, settings, deep link |
+
+### Registration and revocation
+
+One **push token per (device, Host)**. The app registers it with the gateway:
+`POST /v1/tokens {apnsToken, environment, attestation}` → `{pushToken}`. `pushToken` is a
+random opaque bearer (32 bytes) that can push to that device only; `attestation` is an App
+Attest assertion that limits abuse of the free service. An APNs token change is a
+`PUT /v1/tokens/{pushToken}`; the Host does not see it.
+
+State on the Host, per paired device (`MirrorPairedDevice` in `MirrorAuthentication.swift`,
+new optional fields):
+
+| Field | Set by | Meaning |
+| --- | --- | --- |
+| `pushToken`, `kinds` | `pushRegister` from the phone | Where to send, and which events (`blocked`, `done`) |
+| `pushAllowedByMac` | the Mac user | Persisted; `false` means never send to this device, whatever the phone registers |
+
+| Action | Effect on the Mac | Effect on the gateway |
+| --- | --- | --- |
+| Mac switch **Send Notifications to Paired Devices** off | Stops all sends at once; registrations kept | None |
+| Mac turns a device off | `pushAllowedByMac = false`, persisted; a later `pushRegister` is stored but not used | None |
+| Phone turns notifications off (all or one Host) | `pushUnregister` to each online Host → registration removed | `DELETE /v1/tokens/{pushToken}` for each Host, so an offline Host gets `410` on its next send and drops the registration |
+| Device unpaired on the Mac | Registration removed with the device | Token expires after 90 days without use |
+| App deleted | Next send gets `410` (APNs `Unregistered`) → registration removed | Token marked gone |
+
+`pushRegister` is sent only when the Host advertises the `push-v1` capability; an old Host
+closes the connection on an unknown control. The reply carries `pushAllowedByMac` and the Mac
+switch state (`pushEnabled`), so the app can say where notifications are turned off.
 
 ### Flow
 
-1. The iOS app gets its APNs token and registers it with the gateway:
-   `POST /v1/devices {apnsToken, environment, appUserID}` → `{pushToken}`. `pushToken` is a
-   random opaque bearer (32 bytes) that can push to that one device only. `appUserID` is an
-   anonymous UUID that the app also gives to RevenueCat.
-2. While connected, the app sends `pushToken` to each Host on a new control message
-   `pushRegister`, only when the Host advertises the `push-v1` capability in `panes`.
-   The message carries the event kinds the user wants (`blocked`, `done`). The app sends it
-   again on every connection, so a rotated token or a changed setting reaches the Host.
-3. The Host stores the target on the paired device record (`MirrorPairedDevice` in
-   `MirrorAuthentication.swift`, new optional field). Revoking the device removes it.
-4. The Host listens to agent state changes (`AgentObservationStore.publishAgentChanged`
-   publishes `.changed(ActiveAgentEntry)`). On a transition to `blocked` or `done` it posts
-   `POST /v1/push {pushToken, collapseID, sealed}` for each device that has a target, wants
-   that kind, and is not online (`MirrorHost.isOnline(_:)`), when the user is away from the
-   Mac (see "Presence") and subject to the outbound traffic gate below.
-5. The gateway checks the entitlement of the device's `appUserID` (cached, refreshed by
-   RevenueCat webhooks). If active, it sends an APNs alert with `mutable-content: 1`, a
-   generic localized fallback text, `apns-collapse-id` per pane, and `sealed` as custom data.
-6. The Notification Service Extension opens `sealed` and sets the real title and body. If it
-   fails, the fallback text stays.
+1. The Host listens to agent state changes (`AgentObservationStore.publishAgentChanged`).
+2. On `blocked` or `done`, for each device that has a registration, wants the kind, is allowed
+   by the Mac, and is not online (`MirrorHost.isOnline(_:)`), and only while the user is away
+   (see Presence), it posts `POST /v1/push {pushToken, collapseID, sealed}`.
+3. The gateway sends an APNs alert with `mutable-content: 1`, the generic fallback text,
+   `apns-collapse-id`, and `sealed` as custom data.
+4. The Notification Service Extension opens `sealed`. It always takes the pane for the deep
+   link; it shows details only when the user turned on **Show Details** (see Content).
 
-There is no lasting connection from the Mac to the gateway. The Host makes one HTTPS request
-per event, only when a paired device has a target.
-
-### Encryption
-
-- Key: HKDF-SHA256 over the existing 32-byte device secret, salt = Host UUID, info =
-  `prowl-mirror-push-v1`. Both sides already hold the secret, so no new key exchange is needed.
-- Cipher: ChaChaPoly (CryptoKit). `sealed` = Host UUID + combined box (nonce, ciphertext, tag).
-  The Host UUID is in clear so the extension can choose the key.
-- Plaintext JSON: `{v, kind, paneID, title, body, stateChangedAt}`. Title is the tab or
-  worktree name; body is the prompt title for `blocked`, or "Finished" for `done`.
-- The app stores only the derived push key, in a Keychain access group shared with the
-  extension. The device secret stays in the app's own group
-  (`Mirror/iOS/ProwlMirror-iOS/Infrastructure/MirrorAuthentication.swift`).
+There is no lasting connection from the Mac to the gateway: one HTTPS request per event.
 
 ### Outbound traffic gate
 
-Some users work in companies that watch outbound traffic. The Mac makes **no** request to the
-gateway unless all of these are true:
-
-1. **Remote Mirror** is on in Settings (`remoteMirrorEnabled`) and the Host runs
-   (`MirrorHost.isRunning`). Turning either off stops all sends at once.
-2. **Send Notifications to Paired Devices** is on in the Remote Mirror settings (off by
-   default; see "Mac setting and Mirror Pro entry").
-3. A paired device has a push target. The iOS app sends `pushRegister` only while it has an
-   active Mirror Pro entitlement and the user has turned notifications on. Without Pro, no
-   target exists and the Mac sends nothing.
-
-The Mac makes no other gateway request: no health check, no prefetch, no registration of its
-own. Each request carries only `pushToken`, a collapse ID, and ciphertext. `docs/remote-mirror.md`
-lists exactly what leaves the Mac.
-
-### Host rules
-
-- Debounce per pane: send `blocked` once per prompt opening, `done` only after a `working`
-  period of at least 10 s. A newer event on the same pane replaces the older one.
-- Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key, so the gateway does
-  not see pane IDs.
-- Gateway `410` (token gone) or `402` (no entitlement) → drop the target. After a subscription
-  ends, at most one request per device goes out; the next `pushRegister` from an entitled app
-  adds the target again. Network errors → no retry; a lost notification is acceptable.
-- Gateway base URL: a constant, with a `UserDefaults` override for development and for people
-  who build their own iOS app and run their own gateway.
-- **Remote Mirror** settings show per device whether notifications are on, and the Mac user
-  can turn them off for that device (drops the target).
+The Mac makes **no** request to the gateway unless all are true: Remote Mirror is on and the
+Host runs (`MirrorHost.isRunning`); **Send Notifications to Paired Devices** is on (off by
+default); a paired device has a registration that the Mac allows. The Mac makes no other
+gateway request. Each request carries only `pushToken`, a collapse ID and ciphertext.
+`docs/remote-mirror.md` lists exactly what leaves the Mac.
 
 ### Presence
 
-Principle: no push while the user sits at the Mac, and a timely push once they leave it.
+No push while the user sits at the Mac; a timely push once they leave.
 
-- **Present** = the screen is not locked, the display is not asleep, and there was keyboard or
-  mouse input in the last 2 minutes. Anything else is **away**.
-  - Idle time: `CGEventSource.secondsSinceLastEventType(.combinedSessionState, …)`; needs no
-    permission. Lock and display sleep come from the system lock and screen sleep
-    notifications, so locking the screen and leaving counts as away at once.
-  - A small presence monitor in `App/Sources/Features/RemoteMirror/` owns this state; the
-    push sender reads it. It runs only while the push sender has a target to serve.
-- **Present**: no push for any pane. The Mac's own notifications cover that case. This
-  replaces the earlier per-pane rule: `isViewedSurface` only checks window focus, so it says
-  "viewed" when the user left with Prowl in front.
-- **Away**: push `blocked` and `done` as they happen.
-- **On the change to away**: push once for each pane that is still `blocked` and whose
-  `blocked` push was held back while the user was present. Example: an agent blocks at 10:00,
-  the user does not see it and leaves at 10:01; the phone gets it about 10:03. `done` is not
-  sent late: it is not urgent, and a burst of late `done` pushes is noise.
-- Live Activity updates are silent and keep following the counts, so the lock screen stays
-  correct; they never alert while the user is present.
-- The 2-minute threshold is a constant for now, not a setting. A user who watches a video at
-  the Mac without input counts as away; an extra push is better than a missed one.
+- **Present** = screen not locked, display not asleep, keyboard or mouse input in the last
+  2 minutes (`CGEventSource.secondsSinceLastEventType`, no permission needed; lock and display
+  sleep from system notifications). Anything else is **away**. The monitor runs only while the
+  sender has a registration to serve.
+- Present: no push. Away: push as events happen.
+- On the change to away: one push for each pane still `blocked` whose push was held back.
+  `done` is not sent late.
+- Debounce: `blocked` once per prompt opening; `done` only after at least 10 s of `working`.
+- Collapse ID = truncated HMAC-SHA256 of the pane UUID with the push key.
+- Gateway `410` → drop the registration. Network errors → no retry.
 
-### Mac setting and Mirror Pro entry
+### Encryption and content
 
-The **Connect to This Mac** group of the Remote Mirror settings gets a switch **Send
-Notifications to Paired Devices**, off by default. It is a free Mac setting with no
-entitlement check; it is also where a Mac user learns that Mirror Pro exists.
+- Key: HKDF-SHA256 over the existing 32-byte device secret, salt = Host UUID, info =
+  `prowl-mirror-push-v1`. Cipher: ChaChaPoly. `sealed` = Host UUID + combined box.
+- Plaintext: `{v, kind, paneID, title, body, stateChangedAt}`.
+- The app stores only the derived push key, in a Keychain group shared with the extension.
+- **Content**: by default the notification shows only "An agent needs your attention" or
+  "An agent finished" (Guideline 4.5.4, and work environments). **Show Details** (off by
+  default) adds the project or tab name and the prompt title. The fallback text is what users
+  see when the extension fails, so it reads as a normal notification.
 
-- Off: the Host still accepts and stores `pushRegister`, but sends nothing. Turning it on
-  starts sends at once, with no new connection from the phone.
-- Under the switch, each paired device shows one state: **On** (it has a push target),
-  **Not set up** (no target), or **Off for this device** (the Mac user turned it off). For
-  **Not set up**, a short text says that notifications need Mirror Pro in the iOS app (free
-  trial) and gives a link to the App Store page of the iOS app.
-- The Host reports the switch to clients as `pushEnabled` on `panes` (next to the `push-v1`
-  capability). The iOS app uses it in both directions:
-  - `pushEnabled` and no Pro: a banner "Your Mac can send you notifications" that opens the
-    paywall. This is the main upsell path from the Mac.
-  - Pro and not `pushEnabled`: the notification settings say "Turn on Send Notifications to
-    Paired Devices in Prowl Settings → Remote Mirror on your Mac".
-- The Mac does not know the subscription state. A push target exists only when the phone has
-  Pro, so **On** vs. **Not set up** is enough for the Mac UI.
+### Mac setting
+
+The **Connect to This Mac** group gets **Send Notifications to Paired Devices** (off by
+default). Under it, each paired device shows **On**, **Not set up** ("Turn on notifications
+in Prowl Mirror on this device"), or **Off for this device**, with a control to turn it off or
+on. The Mac does not know about subscriptions.
 
 ### iOS
 
-- New targets in `Mirror/iOS/Project.swift`: Notification Service Extension (P1); Notification
-  Content Extension and Widget Extension for Live Activities (P2). App Group and shared
-  Keychain group.
-- Paywall with RevenueCat: monthly and yearly product with a free trial (prices are open).
-  Restore purchases. No account.
-- Settings per Host: event kinds; a global switch.
-- Tap → open the Host and pane from `paneID` (connect if needed).
+- Notification Service Extension target in `Mirror/iOS/Project.swift`; shared Keychain group.
+- Settings: a global switch, per Host event kinds, **Show Details**.
+- Tap → open the Host and pane (connect if needed) and show the current prompt.
 
-### P2
+### P2 — Live Activity (counts only)
 
-- **Answer from the notification**: the content extension shows the prompt choices (from the
-  sealed payload). A choice opens a short connection to the Host and sends the existing
-  `promptRespond` command. All Host safety checks still apply (`PROMPT_CLOSED`,
-  `PROMPT_CHANGED`, …). The extension shows the result. If the Host is not reachable, it
-  says so and offers to open the app.
-- **Live Activity**: one activity per Host that shows the counts of working, blocked and done
-  agents.
-  - Lock screen: Host name, the three counts, the time of the last change, **Open**, and
-    **Answer** while an agent is blocked. Dynamic Island compact: a glyph in the most urgent
-    state color (blocked > working > done) and the blocked count; expanded: the lock screen
-    content. Colors follow the Mac status colors.
-  - The app starts the activity locally when a Pro user leaves the app while agents work or
-    are blocked. Attributes (Host name, Host UUID) are set at that start and never travel
-    through the gateway. No push-to-start, because its attributes would be plaintext.
-  - The Host sends an update through the gateway only when a count changes: high priority for
-    a new `blocked`, low priority otherwise. When all agents are idle or done for a few
-    minutes, it sends `end` and the final state stays on the lock screen for a short time.
-  - The update payload is plaintext to the gateway and Apple, so the content is only counts,
-    states and times. **Answer** targets the first blocked pane through a slot ID (the same
-    HMAC as the collapse ID) that the app maps back to a known pane.
-  - No titles or prompt text: the view cannot read the push key from the Keychain on a device
-    (see Spike results). An App Group file is the only untested way and is not planned.
+- One activity per Host: working, blocked and done counts and the time of the last change;
+  Dynamic Island compact shows the most urgent state color and the blocked count.
+- ActivityKit starts an activity only while the app is in the foreground, so the app starts it
+  from the foreground (when the user opens the Host, or with a control); verify the exact
+  trigger in S5.
+- The app uploads the activity push token, and each rotation, to the gateway:
+  `PUT /v1/tokens/{pushToken}/activity`. The Host keeps sending to its `pushToken`
+  (`POST /v1/activity {pushToken, counts, changedAt}`); the gateway maps it to the current
+  activity token. The Host never needs the activity token, and the app needs no Host
+  connection after it goes to the background.
+- The payload is plaintext to the gateway and Apple: Host-level `pushToken`, counts, times.
+  No titles: the spike showed that the view cannot read the Keychain on a device.
+- Updates follow count changes and never alert while the user is present; `end` after all
+  agents are idle or done for a few minutes.
 
 ## Slices
 
 | Slice | Content |
 | --- | --- |
-| S0 | Done 2026-11-21: gateway platform and APNs keys (see Spike results). Left for S1/S3: App Store Connect products, RevenueCat project and webhook |
-| S1 | Gateway: device registration, push, entitlement cache, rate limits, delete |
-| S2 | Host: `push-v1` capability, `pushRegister`, `pushEnabled`, target storage, event trigger, presence monitor and catch-up push, encryption, the **Send Notifications to Paired Devices** switch with per-device states and the Mirror Pro hint, wire and feature docs |
-| S3 | iOS: APNs registration, Service Extension, paywall, settings, tap to open; first end-to-end test with real APNs on a device |
-| S4 (P2) | Answer from the notification |
+| S0 | Done: gateway platform, APNs keys, Live Activity and NSE spikes (see Spike results). Left: one real APNs push to iPhone One with a Debug Mirror build and the NSE (Keychain read, decrypt, fallback text) |
+| S1 | Gateway: tokens, App Attest, push, activity mapping, rate limits, expiry |
+| S2 | Host: `push-v1`, `pushRegister`/`pushUnregister`, registration state, Mac switch and device states, presence, encryption, wire and feature docs |
+| S3 | iOS: APNs registration, Service Extension, settings, deep link, end-to-end test on a device |
 | S5 (P2) | Live Activity |
 
 ## Alternatives & decisions
 
-- **Ship the APNs key in the app** — rejected. A `.p8` provider key can push to every user of
-  every app of the team. In the source-available Mac app it would be public, and the
-  subscription could not be enforced.
-- **Gate by session count** — rejected. The Mirror shows panes that already exist on the Mac;
-  a count limit is artificial, and a client-side limit has no server value behind it.
-- **Charge per notification** — rejected. Metering makes every notification feel like a cost.
-- **Host holds the APNs token** — rejected. With an opaque `pushToken`, the Host cannot see the
-  device token or the user ID, and the gateway can revoke a token alone.
-- **RevenueCat vs. own StoreKit 2 validation** — RevenueCat (confirmed by onevcat 2026-11-21).
-  The gateway must check entitlement on every push anyway. RevenueCat gives it a REST lookup
-  and webhooks, and handles renewal, grace period, refunds, trials and a later Google Play
-  build. It is free below $2,500 monthly tracked revenue. Own validation means App Store Server
-  Notifications v2 and JWS chain checks in the gateway.
-- **New control message vs. command envelope** — control message `pushRegister`, gated by the
-  `push-v1` capability. It is not a CLI command, and an old Host closes the connection on an
-  unknown control, so the client must check the capability first.
-- **Gateway on Cloudflare Workers** — chosen after the S0 spike showed that a Worker reaches
-  APNs over HTTP/2 and signs the ES256 provider token with WebCrypto. No server to operate.
-- **Live Activity with counts only** — chosen. Titles would need the push key at render time;
-  the spike showed that the Keychain is not available there on a device.
-- **Presence instead of the viewed pane** — chosen. The viewed-pane rule
-  (`muteNotificationsForActiveSurface`) checks only selection and window focus, so it holds
-  pushes back exactly when the user left the Mac with Prowl in front. It also let other panes
-  push while the user sat at the Mac. Presence (lock, display sleep, input idle time) fixes
-  both; the catch-up push on the change to away covers a block the user missed before leaving.
-- **Mac switch off by default** — chosen. The Mac is the machine that sends the traffic, so
-  the Mac user turns it on, and both sides agree before anything leaves the Mac. The cost is
-  one more step for a new Pro user; the iOS app points to the switch, and the Mac switch is
-  also the entry point that leads Mac users to Mirror Pro. On by default would make the phone
-  subscription alone enough to start traffic from the Mac.
-- **No managed preference (MDM) to turn off push** — deferred. The traffic gate (Remote
-  Mirror on, Host running, the Mac switch on, an entitled device registered) is enough for
-  now.
+- **Free push** — chosen (Guideline 4.10). Mirror Pro sells remote access instead (096).
+- **APNs key in the app** — rejected: a `.p8` key can push to every user of every team app.
+- **Host holds the APNs token** — rejected: an opaque per-Host `pushToken` hides the device
+  token, and the phone can revoke one Host without reaching it.
+- **Separate Mac permission field** — chosen. Deleting the registration alone let the next
+  `pushRegister` undo the Mac user's choice.
+- **Answer from the lock screen** — deferred (see Non-goals).
+- **Presence instead of the viewed pane** — chosen. `isViewedSurface` checks only window focus,
+  so it held pushes back when the user left with Prowl in front.
+- **Mac switch off by default** — chosen: the Mac sends the traffic, so the Mac user opts in.
+- **Gateway on Cloudflare Workers** — chosen after the S0 spike.
+- **Live Activity tokens through the gateway** — chosen; the app is suspended in the
+  background, so the Host cannot receive token updates.
 
 ## Spike results (2026-11-21)
 
-Throwaway projects only; nothing from them is in the repository.
+Throwaway projects only.
 
-| Question | Result | Evidence |
-| --- | --- | --- |
-| Worker → APNs over HTTP/2 | Yes | Without a token: `403 MissingProviderToken` (785 ms). With a WebCrypto ES256 JWT from a random key: `403 InvalidProviderToken` (462 ms). Over HTTP/1.1 the connection fails, so these answers prove HTTP/2 |
-| APNs provider keys | Ready | Two keys, topic `com.onevcat.prowl.mirror`: one sandbox only, one production only, each refused by the other environment (`BadEnvironmentKeyInToken`). Held outside the repository; they go to the gateway as Worker secrets |
-| Live Activity view decrypts a sealed `ContentState` field | Simulator: yes (App Group file and shared Keychain). Device (iPhone 15 Pro Max): Keychain read returns `-25291` (`errSecNotAvailable`) in the view, with the right entitlement; the app reads the same item. App Group file not tested on a device | Screenshots of the throwaway project |
-| `simctl push` runs the Notification Service Extension | No (iOS 26.5 and 27.2): the alert shows the fallback text, the extension does not start | The fallback text is what users see when the extension fails, so it must read well |
-| `simctl push` updates a Live Activity | No: `simctl` treats every payload as a user notification. Activity and push-to-start tokens are issued (needs `aps-environment`) | |
-| Signing | Simulator: "Sign to Run Locally" carries App Group, Keychain group and `aps-environment`. Device: Keychain groups need the `$(AppIdentifierPrefix)` prefix; an App Group must be made in the portal or Xcode first (command-line automatic signing does not make it) | |
-
-Consequences:
-
-- The Service Extension and Live Activity push paths can only be tested with real APNs on a
-  device. S3 and S5 test them with a Debug build of the Mirror app and the sandbox key.
-- The Service Extension reading the shared Keychain on a device is not tested yet; it is a
-  common pattern. Verify it first in S3.
-- Reinstalling the app ends running Live Activities, and the first lock screen display asks
-  "Allow Live Activities?".
+| Question | Result |
+| --- | --- |
+| Worker → APNs over HTTP/2 | Yes: `403 MissingProviderToken` without a token, `403 InvalidProviderToken` with a WebCrypto ES256 JWT from a random key; HTTP/1.1 fails to connect |
+| APNs keys | Two keys for topic `com.onevcat.prowl.mirror`, one sandbox only, one production only; each is refused by the other environment. Held outside the repository |
+| Live Activity view decrypts a sealed field | Simulator: yes. Device (iPhone 15 Pro Max): Keychain read in the view returns `-25291` (`errSecNotAvailable`) |
+| `simctl push` runs the NSE / updates a Live Activity | No / no. Both need real APNs on a device |
+| Signing | Device Keychain groups need the `$(AppIdentifierPrefix)` prefix; an App Group must be made in the portal or Xcode first |
 
 ## Open questions
 
-- Prices, trial length, and whether to offer a lifetime purchase.
-- Whether the gateway code stays private or is published for self-hosting.
+- Gateway code private or public.
+- The exact foreground trigger for starting a Live Activity.
 
 ## Amendments
+
+- Updated 2026-11-21: push is free (Guideline 4.10), Mirror Pro moved to remote access in
+  [096](../096-mirror-remote-access/000-plan.md); registration and revocation state, generic
+  default content, tap-to-open instead of lock-screen answers, Live Activity tokens through the
+  gateway. From a plan review of #1142.
