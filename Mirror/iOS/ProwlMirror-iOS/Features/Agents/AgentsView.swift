@@ -81,9 +81,9 @@ struct AgentsView: View {
     }
     .sheet(item: $launchRequest) { request in
       NavigationStack {
-        MirrorLaunchView(execute: { try await session.command($0) }, paneIDs: request.paneIDs) { pane in
+        MirrorLaunchView(execute: { try await session.command($0) }, paneIDs: request.paneIDs) { pane, kickoff in
           launchRequest = nil
-          path.append(MirrorPaneRoute(host: host, pane: pane, launched: true))
+          path.append(MirrorPaneRoute(host: host, pane: pane, launched: true, kickoff: kickoff))
         }
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {

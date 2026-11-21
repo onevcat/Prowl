@@ -48,7 +48,7 @@ struct ContentView: View {
       if let pane = created {
         Text("Created mirror: \(pane.title)").accessibilityIdentifier("created-mirror")
       } else {
-        MirrorLaunchView(execute: MirrorUIFixture.launchCommand) { created = $0 }
+        MirrorLaunchView(execute: MirrorUIFixture.launchCommand) { pane, _ in created = pane }
       }
     }
   }

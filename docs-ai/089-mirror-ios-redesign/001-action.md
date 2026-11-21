@@ -14,6 +14,7 @@
 | 2026-11-06 | S6: messages reach a working agent (queue or steer by the agent's rules); `agents dispatch` still waits for idle | S6 PR, [008](008-s6-input-while-working.md) |
 | 2026-11-06 | S4 follow-up: review page, multi-select boxes and Submit, stable ids (no flood), quoted titles, prompts in Terminal, iOS unified log | [009](009-s4-prompt-fixes.md) |
 | 2026-11-06 | Shell commands from the phone (`shell-send`: clear the line, then type or paste at the shell's own prompt) and the key bar in shell panes (`shell-keys`) | [010](010-shell-commands.md) |
+| 2026-11-21 | A new Claude Code or Codex session opens in Chat with a wait line; phone launches have no dispatch; the session resolver retries a young process every second | [011](011-new-session-opens-in-chat.md) |
 
 The slices form one stack (#1045 → #1051, then S6).
 

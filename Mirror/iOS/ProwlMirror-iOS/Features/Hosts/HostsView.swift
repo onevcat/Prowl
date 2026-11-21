@@ -5,6 +5,9 @@ nonisolated struct MirrorPaneRoute: Hashable {
   let pane: MirrorPaneDescriptor
   /// The pane was just launched from this device; its agent is not detected yet.
   var launched = false
+  /// The first message of an agent launched from this device, shown in Chat until the
+  /// conversation arrives.
+  var kickoff: String?
 }
 
 extension MirrorPaneDescriptor: Hashable {

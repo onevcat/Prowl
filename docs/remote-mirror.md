@@ -241,7 +241,16 @@ out unavailable ones with the reason. The last Profile you started is chosen aga
 arrow starts the session and opens it. Host creates a normal background tab through its
 public CLI router. There is no special AI Control Console, bundled private control
 skill, or separate agent-launch implementation. Profile settings determine model
-and permissions.
+and permissions. The first message goes in as typed: unlike `prowl create --prompt`, a
+session started from the phone has no dispatch receipt and no completion instruction, because
+you read the reply yourself.
+
+A Claude Code or Codex session started with a first message opens in **Chat** at once: your
+message shows as the first bubble, with a playful line under it while the agent starts. The
+real conversation replaces it when the Host finds the agent's transcript, usually within a
+few seconds. If that takes more than 10 seconds, the pane shows the terminal instead (for
+example when the agent waits on a startup dialog). **Terminal** in the toolbar leaves the
+wait at any time. Other agents, and sessions without a first message, open on the terminal.
 
 Every Send first reads public `list`. A detected Agent uses structured `agentsInput`
 (`agents.input`), advertised by the `agent-input` capability. Update Host if this

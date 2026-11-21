@@ -8,18 +8,19 @@ struct MirrorLaunchView: View {
   @FocusState private var promptFocused: Bool
   /// The last Profile started from this device, chosen again next time when it is available.
   @AppStorage("mirror.lastProfileID") private var lastProfileID = ""
-  let onCreated: (MirrorPaneDescriptor) -> Void
+  /// The created pane, and the first message when an agent was started with one.
+  let onCreated: (MirrorPaneDescriptor, String?) -> Void
   /// The panes of the project the person started from (docs-ai 089 S1).
   private let paneIDs: [String]
 
-  init(session: MirrorSession, onCreated: @escaping (MirrorPaneDescriptor) -> Void) {
+  init(session: MirrorSession, onCreated: @escaping (MirrorPaneDescriptor, String?) -> Void) {
     self.init(execute: { try await session.command($0) }, onCreated: onCreated)
   }
 
   init(
     execute: @escaping (MirrorCommandRequest.Command) async throws -> MirrorJSON,
     paneIDs: [String] = [],
-    onCreated: @escaping (MirrorPaneDescriptor) -> Void
+    onCreated: @escaping (MirrorPaneDescriptor, String?) -> Void
   ) {
     _model = State(initialValue: MirrorLaunchModel(execute: execute))
     self.paneIDs = paneIDs
@@ -204,10 +205,12 @@ struct MirrorLaunchView: View {
 
   private var startButton: some View {
     Button {
+      let prompt = model.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+      let kickoff = model.kind == .agent && !prompt.isEmpty ? prompt : nil
       creationTask = Task {
         if let pane = await model.create(), !Task.isCancelled {
           if let id = model.profileID { lastProfileID = id }
-          onCreated(pane)
+          onCreated(pane, kickoff)
         }
       }
     } label: {
