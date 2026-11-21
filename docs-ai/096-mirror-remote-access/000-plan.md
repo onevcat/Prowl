@@ -120,7 +120,7 @@ same pin, so an app update usually downloads nothing.
   connection times, the RevenueCat app user ID; never terminal content (it is inside
   WireGuard and TLS-PSK).
 
-### Authorization model (decide before R1 fixes the wire format)
+### Authorization model (final after R0, before R2 fixes the wire format)
 
 A client-supplied RevenueCat app user ID proves that someone has a subscription, not that this
 installation may register keys for it. The proposal to finalize:
@@ -138,7 +138,7 @@ installation may register keys for it. The proposal to finalize:
 ### Subscription
 
 - RevenueCat, monthly and yearly with a free trial. No account.
-- 3.1.2(a) requires the subscription on all of the user's devices. Define in R3 how restore
+- 3.1.2(a) requires the subscription on all of the user's devices. Define in R4 how restore
   works for an iPhone and an iPad on the same Apple ID (RevenueCat restore behavior and app
   user IDs), and test: two devices, reinstall, refund, removing one device.
 - The Mac setting is the entry point on the Mac: with **Remote Access** off, a short text says

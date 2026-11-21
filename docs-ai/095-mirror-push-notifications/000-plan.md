@@ -163,7 +163,7 @@ on. The Mac does not know about subscriptions.
   Dynamic Island compact shows the most urgent state color and the blocked count.
 - ActivityKit starts an activity only while the app is in the foreground, so the app starts it
   from the foreground (when the user opens the Host, or with a control); verify the exact
-  trigger in S4.
+  trigger in P4.
 - Registration: when it starts an activity, the app tells the Host over the live
   connection (`activityStart {expiresAt}`, at most 8 hours, the ActivityKit limit) and uploads
   the activity push token, and each rotation, to the gateway (a management request). The Host
