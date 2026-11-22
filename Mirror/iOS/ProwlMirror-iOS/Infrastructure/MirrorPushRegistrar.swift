@@ -62,8 +62,24 @@ final class MirrorAppDelegate: NSObject, UIApplicationDelegate {
   #if DEBUG
     /// Device checks before the Host sends pushes: `MIRROR_PUSH_DEBUG_KEY=<Host UUID>:<64 hex>`
     /// saves that push key and registers for APNs, and the token goes to stdout;
-    /// `MIRROR_PUSH_DEBUG_DELIVERED=1` prints the delivered notifications as shown.
+    /// `MIRROR_PUSH_DEBUG_DELIVERED=1` prints the delivered notifications as shown;
+    /// `MIRROR_PUSH_DEBUG_GATEWAY=1` also attests and asks the gateway for a push token.
     private static func applyPushDebugKey() {
+      if ProcessInfo.processInfo.environment["MIRROR_PUSH_DEBUG_GATEWAY"] == "1" {
+        Task {
+          guard let apnsToken = await MirrorPushRegistrar.shared.register() else {
+            return print("MIRROR_PUSH_DEBUG gateway: no APNs token")
+          }
+          do {
+            let environment = MirrorAPNsEnvironment.current
+            let pushToken = try await MirrorPushGatewayClient().createToken(
+              apnsToken: apnsToken, environment: environment)
+            print("MIRROR_PUSH_DEBUG gateway environment=\(environment.rawValue) pushToken=\(pushToken)")
+          } catch {
+            print("MIRROR_PUSH_DEBUG gateway failed: \(error)")
+          }
+        }
+      }
       if ProcessInfo.processInfo.environment["MIRROR_PUSH_DEBUG_DELIVERED"] == "1" {
         Task {
           for note in await UNUserNotificationCenter.current().deliveredNotifications() {

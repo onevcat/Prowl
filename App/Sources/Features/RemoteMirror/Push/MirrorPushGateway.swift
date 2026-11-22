@@ -14,10 +14,8 @@ nonisolated enum MirrorPushGatewayResult: Equatable, Sendable {
 }
 
 nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
-  /// The one gateway for every build. Each push token keeps the APNs environment that the phone
-  /// reported, so Debug and App Store builds of the phone app use the same URL. The
-  /// `remoteMirrorPushGatewayURL` default overrides it for testing.
-  static let defaultBaseURL = URL(string: "https://prowl-push.onev.dev")!
+  /// The `remoteMirrorPushGatewayURL` default overrides it for testing.
+  static let defaultBaseURL = MirrorPushGatewayAddress.url
 
   let baseURL: URL
   let session: URLSession
