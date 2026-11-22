@@ -11,9 +11,12 @@ nonisolated struct MirrorJSONLineReader: Sendable {
   mutating func append(_ data: Data) -> [Data] {
     buffer.append(data)
     var lines: [Data] = []
-    while let newline = buffer.firstIndex(of: 0x0A) {
-      var line = buffer.subdata(in: buffer.startIndex..<newline)
-      buffer.removeSubrange(buffer.startIndex...newline)
+    // The consumed bytes go once at the end: removing each line from the front copied the rest
+    // of a 32 MB replay once per line, seconds before a Mirror chat could open.
+    var start = buffer.startIndex
+    while let newline = buffer[start...].firstIndex(of: 0x0A) {
+      var line = buffer.subdata(in: start..<newline)
+      start = buffer.index(after: newline)
       if skippingOversizedLine {
         skippingOversizedLine = false
         continue
@@ -25,6 +28,7 @@ nonisolated struct MirrorJSONLineReader: Sendable {
         lines.append(line)
       }
     }
+    buffer.removeSubrange(buffer.startIndex..<start)
     if buffer.count > maximumLineBytes {
       buffer.removeAll()
       skippingOversizedLine = true
