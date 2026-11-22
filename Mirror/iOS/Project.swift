@@ -43,9 +43,27 @@ let project = Project(
       sources: ["../Shared/*.swift"],
       // Conversation fixtures feed the DEBUG fixture mode and UI tests without a Host.
       // LICENSE ships the MIT notice with every distributed copy of the app.
-      resources: ["../Fixtures/conversation/*.events.jsonl", "LICENSE"],
+      resources: ["../Fixtures/conversation/*.events.jsonl", "LICENSE", "Push/**/*.strings"],
       buildableFolders: ["ProwlMirror-iOS"],
+      dependencies: [.target(name: "ProwlMirror-iOSNotificationService")],
       settings: settings("App", productName: "ProwlMirror-iOS")
+    ),
+    // Opens Mirror pushes (docs-ai 095). It compiles only the push files that it shares with
+    // the app, and the push strings that the gateway's fallback alert names.
+    .target(
+      name: "ProwlMirror-iOSNotificationService",
+      destinations: destinations,
+      product: .appExtension,
+      bundleId: "com.onevcat.prowl.mirror.NotificationService",
+      infoPlist: nil,
+      sources: [
+        "../Shared/MirrorPushCrypto.swift",
+        "ProwlMirror-iOS/Infrastructure/MirrorPushKeyStore.swift",
+        "ProwlMirror-iOS/Infrastructure/MirrorPushNotification.swift",
+      ],
+      resources: ["Push/**/*.strings"],
+      buildableFolders: ["NotificationService"],
+      settings: settings("NotificationService", productName: "ProwlMirror-iOSNotificationService")
     ),
     .target(
       name: "ProwlMirror-iOSTests",

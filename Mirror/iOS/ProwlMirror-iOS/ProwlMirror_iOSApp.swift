@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct ProwlMirror_iOSApp: App {
+  @UIApplicationDelegateAdaptor private var appDelegate: MirrorAppDelegate
+
   var body: some Scene {
     WindowGroup {
       ContentView()

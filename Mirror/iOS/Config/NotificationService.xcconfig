@@ -1,0 +1,21 @@
+// Notification Service Extension (docs-ai 095): opens Mirror pushes with the key in the
+// Keychain group that it shares with the app. Versions follow the app; the release script
+// passes both on the command line.
+APPLICATION_EXTENSION_API_ONLY = YES
+CODE_SIGN_ENTITLEMENTS = Config/NotificationService.entitlements
+CODE_SIGN_STYLE = Automatic
+CURRENT_PROJECT_VERSION = 1
+DEVELOPMENT_TEAM =
+GENERATE_INFOPLIST_FILE = YES
+INFOPLIST_FILE = Config/NotificationService-Info.plist
+INFOPLIST_KEY_CFBundleDisplayName = Prowl Mirror Notifications
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+MARKETING_VERSION = 1.0
+SKIP_INSTALL = YES
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
+SWIFT_VERSION = 6.0
+TARGETED_DEVICE_FAMILY = 1,2
+
+// Personal settings such as DEVELOPMENT_TEAM; see Config/Local.xcconfig.template.
+#include? "../../../Config/Local.xcconfig"

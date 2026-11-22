@@ -1,0 +1,237 @@
+import Foundation
+import Observation
+
+/// Sends push events for the Mirror Host (docs-ai 095 P2). It does nothing, and contacts
+/// nobody, unless Remote Mirror is on, the Host runs, **Send Notifications to Paired Devices**
+/// is on, and a paired device has a registration that the Mac allows.
+@MainActor
+final class MirrorPushSender {
+  struct PaneDetails: Sendable {
+    let title: String
+    let stateChangedAt: String?
+  }
+
+  private let host: MirrorHost
+  private let enabled: () -> Bool
+  private let paneStates: () -> [UUID: MirrorPushPlanner.PaneState]
+  private let paneDetails: (UUID) -> PaneDetails?
+  private let presence: MacPresenceMonitor
+  /// `nil` when no push service is configured: the sender then never starts.
+  private let gateway: any MirrorPushGateway
+  private let clock: ContinuousClock
+
+  private var planner = MirrorPushPlanner()
+  private var knownPaneStates: [UUID: MirrorPushPlanner.PaneState] = [:]
+  private var onlineDevices: Set<UUID> = []
+  /// The kinds each eligible device asked for at the last refresh, to see devices that became
+  /// eligible while the sender was already active.
+  private var eligibleKinds: [UUID: Set<MirrorPushKind>] = [:]
+  private(set) var isActive = false
+  private var hostObservation: Task<Void, Never>?
+  private var paneObservation: Task<Void, Never>?
+  /// In-flight gateway requests; each removes itself when it ends.
+  private var sends: [UUID: Task<Void, Never>] = [:]
+
+  init(
+    host: MirrorHost, enabled: @escaping () -> Bool,
+    paneStates: @escaping () -> [UUID: MirrorPushPlanner.PaneState],
+    paneDetails: @escaping (UUID) -> PaneDetails?,
+    presence: MacPresenceMonitor, gateway: any MirrorPushGateway, clock: ContinuousClock = ContinuousClock()
+  ) {
+    self.host = host
+    self.enabled = enabled
+    self.paneStates = paneStates
+    self.paneDetails = paneDetails
+    self.presence = presence
+    self.gateway = gateway
+    self.clock = clock
+    presence.onChange = { [weak self] present in self?.presenceChanged(present) }
+  }
+
+  /// Follows the Host and the panes with Observation until `stop()`.
+  func start() {
+    guard hostObservation == nil else { return }
+    hostObservation = Task { [weak self] in
+      while !Task.isCancelled {
+        // Hold the sender only while refreshing, not while waiting for the next change.
+        let observing = await withCheckedContinuation { continuation in
+          guard let sender = self else {
+            continuation.resume(returning: false)
+            return
+          }
+          withObservationTracking {
+            sender.refresh()
+          } onChange: {
+            continuation.resume(returning: true)
+          }
+        }
+        guard observing else { return }
+      }
+    }
+  }
+
+  func stop() {
+    hostObservation?.cancel()
+    hostObservation = nil
+    deactivate()
+    for send in sends.values { send.cancel() }
+    sends.removeAll()
+  }
+
+  /// Waits for the gateway requests started so far.
+  func settle() async {
+    for send in Array(sends.values) { await send.value }
+  }
+
+  /// Every condition under which the Mac may contact the gateway (docs-ai 095 "Outbound
+  /// traffic gate"), read from the current values.
+  private func gateIsOpen(_ devices: [MirrorPushPlanner.Device]) -> Bool {
+    enabled() && host.isRunning && host.pushEnabled && !devices.isEmpty
+  }
+
+  /// Reads the Host state and the panes, and acts on what changed.
+  func refresh() {
+    let devices = eligibleDevices()
+    guard gateIsOpen(devices) else {
+      deactivate()
+      return
+    }
+    if !isActive { activate() }
+    // Pane changes first, so a catch-up below sees which prompts are still open.
+    reconcilePanes(devices: devices)
+    for device in devices {
+      let kinds = eligibleKinds[device.id] ?? []
+      if !kinds.contains(.blocked), device.kinds.contains(.blocked) { planner.deviceBecameEligible(device) }
+    }
+    eligibleKinds = Dictionary(devices.map { ($0.id, $0.kinds) }, uniquingKeysWith: { _, last in last })
+    let online = Set(devices.filter(\.isOnline).map(\.id))
+    for device in devices where onlineDevices.contains(device.id) && !online.contains(device.id) {
+      send(planner.deviceWentOffline(device))
+    }
+    onlineDevices = online
+    // Held prompts that are due now, such as for a device that just became eligible while the
+    // user was already away: no presence or connection change will follow for them.
+    send(planner.drain(devices: devices))
+  }
+
+  private func reconcilePanes(devices: [MirrorPushPlanner.Device]) {
+    let states = paneStates()
+    let now = clock.now
+    for (paneID, state) in states where knownPaneStates[paneID] != state {
+      send(planner.paneChanged(paneID, to: state, at: now, devices: devices))
+    }
+    for paneID in knownPaneStates.keys where states[paneID] == nil {
+      planner.paneRemoved(paneID, at: now)
+    }
+    knownPaneStates = states
+  }
+
+  private func activate() {
+    isActive = true
+    // The states at activation are the starting point, not events. The planner keeps what it
+    // knew before a stop, so an open prompt that was never pushed is still held.
+    let devices = eligibleDevices()
+    knownPaneStates = paneStates()
+    planner.activate(states: knownPaneStates, at: clock.now, devices: devices)
+    onlineDevices = Set(devices.filter(\.isOnline).map(\.id))
+    eligibleKinds = Dictionary(devices.map { ($0.id, $0.kinds) }, uniquingKeysWith: { _, last in last })
+    presence.start()
+    send(planner.presenceChanged(to: presence.isPresent, devices: devices))
+    // The planner may still be "away" from before the stop, so no change fires: send what the
+    // activation held for offline devices now.
+    send(planner.drain(devices: devices))
+  }
+
+  private func deactivate() {
+    guard isActive else { return }
+    isActive = false
+    presence.stop()
+    knownPaneStates = [:]
+    onlineDevices = []
+    eligibleKinds = [:]
+    // Nothing queued may go out once a gate is closed.
+    for send in sends.values { send.cancel() }
+  }
+
+  private func presenceChanged(_ present: Bool) {
+    let devices = eligibleDevices()
+    guard isActive, gateIsOpen(devices) else { return }
+    reconcilePanes(devices: devices)
+    send(planner.presenceChanged(to: present, devices: devices))
+  }
+
+  /// Checked again right before each request, from current values: the gate, the device's
+  /// registration, permission, kind and connection, the user's presence, and for `blocked`
+  /// that the prompt is still open.
+  private func mayStillSend(_ push: MirrorPushPlanner.Push) -> Bool {
+    let devices = eligibleDevices()
+    guard isActive, !Task.isCancelled, gateIsOpen(devices), !presence.isPresent,
+      let device = devices.first(where: { $0.id == push.deviceID }), device.kinds.contains(push.kind), !device.isOnline
+    else { return false }
+    return push.kind != .blocked || paneStates()[push.paneID] == .blocked
+  }
+
+  private func eligibleDevices() -> [MirrorPushPlanner.Device] {
+    host.devices.compactMap { device in
+      guard let push = device.push, device.isPushAllowedByMac else { return nil }
+      return .init(id: device.id, kinds: push.kinds, isOnline: host.isOnline(device.id))
+    }
+  }
+
+  /// Builds and sends each push in its own task, outside any Observation tracking, so reading
+  /// the pane details does not make title changes wake the sender.
+  private func send(_ pushes: [MirrorPushPlanner.Push]) {
+    for push in pushes {
+      let id = UUID()
+      sends[id] = Task { [weak self] in
+        defer { self?.sends.removeValue(forKey: id) }
+        guard let self else { return }
+        guard self.mayStillSend(push), let hostID = self.host.hostIdentityID,
+          let device = self.host.devices.first(where: { $0.id == push.deviceID }), let token = device.push?.token,
+          let request = Self.request(for: push, device: device, hostID: hostID, details: self.paneDetails(push.paneID))
+        else {
+          // Nothing was sent: hold the prompt again for the next valid catch-up.
+          self.planner.skipped(push)
+          return
+        }
+        // Delivered from here on, whatever the network result: no retry.
+        self.planner.attempted(push)
+        let result = await gateway.push(token: token, collapseID: request.collapseID, sealed: request.sealed)
+        self.host.recordPush(result, to: push.deviceID, at: Date())
+        if case .failed(let reason) = result {
+          ProwlLogger("RemoteMirror").warning("Push to a device failed: \(reason)")
+        } else if result == .tokenGone {
+          ProwlLogger("RemoteMirror").info("Push gateway no longer knows a device's token")
+        }
+        // A 410 for a token the phone has since replaced says nothing about the new one: leave
+        // both the registration and the planner's state for the device alone.
+        guard result == .tokenGone,
+          self.host.devices.first(where: { $0.id == push.deviceID })?.push?.token == token
+        else { return }
+        self.planner.forget(push.deviceID)
+        self.host.dropPushRegistration(push.deviceID, token: token)
+      }
+    }
+  }
+
+  struct Request: Equatable {
+    let collapseID: String
+    let sealed: String
+  }
+
+  static func request(
+    for push: MirrorPushPlanner.Push, device: MirrorPairedDevice, hostID: UUID, details: PaneDetails?
+  ) -> Request? {
+    let key = MirrorPushCrypto.key(deviceSecret: device.key, hostID: hostID)
+    let content = MirrorPushContent(
+      kind: push.kind, paneID: push.paneID, title: details?.title ?? String(localized: "Prowl"),
+      body: push.kind == .blocked
+        ? String(localized: "An agent needs your attention")
+        : String(localized: "An agent finished"),
+      stateChangedAt: details?.stateChangedAt)
+    guard let plaintext = try? JSONEncoder().encode(content),
+      let sealed = try? MirrorPushCrypto.seal(plaintext, key: key, hostID: hostID)
+    else { return nil }
+    return Request(collapseID: MirrorPushCrypto.collapseID(paneID: push.paneID, key: key), sealed: sealed)
+  }
+}

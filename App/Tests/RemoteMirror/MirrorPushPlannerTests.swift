@@ -1,0 +1,238 @@
+import Foundation
+import Testing
+
+@testable import Prowl
+
+struct MirrorPushPlannerTests {
+  typealias Device = MirrorPushPlanner.Device
+  typealias Push = MirrorPushPlanner.Push
+
+  private let pane = UUID()
+  private let deviceID = UUID()
+  private let start = ContinuousClock.now
+
+  private func device(online: Bool = false, kinds: Set<MirrorPushKind> = [.blocked, .done]) -> Device {
+    .init(id: deviceID, kinds: kinds, isOnline: online)
+  }
+
+  private func away() -> MirrorPushPlanner {
+    var planner = MirrorPushPlanner()
+    _ = planner.presenceChanged(to: false, devices: [])
+    return planner
+  }
+
+  private func blocked(_ ordinal: Int = 1) -> [MirrorPushPlanner.Push] {
+    [.init(deviceID: deviceID, paneID: pane, kind: .blocked, ordinal: ordinal)]
+  }
+
+  /// The sender's report that each push was sent.
+  private func sent(_ pushes: [Push], _ planner: inout MirrorPushPlanner) -> [Push] {
+    for push in pushes { planner.attempted(push) }
+    return pushes
+  }
+
+  @Test func blockedWhileAwayAndOfflineIsPushedAtOnce() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device()]) == blocked())
+  }
+
+  @Test func blockedWhilePresentIsHeldAndSentOnceWhenTheUserLeaves() {
+    var planner = MirrorPushPlanner()
+    #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device()]).isEmpty)
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+    #expect(planner.presenceChanged(to: true, devices: [device()]).isEmpty)
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func blockedWhileTheDeviceIsOnlineIsSentWhenItGoesOfflineWhileAway() {
+    var planner = away()
+    #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: true)]).isEmpty)
+    #expect(planner.deviceWentOffline(device()) == blocked())
+    #expect(planner.deviceWentOffline(device()).isEmpty)
+  }
+
+  @Test func goingOfflineWhileTheUserIsPresentSendsNothingUntilTheUserLeaves() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: true)])
+    #expect(planner.deviceWentOffline(device()).isEmpty)
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+  }
+
+  @Test func aHeldPromptThatClosedIsNotSentLate() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func onlyTheLatestOpeningOfAPaneIsSentLate() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked(2))
+  }
+
+  @Test func doneNeedsTenSecondsOfWorkingAndTheUserAway() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(9)), devices: [device()]).isEmpty)
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(10)), devices: [device()])
+        == [.init(deviceID: deviceID, paneID: pane, kind: .done)])
+    var present = MirrorPushPlanner()
+    _ = present.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(
+      present.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(60)), devices: [device()]).isEmpty)
+    // `done` is never sent late.
+    #expect(present.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func doneIsNotSentToAnOnlineDevice() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device(online: true)])
+    #expect(
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(30)), devices: [device(online: true)])
+        .isEmpty)
+  }
+
+  @Test func kindsTheDeviceDidNotAskForAreNotSent() {
+    var planner = away()
+    #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device(kinds: [.done])]).isEmpty)
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device(kinds: [.blocked])])
+    #expect(
+      planner.paneChanged(
+        pane, to: .completed, at: start.advanced(by: .seconds(30)), devices: [device(kinds: [.blocked])]
+      )
+      .isEmpty)
+  }
+
+  @Test func aClosedPaneIsForgotten() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    planner.paneRemoved(pane, at: start)
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aShortDetectionMissDoesNotPushTheSamePromptAgain() {
+    var planner = away()
+    #expect(planner.paneChanged(pane, to: .blocked, at: start, devices: [device()]) == blocked())
+    planner.paneRemoved(pane, at: start.advanced(by: .seconds(1)))
+    #expect(planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(3)), devices: [device()]).isEmpty)
+    // A pane that stayed away longer is a new prompt.
+    planner.paneRemoved(pane, at: start.advanced(by: .seconds(4)))
+    #expect(
+      planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(40)), devices: [device()]) == blocked(2))
+  }
+
+  @Test func aDetectionMissKeepsTheWorkingTimeForDone() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    planner.paneRemoved(pane, at: start.advanced(by: .seconds(5)))
+    #expect(
+      planner.paneChanged(pane, to: .completed, at: start.advanced(by: .seconds(12)), devices: [device()])
+        == [.init(deviceID: deviceID, paneID: pane, kind: .done)])
+  }
+
+  @Test func anIdleWithoutAFinishedTurnIsNotDone() {
+    var planner = away()
+    _ = planner.paneChanged(pane, to: .working, at: start, devices: [device()])
+    #expect(planner.paneChanged(pane, to: .idle, at: start.advanced(by: .seconds(30)), devices: [device()]).isEmpty)
+  }
+
+  @Test(arguments: [false, true])
+  func aHeldPromptSurvivesACatchUpDuringADetectionGap(offlineTrigger: Bool) {
+    var planner = MirrorPushPlanner()
+    let online = offlineTrigger
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: online)])
+    planner.paneRemoved(pane, at: start.advanced(by: .seconds(1)))
+    if offlineTrigger {
+      _ = planner.presenceChanged(to: false, devices: [device(online: true)])
+      #expect(planner.deviceWentOffline(device()).isEmpty)
+    } else {
+      #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+    }
+    #expect(
+      planner.paneChanged(pane, to: .blocked, at: start.advanced(by: .seconds(3)), devices: [device()]) == blocked())
+    #expect(planner.presenceChanged(to: true, devices: [device()]).isEmpty)
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aDeviceThatBecomesEligibleGetsTheOpenPromptOnce() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [])
+    planner.deviceBecameEligible(device())
+    planner.deviceBecameEligible(device())
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    planner.deviceBecameEligible(device())
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aPushTheSenderSkippedIsHeldAgainAndSentOnce() {
+    var planner = away()
+    let first = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    #expect(first == blocked())
+    // The user came back before the request: the sender skips it.
+    for push in first { planner.skipped(push) }
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    #expect(sent(planner.presenceChanged(to: false, devices: [device()]), &planner) == blocked())
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+
+  @Test func aSkippedCatchUpIsHeldAgainForTheNextOne() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device(online: true)])
+    _ = planner.presenceChanged(to: false, devices: [device(online: true)])
+    let catchUp = planner.deviceWentOffline(device())
+    #expect(catchUp == blocked())
+    // The phone reconnected before the request.
+    for push in catchUp { planner.skipped(push) }
+    #expect(sent(planner.deviceWentOffline(device()), &planner) == blocked())
+    #expect(planner.deviceWentOffline(device()).isEmpty)
+  }
+
+  @Test func drainSendsHeldPromptsOnlyWhileTheUserIsAway() {
+    var planner = MirrorPushPlanner()
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [])
+    planner.deviceBecameEligible(device())
+    #expect(planner.drain(devices: [device()]).isEmpty)
+    _ = planner.presenceChanged(to: false, devices: [])
+    #expect(planner.drain(devices: [device(online: true)]).isEmpty)
+    #expect(sent(planner.drain(devices: [device()]), &planner) == blocked())
+    #expect(planner.drain(devices: [device()]).isEmpty)
+  }
+
+  @Test func reactivationHoldsAnOpenPromptThatWasNeverPushed() {
+    var planner = MirrorPushPlanner()
+    // Held while the user sat at the Mac; then the sender stopped (for example the listener
+    // restarted) and starts again with the prompt still open.
+    _ = planner.paneChanged(pane, to: .blocked, at: start, devices: [device()])
+    planner.activate(states: [pane: .blocked], at: start, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]) == blocked())
+    // Once pushed, a later start does not hold it again.
+    _ = planner.presenceChanged(to: true, devices: [device()])
+    planner.activate(states: [pane: .blocked], at: start, devices: [device()])
+    #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
+  }
+}
+
+struct PaneAgentStateCompletedTurnTests {
+  private func state(_ raw: AgentRawState, reason: AgentStateDecisionReason?) -> PaneAgentState {
+    var pane = PaneAgentState(detectedAgent: .claude, state: raw, seen: true)
+    pane.decision = reason.map { AgentStateDecision(state: raw, reason: $0) }
+    return pane
+  }
+
+  @Test func onlyAFinishedTurnCountsAsCompletedEvenWhenSeen() {
+    #expect(state(.idle, reason: .programStatus(.done)).isCompletedTurn)
+    #expect(state(.idle, reason: .programStatus(.error)).isCompletedTurn)
+    #expect(!state(.idle, reason: .programStatus(.idle)).isCompletedTurn)
+    // A non-OSC path to idle is a finished turn, as for the done badge.
+    #expect(state(.idle, reason: nil).isCompletedTurn)
+    #expect(!state(.working, reason: .programStatus(.working)).isCompletedTurn)
+  }
+}

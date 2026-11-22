@@ -29,5 +29,11 @@ SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
 SWIFT_VERSION = 6.0
 TARGETED_DEVICE_FAMILY = 1,2
 
+// The first Keychain group stays the app's own, so credentials saved before push support
+// (without an explicit group) are still found; the second is shared with extensions
+// (docs-ai 095). The Info.plist keys add what GENERATE_INFOPLIST_FILE cannot.
+CODE_SIGN_ENTITLEMENTS = Config/App.entitlements
+INFOPLIST_FILE = Config/App-Info.plist
+
 // Personal settings such as DEVELOPMENT_TEAM; see Config/Local.xcconfig.template.
 #include? "../../../Config/Local.xcconfig"

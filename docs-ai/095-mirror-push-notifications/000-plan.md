@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-11-21 |
-| **Primary PRs** | #1142 (plan) |
+| **Primary PRs** | #1142 (plan), #1143 (S0), #1144 (P1), #1145 (P2) |
 | **Related** | [096-mirror-remote-access](../096-mirror-remote-access/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [091-remote-mirror-alpha-settings](../091-remote-mirror-alpha-settings/000-plan.md), `docs/remote-mirror.md`, `docs/remote-mirror-wire.md` |
 
 ## Background
@@ -185,7 +185,7 @@ on. The Mac does not know about subscriptions.
 ## Slices
 
 The gateway lives in a separate private repository; its slices are named G. Prowl PRs P1–P3
-form one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`, and updates
+form one stack (`gh stack`); P3 is split into P3a–P3f. Every Prowl PR passes `make check` and `make test`, and updates
 `docs/` where behavior changes.
 
 **S0 — real push on a device** (no PR; done 2026-11-21, see Spike results)
@@ -223,15 +223,56 @@ form one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`,
   instance with the switch off makes no request to the gateway host (checked with a fake
   gateway); Settings screenshots of the three device states.
 
-**P3 — iOS receiving**
-- Content: APNs registration, App Attest, `pushRegister`, NSE, generic text and **Show
-  Details**, settings, deep link.
-- Accept: unit tests for key derivation (same vector as the Host) and NSE decryption.
-  End to end on iPhone One with G1 and a Debug Host: Mac locked, an agent blocks → the
-  notification arrives within 10 s; a tap opens that pane with the current prompt; generic
-  text unless **Show Details** is on; no push while the user works at the Mac; reading pane A
-  on the phone while pane B blocks, then locking the phone → pane B is pushed; turning
-  notifications off on the phone stops pushes, also from a Host that was offline at the time.
+**P3 — iOS receiving**, in six small PRs (about 30 minutes each, review included). Each
+lists what it needs from iPhone One; slices without a device check can go ahead while the
+phone is away.
+
+- **P3a — push key and content** (no device). The push key from the device secret and the
+  Host UUID, opening `sealed`, the content JSON; the key saved in a Keychain group shared with
+  extensions (`$(AppIdentifierPrefix)com.onevcat.prowl.mirror` first). Accept: unit tests with
+  the wire vector; a corrupt or foreign `sealed` fails; existing pairings still load.
+- **P3b — Notification Service Extension** (device: 5 min). The NSE target, the strings
+  `MIRROR_PUSH_TITLE` and `MIRROR_PUSH_FALLBACK`, generic text by kind, APNs registration
+  (`aps-environment`, the app delegate token hand-off). Accept: unit tests for
+  the text by kind and for failures; on the device, a push sent straight to APNs with the
+  sandbox key shows the generic text of its kind when locked, and the fallback for a corrupt
+  `sealed`.
+- **P3c — gateway client and App Attest** (device: 5 min). App Attest key
+  and installation, `POST`/`PUT`/`DELETE /v1/tokens`, the APNs environment from the embedded
+  provisioning profile (none = production). Accept: unit tests with a fake HTTP layer for
+  each status (401 renews the installation once, 409, 429); on the device, a real
+  installation and a push token from `prowl-push.onev.dev`.
+- **P3d — register with the Host** (device: 10 min, first end to end). On connect to a Host
+  with `push-v1`: a push token per Host, `pushRegister`, `pushStatus` kept per Host; the APNs
+  token change updates every token (`PUT`). Accept: unit tests with a fake Host; on the
+  device, with a Debug Host and the Mac locked, a blocked agent is notified within 10 s, and
+  nothing arrives while the user works at the Mac.
+- **P3e — settings** (device: 5 min). A global switch and per Host kinds; the Host state from
+  `pushStatus` (Mac switch off, off for this device). Turning off sends `pushUnregister` and
+  deletes the token at the gateway, so a Host that is offline at the time stops too; unpairing
+  does the same. Accept: unit tests for each state and for turning off while the Host is
+  offline; on the device, turning off stops pushes.
+- **P3f — Show Details and tap** (device: 10 min). **Show Details** (off by default) adds the
+  tab name and prompt title; a tap opens the Host and the pane, connecting if needed, and shows
+  the current prompt. Accept: unit tests for the content by setting and for the route from a
+  notification; on the device, the tap opens the pane; reading pane A on the phone while pane B
+  blocks, then locking the phone → pane B is pushed.
+
+**M — maintenance before P4**, in four small PRs stacked on P3. From the architecture review
+after P3 (see [test-scenarios.md](test-scenarios.md), "Known gaps"). They make later changes
+and fault finding cheaper; M3 also closes a delivery gap.
+
+- **M1 — token ledger and settings** (no device, no behavior change). The token bookkeeping
+  becomes a pure value type (`MirrorPushTokenLedger`) with its own unit tests; the user's
+  choices move to `MirrorPushSettings`. `MirrorPushCoordinator` keeps the orchestration
+  (tickets, Host queues, the deletion drain).
+- **M2 — flows out of views**. The tap flow leaves `MirrorRootView` for a testable type; the
+  order of forgetting a pairing and of settings changes moves into `MirrorHostSessions`; the
+  phone's settings show one row per Mac, not per pairing.
+- **M3 — dead tokens**. A token that the Host dropped on `410` is not registered again for up
+  to a day: the Host refuses the dropped token, and the phone gets a new one at once.
+- **M4 — diagnostics**. The Mac shows each device's last push result; the gateway returns the
+  APNs reason; the phone and the extension log decisions without private data.
 
 **P4 — Live Activity** (P2 phase)
 - Content: gateway activity mapping, Host `activityStart`/`activityEnd` and stop rules, widget
@@ -301,3 +342,20 @@ S0 notes for P3:
   gateway. From a plan review of #1142.
 - Updated 2026-11-21: send-only `pushToken` with App Attest for management, catch-up when the
   device goes offline, Live Activity registration and stop rules. From a second review.
+- Updated 2026-11-21: P1 Host registration protocol — see [002-p1-registration.md](002-p1-registration.md)
+- Updated 2026-11-22: P2 Host sender — see [003-p2-sender.md](003-p2-sender.md)
+- Updated 2026-11-22: one gateway deployment (`prowl-push.onev.dev`) for every build, holding
+  both APNs keys — see [003-p2-sender.md](003-p2-sender.md); P3 split into six small slices
+  (P3a–P3f, see Slices)
+- Updated 2026-11-22: P3a push key and content on iOS — see [004-p3a-push-key.md](004-p3a-push-key.md)
+- Updated 2026-11-22: P3b Notification Service Extension — see [005-p3b-notification-service.md](005-p3b-notification-service.md)
+- Updated 2026-11-22: P3c gateway client and App Attest — see [006-p3c-gateway-client.md](006-p3c-gateway-client.md)
+- Updated 2026-11-22: P3d registration with each Host — see [007-p3d-host-registration.md](007-p3d-host-registration.md)
+- Updated 2026-11-22: P3e notification settings on the phone — see [008-p3e-settings.md](008-p3e-settings.md)
+- Updated 2026-11-22: P3f Show Details and tap to open — see [009-p3f-details-and-tap.md](009-p3f-details-and-tap.md)
+- Updated 2026-11-22: P3 review fixes (token lifecycle, ordered attestation, tap ownership) — see [010-p3-review-fixes.md](010-p3-review-fixes.md)
+- Updated 2026-11-22: shared push contract (`Mirror/Fixtures/push/contract.json`, `Mirror/Shared/MirrorPushContract.swift`), scenario list and `scripts/test-mirror-push.sh` — see [test-scenarios.md](test-scenarios.md)
+- Updated 2026-11-22: maintenance slices M1–M4 before P4 (see Slices); M1 token ledger and settings — see [011-m1-token-ledger.md](011-m1-token-ledger.md)
+- Updated 2026-11-22: M2 flows out of views, one notification row per Mac — see [012-m2-flows.md](012-m2-flows.md)
+- Updated 2026-11-22: M3 dead tokens (`pushStatus.tokenGone`) — see [013-m3-dead-tokens.md](013-m3-dead-tokens.md)
+- Updated 2026-11-22: M4 diagnostics (last push per device, gateway reasons, phone and extension logs) — see [014-m4-diagnostics.md](014-m4-diagnostics.md)

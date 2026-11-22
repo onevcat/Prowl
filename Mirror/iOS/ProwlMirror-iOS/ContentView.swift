@@ -30,10 +30,13 @@ struct ContentView: View {
   private var content: some View {
     MirrorRootView(store: hosts)
       .environment(sessions)
+      .task { await MirrorPushCoordinator.shared.appBecameActive() }
       .onChange(of: scenePhase) { _, phase in
         switch phase {
         case .background: sessions.suspendAll()
-        case .active: sessions.resumeAll()
+        case .active:
+          sessions.resumeAll()
+          Task { await MirrorPushCoordinator.shared.appBecameActive() }
         default: break
         }
       }

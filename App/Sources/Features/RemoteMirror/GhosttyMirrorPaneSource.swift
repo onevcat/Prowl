@@ -111,6 +111,27 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   /// The sidebar's names, colors and order, pushed from the repositories state (docs-ai 089).
   var decorations = MirrorRosterDecorations()
 
+  /// Agent display states by pane, for push events (docs-ai 095). It reads only the agent
+  /// states, so observing it does not follow title or layout changes.
+  func pushPaneStates() -> [UUID: MirrorPushPlanner.PaneState] {
+    var result: [UUID: MirrorPushPlanner.PaneState] = [:]
+    // Not `activeWorktreeStates`: its tab filter would make tab changes wake the sender.
+    for state in manager.allWorktreeStates {
+      for (surfaceID, agent) in state.surfaceAgentStates where agent.detectedAgent != nil {
+        // Completion, not the display state: a finished turn in a pane the Mac shows as seen
+        // is still a finished turn while the user is away.
+        result[surfaceID] =
+          switch agent.state {
+          case .working: .working
+          case .blocked: .blocked
+          case .idle: agent.isCompletedTurn ? .completed : .idle
+          case .unknown: .idle
+          }
+      }
+    }
+    return result
+  }
+
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
       let decoration = decorations.project(for: state.worktree.repositoryLocation.id)

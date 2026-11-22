@@ -24,7 +24,7 @@ fixed-byte vectors, independent of encode/decode round-trip tests.
 
 Controls: challenge, authenticate, pair, paired, authenticated; list, panes;
 subscribe, subscribed, acknowledge, input, refresh, scroll, scrollResult, viewport; history, historyPage; command,
-commandResult, commandReceipt; failure, ended, ping, pong. There is no private
+commandResult, commandReceipt; pushRegister, pushUnregister, pushStatus; failure, ended, ping, pong. There is no private
 Agent-state or private submission control. Command envelopes preserve the public
 CLI JSON and UUID request ID. See the feature documentation for command scope.
 
@@ -323,6 +323,82 @@ then presses the keys one at a time. Before each key, it checks that the connect
 the lease, that the pane still runs the same agent (or still none), and that nobody started
 editing on the Mac. A refusal after the first key says how many keys were
 pressed.
+
+## Push registration (`push-v1`)
+
+A Host that advertises `push-v1` keeps one push registration per paired device (docs-ai 095).
+A client sends these controls only after it sees the capability: an older Host closes the
+connection on an unknown control.
+
+```json
+{"pushRegister":{"_0":{"pushToken":"<token>","kinds":["blocked","done"]}}}
+{"pushUnregister":{}}
+```
+
+- `pushToken` is the send-only token that the push gateway issued for this device and Host:
+  URL-safe Base64, 16 to 256 characters. Any other value closes the connection.
+- `kinds` lists the events the device wants, at most 16 entries. The Host keeps `blocked` and
+  `done` and ignores other values. A list with no known kind removes the registration, like `pushUnregister`.
+- The client sends `pushRegister` again on every connection, so a new token or a changed
+  setting reaches the Host.
+- Only an authenticated device connection can register, and only for itself.
+
+The Host answers both with its state for that device:
+
+```json
+{"pushStatus":{"_0":{"pushEnabled":false,"pushAllowedByMac":true,"registered":true}}}
+```
+
+The Host also sends `pushStatus` when the Mac user changes the switch or a device's
+permission, so the phone can show where notifications are turned off. It goes only to that
+device's connections that have sent a push control themselves: a client that never does gets
+no unsolicited `pushStatus`, because older clients close on an unknown control. A connection may send at most 16 push controls; more closes it.
+
+`pushEnabled` is the Mac switch **Send Notifications to Paired Devices** (off by default).
+`pushAllowedByMac` is `false` when the Mac user turned notifications off for this device; a
+new `pushRegister` never changes it. `registered` says whether the Host keeps a registration
+now. Unpairing the device removes its registration.
+
+When the gateway answers a push with `410` (it no longer knows the token), the Host drops the
+registration and sends `pushStatus` with `"tokenGone":true` to the device's connections. Until
+the device registers another token, the Host refuses the dropped one: a `pushRegister` with it
+is not saved, and the reply carries `"tokenGone":true` too. The phone then gets a new token from
+the gateway and registers again, at most once per connection. The Host keeps the dropped token
+in memory only. `tokenGone` is absent in every other reply, and from Hosts that predate it.
+
+### Push content encryption
+
+The Host encrypts each push for the receiving device; the gateway and Apple see only the
+result.
+
+- Key: HKDF-SHA256 with the device's 32-byte secret as input key material, the Host UUID in
+  its uppercase canonical spelling (UTF-8) as salt, and `prowl-mirror-push-v1` as info;
+  32 bytes.
+- `sealed`: standard Base64 of the Host UUID's 16 raw bytes followed by the ChaCha20-Poly1305
+  combined box (12-byte nonce, ciphertext, 16-byte tag).
+- Plaintext: JSON `{"v":1,"kind":"blocked"|"done","paneID":"UUID","title":"…","body":"…",
+  "stateChangedAt":"…"}`. `title` is the tab and worktree name, or `Prowl` when the pane is
+  gone; `body` is a short localized text for the event. `stateChangedAt` (ISO 8601) is left
+  out when the Host does not know it, so a decoder must treat it as optional. A phone
+  refuses any `v` other than 1 and shows the generic text instead.
+- The Host and the iOS app compile the same implementation, `Mirror/Shared/MirrorPushCrypto.swift`;
+  the controls' payloads and the capability are in `Mirror/Shared/MirrorPushContract.swift`, and
+  `Mirror/Fixtures/push/contract.json` holds the examples that the Host, the app and the
+  gateway test against.
+  The phone keeps only the derived key, in a Keychain group shared with its Notification
+  Service Extension; the device secret stays in the app's own group.
+- `collapseID`: the first 16 bytes of HMAC-SHA256(key, `collapse:` + pane UUID), URL-safe
+  Base64 without padding (22 characters).
+- Test vector (also checked with an independent implementation): secret 32 × `0x07`, Host
+  `11111111-2222-3333-4444-555555555555` → key
+  `1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1`; nonce
+  `000102030405060708090a0b` and plaintext `{"hello":"push"}` → `sealed`
+  `ERERESIiMzNERFVVVVVVVQABAgMEBQYHCAkKC822FCs5oi5CZcjy+b8H7gVLmwX1v69/XSq/EKCoVU+w`; pane
+  `AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE` → `collapseID` `6O3nw3oYaPm_Beb9LXEOnA`.
+
+The Host posts `{"pushToken","collapseID","sealed"}` to `POST /v1/push` on the gateway. `2xx`
+is sent; `410` means the gateway no longer knows the token, and the Host removes that
+registration; any other result drops the event without retry.
 
 ## Conversation stream (`conversation-v1`)
 

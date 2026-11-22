@@ -36,10 +36,15 @@ nonisolated struct MirrorPairedDevice: Codable, Identifiable, Equatable, Sendabl
   let pairedAt: Date
   var lastSeen: Date?
   var platform: MirrorDevicePlatform?
+  /// Where to send push events for this device, as the phone registered it (docs-ai 095).
+  var push: MirrorPushRegistration?
+  /// The Mac user's choice for this device. `nil` means allowed. A new registration from the
+  /// phone never changes it.
+  var pushAllowedByMac: Bool?
 
   init(
     id: UUID, name: String, key: Data, pairedAt: Date, lastSeen: Date? = nil,
-    platform: MirrorDevicePlatform? = nil
+    platform: MirrorDevicePlatform? = nil, push: MirrorPushRegistration? = nil, pushAllowedByMac: Bool? = nil
   ) {
     self.id = id
     self.name = name
@@ -47,7 +52,11 @@ nonisolated struct MirrorPairedDevice: Codable, Identifiable, Equatable, Sendabl
     self.pairedAt = pairedAt
     self.lastSeen = lastSeen
     self.platform = platform
+    self.push = push
+    self.pushAllowedByMac = pushAllowedByMac
   }
+
+  var isPushAllowedByMac: Bool { pushAllowedByMac ?? true }
 
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -59,6 +68,41 @@ nonisolated struct MirrorPairedDevice: Codable, Identifiable, Equatable, Sendabl
     // An unknown value must not make the whole identity unreadable.
     platform = try container.decodeIfPresent(String.self, forKey: .platform)
       .flatMap(MirrorDevicePlatform.init(rawValue:))
+    push = try? container.decodeIfPresent(MirrorPushRegistration.self, forKey: .push)
+    pushAllowedByMac = try? container.decodeIfPresent(Bool.self, forKey: .pushAllowedByMac)
+  }
+}
+
+nonisolated struct MirrorPushRegistration: Codable, Equatable, Sendable {
+  let token: String
+  let kinds: Set<MirrorPushKind>
+
+  /// The gateway issues URL-safe Base64 tokens; anything else is not a token it made.
+  static func isValidToken(_ token: String) -> Bool {
+    (16...256).contains(token.utf8.count)
+      && token.utf8.allSatisfy { byte in
+        (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) || (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
+          || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte) || byte == UInt8(ascii: "-")
+          || byte == UInt8(ascii: "_")
+      }
+  }
+
+  /// `nil` when no kind is known: that is the same as no registration.
+  init?(token: String, kinds: Set<MirrorPushKind>) {
+    guard !kinds.isEmpty else { return nil }
+    self.token = token
+    self.kinds = kinds
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    token = try container.decode(String.self, forKey: .token)
+    // A kind that a later version added must not drop the whole registration, but a
+    // registration with no known kind is none (`MirrorPairedDevice` decodes it as `nil`).
+    kinds = Set(try container.decode([String].self, forKey: .kinds).compactMap(MirrorPushKind.init(rawValue:)))
+    guard !kinds.isEmpty else {
+      throw DecodingError.dataCorruptedError(forKey: .kinds, in: container, debugDescription: "No known kind")
+    }
   }
 }
 

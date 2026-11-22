@@ -84,7 +84,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, acknowledge, input, history, historyPage, failure, ping, pong, ended,
       refresh, command, commandResult, commandReceipt, scroll, scrollResult, scrollState,
-      conversationSnapshot, conversationEvents, screenPrompt
+      conversationSnapshot, conversationEvents, screenPrompt, pushRegister, pushUnregister, pushStatus
   }
   case list
   case panes(PanesPayload)
@@ -228,6 +228,13 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var subscriptionID: UUID
     var commandReceiptID: UUID
   }
+  /// Push notifications for this device from this Host (`push-v1`, docs-ai 095).
+  case pushRegister(PushRegisterPayload)
+  typealias PushRegisterPayload = MirrorPushRegisterPayload
+  case pushUnregister
+  /// The Host's reply to `pushRegister` and `pushUnregister`.
+  case pushStatus(PushStatusPayload)
+  typealias PushStatusPayload = MirrorPushStatusPayload
   var kind: Kind {
     switch self {
     case .challenge: .challenge
@@ -259,6 +266,9 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .conversationSnapshot: .conversationSnapshot
     case .conversationEvents: .conversationEvents
     case .screenPrompt: .screenPrompt
+    case .pushRegister: .pushRegister
+    case .pushUnregister: .pushUnregister
+    case .pushStatus: .pushStatus
     }
   }
   var panes: [MirrorPaneDescriptor]? {

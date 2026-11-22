@@ -20,6 +20,8 @@ Build, sign, notarize, and publish a Prowl release.
      and unchanged source, binaries, and routes within 24 hours; rerun after relevant changes.
      Report T1 headless results separately from D3 handoff acceptance in R2b and D2 review acceptance in R3;
      inventory alone is not a contract pass, and T1 success does not establish workflow release readiness.
+   - Run `scripts/test-mirror-push.sh` (the runbook's **Mirror push release check**). Stop if it
+     fails or reports the gateway as SKIPPED, and tell the user.
    - Run the `sync-docs` skill. It diffs `docs/.sync-meta.json`'s `last_synced_commit`
      against the current `main` HEAD (the code about to ship), updates any docs whose
      implementation changed, and sets `last_synced_commit` to the **current HEAD** —
@@ -50,7 +52,8 @@ Build, sign, notarize, and publish a Prowl release.
    - Read the generated `build/release-notes.md`, show the content to the user, and wait
      for explicit confirmation. If the user wants changes, edit the file directly.
    - Alongside that maintainer-facing confirmation, report the agent contract check result
-     and evidence location, including any blocked or untested runtimes. Keep this diagnostic
+     and evidence location, including any blocked or untested runtimes, and the Mirror push
+     check result. Keep this diagnostic
      summary out of the public release notes; apply the release runbook's scope policy.
    - **Do NOT proceed to the next step until the user confirms the release notes.**
 6. Run the release script: `./scripts/release.sh <VERSION>`

@@ -77,6 +77,10 @@ nonisolated enum MirrorCredentialVault {
     }
     guard status == errSecSuccess else { throw Failure(status: status) }
   }
+  static func remove(account: String) throws {
+    let status = SecItemDelete(query(account) as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure(status: status) }
+  }
   struct Failure: LocalizedError {
     let status: OSStatus
     var errorDescription: String? { "Unable to store device credentials (Keychain \(status))." }

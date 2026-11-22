@@ -44,6 +44,8 @@ final class MirrorHostSession {
   var supportsConversation: Bool { capabilities.contains("conversation-v1") }
   var supportsLaunch: Bool { capabilities.contains("launch-profile") }
   var supportsShellLaunch: Bool { capabilities.contains("launch-shell") }
+  /// `nil` until the Host listed its capabilities on this connection.
+  var supportsPush: Bool? { status == .ready ? capabilities.contains(MirrorPushContract.capability) : nil }
 
   @ObservationIgnored private var transport: (any MirrorTransport)?
   @ObservationIgnored private var generation = UUID()
@@ -57,6 +59,14 @@ final class MirrorHostSession {
   @ObservationIgnored private let clock: any Clock<Duration>
   @ObservationIgnored private let refreshInterval: Duration
   @ObservationIgnored private let makeTransport: (MirrorSavedConnection) throws -> any MirrorTransport
+  @ObservationIgnored private let push: MirrorPushCoordinator
+  /// The connection that already asked for push registration; each connection asks once.
+  @ObservationIgnored private var pushRegistrationAttempt: UUID?
+  /// The push token that this connection registered last.
+  @ObservationIgnored private var registeredPushToken: String?
+  /// The connection that already replaced a token the Host called gone; once per connection,
+  /// so that a Host that keeps refusing cannot make the phone loop.
+  @ObservationIgnored private var goneTokenReplacement: UUID?
 
   private struct PendingCommand {
     let continuation: CheckedContinuation<MirrorJSON, any Error>
@@ -80,12 +90,14 @@ final class MirrorHostSession {
     refreshInterval: Duration = .seconds(3),
     makeTransport: @escaping (MirrorSavedConnection) throws -> any MirrorTransport = {
       MirrorRemoteConnection(configuration: $0)
-    }
+    },
+    push: MirrorPushCoordinator = .shared
   ) {
     self.configuration = configuration
     self.clock = clock
     self.refreshInterval = refreshInterval
     self.makeTransport = makeTransport
+    self.push = push
   }
 
   func start() {
@@ -157,6 +169,16 @@ final class MirrorHostSession {
     start()
   }
 
+  /// Returns once this connection is no longer connecting: the Host listed its panes, the
+  /// connection failed (also after `connectTimeoutDuration`), or it was stopped.
+  func settled() async {
+    while status == .connecting {
+      await withCheckedContinuation { continuation in
+        withObservationTracking { _ = status } onChange: { continuation.resume() }
+      }
+    }
+  }
+
   func refresh() {
     guard status == .ready else { return }
     send(.list)
@@ -210,6 +232,37 @@ final class MirrorHostSession {
     pending.continuation.resume(with: result)
   }
 
+  /// Notification settings changed (docs-ai 095 P3e): register again with the new kinds, or
+  /// tell the Host to stop. Hosts without `push-v1` get nothing, since they close on unknown
+  /// controls.
+  func pushSettingsChanged() {
+    guard status == .ready, capabilities.contains(MirrorPushContract.capability) else { return }
+    if push.settings.isEnabled {
+      pushRegistrationAttempt = nil
+      registerForPush()
+    } else {
+      send(.pushUnregister)
+    }
+  }
+
+  /// Once per connection: `pushRegister` when notifications are on and the Host has `push-v1`
+  /// (docs-ai 095). The Host answers with `pushStatus`.
+  private func registerForPush() {
+    let attempt = generation
+    guard pushRegistrationAttempt != attempt, let credential = configuration.credential else { return }
+    pushRegistrationAttempt = attempt
+    let capabilities = capabilities
+    Task { [weak self, push] in
+      let deliverable = { [weak self] in self?.generation == attempt && self?.status == .ready }
+      guard
+        let message = await push.registration(for: credential, capabilities: capabilities, deliverable: deliverable)
+      else { return }
+      guard let self, self.generation == attempt, self.status == .ready else { return }
+      if case .pushRegister(let payload) = message { self.registeredPushToken = payload.pushToken }
+      self.send(message)
+    }
+  }
+
   private func failPendingCommands(_ error: any Error) {
     for id in Array(pendingCommands.keys) { finishCommand(id, .failure(error)) }
   }
@@ -230,6 +283,7 @@ final class MirrorHostSession {
       if let name = message.hostName { hostName = name }
       lastRefreshedAt = Date()
       status = .ready
+      registerForPush()
     case .commandResult:
       guard let response = message.commandResponse else { return }
       finishCommand(response.requestID, .success(response.response))
@@ -239,6 +293,17 @@ final class MirrorHostSession {
     case .failure:
       status = .failed(message.error ?? String(localized: "The Host rejected the request."))
       transport?.close(nil)
+    case .pushStatus:
+      guard case .pushStatus(let payload) = message, let hostID = configuration.credential?.hostID else { return }
+      push.received(payload, hostID: hostID)
+      // The gateway no longer knows the token (docs-ai 095 M3): forget it and register a new one.
+      if payload.tokenGone == true, let token = registeredPushToken, goneTokenReplacement != generation {
+        goneTokenReplacement = generation
+        registeredPushToken = nil
+        push.tokenGone(token, hostID: hostID)
+        pushRegistrationAttempt = nil
+        registerForPush()
+      }
     case .ping, .pong:
       break
     default:

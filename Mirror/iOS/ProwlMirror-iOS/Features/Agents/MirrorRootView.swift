@@ -8,6 +8,9 @@ struct MirrorRootView: View {
   @State private var path = NavigationPath()
   @State private var showsAdd = false
   @State private var showsHosts = false
+  private let router = MirrorNotificationRouter.shared
+  /// The Host that a tapped notification selected; its selection change keeps the pane open.
+  @State private var notificationHostID: UUID?
 
   var body: some View {
     Group {
@@ -41,7 +44,34 @@ struct MirrorRootView: View {
         Task { @MainActor in showsAdd = true }
       }
     }
-    .onChange(of: store.selectedHost?.id) { _, _ in path = NavigationPath() }
+    .onChange(of: store.selectedHost?.id) { _, new in
+      if new != nil, new == notificationHostID {
+        notificationHostID = nil
+      } else {
+        path = NavigationPath()
+      }
+    }
+    .task(id: router.pending) { await openNotificationTarget() }
+  }
+
+  /// A tapped notification (docs-ai 095 P3f); `MirrorNotificationOpener` decides, this view
+  /// applies the result.
+  private func openNotificationTarget() async {
+    guard let target = router.pending else { return }
+    let opener = MirrorNotificationOpener(router: router, store: store, sessions: sessions)
+    let outcome = await opener.open(target) { host in
+      showsAdd = false
+      showsHosts = false
+      guard store.selectedHost?.id != host.id else { return }
+      path = NavigationPath()
+      notificationHostID = host.id
+      store.select(host.id)
+    }
+    switch outcome {
+    case .unchanged: break
+    case .agents: path = NavigationPath()
+    case .pane(let route): path = NavigationPath([route])
+    }
   }
 }
 
