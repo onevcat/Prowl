@@ -36,4 +36,4 @@ from the Mac."
 
 ## Refs
 
-PR: P3e (stacked on #1151).
+PR: #1152 (stacked on #1151).
