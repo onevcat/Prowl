@@ -61,8 +61,8 @@ Second Prowl slice of 095, stacked on P1. The Host sends push events through the
   worktree name.
 - One gateway deployment for all builds, not a dev and a production gateway: tokens carry
   their APNs environment, and separate gateways would break a Debug Mac paired with an App
-  Store phone (its token would be unknown, and the Mac would drop it on `410`). The `dev`
-  deployment stays as staging for gateway changes only.
+  Store phone (its token would be unknown, and the Mac would drop it on `410`). Development and
+  testing use the same gateway; the staging deployment was deleted on 2026-11-22.
 
 ## Refs
 
