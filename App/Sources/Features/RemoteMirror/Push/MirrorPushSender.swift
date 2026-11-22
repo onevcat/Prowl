@@ -17,7 +17,7 @@ final class MirrorPushSender {
   private let paneDetails: (UUID) -> PaneDetails?
   private let presence: MacPresenceMonitor
   /// `nil` when no push service is configured: the sender then never starts.
-  private let gateway: (any MirrorPushGateway)?
+  private let gateway: any MirrorPushGateway
   private let clock: ContinuousClock
 
   private var planner = MirrorPushPlanner()
@@ -36,7 +36,7 @@ final class MirrorPushSender {
     host: MirrorHost, enabled: @escaping () -> Bool,
     paneStates: @escaping () -> [UUID: MirrorPushPlanner.PaneState],
     paneDetails: @escaping (UUID) -> PaneDetails?,
-    presence: MacPresenceMonitor, gateway: (any MirrorPushGateway)?, clock: ContinuousClock = ContinuousClock()
+    presence: MacPresenceMonitor, gateway: any MirrorPushGateway, clock: ContinuousClock = ContinuousClock()
   ) {
     self.host = host
     self.enabled = enabled
@@ -86,7 +86,7 @@ final class MirrorPushSender {
   /// Every condition under which the Mac may contact the gateway (docs-ai 095 "Outbound
   /// traffic gate"), read from the current values.
   private func gateIsOpen(_ devices: [MirrorPushPlanner.Device]) -> Bool {
-    gateway != nil && enabled() && host.isRunning && host.pushEnabled && !devices.isEmpty
+    enabled() && host.isRunning && host.pushEnabled && !devices.isEmpty
   }
 
   /// Reads the Host state and the panes, and acts on what changed.
@@ -181,7 +181,6 @@ final class MirrorPushSender {
   /// Builds and sends each push in its own task, outside any Observation tracking, so reading
   /// the pane details does not make title changes wake the sender.
   private func send(_ pushes: [MirrorPushPlanner.Push]) {
-    guard let gateway else { return }
     for push in pushes {
       let id = UUID()
       sends[id] = Task { [weak self] in

@@ -14,16 +14,10 @@ nonisolated enum MirrorPushGatewayResult: Equatable, Sendable {
 }
 
 nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
-  /// The development gateway (sandbox APNs), for Debug builds only. A Release build has no
-  /// default until a production gateway exists, so it cannot send to the sandbox by mistake.
-  /// The `remoteMirrorPushGatewayURL` default overrides it for self-built apps and testing.
-  static let defaultBaseURL: URL? = {
-    #if DEBUG
-      URL(string: "https://prowl-push-dev.onevcat.workers.dev")
-    #else
-      nil
-    #endif
-  }()
+  /// The one gateway for every build. Each push token keeps the APNs environment that the phone
+  /// reported, so Debug and App Store builds of the phone app use the same URL. The
+  /// `remoteMirrorPushGatewayURL` default overrides it for testing.
+  static let defaultBaseURL = URL(string: "https://prowl-push.onev.dev")!
 
   let baseURL: URL
   let session: URLSession
@@ -33,10 +27,9 @@ nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
     self.session = session
   }
 
-  /// `nil` when no gateway is configured; the Host then sends nothing.
-  static func configured(defaults: UserDefaults = .standard) -> Self? {
+  static func configured(defaults: UserDefaults = .standard) -> Self {
     let override = defaults.string(forKey: "remoteMirrorPushGatewayURL").flatMap(URL.init(string:))
-    return (override ?? defaultBaseURL).map { Self(baseURL: $0) }
+    return Self(baseURL: override ?? defaultBaseURL)
   }
 
   func push(token: String, collapseID: String, sealed: String) async -> MirrorPushGatewayResult {

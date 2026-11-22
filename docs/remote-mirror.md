@@ -397,10 +397,9 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
   device**, or **Notifications not set up**. **Turn Off** stops notifications to that device;
   a new registration from the phone does not turn them on again. **Turn On** allows them again.
 - Nothing is sent while Remote Mirror is off, the Host does not listen, the switch is off, or
-  no paired device registered. Debug builds use the development push service; release builds
-  send nothing until the production service is available.
+  no paired device registered.
 
-What leaves the Mac: one HTTPS request per notification to the Prowl push service, with the
+What leaves the Mac: one HTTPS request per notification to the Prowl push service (`prowl-push.onev.dev`), with the
 device's push token, a collapse identifier derived from the pane with a key the service does
 not have, and the end-to-end encrypted content (the agent's tab and worktree name and the
 event). The service and Apple cannot read the content. There is no other request: no health

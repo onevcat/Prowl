@@ -1134,7 +1134,7 @@ struct MirrorHostTests {
   }
 
   enum PushGate: String, CaseIterable, Sendable {
-    case open, mirrorOff, hostStopped, switchOff, notRegistered, disallowed, noGateway
+    case open, mirrorOff, hostStopped, switchOff, notRegistered, disallowed
   }
 
   @Test(.timeLimit(.minutes(1)), arguments: PushGate.allCases)
@@ -1162,7 +1162,7 @@ struct MirrorHostTests {
     let sender = MirrorPushSender(
       host: host, enabled: { gate != .mirrorOff }, paneStates: { states },
       paneDetails: { _ in .init(title: "demo · main", stateChangedAt: nil) }, presence: presence,
-      gateway: gate == .noGateway ? nil : gateway)
+      gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
     #expect(sender.isActive == (gate == .open))
