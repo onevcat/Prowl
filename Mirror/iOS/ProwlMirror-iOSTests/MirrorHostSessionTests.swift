@@ -103,10 +103,48 @@ struct MirrorHostSessionTests {
     #expect(session.panes.first?.busy == true)
   }
 
-  private func makeSession(_ channel: Channel, clock: any Clock<Duration> = ContinuousClock()) -> MirrorHostSession {
+  private func makeSession(
+    _ channel: Channel, clock: any Clock<Duration> = ContinuousClock(),
+    credential: MirrorDeviceCredential? = nil, push: MirrorPushCoordinator = PushCoordinatorWorld().coordinator(enabled: false)
+  ) -> MirrorHostSession {
     MirrorHostSession(
-      configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""), clock: clock,
-      makeTransport: { _ in channel })
+      configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "", credential: credential), clock: clock,
+      makeTransport: { _ in channel }, push: push)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func registersForPushOncePerConnectionAndKeepsTheHostsAnswer() async {
+    let world = PushCoordinatorWorld()
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    let push = world.coordinator()
+    let credential = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 1, count: 32))
+    let channel = Channel()
+    channel.capabilities.append("push-v1")
+    let session = makeSession(channel, credential: credential, push: push)
+    defer { session.stop() }
+    session.start()
+
+    await waitUntil { channel.sent.contains { $0.kind == .pushRegister } }
+    session.refresh()
+    await waitUntil { channel.sent.filter { $0.kind == .list }.count == 2 }
+    #expect(channel.sent.filter { $0.kind == .pushRegister }.count == 1)
+
+    let status = MirrorMessage.PushStatusPayload(pushEnabled: false, pushAllowedByMac: true, registered: true)
+    channel.onMessage?(.pushStatus(status))
+    #expect(session.status == .ready)
+    #expect(push.statuses[credential.hostID] == status)
+  }
+
+  @Test func aHostWithoutPushGetsNoRegistration() async {
+    let world = PushCoordinatorWorld()
+    let channel = Channel()
+    let session = makeSession(
+      channel, credential: MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 1, count: 32)),
+      push: world.coordinator())
+    defer { session.stop() }
+    session.start()
+    await Task.yield()
+    #expect(!channel.sent.contains { $0.kind == .pushRegister })
+    #expect(world.gateway.requests.isEmpty)
   }
 
   private func waitUntil(_ predicate: @MainActor () -> Bool) async {
@@ -134,6 +172,7 @@ struct MirrorHostSessionTests {
   var answersReady = true
   /// The panes the Host lists; nil for one idle Claude pane.
   var listed: [MirrorPaneDescriptor]?
+  var capabilities = ["text-v1", "conversation-v1", "launch-profile"]
   private(set) var closed = false
   private(set) var sent: [MirrorMessage] = []
   var commandRequests: [MirrorCommandRequest] { sent.compactMap(\.commandRequest) }
@@ -151,7 +190,7 @@ struct MirrorHostSessionTests {
     onMessage?(
       .panes(
         .init(
-          panes: listed ?? [pane], capabilities: ["text-v1", "conversation-v1", "launch-profile"], hostRunID: UUID())))
+          panes: listed ?? [pane], capabilities: capabilities, hostRunID: UUID())))
   }
 
   func close(_ reason: String?) { closed = true }

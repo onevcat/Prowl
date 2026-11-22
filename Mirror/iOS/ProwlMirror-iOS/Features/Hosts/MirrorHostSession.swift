@@ -57,6 +57,9 @@ final class MirrorHostSession {
   @ObservationIgnored private let clock: any Clock<Duration>
   @ObservationIgnored private let refreshInterval: Duration
   @ObservationIgnored private let makeTransport: (MirrorSavedConnection) throws -> any MirrorTransport
+  @ObservationIgnored private let push: MirrorPushCoordinator
+  /// The connection that already asked for push registration; each connection asks once.
+  @ObservationIgnored private var pushRegistrationAttempt: UUID?
 
   private struct PendingCommand {
     let continuation: CheckedContinuation<MirrorJSON, any Error>
@@ -80,12 +83,14 @@ final class MirrorHostSession {
     refreshInterval: Duration = .seconds(3),
     makeTransport: @escaping (MirrorSavedConnection) throws -> any MirrorTransport = {
       MirrorRemoteConnection(configuration: $0)
-    }
+    },
+    push: MirrorPushCoordinator = .shared
   ) {
     self.configuration = configuration
     self.clock = clock
     self.refreshInterval = refreshInterval
     self.makeTransport = makeTransport
+    self.push = push
   }
 
   func start() {
@@ -210,6 +215,20 @@ final class MirrorHostSession {
     pending.continuation.resume(with: result)
   }
 
+  /// Once per connection: `pushRegister` when notifications are on and the Host has `push-v1`
+  /// (docs-ai 095). The Host answers with `pushStatus`.
+  private func registerForPush() {
+    let attempt = generation
+    guard pushRegistrationAttempt != attempt, let credential = configuration.credential else { return }
+    pushRegistrationAttempt = attempt
+    let capabilities = capabilities
+    Task { [weak self, push] in
+      guard let message = await push.registration(for: credential, capabilities: capabilities) else { return }
+      guard let self, self.generation == attempt, self.status == .ready else { return }
+      self.send(message)
+    }
+  }
+
   private func failPendingCommands(_ error: any Error) {
     for id in Array(pendingCommands.keys) { finishCommand(id, .failure(error)) }
   }
@@ -230,6 +249,7 @@ final class MirrorHostSession {
       if let name = message.hostName { hostName = name }
       lastRefreshedAt = Date()
       status = .ready
+      registerForPush()
     case .commandResult:
       guard let response = message.commandResponse else { return }
       finishCommand(response.requestID, .success(response.response))
@@ -239,6 +259,9 @@ final class MirrorHostSession {
     case .failure:
       status = .failed(message.error ?? String(localized: "The Host rejected the request."))
       transport?.close(nil)
+    case .pushStatus:
+      guard case .pushStatus(let payload) = message, let hostID = configuration.credential?.hostID else { return }
+      push.received(payload, hostID: hostID)
     case .ping, .pong:
       break
     default:

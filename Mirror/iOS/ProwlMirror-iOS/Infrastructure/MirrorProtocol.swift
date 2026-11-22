@@ -84,7 +84,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, acknowledge, input, history, historyPage, failure, ping, pong, ended,
       refresh, command, commandResult, commandReceipt, scroll, scrollResult, scrollState,
-      conversationSnapshot, conversationEvents, screenPrompt
+      conversationSnapshot, conversationEvents, screenPrompt, pushRegister, pushUnregister, pushStatus
   }
   case list
   case panes(PanesPayload)
@@ -228,6 +228,24 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var subscriptionID: UUID
     var commandReceiptID: UUID
   }
+  /// Push notifications for this device from this Host (`push-v1`, docs-ai 095).
+  case pushRegister(PushRegisterPayload)
+  struct PushRegisterPayload: Codable, Equatable, Sendable {
+    /// The send-only token that the push gateway issued for this device and Host.
+    var pushToken: String
+    /// `MirrorPushKind` raw values.
+    var kinds: [String]
+  }
+  case pushUnregister
+  /// The Host's reply to `pushRegister` and `pushUnregister`.
+  case pushStatus(PushStatusPayload)
+  struct PushStatusPayload: Codable, Equatable, Sendable {
+    /// The Mac switch **Send Notifications to Paired Devices**.
+    var pushEnabled: Bool
+    /// `false` after the Mac user turned notifications off for this device.
+    var pushAllowedByMac: Bool
+    var registered: Bool
+  }
   var kind: Kind {
     switch self {
     case .challenge: .challenge
@@ -259,6 +277,9 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .conversationSnapshot: .conversationSnapshot
     case .conversationEvents: .conversationEvents
     case .screenPrompt: .screenPrompt
+    case .pushRegister: .pushRegister
+    case .pushUnregister: .pushUnregister
+    case .pushStatus: .pushStatus
     }
   }
   var panes: [MirrorPaneDescriptor]? {
