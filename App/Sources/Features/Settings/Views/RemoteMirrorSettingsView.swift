@@ -231,11 +231,7 @@ private struct ConnectToThisMacSection: View {
         .help("Start the listener at launch, so paired devices can connect without a click here")
       Toggle(isOn: $host.pushEnabled) {
         Text("Send notifications to paired devices")
-        Text(
-          """
-          When an agent needs you or finishes while you are away from this Mac, paired devices \
-          get a notification through the Prowl push service. The content is end-to-end encrypted.
-          """)
+        Text("Notify paired devices when an agent needs you or finishes while you are away. End-to-end encrypted.")
       }
       .help("Notify paired iPhones and iPads when you are away from this Mac")
       .accessibilityIdentifier("remote-mirror-push-enabled")

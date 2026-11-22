@@ -394,7 +394,7 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
   turn is never sent late, and only after the agent worked for at least 10 seconds; an
   interrupted agent is not a finished turn.
 - Each paired device in the list shows **Notifications on**, **Notifications off for this
-  device**, or **Notifications not set up**. **Turn Off** stops notifications to that device;
+  device**, or **Notifications not turned on in Prowl Mirror**. **Turn Off** stops notifications to that device;
   a new registration from the phone does not turn them on again. **Turn On** allows them again.
   After a push, the row also shows the time of the last one and its result: sent, not delivered
   because the device must renew its registration (it does so when it next connects), or failed

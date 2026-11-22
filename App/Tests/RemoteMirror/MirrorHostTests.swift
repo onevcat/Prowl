@@ -1326,7 +1326,9 @@ struct MirrorHostTests {
     #expect(
       MirrorPushDelivery(date: date, result: .failed(reason: "ServiceUnavailable")).summary
         == "Last notification at \(time) failed (ServiceUnavailable)")
-    #expect(MirrorPushDelivery(date: date, result: .tokenGone).summary.contains("renews its registration"))
+    #expect(
+      MirrorPushDelivery(date: date, result: .tokenGone).summary
+        == "Last notification at \(time) not delivered · open Prowl Mirror on the device")
   }
 
   enum LateGate: String, CaseIterable, Sendable {

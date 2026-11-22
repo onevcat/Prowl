@@ -519,7 +519,7 @@ struct MirrorPushStatusTextTests {
     #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off on the Mac")
     #expect(
       MirrorPushStatusText.detail(push: push, hostID: hostID, supportsPush: true)
-        == "Turn on Send Notifications to Paired Devices in Remote Mirror settings on the Mac.")
+        == "On the Mac, turn on “Send notifications to paired devices” in Remote Mirror settings.")
     push.received(.init(pushEnabled: true, pushAllowedByMac: false, registered: true), hostID: hostID)
     #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off on the Mac")
     push.setKinds([], for: hostID)
