@@ -14,8 +14,11 @@ struct MirrorNotificationsSection: View {
       Toggle("Notifications", isOn: Binding(get: { push.settings.isEnabled }, set: setEnabled))
         .accessibilityIdentifier("push-enabled")
       if push.settings.isEnabled {
-        Toggle("Show Details", isOn: Binding(get: { push.settings.showsDetails }, set: push.settings.setShowsDetails))
-          .accessibilityIdentifier("push-show-details")
+        Toggle(isOn: Binding(get: { push.settings.showsDetails }, set: push.settings.setShowsDetails)) {
+          Text("Show Details")
+          Text("Show the tab name in notifications, also on the lock screen.")
+        }
+        .accessibilityIdentifier("push-show-details")
         // One row per Mac: its addresses share the kinds and the token.
         ForEach(macs, id: \.hostID) { mac in
           NavigationLink {
@@ -34,12 +37,7 @@ struct MirrorNotificationsSection: View {
       if systemDenied, push.settings.isEnabled {
         Text("Notifications are turned off for Prowl Mirror in the Settings app.")
       } else {
-        Text(
-          """
-          When an agent needs you or finishes while you are away from the Mac, the Host sends a \
-          notification through the Prowl push service. The content is end-to-end encrypted. \
-          Show Details adds the tab and worktree name, also on the lock screen.
-          """)
+        Text("Sent when an agent needs you or finishes while you are away from the Mac. End-to-end encrypted.")
       }
     }
     .task(id: push.settings.isEnabled) {
@@ -113,21 +111,21 @@ enum MirrorPushStatusText {
   }
 
   static func detail(push: MirrorPushCoordinator, hostID: UUID, supportsPush: Bool?) -> String {
-    if push.settings.kinds(for: hostID).isEmpty { return String(localized: "This Host sends no notifications to this phone.") }
+    if push.settings.kinds(for: hostID).isEmpty { return String(localized: "No notifications from this Mac.") }
     if supportsPush == false {
-      return String(localized: "The Prowl version on this Mac cannot send notifications. Update Prowl on the Mac.")
+      return String(localized: "Update Prowl on this Mac to get notifications.")
     }
     guard let status = push.statuses[hostID] else {
-      return String(localized: "Notifications start the next time this phone connects to the Host.")
+      return String(localized: "Notifications start the next time you connect to this Mac.")
     }
     if !status.pushEnabled {
-      return String(localized: "Turn on Send Notifications to Paired Devices in Remote Mirror settings on the Mac.")
+      return String(localized: "On the Mac, turn on “Send notifications to paired devices” in Remote Mirror settings.")
     }
     if !status.pushAllowedByMac {
-      return String(localized: "Notifications to this phone are turned off in Remote Mirror settings on the Mac.")
+      return String(localized: "Turned off for this phone in Remote Mirror settings on the Mac.")
     }
     return status.registered
-      ? String(localized: "The Host notifies this phone while you are away from the Mac.")
-      : String(localized: "Notifications start the next time this phone connects to the Host.")
+      ? String(localized: "You get notifications while you are away from this Mac.")
+      : String(localized: "Notifications start the next time you connect to this Mac.")
   }
 }

@@ -103,7 +103,7 @@ private struct MirrorDeviceNotificationsRow: View {
           .accessibilityIdentifier("remote-mirror-device-notifications-on-\(device.id)")
       } else if device.push != nil {
         Button("Turn Off") { host.setPushAllowed(false, for: device.id) }
-          .help("Stop notifications to this device; the device cannot turn them on again")
+          .help("Stop notifications to this device until you turn them on here")
           .accessibilityIdentifier("remote-mirror-device-notifications-off-\(device.id)")
       }
     }
@@ -114,7 +114,7 @@ private struct MirrorDeviceNotificationsRow: View {
   private var state: String {
     guard device.isPushAllowedByMac else { return String(localized: "Notifications off for this device") }
     guard device.push != nil else {
-      return String(localized: "Notifications not set up · turn them on in Prowl Mirror on this device")
+      return String(localized: "Notifications not turned on in Prowl Mirror")
     }
     return String(localized: "Notifications on")
   }
@@ -162,8 +162,7 @@ extension MirrorPushDelivery {
     case .accepted:
       return String(localized: "Last notification sent at \(time)")
     case .tokenGone:
-      return String(
-        localized: "Last notification at \(time) not delivered: the device renews its registration when it connects")
+      return String(localized: "Last notification at \(time) not delivered · open Prowl Mirror on the device")
     case .failed(let reason):
       return String(localized: "Last notification at \(time) failed (\(reason))")
     }
