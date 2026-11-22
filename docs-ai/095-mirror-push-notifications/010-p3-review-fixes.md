@@ -40,8 +40,9 @@ the top branch of the stack (#1153); the stack merges as one.
 - **Permission at the send boundary.** `MirrorPushGatewayClient` takes a `Permission` for each
   create and update. It checks it right before the request starts and again right before the
   signed request leaves, so a request that was queued before notifications were turned off is
-  never sent. Deletes need no permission. An installation that is already being created when
-  the switch goes off still finishes.
+  never sent. Deletes need no permission. (Round 3: the permission also reaches installation
+  and challenge requests, so after off no request of any kind starts for a create or update;
+  only a request already on the network completes.)
 - **Installation recovery is a rule, not a retry.** A management `401` is read by its error
   code. `invalid-challenge` and `replayed-assertion` are retried once with a new challenge and
   the same installation. `unknown-installation` (and a missing local key) attest a new key.
@@ -56,6 +57,17 @@ the top branch of the stack (#1153); the stack merges as one.
 - **The APNs environment is part of a token.** The record keeps it. When another build
   replaces the app, the old token is retired and a new one is created in the new environment;
   a `PUT` never moves a token across environments.
+
+## Round 3 changes
+
+- **One owner per Host, also for work in flight.** Registrations of one Host run one after
+  another. The push key is saved only when the registering pairing's token is committed, so a
+  pairing that fails never replaces the key of the one that carries notifications. A token of
+  another pairing or build stays until its replacement exists, then is deleted at once.
+  Forgetting a pairing bumps its own counter, so its registration in flight stops even while
+  another pairing owns the Host's token.
+- **Kind changes reach every connected address of the Mac** (`MirrorHostSessions.pushSettingsChanged(hostID:)`),
+  not only the entry whose settings page was used.
 
 ## Refs
 

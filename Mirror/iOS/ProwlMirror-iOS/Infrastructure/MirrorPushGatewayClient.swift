@@ -177,13 +177,12 @@ actor MirrorPushGatewayClient {
   /// expired or used challenge, or a counter that the gateway saw already, is retried once with
   /// a new challenge and the same installation. Any other `401` is an error.
   private func manage(
-    _ method: String, path: String, body: Data?, allowed: Permission
+    _ method: String, path: String, body: Data?, allowed: @escaping Permission
   ) async throws -> (Data, Int) {
     var retried = false
     while true {
-      guard await allowed() else { throw MirrorPushGatewayError.superseded }
-      let installation = try await installation()
-      let challenge = try await challenge()
+      let installation = try await installation(allowed: allowed)
+      let challenge = try await challenge(allowed: allowed)
       let bodyText = body.map { String(decoding: $0, as: UTF8.self) } ?? ""
       let clientData = Data("\(method) \(path)\n\(challenge)\n\(bodyText)".utf8)
       let assertion: Data
@@ -223,10 +222,11 @@ actor MirrorPushGatewayClient {
     (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
   }
 
-  private func installation() async throws -> MirrorPushInstallation {
+  /// Requests run one at a time (`inOrder`), so only the running request attests.
+  private func installation(allowed: @escaping Permission) async throws -> MirrorPushInstallation {
     if let stored = storage.load() { return stored }
     if let installing { return try await installing.value }
-    let task = Task { try await self.attestNewKey() }
+    let task = Task { try await self.attestNewKey(allowed: allowed) }
     installing = task
     defer { installing = nil }
     let installation = try await task.value
@@ -234,11 +234,12 @@ actor MirrorPushGatewayClient {
     return installation
   }
 
-  private func attestNewKey() async throws -> MirrorPushInstallation {
+  private func attestNewKey(allowed: @escaping Permission) async throws -> MirrorPushInstallation {
     guard attest.isSupported else { throw MirrorPushGatewayError.attestUnsupported }
     let keyID = try await attest.generateKey()
-    let challenge = try await challenge()
+    let challenge = try await challenge(allowed: allowed)
     let attestation = try await attest.attestKey(keyID, clientDataHash: Data(SHA256.hash(data: Data(challenge.utf8))))
+    guard await allowed() else { throw MirrorPushGatewayError.superseded }
     let body = try JSONEncoder().encode([
       "keyID": keyID, "attestationObject": attestation.base64EncodedString(), "challenge": challenge,
     ])
@@ -251,7 +252,9 @@ actor MirrorPushGatewayClient {
     return MirrorPushInstallation(keyID: keyID, installationID: id)
   }
 
-  private func challenge() async throws -> String {
+  /// Every request leaves only while its operation is still allowed; a delete always is.
+  private func challenge(allowed: Permission) async throws -> String {
+    guard await allowed() else { throw MirrorPushGatewayError.superseded }
     let (data, response) = try await send(request("POST", path: "/v1/challenge", body: nil))
     try Self.checkRateLimit(response)
     guard response.statusCode == 200,

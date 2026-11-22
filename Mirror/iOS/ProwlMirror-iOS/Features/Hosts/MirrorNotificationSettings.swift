@@ -87,7 +87,7 @@ struct MirrorHostNotificationsView: View {
         if on { kinds.insert(kind) } else { kinds.remove(kind) }
         // No kinds left revokes the token at once, also while the Host is offline.
         push.setKinds(kinds, for: hostID)
-        sessions.existing(for: host)?.pushSettingsChanged()
+        sessions.pushSettingsChanged(hostID: hostID)
       })
   }
 }

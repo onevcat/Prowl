@@ -37,6 +37,14 @@ final class MirrorHostSessions {
     for session in sessions.values { session.pushSettingsChanged() }
   }
 
+  /// A change of one Host's kinds reaches every connected address of that Mac, whichever
+  /// pairing carries its notifications.
+  func pushSettingsChanged(hostID: UUID) {
+    for session in sessions.values where session.configuration.credential?.hostID == hostID {
+      session.pushSettingsChanged()
+    }
+  }
+
   func suspendAll() {
     for session in sessions.values { session.stop() }
   }

@@ -160,6 +160,39 @@ struct MirrorHostSessionTests {
     #expect(channel.sent.last?.kind == .pushUnregister)
   }
 
+  @Test(.timeLimit(.minutes(1))) func aKindChangeReachesTheConnectedAddressOfTheSameMac() async {
+    let world = PushCoordinatorWorld()
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    let push = world.coordinator()
+    let hostID = UUID()
+    let credential = MirrorDeviceCredential(hostID: hostID, deviceID: UUID(), key: Data(repeating: 1, count: 32))
+    let channel = Channel()
+    channel.capabilities.append("push-v1")
+    let connected = MirrorHostRecord(id: UUID(), address: "mac", port: 7880, hostID: hostID, pairedAt: .distantPast)
+    let other = MirrorHostRecord(id: UUID(), address: "192.168.1.2", port: 7880, hostID: hostID, pairedAt: .distantPast)
+    let sessions = MirrorHostSessions(makeSession: { record in
+      MirrorHostSession(
+        configuration: .init(
+          address: record.address, port: record.port, pairingKey: "",
+          credential: record.id == connected.id ? credential : nil),
+        makeTransport: { _ in channel }, push: push)
+    })
+    let session = sessions.session(for: connected)
+    defer { session.stop() }
+    session.start()
+    _ = sessions.session(for: other)
+    await waitUntil { channel.sent.contains { $0.kind == .pushRegister } }
+
+    push.setKinds([.blocked], for: hostID)
+    sessions.pushSettingsChanged(hostID: hostID)
+    await waitUntil { channel.sent.filter { $0.kind == .pushRegister }.count == 2 }
+    guard case .pushRegister(let payload) = channel.sent.last(where: { $0.kind == .pushRegister }) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.kinds == ["blocked"])
+  }
+
   @Test func aHostWithoutPushHearsNothingWhenSettingsChange() {
     let world = PushCoordinatorWorld()
     let push = world.coordinator()

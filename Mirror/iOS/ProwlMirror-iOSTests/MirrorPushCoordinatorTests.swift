@@ -324,6 +324,60 @@ struct MirrorPushCoordinatorTests {
     #expect(world.keys[credential.hostID] != nil)
   }
 
+  @Test(.timeLimit(.minutes(1))) func turningOffWhileAttestingStartsNoFurtherRequest() async {
+    world.gateway.hold("POST /v1/installations")
+    let coordinator = world.coordinator()
+    let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.gateway.isWaiting("POST /v1/installations") })
+
+    coordinator.setEnabled(false)
+    world.gateway.release("POST /v1/installations")
+    #expect(await registering.value == nil)
+    #expect(world.gateway.routes() == ["POST /v1/challenge", "POST /v1/installations"])
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aFailingPairingDoesNotReplaceTheKeyOfTheOneThatRegistered() async {
+    let otherAddress = MirrorDeviceCredential(hostID: credential.hostID, deviceID: UUID(), key: Data(repeating: 3, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 500)
+    world.gateway.hold("POST /v1/tokens")
+    let coordinator = world.coordinator()
+    let first = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.gateway.isWaiting("POST /v1/tokens") })
+    let second = Task { await coordinator.registration(for: otherAddress, capabilities: push) }
+    for _ in 0..<200 { await Task.yield() }
+    world.gateway.release("POST /v1/tokens")
+
+    guard case .pushRegister(let payload) = await first.value else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.pushToken == "push-1")
+    #expect(await second.value == nil)
+    #expect(world.record(credential.hostID)?.deviceID == credential.deviceID)
+    #expect(world.keys[credential.hostID] == MirrorPushCrypto.key(deviceSecret: credential.key, hostID: credential.hostID))
+    #expect(!world.gateway.routes().contains("DELETE /v1/tokens/push-1"))
+  }
+
+  @Test(.timeLimit(.minutes(1))) func forgettingAPairingStopsItsRegistrationWithoutTouchingTheOwner() async {
+    let otherAddress = MirrorDeviceCredential(hostID: credential.hostID, deviceID: UUID(), key: Data(repeating: 3, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    let requests = world.gateway.requests.count
+
+    world.holdsAPNs = true
+    let forgotten = Task { await coordinator.registration(for: otherAddress, capabilities: push) }
+    #expect(await eventually { world.isWaitingForAPNs })
+    await coordinator.removeRegistration(for: credential.hostID, deviceID: otherAddress.deviceID)
+    world.releaseAPNs()
+
+    #expect(await forgotten.value == nil)
+    #expect(world.record(credential.hostID)?.pushToken == "push-1")
+    #expect(world.keys[credential.hostID] != nil)
+    #expect(world.gateway.requests.count == requests)
+  }
+
   @Test func anotherBuildEnvironmentGetsItsOwnToken() async {
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
