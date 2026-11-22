@@ -193,7 +193,10 @@ struct ClaudeSessionRegistryTests {
     let resolver = AgentSessionResolver(
       homeDirectory: home, tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in .unavailable })
     let identified = LocalAgentProcess(agent: .claude, pid: pid)
-    let now = Date()
+    // The test process is the "agent". A process younger than `youngProcessWindow` resolves a
+    // session without a transcript every second, which would skip the 5 s cache this test
+    // checks, so resolve as if the process were older.
+    let now = max(Date(), startedAt.addingTimeInterval(AgentSessionResolver.youngProcessWindow + 1))
     let first = await resolver.resolve(identified: identified, workingDirectory: nil, activeText: "", now: now)
     #expect(first.session?.id == sessionA)
     #expect(first.session?.source == .processLog)
