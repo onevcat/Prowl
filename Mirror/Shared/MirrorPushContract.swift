@@ -29,4 +29,15 @@ nonisolated struct MirrorPushStatusPayload: Codable, Equatable, Sendable {
   var pushAllowedByMac: Bool
   /// Whether the Host keeps a registration for this device now.
   var registered: Bool
+  /// `true` when the gateway no longer knows the device's token (`410`). The Host refuses that
+  /// token until the phone registers another one, which the phone then does at once. Absent
+  /// otherwise, and from Hosts before docs-ai 095 M3.
+  var tokenGone: Bool?
+
+  init(pushEnabled: Bool, pushAllowedByMac: Bool, registered: Bool, tokenGone: Bool? = nil) {
+    self.pushEnabled = pushEnabled
+    self.pushAllowedByMac = pushAllowedByMac
+    self.registered = registered
+    self.tokenGone = tokenGone
+  }
 }

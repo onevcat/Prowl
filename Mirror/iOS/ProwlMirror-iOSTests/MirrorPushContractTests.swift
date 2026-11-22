@@ -43,7 +43,13 @@ struct MirrorPushContractTests {
     let register = MirrorMessage.pushRegister(
       .init(pushToken: "Zm9vYmFyLXB1c2gtdG9rZW4tMDEyMzQ1Njc4OQ", kinds: ["blocked", "done"]))
     let status = MirrorMessage.pushStatus(.init(pushEnabled: true, pushAllowedByMac: false, registered: true))
-    for (name, message) in [("pushRegister", register), ("pushUnregister", .pushUnregister), ("pushStatus", status)] {
+    let gone = MirrorMessage.pushStatus(
+      .init(pushEnabled: true, pushAllowedByMac: true, registered: false, tokenGone: true))
+    let cases: [(String, MirrorMessage)] = [
+      ("pushRegister", register), ("pushUnregister", .pushUnregister), ("pushStatus", status),
+      ("pushStatusTokenGone", gone),
+    ]
+    for (name, message) in cases {
       let expected = try #require(messages[name])
       #expect(try sameJSON(JSONEncoder().encode(message), expected), "\(name)")
       let decoded = try JSONDecoder().decode(MirrorMessage.self, from: json(expected))

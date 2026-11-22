@@ -357,3 +357,4 @@ S0 notes for P3:
 - Updated 2026-11-22: shared push contract (`Mirror/Fixtures/push/contract.json`, `Mirror/Shared/MirrorPushContract.swift`), scenario list and `scripts/test-mirror-push.sh` — see [test-scenarios.md](test-scenarios.md)
 - Updated 2026-11-22: maintenance slices M1–M4 before P4 (see Slices); M1 token ledger and settings — see [011-m1-token-ledger.md](011-m1-token-ledger.md)
 - Updated 2026-11-22: M2 flows out of views, one notification row per Mac — see [012-m2-flows.md](012-m2-flows.md)
+- Updated 2026-11-22: M3 dead tokens (`pushStatus.tokenGone`) — see [013-m3-dead-tokens.md](013-m3-dead-tokens.md)

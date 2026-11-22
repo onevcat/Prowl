@@ -1092,6 +1092,49 @@ struct MirrorHostTests {
     #expect(host.error != nil)
   }
 
+  @Test(.timeLimit(.minutes(1))) func aTokenTheGatewayNoLongerKnowsIsRefusedUntilTheDeviceRegistersAnother()
+    async throws
+  {
+    var saved = Self.identity
+    let deviceID = Self.identity.devices[0].id
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { client.connection.close() }
+    var messages = client.messages.makeAsyncIterator()
+    let dead = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    let fresh = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210-_ZyXwV"
+
+    client.connection.send(.pushRegister(.init(pushToken: dead, kinds: ["blocked"])))
+    let first = Self.pushStatus(await messages.next())
+    #expect(first?.registered == true && first?.tokenGone == nil)
+
+    // The gateway answered 410: the connected phone hears it at once.
+    host.dropPushRegistration(deviceID, token: dead)
+    let dropped = Self.pushStatus(await messages.next())
+    #expect(dropped?.registered == false && dropped?.tokenGone == true)
+
+    // A phone that registers the dead token again is told so, and nothing is saved.
+    client.connection.send(.pushRegister(.init(pushToken: dead, kinds: ["blocked"])))
+    let refused = Self.pushStatus(await messages.next())
+    #expect(refused?.registered == false && refused?.tokenGone == true)
+    #expect(saved.devices[0].push == nil)
+
+    // A new token is saved, and the dead one is no longer remembered.
+    client.connection.send(.pushRegister(.init(pushToken: fresh, kinds: ["blocked"])))
+    let replaced = Self.pushStatus(await messages.next())
+    #expect(replaced?.registered == true && replaced?.tokenGone == nil)
+    #expect(saved.devices[0].push?.token == fresh)
+    client.connection.send(.pushRegister(.init(pushToken: dead, kinds: ["blocked"])))
+    #expect(Self.pushStatus(await messages.next())?.tokenGone == nil)
+    #expect(saved.devices[0].push?.token == dead)
+  }
+
   @Test(.timeLimit(.minutes(1))) func pushControlsArePerConnectionLimited() async throws {
     var saved = Self.identity
     let host = MirrorHost(

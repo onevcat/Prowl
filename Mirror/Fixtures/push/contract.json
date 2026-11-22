@@ -28,6 +28,16 @@
           "registered": true
         }
       }
+    },
+    "pushStatusTokenGone": {
+      "pushStatus": {
+        "_0": {
+          "pushEnabled": true,
+          "pushAllowedByMac": true,
+          "registered": false,
+          "tokenGone": true
+        }
+      }
     }
   },
   "crypto": {

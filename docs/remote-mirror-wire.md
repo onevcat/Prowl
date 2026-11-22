@@ -359,6 +359,13 @@ no unsolicited `pushStatus`, because older clients close on an unknown control. 
 new `pushRegister` never changes it. `registered` says whether the Host keeps a registration
 now. Unpairing the device removes its registration.
 
+When the gateway answers a push with `410` (it no longer knows the token), the Host drops the
+registration and sends `pushStatus` with `"tokenGone":true` to the device's connections. Until
+the device registers another token, the Host refuses the dropped one: a `pushRegister` with it
+is not saved, and the reply carries `"tokenGone":true` too. The phone then gets a new token from
+the gateway and registers again, at most once per connection. The Host keeps the dropped token
+in memory only. `tokenGone` is absent in every other reply, and from Hosts that predate it.
+
 ### Push content encryption
 
 The Host encrypts each push for the receiving device; the gateway and Apple see only the

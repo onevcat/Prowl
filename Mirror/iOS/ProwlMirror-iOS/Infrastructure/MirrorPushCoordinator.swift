@@ -276,6 +276,12 @@ final class MirrorPushCoordinator {
     statuses[hostID] = status
   }
 
+  /// The Host says that the gateway no longer knows this token. It is forgotten without a
+  /// deletion; the next registration creates a new one.
+  func tokenGone(_ pushToken: String, hostID: UUID) {
+    mutate { $0.drop(hostID, pushToken) }
+  }
+
   private struct Superseded: Error {}
 
   /// The stored token while it belongs to this pairing and build, is fresh, and points at this

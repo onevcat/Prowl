@@ -62,6 +62,11 @@ final class MirrorHostSession {
   @ObservationIgnored private let push: MirrorPushCoordinator
   /// The connection that already asked for push registration; each connection asks once.
   @ObservationIgnored private var pushRegistrationAttempt: UUID?
+  /// The push token that this connection registered last.
+  @ObservationIgnored private var registeredPushToken: String?
+  /// The connection that already replaced a token the Host called gone; once per connection,
+  /// so that a Host that keeps refusing cannot make the phone loop.
+  @ObservationIgnored private var goneTokenReplacement: UUID?
 
   private struct PendingCommand {
     let continuation: CheckedContinuation<MirrorJSON, any Error>
@@ -253,6 +258,7 @@ final class MirrorHostSession {
         let message = await push.registration(for: credential, capabilities: capabilities, deliverable: deliverable)
       else { return }
       guard let self, self.generation == attempt, self.status == .ready else { return }
+      if case .pushRegister(let payload) = message { self.registeredPushToken = payload.pushToken }
       self.send(message)
     }
   }
@@ -290,6 +296,14 @@ final class MirrorHostSession {
     case .pushStatus:
       guard case .pushStatus(let payload) = message, let hostID = configuration.credential?.hostID else { return }
       push.received(payload, hostID: hostID)
+      // The gateway no longer knows the token (docs-ai 095 M3): forget it and register a new one.
+      if payload.tokenGone == true, let token = registeredPushToken, goneTokenReplacement != generation {
+        goneTokenReplacement = generation
+        registeredPushToken = nil
+        push.tokenGone(token, hostID: hostID)
+        pushRegistrationAttempt = nil
+        registerForPush()
+      }
     case .ping, .pong:
       break
     default:

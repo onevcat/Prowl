@@ -134,6 +134,39 @@ struct MirrorHostSessionTests {
     #expect(push.statuses[credential.hostID] == status)
   }
 
+  @Test(.timeLimit(.minutes(1))) func aTokenTheHostCallsGoneIsReplacedOncePerConnection() async {
+    let world = PushCoordinatorWorld()
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    let push = world.coordinator()
+    let credential = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 1, count: 32))
+    let channel = Channel()
+    channel.capabilities.append("push-v1")
+    let session = makeSession(channel, credential: credential, push: push)
+    defer { session.stop() }
+    session.start()
+    await waitUntil { channel.sent.contains { $0.kind == .pushRegister } }
+
+    let gone = MirrorMessage.PushStatusPayload(
+      pushEnabled: true, pushAllowedByMac: true, registered: false, tokenGone: true)
+    channel.onMessage?(.pushStatus(gone))
+    await waitUntil { channel.sent.filter { $0.kind == .pushRegister }.count == 2 }
+    guard case .pushRegister(let payload) = channel.sent.last(where: { $0.kind == .pushRegister }) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    // The dead token is forgotten without a deletion, which the gateway would refuse anyway.
+    #expect(payload.pushToken == "push-2")
+    #expect(world.record(credential.hostID)?.pushToken == "push-2")
+    #expect(!world.gateway.routes().contains { $0.hasPrefix("DELETE") })
+
+    // A Host that keeps refusing gets no further attempt on this connection.
+    channel.onMessage?(.pushStatus(gone))
+    await Task.yield()
+    #expect(channel.sent.filter { $0.kind == .pushRegister }.count == 2)
+    #expect(world.gateway.routes().filter { $0 == "POST /v1/tokens" }.count == 2)
+  }
+
   @Test(.timeLimit(.minutes(1))) func settingsChangesReachTheConnectedHost() async {
     let world = PushCoordinatorWorld()
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)

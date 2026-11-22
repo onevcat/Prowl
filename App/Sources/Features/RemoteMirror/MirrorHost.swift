@@ -79,6 +79,9 @@ final class MirrorHost {
   @ObservationIgnored private var devicePeers: [UUID: UUID] = [:]
   /// Push controls sent on this connection; a connection with an entry understands `pushStatus`.
   @ObservationIgnored private var pushControlCounts: [UUID: Int] = [:]
+  /// The token that the gateway no longer knows, by device. Kept in memory only: after a
+  /// restart, one more push gets `410` and sets it again.
+  @ObservationIgnored private var goneTokens: [UUID: String] = [:]
   @ObservationIgnored private var authenticationDeadlines: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private let clock: any Clock<Duration>
   @ObservationIgnored private let loadIdentity: () throws -> MirrorHostIdentity?
@@ -222,6 +225,13 @@ final class MirrorHost {
       guard MirrorPushRegistration.isValidToken(payload.pushToken), payload.kinds.count <= 16 else {
         throw MirrorProtocolError.invalidMessage
       }
+      // A phone that has not seen the `410` yet registers the dead token again; it gets a new
+      // one when told.
+      if goneTokens[deviceID] == payload.pushToken {
+        sendPushStatus(to: [deviceID], tokenGone: true)
+        return
+      }
+      goneTokens[deviceID] = nil
       // No kind this Host knows is the same as turning notifications off.
       registration = MirrorPushRegistration(
         token: payload.pushToken, kinds: Set(payload.kinds.compactMap(MirrorPushKind.init(rawValue:))))
@@ -248,19 +258,22 @@ final class MirrorHost {
   /// phone registered a newer token meanwhile.
   func dropPushRegistration(_ deviceID: UUID, token: String) {
     guard devices.first(where: { $0.id == deviceID })?.push?.token == token else { return }
+    goneTokens[deviceID] = token
     updateDevice(deviceID, reportsError: false) { $0.push = nil }
-    sendPushStatus(to: [deviceID])
+    sendPushStatus(to: [deviceID], tokenGone: true)
   }
 
   /// Tells the open connections of these devices the current push state. Only a connection
   /// that has sent a push control gets it: an older client closes on an unknown control, and
   /// another connection's registration does not prove that this one understands it.
-  private func sendPushStatus(to deviceIDs: Set<UUID>) {
+  private func sendPushStatus(to deviceIDs: Set<UUID>, tokenGone: Bool = false) {
     for (peerID, deviceID) in devicePeers where deviceIDs.contains(deviceID) && pushControlCounts[peerID] != nil {
       guard let device = devices.first(where: { $0.id == deviceID }) else { continue }
       peers[peerID]?.send(
         .pushStatus(
-          .init(pushEnabled: pushEnabled, pushAllowedByMac: device.isPushAllowedByMac, registered: device.push != nil)))
+          .init(
+            pushEnabled: pushEnabled, pushAllowedByMac: device.isPushAllowedByMac, registered: device.push != nil,
+            tokenGone: tokenGone ? true : nil)))
     }
   }
 
