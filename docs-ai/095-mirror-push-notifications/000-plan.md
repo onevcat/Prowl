@@ -330,3 +330,4 @@ S0 notes for P3:
 - Updated 2026-11-22: one gateway deployment (`prowl-push.onev.dev`) for every build, holding
   both APNs keys — see [003-p2-sender.md](003-p2-sender.md); P3 split into six small slices
   (P3a–P3f, see Slices)
+- Updated 2026-11-22: P3a push key and content on iOS — see [004-p3a-push-key.md](004-p3a-push-key.md)

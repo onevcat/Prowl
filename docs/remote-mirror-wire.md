@@ -372,7 +372,11 @@ result.
 - Plaintext: JSON `{"v":1,"kind":"blocked"|"done","paneID":"UUID","title":"…","body":"…",
   "stateChangedAt":"…"}`. `title` is the tab and worktree name, or `Prowl` when the pane is
   gone; `body` is a short localized text for the event. `stateChangedAt` (ISO 8601) is left
-  out when the Host does not know it, so a decoder must treat it as optional.
+  out when the Host does not know it, so a decoder must treat it as optional. A phone
+  refuses any `v` other than 1 and shows the generic text instead.
+- The Host and the iOS app compile the same implementation, `Mirror/Shared/MirrorPushCrypto.swift`.
+  The phone keeps only the derived key, in a Keychain group shared with its Notification
+  Service Extension; the device secret stays in the app's own group.
 - `collapseID`: the first 16 bytes of HMAC-SHA256(key, `collapse:` + pane UUID), URL-safe
   Base64 without padding (22 characters).
 - Test vector (also checked with an independent implementation): secret 32 × `0x07`, Host

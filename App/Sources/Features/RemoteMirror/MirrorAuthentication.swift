@@ -73,11 +73,6 @@ nonisolated struct MirrorPairedDevice: Codable, Identifiable, Equatable, Sendabl
   }
 }
 
-/// An event kind that a phone can ask to be notified about (docs-ai 095).
-nonisolated enum MirrorPushKind: String, Codable, CaseIterable, Sendable {
-  case blocked, done
-}
-
 nonisolated struct MirrorPushRegistration: Codable, Equatable, Sendable {
   let token: String
   let kinds: Set<MirrorPushKind>
