@@ -37,4 +37,4 @@ only this app install may change or delete it (plan "Registration and revocation
 
 ## Refs
 
-PR: P3c (stacked on #1149).
+PR: #1150 (stacked on #1149).
