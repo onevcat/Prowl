@@ -32,9 +32,15 @@ to APNs sandbox.
 | Tap that notification (app in the background) | The app opened the pane `p3d-repo / master` of the Debug Host |
 | Show Details on | "p3d-repo · master" / "An agent needs your attention" |
 
-Not checked on the device: the plan's "read pane A, pane B blocks, lock the phone → pane B is
-pushed" needs the Mac away again. It is the Host's catch-up when the phone disconnects (P2),
-covered by the Host's tests.
+Reading pane A while pane B blocks (Mac locked by onevcat, PASS):
+
+| Time (UTC) | Event |
+| --- | --- |
+| 06:01:08 | Mac locked |
+| 06:01:41 | Claude Code started in pane B and stopped at its trust prompt (blocked); the phone showed pane A, connected |
+| 06:01:41–06:02:09 | No push while the phone stayed connected |
+| 06:02:09 | Phone locked (disconnects) |
+| 06:02:14 | One push for pane B ("Prowl" / "An agent needs your attention") |
 
 ## Refs
 
