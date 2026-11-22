@@ -94,7 +94,7 @@ actor MirrorPushGatewayClient {
   private var queue: Task<Void, Never>?
 
   init(
-    baseURL: URL = MirrorPushGatewayAddress.url, attest: any MirrorAppAttesting = DeviceAppAttest(),
+    baseURL: URL = MirrorPushContract.gatewayURL, attest: any MirrorAppAttesting = DeviceAppAttest(),
     storage: MirrorPushInstallationStorage = .keychain, send: @escaping Send = MirrorPushGatewayClient.urlSession
   ) {
     self.baseURL = baseURL

@@ -230,22 +230,11 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   }
   /// Push notifications for this device from this Host (`push-v1`, docs-ai 095).
   case pushRegister(PushRegisterPayload)
-  struct PushRegisterPayload: Codable, Equatable, Sendable {
-    /// The send-only token that the push gateway issued for this device and Host.
-    var pushToken: String
-    /// `MirrorPushKind` raw values.
-    var kinds: [String]
-  }
+  typealias PushRegisterPayload = MirrorPushRegisterPayload
   case pushUnregister
   /// The Host's reply to `pushRegister` and `pushUnregister`.
   case pushStatus(PushStatusPayload)
-  struct PushStatusPayload: Codable, Equatable, Sendable {
-    /// The Mac switch **Send Notifications to Paired Devices**.
-    var pushEnabled: Bool
-    /// `false` after the Mac user turned notifications off for this device.
-    var pushAllowedByMac: Bool
-    var registered: Bool
-  }
+  typealias PushStatusPayload = MirrorPushStatusPayload
   var kind: Kind {
     switch self {
     case .challenge: .challenge

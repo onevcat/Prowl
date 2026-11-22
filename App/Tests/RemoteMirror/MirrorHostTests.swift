@@ -1502,6 +1502,51 @@ struct MirrorHostTests {
     #expect(await gateway.tokens == [old, new])
   }
 
+  /// Scenario 4 of docs-ai 095 `test-scenarios.md`: while the phone is connected it sees the
+  /// prompt itself, so the Host holds the push; once the phone disconnects, the prompt that
+  /// still waits is sent once.
+  @Test(.timeLimit(.minutes(1))) func aPromptHeldWhileThePhoneIsConnectedIsSentOnceItDisconnects() async throws {
+    let token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE"
+    var saved = Self.identity
+    let suite = "MirrorPushSenderTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { saved }, saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.pushEnabled = true
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let client = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    var messages = client.messages.makeAsyncIterator()
+    client.connection.send(.pushRegister(.init(pushToken: token, kinds: ["blocked"])))
+    #expect(Self.pushStatus(await messages.next())?.registered == true)
+
+    let gateway = RecordingPushGateway()
+    let pane = UUID()
+    var states: [UUID: MirrorPushPlanner.PaneState] = [pane: .working]
+    let presence = MacPresenceMonitor(
+      idleSeconds: { 0 }, screenLocked: { true }, displayAsleep: { false }, observesSystem: false)
+    let sender = MirrorPushSender(
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      gateway: gateway)
+    defer { sender.stop() }
+    sender.refresh()
+    states[pane] = .blocked
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.isEmpty)
+
+    client.connection.close()
+    for await online in Observations({ host.isOnline(Self.identity.devices[0].id) }) where !online { break }
+    sender.refresh()
+    await sender.settle()
+    sender.refresh()
+    await sender.settle()
+    #expect(await gateway.calls.map(\.token) == [token])
+  }
+
   private actor HoldingPushGateway: MirrorPushGateway {
     private(set) var tokens: [String] = []
     private var held: CheckedContinuation<MirrorPushGatewayResult, Never>?

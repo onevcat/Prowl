@@ -277,7 +277,7 @@ final class MirrorPushCoordinator {
   func registration(
     for credential: MirrorDeviceCredential, capabilities: Set<String>, deliverable: @escaping () -> Bool = { true }
   ) async -> MirrorMessage? {
-    guard isEnabled, capabilities.contains("push-v1") else { return nil }
+    guard isEnabled, capabilities.contains(MirrorPushContract.capability) else { return nil }
     let hostID = credential.hostID
     let kinds = kinds(for: hostID)
     if kinds.isEmpty {

@@ -414,8 +414,10 @@ What leaves the Mac: one HTTPS request per notification to the Prowl push servic
 device's push token, a collapse identifier derived from the pane with a key the service does
 not have, and the end-to-end encrypted content (the agent's tab and worktree name and the
 event). The service and Apple cannot read the content. There is no other request: no health
-check and no registration of the Mac. Developers can point the Mac at another push service
-with `defaults write com.onevcat.prowl remoteMirrorPushGatewayURL <URL>`.
+check and no registration of the Mac. For tests with a fake push service only, developers can
+point the Mac elsewhere with `defaults write com.onevcat.prowl remoteMirrorPushGatewayURL <URL>`;
+a phone's token works only at the service that issued it, so any other service answers `410`
+and the Mac drops every registration.
 
 ## Protocol and development
 

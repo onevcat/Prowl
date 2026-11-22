@@ -338,3 +338,4 @@ S0 notes for P3:
 - Updated 2026-11-22: P3e notification settings on the phone — see [008-p3e-settings.md](008-p3e-settings.md)
 - Updated 2026-11-22: P3f Show Details and tap to open — see [009-p3f-details-and-tap.md](009-p3f-details-and-tap.md)
 - Updated 2026-11-22: P3 review fixes (token lifecycle, ordered attestation, tap ownership) — see [010-p3-review-fixes.md](010-p3-review-fixes.md)
+- Updated 2026-11-22: shared push contract (`Mirror/Fixtures/push/contract.json`, `Mirror/Shared/MirrorPushContract.swift`), scenario list and `scripts/test-mirror-push.sh` — see [test-scenarios.md](test-scenarios.md)

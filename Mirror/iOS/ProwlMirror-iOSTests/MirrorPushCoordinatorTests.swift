@@ -425,6 +425,28 @@ struct MirrorPushCoordinatorTests {
     #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") })
   }
 
+  /// Scenario 7 of docs-ai 095 `test-scenarios.md`: turning notifications off deletes the token
+  /// of every Host, connected or not, and nothing else reaches the gateway.
+  @Test func turningOffDeletesTheTokenOfEveryHostAndSendsNothingElse() async {
+    let offline = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 9, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    world.gateway.answer("DELETE /v1/tokens/push-2", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    _ = await coordinator.registration(for: offline, capabilities: push)
+    let before = world.gateway.routes().count
+
+    coordinator.setEnabled(false)
+    #expect(await eventually { world.stored.revoking.isEmpty })
+    let after = world.gateway.routes().dropFirst(before).filter { $0 != "POST /v1/challenge" }
+    #expect(Set(after) == ["DELETE /v1/tokens/push-1", "DELETE /v1/tokens/push-2"])
+    #expect(world.stored.records.isEmpty)
+    #expect(world.keys.isEmpty)
+    #expect(await coordinator.registration(for: credential, capabilities: push) == nil)
+  }
+
   @Test func aNewAPNsTokenMovesTheTokensOfEveryHost() async throws {
     let other = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 9, count: 32))
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)

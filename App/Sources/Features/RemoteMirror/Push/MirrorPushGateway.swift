@@ -15,7 +15,7 @@ nonisolated enum MirrorPushGatewayResult: Equatable, Sendable {
 
 nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
   /// The `remoteMirrorPushGatewayURL` default overrides it for testing.
-  static let defaultBaseURL = MirrorPushGatewayAddress.url
+  static let defaultBaseURL = MirrorPushContract.gatewayURL
 
   let baseURL: URL
   let session: URLSession
@@ -31,18 +31,24 @@ nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
   }
 
   func push(token: String, collapseID: String, sealed: String) async -> MirrorPushGatewayResult {
-    var request = URLRequest(url: baseURL.appending(path: "v1/push"))
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.timeoutInterval = 15
     do {
-      request.httpBody = try JSONEncoder().encode(["pushToken": token, "collapseID": collapseID, "sealed": sealed])
+      let request = try Self.pushRequest(baseURL: baseURL, token: token, collapseID: collapseID, sealed: sealed)
       let (_, response) = try await session.data(for: request)
       return Self.result(statusCode: (response as? HTTPURLResponse)?.statusCode)
     } catch {
       ProwlLogger("RemoteMirror").warning("Push gateway request failed", error: error)
       return .failed
     }
+  }
+
+  /// `POST /v1/push` (contract: `Mirror/Fixtures/push/contract.json`, `gateway`).
+  static func pushRequest(baseURL: URL, token: String, collapseID: String, sealed: String) throws -> URLRequest {
+    var request = URLRequest(url: baseURL.appending(path: "v1/push"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.timeoutInterval = 15
+    request.httpBody = try JSONEncoder().encode(["pushToken": token, "collapseID": collapseID, "sealed": sealed])
+    return request
   }
 
   static func result(statusCode: Int?) -> MirrorPushGatewayResult {

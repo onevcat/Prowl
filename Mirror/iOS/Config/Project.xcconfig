@@ -44,3 +44,7 @@ IPHONEOS_DEPLOYMENT_TARGET = 26.0
 LOCALIZATION_PREFERS_STRING_CATALOGS = YES
 MTL_FAST_MATH = YES
 SDKROOT = iphoneos
+
+// The Keychain group that the app shares with its Notification Service Extension (docs-ai 095):
+// the push keys and Show Details. Both entitlements and both Info.plist files use it.
+MIRROR_SHARED_KEYCHAIN_GROUP = $(AppIdentifierPrefix)com.onevcat.prowl.mirror.shared

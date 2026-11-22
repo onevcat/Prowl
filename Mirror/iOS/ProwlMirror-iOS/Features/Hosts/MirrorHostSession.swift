@@ -45,7 +45,7 @@ final class MirrorHostSession {
   var supportsLaunch: Bool { capabilities.contains("launch-profile") }
   var supportsShellLaunch: Bool { capabilities.contains("launch-shell") }
   /// `nil` until the Host listed its capabilities on this connection.
-  var supportsPush: Bool? { status == .ready ? capabilities.contains("push-v1") : nil }
+  var supportsPush: Bool? { status == .ready ? capabilities.contains(MirrorPushContract.capability) : nil }
 
   @ObservationIgnored private var transport: (any MirrorTransport)?
   @ObservationIgnored private var generation = UUID()
@@ -221,7 +221,7 @@ final class MirrorHostSession {
   /// tell the Host to stop. Hosts without `push-v1` get nothing, since they close on unknown
   /// controls.
   func pushSettingsChanged() {
-    guard status == .ready, capabilities.contains("push-v1") else { return }
+    guard status == .ready, capabilities.contains(MirrorPushContract.capability) else { return }
     if push.isEnabled {
       pushRegistrationAttempt = nil
       registerForPush()

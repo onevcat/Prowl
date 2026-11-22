@@ -7,7 +7,7 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.onevcat.prowl.mirror</string>
-		<string>$(AppIdentifierPrefix)com.onevcat.prowl.mirror.shared</string>
+		<string>$(MIRROR_SHARED_KEYCHAIN_GROUP)</string>
 	</array>
 </dict>
 </plist>

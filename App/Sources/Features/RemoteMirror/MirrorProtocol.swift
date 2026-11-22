@@ -185,24 +185,12 @@ nonisolated enum MirrorMessage: Codable, Sendable {
   /// `push-v1`: where the Host sends push events for this device, and which events
   /// (docs-ai 095). The phone sends it on every connection.
   case pushRegister(PushRegisterPayload)
-  struct PushRegisterPayload: Codable, Sendable {
-    /// The send-only token that the push gateway issued for this device and Host.
-    var pushToken: String
-    /// `blocked`, `done`. The Host ignores a kind that it does not know.
-    var kinds: [String]
-  }
+  typealias PushRegisterPayload = MirrorPushRegisterPayload
   /// `push-v1`: the phone turned notifications off for this Host.
   case pushUnregister
   /// The Host's reply to `pushRegister` and `pushUnregister`.
   case pushStatus(PushStatusPayload)
-  struct PushStatusPayload: Codable, Sendable {
-    /// The Mac switch **Send Notifications to Paired Devices**.
-    var pushEnabled: Bool
-    /// `false` when the Mac user turned notifications off for this device.
-    var pushAllowedByMac: Bool
-    /// Whether the Host keeps a registration for this device now.
-    var registered: Bool
-  }
+  typealias PushStatusPayload = MirrorPushStatusPayload
   case acknowledge(AcknowledgePayload)
   struct AcknowledgePayload: Codable, Sendable {
     var sequence: UInt64

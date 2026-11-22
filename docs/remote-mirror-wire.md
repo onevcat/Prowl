@@ -374,7 +374,10 @@ result.
   gone; `body` is a short localized text for the event. `stateChangedAt` (ISO 8601) is left
   out when the Host does not know it, so a decoder must treat it as optional. A phone
   refuses any `v` other than 1 and shows the generic text instead.
-- The Host and the iOS app compile the same implementation, `Mirror/Shared/MirrorPushCrypto.swift`.
+- The Host and the iOS app compile the same implementation, `Mirror/Shared/MirrorPushCrypto.swift`;
+  the controls' payloads and the capability are in `Mirror/Shared/MirrorPushContract.swift`, and
+  `Mirror/Fixtures/push/contract.json` holds the examples that the Host, the app and the
+  gateway test against.
   The phone keeps only the derived key, in a Keychain group shared with its Notification
   Service Extension; the device secret stays in the app's own group.
 - `collapseID`: the first 16 bytes of HMAC-SHA256(key, `collapse:` + pane UUID), URL-safe

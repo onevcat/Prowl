@@ -688,7 +688,9 @@ final class MirrorHost {
           .panes(
             .init(
               panes: panes,
-              capabilities: ["vt-v1", "text-v1", "conversation-v1", "takeover", "refresh", "push-v1"]
+              capabilities: [
+                "vt-v1", "text-v1", "conversation-v1", "takeover", "refresh", MirrorPushContract.capability,
+              ]
                 + (commandService != nil
                   ? [
                     "launch-profile", "launch-shell", "agents-dispatch", "agent-input", "prompt-respond", "agent-keys",

@@ -5,22 +5,12 @@ import UserNotifications
 
 @testable import ProwlMirror_iOS
 
-/// The vector in `docs/remote-mirror-wire.md` ("Push content encryption"), also checked by the
-/// Host tests and computed independently with Node's crypto.
+/// Failure paths of opening; the shared vector itself is in `MirrorPushContractTests`.
 struct MirrorPushCryptoTests {
   private let hostID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
   private let paneID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
   private let sealed = "ERERESIiMzNERFVVVVVVVQABAgMEBQYHCAkKC822FCs5oi5CZcjy+b8H7gVLmwX1v69/XSq/EKCoVU+w"
   private var key: SymmetricKey { MirrorPushCrypto.key(deviceSecret: Data(repeating: 7, count: 32), hostID: hostID) }
-
-  @Test func opensTheWireVector() throws {
-    #expect(
-      key.withUnsafeBytes { Data($0) }.map { String(format: "%02x", $0) }.joined()
-        == "1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1")
-    #expect(MirrorPushCrypto.hostID(ofSealed: sealed) == hostID)
-    #expect(try MirrorPushCrypto.open(sealed, key: key) == Data(#"{"hello":"push"}"#.utf8))
-    #expect(MirrorPushCrypto.collapseID(paneID: paneID, key: key) == "6O3nw3oYaPm_Beb9LXEOnA")
-  }
 
   @Test func refusesAnotherKeyAndChangedBytes() throws {
     let otherKey = MirrorPushCrypto.key(deviceSecret: Data(repeating: 8, count: 32), hostID: hostID)

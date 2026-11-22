@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>MirrorSharedKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)com.onevcat.prowl.mirror.shared</string>
+	<string>$(MIRROR_SHARED_KEYCHAIN_GROUP)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 
@@ -218,44 +217,6 @@ struct MirrorPushPlannerTests {
     _ = planner.presenceChanged(to: true, devices: [device()])
     planner.activate(states: [pane: .blocked], at: start, devices: [device()])
     #expect(planner.presenceChanged(to: false, devices: [device()]).isEmpty)
-  }
-}
-
-struct MirrorPushCryptoTests {
-  // The same vector was computed independently with Node's crypto (HKDF-SHA256,
-  // ChaCha20-Poly1305, HMAC-SHA256); the iOS extension must produce it too.
-  private let hostID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
-  private let paneID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
-
-  @Test func keySealAndCollapseIDMatchTheSharedVector() throws {
-    let key = MirrorPushCrypto.key(deviceSecret: Data(repeating: 7, count: 32), hostID: hostID)
-    #expect(
-      key.withUnsafeBytes { Data($0) }.map { String(format: "%02x", $0) }.joined()
-        == "1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1")
-    let nonce = try ChaChaPolyNonce.make(hex: "000102030405060708090a0b")
-    #expect(
-      try MirrorPushCrypto.seal(Data(#"{"hello":"push"}"#.utf8), key: key, hostID: hostID, nonce: nonce)
-        == "ERERESIiMzNERFVVVVVVVQABAgMEBQYHCAkKC822FCs5oi5CZcjy+b8H7gVLmwX1v69/XSq/EKCoVU+w")
-    #expect(MirrorPushCrypto.collapseID(paneID: paneID, key: key) == "6O3nw3oYaPm_Beb9LXEOnA")
-  }
-
-  @Test func gatewayStatusCodesMapToResults() {
-    #expect(URLSessionMirrorPushGateway.result(statusCode: 202) == .accepted)
-    #expect(URLSessionMirrorPushGateway.result(statusCode: 410) == .tokenGone)
-    for code in [400, 429, 500, nil] { #expect(URLSessionMirrorPushGateway.result(statusCode: code) == .failed) }
-  }
-}
-
-enum ChaChaPolyNonce {
-  static func make(hex: String) throws -> ChaChaPoly.Nonce {
-    var bytes: [UInt8] = []
-    var index = hex.startIndex
-    while index < hex.endIndex {
-      let next = hex.index(index, offsetBy: 2)
-      bytes.append(UInt8(hex[index..<next], radix: 16)!)
-      index = next
-    }
-    return try ChaChaPoly.Nonce(data: bytes)
   }
 }
 
