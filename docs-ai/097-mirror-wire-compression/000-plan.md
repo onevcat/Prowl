@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-11-22 |
-| **Primary PRs** | (fill in) |
+| **Primary PRs** | see [001-action.md](001-action.md) |
 | **Related** | [096-mirror-remote-access](../096-mirror-remote-access/000-plan.md), `docs/remote-mirror-wire.md` |
 
 ## Background
