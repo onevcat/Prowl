@@ -39,4 +39,4 @@ The sealed body text never appeared.
 
 ## Refs
 
-PR: P3b (stacked on #1148).
+PR: #1149 (stacked on #1148).
