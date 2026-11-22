@@ -119,6 +119,7 @@ struct MirrorPushContractTests {
       baseURL: URLSessionMirrorPushGateway.defaultBaseURL, token: "t", collapseID: "c", sealed: "s")
     #expect(request.httpMethod == "POST")
     #expect(request.url?.path() == gateway["pushPath"] as? String)
+    #expect(MirrorPushContract.maximumSealedLength == gateway["maximumSealedLength"] as? Int)
     let body = try JSONSerialization.jsonObject(with: try #require(request.httpBody)) as? [String: String]
     #expect(body?.keys.sorted() == gateway["pushRequestKeys"] as? [String])
 

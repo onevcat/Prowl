@@ -1242,7 +1242,7 @@ struct MirrorHostTests {
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
       host: host, enabled: { gate != .mirrorOff }, paneStates: { states },
-      paneDetails: { _ in .init(title: "demo · main", stateChangedAt: nil) }, presence: presence,
+      paneDetails: { _, _ in .init(title: "demo · main", stateChangedAt: nil) }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1293,7 +1293,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1357,7 +1357,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1413,7 +1413,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1449,7 +1449,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { locked }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1496,7 +1496,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1539,7 +1539,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { false }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1577,7 +1577,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { true }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
@@ -1633,7 +1633,7 @@ struct MirrorHostTests {
     let presence = MacPresenceMonitor(
       idleSeconds: { 0 }, screenLocked: { true }, displayAsleep: { false }, observesSystem: false)
     let sender = MirrorPushSender(
-      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _ in nil }, presence: presence,
+      host: host, enabled: { true }, paneStates: { states }, paneDetails: { _, _ in nil }, presence: presence,
       gateway: gateway)
     defer { sender.stop() }
     sender.refresh()
