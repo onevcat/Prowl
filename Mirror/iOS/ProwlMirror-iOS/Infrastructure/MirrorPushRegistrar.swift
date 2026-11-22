@@ -88,7 +88,7 @@ final class MirrorAppDelegate: NSObject, UIApplicationDelegate {
         Task {
           for note in await UNUserNotificationCenter.current().deliveredNotifications() {
             let content = note.request.content
-            print("MIRROR_PUSH_DEBUG delivered title=\(content.title) body=\(content.body) info=\(content.userInfo)")
+            print("MIRROR_PUSH_DEBUG delivered at=\(note.date.ISO8601Format()) title=\(content.title) body=\(content.body) info=\(content.userInfo)")
           }
         }
       }

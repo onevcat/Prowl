@@ -22,10 +22,19 @@ on every connection, so the Host's P2 sender can reach it.
   Host's `pushStatus` instead of treating it as an unexpected message.
 - DEBUG launch environment `MIRROR_PUSH_DEBUG_ENABLE=1|0` until the settings switch (P3e).
 
-## Device check
+## Device check (2026-11-22, PASS)
 
-Pending: Debug Host from this stack, iPhone One paired with it, Mac away, a blocked agent →
-notification within 10 s; none while the user is at the Mac.
+Setup: Prowl Debug from this stack (isolated data folder and socket, listening on
+`172.20.10.2:7881`), iPhone One paired with it over the phone's own hotspot, notifications on
+through the DEBUG switch. After the first connection the Mac showed the device as
+**Notifications on**, and the gateway had issued a new `development` token. A real Claude Code
+session in a scratch repository stopped at its trust prompt (`osc.blocked.permission`). The
+phone was locked, so it was disconnected from the Host.
+
+| Scenario | Result |
+| --- | --- |
+| User at the Mac, agent blocked from 05:28:49Z | No push from this Host until the Mac locked (about 2.7 minutes) |
+| Mac locked at 05:31:31Z (lock state sampled every 2 s) | One push delivered at 05:31:31Z: "Prowl" / "An agent needs your attention", kind `blocked`, the pane's UUID, the Debug Host's UUID |
 
 ## Refs
 
