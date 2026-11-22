@@ -358,3 +358,4 @@ S0 notes for P3:
 - Updated 2026-11-22: maintenance slices M1–M4 before P4 (see Slices); M1 token ledger and settings — see [011-m1-token-ledger.md](011-m1-token-ledger.md)
 - Updated 2026-11-22: M2 flows out of views, one notification row per Mac — see [012-m2-flows.md](012-m2-flows.md)
 - Updated 2026-11-22: M3 dead tokens (`pushStatus.tokenGone`) — see [013-m3-dead-tokens.md](013-m3-dead-tokens.md)
+- Updated 2026-11-22: M4 diagnostics (last push per device, gateway reasons, phone and extension logs) — see [014-m4-diagnostics.md](014-m4-diagnostics.md)

@@ -84,6 +84,16 @@ private struct MirrorDeviceNotificationsRow: View {
   let device: MirrorPairedDevice
 
   var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      controls
+      if let last = host.lastPushes[device.id] {
+        Text(last.summary).font(.caption).foregroundStyle(.secondary)
+          .accessibilityIdentifier("remote-mirror-device-last-push-\(device.id)")
+      }
+    }
+  }
+
+  private var controls: some View {
     HStack(spacing: 6) {
       Text(state).font(.caption).foregroundStyle(.secondary)
       // The Mac's choice persists without a registration, so its control shows either way.
@@ -140,6 +150,22 @@ extension View {
         Disconnect \(target.deviceName) from \(target.paneTitle)? \
         The terminal keeps running. The device stays paired and can reconnect.
         """)
+    }
+  }
+}
+
+extension MirrorPushDelivery {
+  /// The last push in words, so that a missing notification can be traced (docs-ai 095 M4).
+  var summary: String {
+    let time = date.formatted(date: .omitted, time: .shortened)
+    switch result {
+    case .accepted:
+      return String(localized: "Last notification sent at \(time)")
+    case .tokenGone:
+      return String(
+        localized: "Last notification at \(time) not delivered: the device renews its registration when it connects")
+    case .failed(let reason):
+      return String(localized: "Last notification at \(time) failed (\(reason))")
     }
   }
 }

@@ -1265,9 +1265,30 @@ struct MirrorHostTests {
     await sender.settle()
     #expect(await gateway.calls.count == 1)
     #expect(saved.devices[0].push == nil)
+    // Settings shows what happened to the last push.
+    #expect(host.lastPushes[identity.devices[0].id]?.result == .tokenGone)
     // With no registration left, the sender stops and makes no further requests.
     sender.refresh()
     #expect(!sender.isActive)
+  }
+
+  @Test func aFailureReasonKeepsOnlyAShortCode() {
+    let messy = Data(#"{"error":"try-later","reason":"Bad Device\nToken <b>"}"#.utf8)
+    #expect(URLSessionMirrorPushGateway.reason(messy) == "BadDeviceTokenb")
+    let long = Data(#"{"error":"\#(String(repeating: "x", count: 100))"}"#.utf8)
+    #expect(URLSessionMirrorPushGateway.reason(long)?.count == 64)
+    #expect(URLSessionMirrorPushGateway.reason(Data("not json".utf8)) == nil)
+    #expect(URLSessionMirrorPushGateway.reason(Data(#"{"error":"💥"}"#.utf8)) == nil)
+  }
+
+  @Test func theLastPushNamesWhyItFailed() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let time = date.formatted(date: .omitted, time: .shortened)
+    #expect(MirrorPushDelivery(date: date, result: .accepted).summary == "Last notification sent at \(time)")
+    #expect(
+      MirrorPushDelivery(date: date, result: .failed(reason: "ServiceUnavailable")).summary
+        == "Last notification at \(time) failed (ServiceUnavailable)")
+    #expect(MirrorPushDelivery(date: date, result: .tokenGone).summary.contains("renews its registration"))
   }
 
   enum LateGate: String, CaseIterable, Sendable {

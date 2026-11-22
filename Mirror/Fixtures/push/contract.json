@@ -102,6 +102,28 @@
       "429": "failed",
       "500": "failed"
     },
+    "pushFailures": [
+      {
+        "status": 503,
+        "body": {
+          "error": "try-later",
+          "reason": "ServiceUnavailable"
+        },
+        "reason": "ServiceUnavailable"
+      },
+      {
+        "status": 429,
+        "body": {
+          "error": "rate-limited"
+        },
+        "reason": "rate-limited"
+      },
+      {
+        "status": 500,
+        "body": null,
+        "reason": "http-500"
+      }
+    ],
     "apnsPayload": {
       "aps": {
         "alert": {

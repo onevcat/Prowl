@@ -138,6 +138,26 @@ struct MirrorPushNotificationTests {
     #expect(MirrorPushNotification.open(userInfo: ["sealed": try sealed(.blocked, key: otherKey)], key: keys) == nil)
   }
 
+  @Test func saysWhyAPushKeepsTheFallback() throws {
+    let otherKey = SymmetricKey(size: .bits256)
+    let future = try MirrorPushCrypto.seal(Data(#"{"v":2,"kind":"blocked"}"#.utf8), key: key, hostID: hostID)
+    let cases: [([AnyHashable: Any], MirrorPushNotification.Failure)] = [
+      ([:], .malformed),
+      (["sealed": "corrupt"], .malformed),
+      (["sealed": try sealed(.blocked)], .noKey),
+      (["sealed": try sealed(.blocked, key: otherKey)], .cannotOpen),
+      (["sealed": future], .unsupportedContent),
+    ]
+    for (index, (userInfo, expected)) in cases.enumerated() {
+      let lookup: (UUID) -> SymmetricKey? = { id in expected == .noKey ? nil : self.keys(id) }
+      guard case .failure(let failure) = MirrorPushNotification.read(userInfo: userInfo, key: lookup) else {
+        Issue.record("Case \(index) opened")
+        continue
+      }
+      #expect(failure == expected, "case \(index)")
+    }
+  }
+
   @Test func theAppShipsTheGatewayFallbackStrings() {
     #expect(String(localized: "MIRROR_PUSH_TITLE") == "Prowl")
     #expect(String(localized: "MIRROR_PUSH_FALLBACK") == "An agent on your Mac has an update")

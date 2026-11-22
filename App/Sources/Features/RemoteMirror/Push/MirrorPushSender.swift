@@ -197,6 +197,12 @@ final class MirrorPushSender {
         // Delivered from here on, whatever the network result: no retry.
         self.planner.attempted(push)
         let result = await gateway.push(token: token, collapseID: request.collapseID, sealed: request.sealed)
+        self.host.recordPush(result, to: push.deviceID, at: Date())
+        if case .failed(let reason) = result {
+          ProwlLogger("RemoteMirror").warning("Push to a device failed: \(reason)")
+        } else if result == .tokenGone {
+          ProwlLogger("RemoteMirror").info("Push gateway no longer knows a device's token")
+        }
         // A 410 for a token the phone has since replaced says nothing about the new one: leave
         // both the registration and the planner's state for the device alone.
         guard result == .tokenGone,

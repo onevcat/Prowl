@@ -396,6 +396,10 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
 - Each paired device in the list shows **Notifications on**, **Notifications off for this
   device**, or **Notifications not set up**. **Turn Off** stops notifications to that device;
   a new registration from the phone does not turn them on again. **Turn On** allows them again.
+  After a push, the row also shows the time of the last one and its result: sent, not delivered
+  because the device must renew its registration (it does so when it next connects), or failed
+  with the push service's reason (for example `ServiceUnavailable` or `rate-limited`). The
+  result is kept until Prowl quits.
 - Nothing is sent while Remote Mirror is off, the Host does not listen, the switch is off, or
   no paired device registered.
 

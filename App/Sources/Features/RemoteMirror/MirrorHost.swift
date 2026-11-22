@@ -67,6 +67,9 @@ final class MirrorHost {
 
   private(set) var onlineDeviceIDs: Set<UUID> = []
   private(set) var devices: [MirrorPairedDevice] = []
+  /// The last push to each device and how the gateway answered (docs-ai 095 M4). In memory
+  /// only; Settings shows it so that a missing notification can be traced.
+  private(set) var lastPushes: [UUID: MirrorPushDelivery] = [:]
   /// Set when the saved devices could not be read; an empty `devices` is then not a result.
   private(set) var deviceListError: String?
   /// The device that completed the current pairing window; cleared when a new code is issued.
@@ -253,6 +256,10 @@ final class MirrorHost {
 
   /// The Host UUID, which salts each device's push key; `nil` until the identity is loaded.
   var hostIdentityID: UUID? { identity?.id }
+
+  func recordPush(_ result: MirrorPushGatewayResult, to deviceID: UUID, at date: Date) {
+    lastPushes[deviceID] = MirrorPushDelivery(date: date, result: result)
+  }
 
   /// The gateway no longer knows this token (docs-ai 095): forget the registration, unless the
   /// phone registered a newer token meanwhile.

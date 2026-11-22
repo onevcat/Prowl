@@ -109,7 +109,7 @@ final class MirrorPushCoordinator {
         // Gone, or owned by an earlier installation: the next connection gets a new token.
         mutate { $0.drop(hostID, record.pushToken) }
       } catch {
-        MirrorLog.push.error("Moving a push token failed: \(String(describing: error), privacy: .private)")
+        Self.logFailure("Moving a push token", error)
       }
     }
   }
@@ -132,7 +132,7 @@ final class MirrorPushCoordinator {
       } catch MirrorPushGatewayError.refused(status: 403) {
         MirrorLog.push.error("A push token of an earlier installation cannot be deleted")
       } catch {
-        MirrorLog.push.error("Deleting a push token failed: \(String(describing: error), privacy: .private)")
+        Self.logFailure("Deleting a push token", error)
         return
       }
       mutate { $0.deleted(pushToken) }
@@ -225,15 +225,25 @@ final class MirrorPushCoordinator {
     _ credential: MirrorDeviceCredential, kinds: Set<MirrorPushKind>, ticket: Ticket,
     deliverable: () -> Bool
   ) async -> MirrorMessage? {
-    guard isCurrent(ticket), let apnsToken = await registerAPNs(), isCurrent(ticket) else { return nil }
+    guard isCurrent(ticket) else { return nil }
+    guard let apnsToken = await registerAPNs() else {
+      MirrorLog.push.info("Push registration stopped: no APNs token (permission off, or APNs unavailable)")
+      return nil
+    }
+    guard isCurrent(ticket) else { return nil }
     let prepared: PreparedToken
     do {
       prepared = try await pushToken(for: credential, apnsToken: apnsToken, ticket: ticket)
     } catch {
-      MirrorLog.push.error("Push registration for a Host failed: \(String(describing: error), privacy: .private)")
+      if error is Superseded {
+        MirrorLog.push.info("Push registration dropped: the settings changed meanwhile")
+      } else {
+        Self.logFailure("Push registration for a Host", error)
+      }
       return nil
     }
     guard isCurrent(ticket), deliverable() else {
+      MirrorLog.push.info("Push registration dropped: the settings changed or the connection closed meanwhile")
       abandon(prepared)
       return nil
     }
@@ -279,7 +289,18 @@ final class MirrorPushCoordinator {
   /// The Host says that the gateway no longer knows this token. It is forgotten without a
   /// deletion; the next registration creates a new one.
   func tokenGone(_ pushToken: String, hostID: UUID) {
+    MirrorLog.push.info("The Host says the gateway no longer knows a push token; registering a new one")
     mutate { $0.drop(hostID, pushToken) }
+  }
+
+  /// Gateway errors hold only status codes, so they are logged in full; other errors may hold
+  /// addresses and stay private.
+  private static func logFailure(_ step: String, _ error: any Error) {
+    if let gateway = error as? MirrorPushGatewayError {
+      MirrorLog.push.error("\(step, privacy: .public) failed: \(String(describing: gateway), privacy: .public)")
+    } else {
+      MirrorLog.push.error("\(step, privacy: .public) failed: \(String(describing: error), privacy: .private)")
+    }
   }
 
   private struct Superseded: Error {}

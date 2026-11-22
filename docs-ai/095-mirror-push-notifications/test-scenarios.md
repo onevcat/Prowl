@@ -67,9 +67,4 @@ checks and the slice records `005`–`009`.
 ## Known gaps and follow-ups
 
 From the architecture review after the stack review (2026-11-22). Slices M1–M4 in the plan address them; each slice removes its item here.
-- **Diagnostics:**
-  - The Mac keeps and shows no last push result per device.
-  - Gateway errors and the APNs `reason` are not reported.
-  - iOS logs only private errors.
-  - The extension logs nothing.
 - **`remoteMirrorPushGatewayURL`** (Mac) is for tests with a fake gateway only. Tokens from the real gateway are unknown elsewhere, so the Host would drop every registration.

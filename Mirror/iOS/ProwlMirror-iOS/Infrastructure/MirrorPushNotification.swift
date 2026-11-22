@@ -16,16 +16,32 @@ nonisolated enum MirrorPushNotification {
     let content: MirrorPushContent
   }
 
-  /// `nil` when `sealed` is missing or malformed, this phone has no key for the Host, or the
-  /// content does not decrypt or decode.
+  /// Why a push keeps the fallback text. The extension logs it (docs-ai 095 M4); it names no
+  /// Host or content.
+  enum Failure: String, Error, Equatable {
+    /// No `sealed` value, or not one that names a Host.
+    case malformed
+    /// This phone has no key for the Host: it was forgotten, or never registered here.
+    case noKey
+    /// The key does not open it: another pairing's key, or corrupt data.
+    case cannotOpen
+    /// It opens, but the content is of an unknown version or shape.
+    case unsupportedContent
+  }
+
+  /// `nil` when the push cannot be opened; `read` says why.
   static func open(userInfo: [AnyHashable: Any], key: (UUID) -> SymmetricKey?) -> Opened? {
-    guard let sealed = userInfo[sealedKey] as? String,
-      let hostID = MirrorPushCrypto.hostID(ofSealed: sealed),
-      let key = key(hostID),
-      let plaintext = try? MirrorPushCrypto.open(sealed, key: key),
-      let content = try? MirrorPushContent.decode(plaintext)
-    else { return nil }
-    return Opened(hostID: hostID, content: content)
+    try? read(userInfo: userInfo, key: key).get()
+  }
+
+  static func read(userInfo: [AnyHashable: Any], key: (UUID) -> SymmetricKey?) -> Result<Opened, Failure> {
+    guard let sealed = userInfo[sealedKey] as? String, let hostID = MirrorPushCrypto.hostID(ofSealed: sealed) else {
+      return .failure(.malformed)
+    }
+    guard let key = key(hostID) else { return .failure(.noKey) }
+    guard let plaintext = try? MirrorPushCrypto.open(sealed, key: key) else { return .failure(.cannotOpen) }
+    guard let content = try? MirrorPushContent.decode(plaintext) else { return .failure(.unsupportedContent) }
+    return .success(Opened(hostID: hostID, content: content))
   }
 
   /// Generic text by kind, so the tab name stays off the lock screen, unless **Show Details**

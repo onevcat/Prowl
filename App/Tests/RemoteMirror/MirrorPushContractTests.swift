@@ -125,9 +125,28 @@ struct MirrorPushContractTests {
     let results = try #require(gateway["pushResults"] as? [String: String])
     for (code, expected) in results {
       let result = URLSessionMirrorPushGateway.result(statusCode: Int(code))
-      #expect("\(result)" == expected, "status \(code)")
+      #expect(Self.kind(result) == expected, "status \(code)")
     }
     // No answer at all (network error) is a failure too, outside the gateway's contract.
-    #expect(URLSessionMirrorPushGateway.result(statusCode: nil) == .failed)
+    #expect(URLSessionMirrorPushGateway.result(statusCode: nil) == .failed(reason: "network"))
+  }
+
+  @Test func failureReasonsMatch() throws {
+    let failures = try #require(try gateway["pushFailures"] as? [[String: Any]])
+    #expect(!failures.isEmpty)
+    for failure in failures {
+      let status = try #require(failure["status"] as? Int)
+      let body = try (failure["body"] as? [String: Any]).map { try JSONSerialization.data(withJSONObject: $0) }
+      let reason = try #require(failure["reason"] as? String)
+      #expect(URLSessionMirrorPushGateway.result(statusCode: status, body: body) == .failed(reason: reason))
+    }
+  }
+
+  private static func kind(_ result: MirrorPushGatewayResult) -> String {
+    switch result {
+    case .accepted: "accepted"
+    case .tokenGone: "tokenGone"
+    case .failed: "failed"
+    }
   }
 }

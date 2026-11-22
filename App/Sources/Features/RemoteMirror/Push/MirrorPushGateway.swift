@@ -10,7 +10,14 @@ nonisolated enum MirrorPushGatewayResult: Equatable, Sendable {
   /// The token is gone at the gateway (deleted, expired, or the app was removed).
   case tokenGone
   /// Rate limited, invalid, a server error or a network error: drop this event, keep the token.
-  case failed
+  /// `reason` is the gateway's code or APNs reason, `http-<status>`, or `network`; it names no
+  /// device or content.
+  case failed(reason: String)
+}
+
+nonisolated struct MirrorPushDelivery: Equatable, Sendable {
+  let date: Date
+  let result: MirrorPushGatewayResult
 }
 
 nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
@@ -33,11 +40,11 @@ nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
   func push(token: String, collapseID: String, sealed: String) async -> MirrorPushGatewayResult {
     do {
       let request = try Self.pushRequest(baseURL: baseURL, token: token, collapseID: collapseID, sealed: sealed)
-      let (_, response) = try await session.data(for: request)
-      return Self.result(statusCode: (response as? HTTPURLResponse)?.statusCode)
+      let (data, response) = try await session.data(for: request)
+      return Self.result(statusCode: (response as? HTTPURLResponse)?.statusCode, body: data)
     } catch {
       ProwlLogger("RemoteMirror").warning("Push gateway request failed", error: error)
-      return .failed
+      return .failed(reason: "network")
     }
   }
 
@@ -51,11 +58,26 @@ nonisolated struct URLSessionMirrorPushGateway: MirrorPushGateway {
     return request
   }
 
-  static func result(statusCode: Int?) -> MirrorPushGatewayResult {
+  static func result(statusCode: Int?, body: Data? = nil) -> MirrorPushGatewayResult {
     switch statusCode {
     case .some(200...299): .accepted
     case .some(410): .tokenGone
-    default: .failed
+    case .some(let code): .failed(reason: reason(body) ?? "http-\(code)")
+    case nil: .failed(reason: "network")
     }
+  }
+
+  /// The failure body `{"error": code, "reason": APNs reason}` (contract: `gateway.pushFailures`).
+  /// Only a short code survives, since it goes into logs and Settings.
+  static func reason(_ body: Data?) -> String? {
+    struct Failure: Decodable {
+      let error: String?
+      let reason: String?
+    }
+    guard let body, let failure = try? JSONDecoder().decode(Failure.self, from: body),
+      let text = failure.reason ?? failure.error
+    else { return nil }
+    let code = String(text.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }.prefix(64))
+    return code.isEmpty ? nil : code
   }
 }
