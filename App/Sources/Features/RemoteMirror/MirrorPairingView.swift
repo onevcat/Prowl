@@ -153,6 +153,9 @@ struct MirrorPairingView: View {
         Text(host.pairingKey)
           .font(.largeTitle.monospaced().weight(.semibold))
           .textSelection(.enabled)
+          // A selectable text keeps its first accessibility label; a new view per code makes
+          // VoiceOver and automation read the code that is shown.
+          .id(host.pairingKey)
           .accessibilityIdentifier("remote-mirror-pairing-key")
         HStack(spacing: 4) {
           Text("Expires in")
