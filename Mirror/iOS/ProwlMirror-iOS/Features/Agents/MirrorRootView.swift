@@ -60,7 +60,11 @@ struct MirrorRootView: View {
   /// changes nothing.
   private func openNotificationTarget() async {
     guard let target = router.pending else { return }
-    guard let host = store.hosts.first(where: { $0.hostID == target.hostID }) else {
+    guard
+      let host = MirrorNotificationRouter.entry(
+        for: target, among: store.hosts, selectedID: store.selectedHost?.id,
+        isConnected: { sessions.existing(for: $0)?.status == .ready })
+    else {
       router.finish(target)
       return
     }

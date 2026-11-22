@@ -3,10 +3,16 @@ import Foundation
 import Observation
 import os
 
-/// The push token of one Host, and the APNs token it points at.
+/// The push token of one Host, and the device it points at. One pairing per Host carries
+/// notifications: a Mac paired at two addresses has two device credentials, each with its own
+/// key, and only the pairing that registered last has a token.
 nonisolated struct MirrorPushTokenRecord: Codable, Equatable, Sendable {
   let pushToken: String
   let apnsToken: String
+  /// The gateway keeps the environment of a token; a token never moves to another one.
+  let environment: String
+  /// The pairing (device credential) that registered this token with the Host.
+  let deviceID: UUID
   /// When the gateway last confirmed the token.
   let checkedAt: Date
 }
@@ -136,8 +142,10 @@ final class MirrorPushCoordinator {
     for hostID in state.records.keys { revoke(hostID) }
   }
 
-  /// The Host was forgotten on this phone: its token is revoked and its key removed.
-  func removeRegistration(for hostID: UUID) async {
+  /// A pairing was forgotten on this phone: if it carries the Host's notifications, its token
+  /// is revoked and its key removed. Another pairing of the same Host keeps its own.
+  func removeRegistration(for hostID: UUID, deviceID: UUID?) async {
+    if let record = state.records[hostID], deviceID != nil, record.deviceID != deviceID { return }
     revoke(hostID)
     await retryRevocations()
   }
@@ -148,13 +156,19 @@ final class MirrorPushCoordinator {
   func appBecameActive() async {
     await retryRevocations()
     guard isEnabled, !state.records.isEmpty, let apnsToken = await registerAPNs() else { return }
-    for (hostID, record) in state.records where record.apnsToken != apnsToken {
+    let environment = environment().rawValue
+    for (hostID, record) in state.records where record.apnsToken != apnsToken || record.environment != environment {
       let ticket = ticket(for: hostID)
       guard isCurrent(ticket, forToken: true) else { continue }
+      if record.environment != environment {
+        // Another build replaced this one; the next connection creates a token for it.
+        retire(hostID, record)
+        continue
+      }
       do {
-        try await gateway.updateToken(record.pushToken, apnsToken: apnsToken)
+        try await gateway.updateToken(record.pushToken, apnsToken: apnsToken, allowed: permission(ticket))
         if state.records[hostID]?.pushToken == record.pushToken {
-          mutate { $0.records[hostID] = .init(pushToken: record.pushToken, apnsToken: apnsToken, checkedAt: now()) }
+          mutate { $0.records[hostID] = record.moved(to: apnsToken, at: now()) }
         }
       } catch MirrorPushGatewayError.refused(let status) where status == 404 || status == 403 {
         // Gone, or owned by an earlier installation: the next connection gets a new token.
@@ -190,6 +204,22 @@ final class MirrorPushCoordinator {
     }
   }
 
+  /// Moves a token that no longer fits (another pairing or build) to the deletion queue,
+  /// without revoking the Host: its next registration creates the replacement.
+  private func retire(_ hostID: UUID, _ record: MirrorPushTokenRecord) {
+    guard state.records[hostID]?.pushToken == record.pushToken else { return }
+    mutate {
+      $0.records[hostID] = nil
+      $0.revoking.append(record.pushToken)
+    }
+    Task { await retryRevocations() }
+  }
+
+  /// Checked by the gateway client right before a queued create or update leaves.
+  private func permission(_ ticket: Ticket) -> MirrorPushGatewayClient.Permission {
+    { await MainActor.run { self.isCurrent(ticket, forToken: true) } }
+  }
+
   /// Synchronous, so no registration in flight can see the token again.
   private func revoke(_ hostID: UUID) {
     revocations[hostID, default: 0] += 1
@@ -204,7 +234,7 @@ final class MirrorPushCoordinator {
     Task { await retryRevocations() }
   }
 
-  private struct Ticket {
+  private struct Ticket: Sendable {
     let hostID: UUID
     let switches: Int
     let revocation: Int
@@ -249,7 +279,7 @@ final class MirrorPushCoordinator {
     }
     guard let apnsToken = await registerAPNs(), isCurrent(ticket) else { return nil }
     do {
-      let pushToken = try await pushToken(for: hostID, apnsToken: apnsToken, ticket: ticket)
+      let pushToken = try await pushToken(for: credential, apnsToken: apnsToken, ticket: ticket)
       guard isCurrent(ticket) else { return nil }
       return .pushRegister(.init(pushToken: pushToken, kinds: kinds.map(\.rawValue).sorted()))
     } catch {
@@ -264,28 +294,37 @@ final class MirrorPushCoordinator {
 
   private struct Superseded: Error {}
 
-  /// The stored token while it is fresh and points at this APNs token. Otherwise the gateway
-  /// confirms it with `PUT` (which also moves it to a new APNs token); a token the gateway no
-  /// longer knows, or that an earlier installation owns, is replaced. Nothing reaches the
-  /// gateway once the Host was revoked, and a token created meanwhile is revoked at once.
-  private func pushToken(for hostID: UUID, apnsToken: String, ticket: Ticket) async throws -> String {
+  /// The stored token while it belongs to this pairing and build, is fresh, and points at this
+  /// APNs token. Otherwise the gateway confirms it with `PUT` (which also moves it to a new
+  /// APNs token); a token of another pairing or build is retired, and one the gateway no longer
+  /// knows, or that an earlier installation owns, is replaced. Nothing reaches the gateway once
+  /// the Host was revoked, and a token created meanwhile is revoked at once.
+  private func pushToken(
+    for credential: MirrorDeviceCredential, apnsToken: String, ticket: Ticket
+  ) async throws -> String {
+    let hostID = credential.hostID
+    let environment = environment().rawValue
+    if let record = state.records[hostID], record.deviceID != credential.deviceID || record.environment != environment {
+      retire(hostID, record)
+    }
     if let record = state.records[hostID] {
       if record.apnsToken == apnsToken, now().timeIntervalSince(record.checkedAt) < Self.checkInterval {
         return record.pushToken
       }
       do {
-        try await gateway.updateToken(record.pushToken, apnsToken: apnsToken)
+        try await gateway.updateToken(record.pushToken, apnsToken: apnsToken, allowed: permission(ticket))
         guard isCurrent(ticket, forToken: true), state.records[hostID]?.pushToken == record.pushToken else {
           throw Superseded()
         }
-        mutate { $0.records[hostID] = .init(pushToken: record.pushToken, apnsToken: apnsToken, checkedAt: now()) }
+        mutate { $0.records[hostID] = record.moved(to: apnsToken, at: now()) }
         return record.pushToken
       } catch MirrorPushGatewayError.refused(let status) where status == 404 || status == 403 {
         if state.records[hostID]?.pushToken == record.pushToken { mutate { $0.records[hostID] = nil } }
       }
     }
     guard isCurrent(ticket, forToken: true) else { throw Superseded() }
-    let pushToken = try await gateway.createToken(apnsToken: apnsToken, environment: environment())
+    let pushToken = try await gateway.createToken(
+      apnsToken: apnsToken, environment: .init(rawValue: environment) ?? .production, allowed: permission(ticket))
     guard isCurrent(ticket, forToken: true) else {
       mutate { $0.revoking.append(pushToken) }
       Task { await retryRevocations() }
@@ -294,7 +333,17 @@ final class MirrorPushCoordinator {
     if let replaced = state.records[hostID], replaced.pushToken != pushToken {
       mutate { $0.revoking.append(replaced.pushToken) }
     }
-    mutate { $0.records[hostID] = .init(pushToken: pushToken, apnsToken: apnsToken, checkedAt: now()) }
+    mutate {
+      $0.records[hostID] = .init(
+        pushToken: pushToken, apnsToken: apnsToken, environment: environment, deviceID: credential.deviceID,
+        checkedAt: now())
+    }
     return pushToken
+  }
+}
+
+extension MirrorPushTokenRecord {
+  nonisolated func moved(to apnsToken: String, at date: Date) -> Self {
+    .init(pushToken: pushToken, apnsToken: apnsToken, environment: environment, deviceID: deviceID, checkedAt: date)
   }
 }

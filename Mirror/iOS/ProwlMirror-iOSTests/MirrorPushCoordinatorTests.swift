@@ -13,6 +13,7 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   var showsDetails = false
   var failsToSaveDetails = false
   var now = Date(timeIntervalSince1970: 1_000_000)
+  var environment = MirrorAPNsEnvironment.development
   let gateway = FakeGateway()
   let attest = FakeAttest()
   let installation = MemoryStorage()
@@ -46,7 +47,7 @@ final class PushCoordinatorWorld: @unchecked Sendable {
         }
         return self.apnsToken
       },
-      environment: { .development },
+      environment: { self.environment },
       saveKey: { key, id in self.lock.withLock { self.keys[id] = key } },
       removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
       now: { self.now },
@@ -87,7 +88,11 @@ struct MirrorPushCoordinatorTests {
     #expect(
       key.withUnsafeBytes { Data($0) }.map { String(format: "%02x", $0) }.joined()
         == "1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1")
-    #expect(world.record(credential.hostID) == .init(pushToken: "push-1", apnsToken: "aa11", checkedAt: world.now))
+    #expect(
+      world.record(credential.hostID)
+        == .init(
+          pushToken: "push-1", apnsToken: "aa11", environment: "development", deviceID: credential.deviceID,
+          checkedAt: world.now))
     let body = try #require(world.gateway.requests.last?.httpBody)
     #expect(try JSONDecoder().decode([String: String].self, from: body) == ["apnsToken": "aa11", "environment": "development"])
   }
@@ -197,7 +202,7 @@ struct MirrorPushCoordinatorTests {
     _ = await coordinator.registration(for: credential, capabilities: push)
     coordinator.received(.init(pushEnabled: true, pushAllowedByMac: true, registered: true), hostID: credential.hostID)
 
-    await coordinator.removeRegistration(for: credential.hostID)
+    await coordinator.removeRegistration(for: credential.hostID, deviceID: credential.deviceID)
     #expect(world.record(credential.hostID) == nil)
     #expect(world.stored.revoking == ["push-1"])
     #expect(world.keys[credential.hostID] == nil)
@@ -272,6 +277,69 @@ struct MirrorPushCoordinatorTests {
     #expect(await registering.value == nil)
     #expect(world.record(credential.hostID)?.pushToken == "push-1")
     #expect(world.stored.revoking.isEmpty)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aQueuedRequestDoesNotLeaveAfterTurningOff() async {
+    let other = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 9, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    world.gateway.hold("POST /v1/tokens")
+    let coordinator = world.coordinator()
+    let first = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.gateway.isWaiting("POST /v1/tokens") })
+    let second = Task { await coordinator.registration(for: other, capabilities: push) }
+    for _ in 0..<200 { await Task.yield() }
+
+    coordinator.setEnabled(false)
+    world.gateway.release("POST /v1/tokens")
+    #expect(await first.value == nil)
+    #expect(await second.value == nil)
+    #expect(await eventually { world.stored.revoking.isEmpty })
+    // The second Host's request was queued before off and never left: challenges went to the
+    // installation, the first Host's token, and its deletion only.
+    #expect(world.gateway.routes().filter { $0 == "POST /v1/tokens" }.count == 1)
+    #expect(world.gateway.routes().filter { $0 == "POST /v1/challenge" }.count == 3)
+    #expect(world.gateway.routes().contains("DELETE /v1/tokens/push-1"))
+  }
+
+  @Test func anotherPairingOfTheSameHostTakesOverAndForgettingTheOldOneKeepsIt() async {
+    let otherAddress = MirrorDeviceCredential(hostID: credential.hostID, deviceID: UUID(), key: Data(repeating: 3, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+
+    guard case .pushRegister(let payload) = await coordinator.registration(for: otherAddress, capabilities: push) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.pushToken == "push-2")
+    #expect(world.record(credential.hostID)?.deviceID == otherAddress.deviceID)
+    #expect(world.keys[credential.hostID] == MirrorPushCrypto.key(deviceSecret: otherAddress.key, hostID: credential.hostID))
+    #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") && world.stored.revoking.isEmpty })
+
+    await coordinator.removeRegistration(for: credential.hostID, deviceID: credential.deviceID)
+    #expect(world.record(credential.hostID)?.pushToken == "push-2")
+    #expect(world.keys[credential.hostID] != nil)
+  }
+
+  @Test func anotherBuildEnvironmentGetsItsOwnToken() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+
+    world.environment = .production
+    guard case .pushRegister(let payload) = await coordinator.registration(for: credential, capabilities: push) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.pushToken == "push-2")
+    #expect(world.record(credential.hostID)?.environment == "production")
+    #expect(!world.gateway.routes().contains("PUT /v1/tokens/push-1"))
+    #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") })
   }
 
   @Test func aNewAPNsTokenMovesTheTokensOfEveryHost() async throws {
@@ -375,6 +443,24 @@ struct MirrorNotificationRouterTests {
     #expect(!router.owns(second, selectedHostID: UUID(), hostRecordID: record))
     router.finish(second)
     #expect(router.pending == nil)
+  }
+
+  @Test func opensTheConnectedAddressOfAHostPairedTwice() {
+    let lan = MirrorHostRecord(
+      id: UUID(), address: "192.168.1.2", port: 7880, hostID: hostID, pairedAt: .distantPast,
+      lastConnectedAt: Date(timeIntervalSince1970: 10))
+    let name = MirrorHostRecord(
+      id: UUID(), address: "mac", port: 7880, hostID: hostID, pairedAt: .distantPast,
+      lastConnectedAt: Date(timeIntervalSince1970: 20))
+    let unrelated = MirrorHostRecord(id: UUID(), address: "x", port: 1, hostID: UUID(), pairedAt: .distantPast)
+    let target = MirrorNotificationRouter.Target(hostID: hostID, paneID: paneID)
+    let hosts = [unrelated, lan, name]
+
+    #expect(MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: lan.id, isConnected: { _ in false }) == lan)
+    #expect(
+      MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: unrelated.id, isConnected: { $0 == lan }) == lan)
+    #expect(MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: nil, isConnected: { _ in false }) == name)
+    #expect(MirrorNotificationRouter.entry(for: .init(hostID: UUID(), paneID: paneID), among: hosts, selectedID: nil, isConnected: { _ in true }) == nil)
   }
 
   @Test func routesToThePaneWhileTheHostListsIt() {

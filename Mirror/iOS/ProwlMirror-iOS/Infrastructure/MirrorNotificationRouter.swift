@@ -38,6 +38,16 @@ final class MirrorNotificationRouter {
     pending == target && selectedHostID == hostRecordID
   }
 
+  /// The paired entry to open for a Host that is paired at several addresses: the one shown
+  /// now, else one that is connected, else the one connected most recently.
+  nonisolated static func entry(
+    for target: Target, among hosts: [MirrorHostRecord], selectedID: UUID?, isConnected: (MirrorHostRecord) -> Bool
+  ) -> MirrorHostRecord? {
+    let candidates = hosts.filter { $0.hostID == target.hostID }
+    return candidates.first { $0.id == selectedID } ?? candidates.first(where: isConnected)
+      ?? candidates.max { ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast) }
+  }
+
   /// Where a target leads once the Host's panes are known: the pane, or `nil` when the pane is
   /// gone (the agents list stays).
   nonisolated static func route(

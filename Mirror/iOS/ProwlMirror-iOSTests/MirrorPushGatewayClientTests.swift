@@ -65,7 +65,7 @@ struct MirrorPushGatewayClientTests {
   }
 
   @Test func a401RenewsTheInstallationOnceAndRetries() async throws {
-    gateway.answer("POST /v1/tokens", 401)
+    gateway.answer("POST /v1/tokens", 401, #"{"error":"unknown-installation"}"#)
     gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
 
     #expect(try await client().createToken(apnsToken: "ab", environment: .production) == "push-1")
@@ -73,9 +73,35 @@ struct MirrorPushGatewayClientTests {
     #expect(memory.current == MirrorPushInstallation(keyID: "key-2", installationID: "i2"))
   }
 
+  @Test func anExpiredChallengeIsRetriedWithTheSameInstallation() async throws {
+    gateway.answer("DELETE /v1/tokens/push-1", 401, #"{"error":"invalid-challenge"}"#)
+    gateway.answer("DELETE /v1/tokens/push-1", 204)
+    try await client().deleteToken("push-1")
+    #expect(gateway.routes().filter { $0 == "POST /v1/installations" }.count == 1)
+    #expect(memory.current?.installationID == "i1")
+    let deletes = gateway.requests.filter { $0.httpMethod == "DELETE" }
+    #expect(deletes.map { $0.value(forHTTPHeaderField: "X-Prowl-Installation") } == ["i1", "i1"])
+  }
+
+  @Test func anInvalidAssertionKeepsTheInstallation() async throws {
+    gateway.answer("PUT /v1/tokens/push-1", 401, #"{"error":"invalid-assertion"}"#)
+    await #expect(throws: MirrorPushGatewayError.refused(status: 401)) {
+      try await client().updateToken("push-1", apnsToken: "ab")
+    }
+    #expect(memory.current?.installationID == "i1")
+    #expect(gateway.routes().filter { $0 == "POST /v1/installations" }.count == 1)
+  }
+
+  @Test func aRequestThatIsNoLongerAllowedIsNotSent() async throws {
+    await #expect(throws: MirrorPushGatewayError.superseded) {
+      try await client().createToken(apnsToken: "ab", environment: .production, allowed: { false })
+    }
+    #expect(gateway.requests.isEmpty)
+  }
+
   @Test func aSecond401IsAnError() async throws {
-    gateway.answer("POST /v1/tokens", 401)
-    gateway.answer("POST /v1/tokens", 401)
+    gateway.answer("POST /v1/tokens", 401, #"{"error":"unknown-installation"}"#)
+    gateway.answer("POST /v1/tokens", 401, #"{"error":"unknown-installation"}"#)
 
     await #expect(throws: MirrorPushGatewayError.refused(status: 401)) {
       try await client().createToken(apnsToken: "ab", environment: .production)

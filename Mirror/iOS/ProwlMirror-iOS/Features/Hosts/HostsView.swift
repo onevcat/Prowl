@@ -88,8 +88,12 @@ struct HostsManagerView: View {
   }
 
   private func forget(_ host: MirrorHostRecord) {
-    // The Host may be offline: deleting the push token at the gateway stops it anyway.
-    if let hostID = host.hostID { Task { await MirrorPushCoordinator.shared.removeRegistration(for: hostID) } }
+    // The Host may be offline: deleting the push token at the gateway stops it anyway. Only
+    // this pairing's token goes; another address of the same Mac keeps its own.
+    if let hostID = host.hostID {
+      let deviceID = (try? MirrorSavedConnection.load(account: host.credentialAccount))?.credential?.deviceID
+      Task { await MirrorPushCoordinator.shared.removeRegistration(for: hostID, deviceID: deviceID) }
+    }
     sessions.forget(host.id)
     store.remove(host.id)
     if store.hosts.isEmpty { dismiss() }

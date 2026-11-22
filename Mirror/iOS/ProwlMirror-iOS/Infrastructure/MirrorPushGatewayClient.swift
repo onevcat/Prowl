@@ -73,6 +73,8 @@ nonisolated enum MirrorPushGatewayError: Error, Equatable {
   case tooManyTokens
   case refused(status: Int)
   case invalidResponse
+  /// The caller's settings changed while the request waited; it was not sent.
+  case superseded
 }
 
 /// The phone's side of the push gateway (docs-ai 095, `prowl-push-gateway` README "Phone API").
@@ -107,17 +109,23 @@ actor MirrorPushGatewayClient {
     return (data, http)
   }
 
+  /// Whether a queued request may still be sent; checked right before each request leaves.
+  typealias Permission = @Sendable () async -> Bool
+
   /// A new push token for this APNs token; the Host gets it with `pushRegister`.
-  func createToken(apnsToken: String, environment: MirrorAPNsEnvironment) async throws -> String {
-    try await inOrder { try await self.create(apnsToken: apnsToken, environment: environment) }
+  func createToken(
+    apnsToken: String, environment: MirrorAPNsEnvironment, allowed: @escaping Permission = { true }
+  ) async throws -> String {
+    try await inOrder { try await self.create(apnsToken: apnsToken, environment: environment, allowed: allowed) }
   }
 
   /// Points an existing push token at a new APNs token.
-  func updateToken(_ pushToken: String, apnsToken: String) async throws {
-    try await inOrder { try await self.update(pushToken, apnsToken: apnsToken) }
+  func updateToken(_ pushToken: String, apnsToken: String, allowed: @escaping Permission = { true }) async throws {
+    try await inOrder { try await self.update(pushToken, apnsToken: apnsToken, allowed: allowed) }
   }
 
   /// Deletes a push token, so no Host can use it again; an unknown token is already gone.
+  /// Deletion is always allowed: it is the only request while notifications are off.
   func deleteToken(_ pushToken: String) async throws {
     try await inOrder { try await self.delete(pushToken) }
   }
@@ -132,9 +140,11 @@ actor MirrorPushGatewayClient {
     return try await task.value
   }
 
-  private func create(apnsToken: String, environment: MirrorAPNsEnvironment) async throws -> String {
+  private func create(
+    apnsToken: String, environment: MirrorAPNsEnvironment, allowed: @escaping Permission
+  ) async throws -> String {
     let body = try JSONEncoder().encode(["apnsToken": apnsToken, "environment": environment.rawValue])
-    let (data, status) = try await manage("POST", path: "/v1/tokens", body: body)
+    let (data, status) = try await manage("POST", path: "/v1/tokens", body: body, allowed: allowed)
     switch status {
     case 201:
       guard let token = try? JSONDecoder().decode([String: String].self, from: data)["pushToken"] else {
@@ -146,26 +156,32 @@ actor MirrorPushGatewayClient {
     }
   }
 
-  private func update(_ pushToken: String, apnsToken: String) async throws {
+  private func update(_ pushToken: String, apnsToken: String, allowed: @escaping Permission) async throws {
     let body = try JSONEncoder().encode(["apnsToken": apnsToken])
-    let (_, status) = try await manage("PUT", path: "/v1/tokens/\(pushToken)", body: body)
+    let (_, status) = try await manage("PUT", path: "/v1/tokens/\(pushToken)", body: body, allowed: allowed)
     guard status == 204 else { throw MirrorPushGatewayError.refused(status: status) }
   }
 
   private func delete(_ pushToken: String) async throws {
-    let (_, status) = try await manage("DELETE", path: "/v1/tokens/\(pushToken)", body: nil)
+    let (_, status) = try await manage("DELETE", path: "/v1/tokens/\(pushToken)", body: nil, allowed: { true })
     guard status == 204 || status == 404 else { throw MirrorPushGatewayError.refused(status: status) }
   }
 
   // MARK: Management
 
-  /// Sends a management request. A `401` means the gateway no longer accepts this installation
-  /// (deleted, or its counter moved on), and a missing local key means a reinstall; either way
-  /// the app attests a new key and tries once more. A token of the earlier installation then
-  /// answers `403`, which the caller handles.
-  private func manage(_ method: String, path: String, body: Data?) async throws -> (Data, Int) {
-    var renewed = false
+  /// Sends a management request, unless `allowed` says no right before it would leave.
+  ///
+  /// A new installation takes over only when the old one is really gone: the gateway does not
+  /// know it (`unknown-installation`), or the local App Attest key is missing (a reinstall).
+  /// Replacing it otherwise would strand every token it owns, which answer `403` afterwards. An
+  /// expired or used challenge, or a counter that the gateway saw already, is retried once with
+  /// a new challenge and the same installation. Any other `401` is an error.
+  private func manage(
+    _ method: String, path: String, body: Data?, allowed: Permission
+  ) async throws -> (Data, Int) {
+    var retried = false
     while true {
+      guard await allowed() else { throw MirrorPushGatewayError.superseded }
       let installation = try await installation()
       let challenge = try await challenge()
       let bodyText = body.map { String(decoding: $0, as: UTF8.self) } ?? ""
@@ -174,26 +190,37 @@ actor MirrorPushGatewayClient {
       do {
         assertion = try await attest.generateAssertion(
           installation.keyID, clientDataHash: Data(SHA256.hash(data: clientData)))
-      } catch let error as DCError where error.code == .invalidKey && !renewed {
-        // The App Attest key lives as long as the app install, the Keychain record longer: after
-        // a reinstall the saved installation has no key. Attest a new one.
-        renewed = true
+      } catch let error as DCError where error.code == .invalidKey && !retried {
+        retried = true
         if storage.load() == installation { storage.save(nil) }
         continue
       }
+      guard await allowed() else { throw MirrorPushGatewayError.superseded }
       var request = request(method, path: path, body: body)
       request.setValue(installation.installationID, forHTTPHeaderField: "X-Prowl-Installation")
       request.setValue(challenge, forHTTPHeaderField: "X-Prowl-Challenge")
       request.setValue(assertion.base64EncodedString(), forHTTPHeaderField: "X-Prowl-Assertion")
       let (data, response) = try await send(request)
-      if response.statusCode == 401, !renewed {
-        renewed = true
-        if storage.load() == installation { storage.save(nil) }
-        continue
+      if response.statusCode == 401, !retried {
+        switch Self.errorCode(data) {
+        case "unknown-installation":
+          retried = true
+          if storage.load() == installation { storage.save(nil) }
+          continue
+        case "invalid-challenge", "replayed-assertion":
+          retried = true
+          continue
+        default:
+          break
+        }
       }
       try Self.checkRateLimit(response)
       return (data, response.statusCode)
     }
+  }
+
+  private static func errorCode(_ data: Data) -> String? {
+    (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
   }
 
   private func installation() async throws -> MirrorPushInstallation {

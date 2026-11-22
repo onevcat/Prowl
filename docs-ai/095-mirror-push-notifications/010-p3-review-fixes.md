@@ -35,6 +35,28 @@ the top branch of the stack (#1153); the stack merges as one.
   nothing. A pane that is gone, or a Host that cannot be reached, shows the agents list, also
   on the same Host.
 
+## Round 2 changes
+
+- **Permission at the send boundary.** `MirrorPushGatewayClient` takes a `Permission` for each
+  create and update. It checks it right before the request starts and again right before the
+  signed request leaves, so a request that was queued before notifications were turned off is
+  never sent. Deletes need no permission. An installation that is already being created when
+  the switch goes off still finishes.
+- **Installation recovery is a rule, not a retry.** A management `401` is read by its error
+  code. `invalid-challenge` and `replayed-assertion` are retried once with a new challenge and
+  the same installation. `unknown-installation` (and a missing local key) attest a new key.
+  Any other `401` is an error. A new installation strands the tokens of the old one (they
+  answer `403`); that happens only when the old one is gone anyway.
+- **One pairing per Host carries notifications.** A Mac paired at two addresses has two device
+  credentials with their own keys. The token record keeps the `deviceID` of the pairing that
+  registered it, and a registration from another pairing retires the old token (the Host
+  drops that registration on `410`) and creates its own. Forgetting a pairing revokes only
+  its own token. A tap opens the shown entry of that Host, else a connected one, else the one
+  connected most recently.
+- **The APNs environment is part of a token.** The record keeps it. When another build
+  replaces the app, the old token is retired and a new one is created in the new environment;
+  a `PUT` never moves a token across environments.
+
 ## Refs
 
 #1153 (review round 1 of the stack review for #1149–#1153). Tests:
