@@ -9,12 +9,14 @@ final class MirrorPushSender {
   struct PaneDetails: Sendable {
     let title: String
     let stateChangedAt: String?
+    /// What the agent asks or replied (`MirrorPushSummary`); the generic text when `nil`.
+    var summary: String?
   }
 
   private let host: MirrorHost
   private let enabled: () -> Bool
   private let paneStates: () -> [UUID: MirrorPushPlanner.PaneState]
-  private let paneDetails: (UUID) -> PaneDetails?
+  private let paneDetails: (UUID, MirrorPushKind) async -> PaneDetails?
   private let presence: MacPresenceMonitor
   /// `nil` when no push service is configured: the sender then never starts.
   private let gateway: any MirrorPushGateway
@@ -35,7 +37,7 @@ final class MirrorPushSender {
   init(
     host: MirrorHost, enabled: @escaping () -> Bool,
     paneStates: @escaping () -> [UUID: MirrorPushPlanner.PaneState],
-    paneDetails: @escaping (UUID) -> PaneDetails?,
+    paneDetails: @escaping (UUID, MirrorPushKind) async -> PaneDetails?,
     presence: MacPresenceMonitor, gateway: any MirrorPushGateway, clock: ContinuousClock = ContinuousClock()
   ) {
     self.host = host
@@ -186,9 +188,12 @@ final class MirrorPushSender {
       sends[id] = Task { [weak self] in
         defer { self?.sends.removeValue(forKey: id) }
         guard let self else { return }
+        // Read first: a finished turn's reply comes from the transcript. The gates are checked
+        // after it, so a change while it was read still stops the push.
+        let details = await self.paneDetails(push.paneID, push.kind)
         guard self.mayStillSend(push), let hostID = self.host.hostIdentityID,
           let device = self.host.devices.first(where: { $0.id == push.deviceID }), let token = device.push?.token,
-          let request = Self.request(for: push, device: device, hostID: hostID, details: self.paneDetails(push.paneID))
+          let request = Self.request(for: push, device: device, hostID: hostID, details: details)
         else {
           // Nothing was sent: hold the prompt again for the next valid catch-up.
           self.planner.skipped(push)
@@ -223,14 +228,22 @@ final class MirrorPushSender {
     for push: MirrorPushPlanner.Push, device: MirrorPairedDevice, hostID: UUID, details: PaneDetails?
   ) -> Request? {
     let key = MirrorPushCrypto.key(deviceSecret: device.key, hostID: hostID)
-    let content = MirrorPushContent(
-      kind: push.kind, paneID: push.paneID, title: details?.title ?? String(localized: "Prowl"),
-      body: push.kind == .blocked
-        ? String(localized: "An agent needs your attention")
-        : String(localized: "An agent finished"),
-      stateChangedAt: details?.stateChangedAt)
-    guard let plaintext = try? JSONEncoder().encode(content),
-      let sealed = try? MirrorPushCrypto.seal(plaintext, key: key, hostID: hostID)
+    let generic =
+      push.kind == .blocked
+      ? String(localized: "An agent needs your attention")
+      : String(localized: "An agent finished")
+    func sealed(body: String) -> String? {
+      let content = MirrorPushContent(
+        kind: push.kind, paneID: push.paneID, title: details?.title ?? String(localized: "Prowl"), body: body,
+        stateChangedAt: details?.stateChangedAt)
+      guard let plaintext = try? JSONEncoder().encode(content) else { return nil }
+      return try? MirrorPushCrypto.seal(plaintext, key: key, hostID: hostID)
+    }
+    // A summary that would make the push too large for the gateway gives way to the generic text.
+    guard
+      let sealed = details?.summary.flatMap(sealed(body:)).flatMap({
+        $0.count <= MirrorPushContract.maximumSealedLength ? $0 : nil
+      }) ?? sealed(body: generic)
     else { return nil }
     return Request(collapseID: MirrorPushCrypto.collapseID(paneID: push.paneID, key: key), sealed: sealed)
   }

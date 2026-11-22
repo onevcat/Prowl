@@ -34,10 +34,24 @@ final class RemoteMirrorStore {
     pushSender = MirrorPushSender(
       host: host, enabled: { settings.wrappedValue.global.remoteMirrorEnabled },
       paneStates: { paneSource.pushPaneStates() },
-      paneDetails: { id in
+      paneDetails: { id, kind in
         guard let pane = paneSource.panes().first(where: { $0.id == id }) else { return nil }
         let title = [pane.tabTitle, pane.worktreeName].compactMap { $0 }.joined(separator: " · ")
-        return .init(title: title.isEmpty ? pane.title : title, stateChangedAt: pane.stateChangedAt)
+        var details = MirrorPushSender.PaneDetails(
+          title: title.isEmpty ? pane.title : title, stateChangedAt: pane.stateChangedAt)
+        switch kind {
+        case .blocked:
+          details.summary = (try? paneSource.activeText(id)).flatMap(MirrorPushSummary.question(onScreen:))
+        case .done:
+          if let state = paneSource.agentState(id), let agent = state.detectedAgent,
+            let transcript = state.session?.transcriptPath
+          {
+            details.summary = await Task.detached {
+              MirrorPushSummary.lastReply(transcript: transcript, agent: agent)
+            }.value
+          }
+        }
+        return details
       },
       presence: MacPresenceMonitor(), gateway: URLSessionMirrorPushGateway.configured())
     self.runtime = runtime

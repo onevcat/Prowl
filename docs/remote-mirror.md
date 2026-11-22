@@ -409,16 +409,17 @@ addresses, with its state (**On**, **Off on the
 Mac**, **Update Prowl on the Mac**, **Not connected yet**) and a page that chooses the events:
 **An agent needs you** and **An agent finished**. Notifications show only "An agent needs your
 attention" or "An agent finished"; the phone decrypts them and keeps the Host's text off the
-lock screen. **Show Details** (off by default) shows the tab and worktree name instead, also on
-the lock screen. Tapping a notification opens that Host and pane, and connects first if needed;
+lock screen. **Show Details** (off by default) shows the tab and worktree name instead, with
+what the agent asks (the question and, for a permission, the command) or the start of its last
+reply, also on the lock screen. Tapping a notification opens that Host and pane, and connects first if needed;
 a pane that has closed since leaves the agents list in view. Turning notifications off, turning off every event of a Host, or forgetting a
 Host deletes that Host's push token at the push service, so a Host that is offline at that
 moment cannot notify the phone either.
 
 What leaves the Mac: one HTTPS request per notification to the Prowl push service (`prowl-push.onev.dev`), with the
 device's push token, a collapse identifier derived from the pane with a key the service does
-not have, and the end-to-end encrypted content (the agent's tab and worktree name and the
-event). The service and Apple cannot read the content. There is no other request: no health
+not have, and the end-to-end encrypted content (the agent's tab and worktree name, the
+event, and up to 180 characters of what the agent asks or last replied). The service and Apple cannot read the content. There is no other request: no health
 check and no registration of the Mac. For tests with a fake push service only, developers can
 point the Mac elsewhere with `defaults write com.onevcat.prowl remoteMirrorPushGatewayURL <URL>`;
 a phone's token works only at the service that issued it, so any other service answers `410`

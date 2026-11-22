@@ -10,6 +10,9 @@ nonisolated enum MirrorPushContract {
   /// reported, and works only at the gateway that issued it, so the Host and the phone must
   /// use this same address.
   static let gatewayURL = URL(string: "https://prowl-push.onev.dev")!
+
+  /// The longest `sealed` value (Base64 characters) that the gateway accepts in `POST /v1/push`.
+  static let maximumSealedLength = 3_000
 }
 
 /// `pushRegister`: where the Host sends push events for this device, and which events. The

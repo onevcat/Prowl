@@ -359,3 +359,4 @@ S0 notes for P3:
 - Updated 2026-11-22: M2 flows out of views, one notification row per Mac — see [012-m2-flows.md](012-m2-flows.md)
 - Updated 2026-11-22: M3 dead tokens (`pushStatus.tokenGone`) — see [013-m3-dead-tokens.md](013-m3-dead-tokens.md)
 - Updated 2026-11-22: M4 diagnostics (last push per device, gateway reasons, phone and extension logs) — see [014-m4-diagnostics.md](014-m4-diagnostics.md)
+- Updated 2026-11-23: Show Details carries what the agent asks or replied — see [015-content-summary.md](015-content-summary.md)

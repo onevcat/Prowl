@@ -90,6 +90,7 @@
       ]
     },
     "pushPath": "/v1/push",
+    "maximumSealedLength": 3000,
     "pushRequestKeys": [
       "collapseID",
       "pushToken",

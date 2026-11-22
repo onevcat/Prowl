@@ -16,7 +16,7 @@ struct MirrorNotificationsSection: View {
       if push.settings.isEnabled {
         Toggle(isOn: Binding(get: { push.settings.showsDetails }, set: push.settings.setShowsDetails)) {
           Text("Show Details")
-          Text("Show the tab name in notifications, also on the lock screen.")
+          Text("Show the tab name and what the agent asks or replies, also on the lock screen.")
         }
         .accessibilityIdentifier("push-show-details")
         // One row per Mac: its addresses share the kinds and the token.
