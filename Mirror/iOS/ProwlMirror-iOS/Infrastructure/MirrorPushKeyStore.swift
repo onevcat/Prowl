@@ -48,11 +48,38 @@ nonisolated enum MirrorPushKeyStore {
     guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure(status: status) }
   }
 
-  private static func query(_ hostID: UUID) -> [String: Any] {
+  /// **Show Details** (docs-ai 095 P3f), in the shared group so the extension can read it.
+  /// Off when missing or unreadable.
+  static var showsDetails: Bool {
+    var request = query(account: detailsAccount)
+    request[kSecReturnData as String] = true
+    request[kSecMatchLimit as String] = kSecMatchLimitOne
+    var result: CFTypeRef?
+    guard SecItemCopyMatching(request as CFDictionary, &result) == errSecSuccess else { return false }
+    return (result as? Data) == Data([1])
+  }
+
+  static func setShowsDetails(_ on: Bool) throws {
+    let value = Data([on ? 1 : 0])
+    var status = SecItemUpdate(query(account: detailsAccount) as CFDictionary, [kSecValueData as String: value] as CFDictionary)
+    if status == errSecItemNotFound {
+      var item = query(account: detailsAccount)
+      item[kSecValueData as String] = value
+      item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+      status = SecItemAdd(item as CFDictionary, nil)
+    }
+    guard status == errSecSuccess else { throw Failure(status: status) }
+  }
+
+  private static let detailsAccount = "show-details"
+
+  private static func query(_ hostID: UUID) -> [String: Any] { query(account: hostID.uuidString) }
+
+  private static func query(account: String) -> [String: Any] {
     var query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: hostID.uuidString,
+      kSecAttrAccount as String: account,
     ]
     if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
     return query

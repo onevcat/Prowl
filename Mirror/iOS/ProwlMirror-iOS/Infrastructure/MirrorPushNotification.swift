@@ -28,15 +28,21 @@ nonisolated enum MirrorPushNotification {
     return Opened(hostID: hostID, content: content)
   }
 
-  /// Generic text by kind: the tab name and the prompt stay off the lock screen. The Host and
-  /// pane go into `userInfo` for the tap, and notifications group by Host.
-  static func apply(_ opened: Opened, to content: UNMutableNotificationContent) {
-    content.title = String(localized: "MIRROR_PUSH_TITLE")
-    content.body =
-      switch opened.content.kind {
-      case .blocked: String(localized: "MIRROR_PUSH_BLOCKED")
-      case .done: String(localized: "MIRROR_PUSH_DONE")
-      }
+  /// Generic text by kind, so the tab name stays off the lock screen, unless **Show Details**
+  /// is on: then the Host's title (tab and worktree) and text. The Host and pane go into
+  /// `userInfo` for the tap, and notifications group by Host.
+  static func apply(_ opened: Opened, to content: UNMutableNotificationContent, showsDetails: Bool) {
+    if showsDetails, !opened.content.title.isEmpty {
+      content.title = opened.content.title
+      content.body = opened.content.body
+    } else {
+      content.title = String(localized: "MIRROR_PUSH_TITLE")
+      content.body =
+        switch opened.content.kind {
+        case .blocked: String(localized: "MIRROR_PUSH_BLOCKED")
+        case .done: String(localized: "MIRROR_PUSH_DONE")
+        }
+    }
     content.threadIdentifier = opened.hostID.uuidString
     content.targetContentIdentifier = opened.content.paneID.uuidString
     var userInfo = content.userInfo

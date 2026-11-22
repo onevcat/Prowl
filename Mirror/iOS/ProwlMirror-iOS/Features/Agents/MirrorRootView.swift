@@ -8,6 +8,9 @@ struct MirrorRootView: View {
   @State private var path = NavigationPath()
   @State private var showsAdd = false
   @State private var showsHosts = false
+  private let router = MirrorNotificationRouter.shared
+  /// The Host that a tapped notification selected; its selection change keeps the pane open.
+  @State private var notificationHostID: UUID?
 
   var body: some View {
     Group {
@@ -41,7 +44,40 @@ struct MirrorRootView: View {
         Task { @MainActor in showsAdd = true }
       }
     }
-    .onChange(of: store.selectedHost?.id) { _, _ in path = NavigationPath() }
+    .onChange(of: store.selectedHost?.id) { _, new in
+      if new != nil, new == notificationHostID {
+        notificationHostID = nil
+      } else {
+        path = NavigationPath()
+      }
+    }
+    .task(id: router.pending) { await openNotificationTarget() }
+  }
+
+  /// A tapped notification (docs-ai 095 P3f): show its Host, connect if needed, and open the
+  /// pane once the Host lists it. A pane that is gone leaves the agents list in view.
+  private func openNotificationTarget() async {
+    guard let target = router.pending else { return }
+    defer { router.pending = nil }
+    guard let host = store.hosts.first(where: { $0.hostID == target.hostID }) else { return }
+    showsAdd = false
+    showsHosts = false
+    if store.selectedHost?.id != host.id {
+      path = NavigationPath()
+      notificationHostID = host.id
+      store.select(host.id)
+    }
+    let session = sessions.session(for: host)
+    if case .failed = session.status { session.retry() } else { session.start() }
+    // The roster arrives within the connect timeout, or the connection failed.
+    let deadline = ContinuousClock.now + MirrorHostSession.connectTimeoutDuration
+    while session.status != .ready, ContinuousClock.now < deadline {
+      if case .failed = session.status { return }
+      try? await Task.sleep(for: .milliseconds(200))
+      if Task.isCancelled { return }
+    }
+    guard let route = MirrorNotificationRouter.route(for: target, host: host, panes: session.panes) else { return }
+    path = NavigationPath([route])
   }
 }
 

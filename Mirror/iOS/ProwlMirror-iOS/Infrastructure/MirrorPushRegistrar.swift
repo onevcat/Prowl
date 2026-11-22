@@ -44,6 +44,8 @@ final class MirrorAppDelegate: NSObject, UIApplicationDelegate {
   func application(
     _ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Set before launch ends, so a tap that launched the app is delivered too.
+    UNUserNotificationCenter.current().delegate = MirrorNotificationDelegate.shared
     #if DEBUG
       Self.applyPushDebugKey()
     #endif

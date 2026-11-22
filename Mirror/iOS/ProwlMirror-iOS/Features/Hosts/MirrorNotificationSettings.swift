@@ -14,6 +14,8 @@ struct MirrorNotificationsSection: View {
       Toggle("Notifications", isOn: Binding(get: { push.isEnabled }, set: setEnabled))
         .accessibilityIdentifier("push-enabled")
       if push.isEnabled {
+        Toggle("Show Details", isOn: Binding(get: { push.showsDetails }, set: push.setShowsDetails))
+          .accessibilityIdentifier("push-show-details")
         ForEach(store.hosts) { host in
           if let hostID = host.hostID {
             NavigationLink {
@@ -36,7 +38,8 @@ struct MirrorNotificationsSection: View {
         Text(
           """
           When an agent needs you or finishes while you are away from the Mac, the Host sends a \
-          notification through the Prowl push service. The content is end-to-end encrypted.
+          notification through the Prowl push service. The content is end-to-end encrypted. \
+          Show Details adds the tab and worktree name, also on the lock screen.
           """)
       }
     }

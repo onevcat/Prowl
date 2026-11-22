@@ -10,6 +10,8 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   private var records: [UUID: MirrorPushTokenRecord] = [:]
   private(set) var keys: [UUID: SymmetricKey] = [:]
   var apnsToken: String? = "aa11"
+  var showsDetails = false
+  var failsToSaveDetails = false
   var now = Date(timeIntervalSince1970: 1_000_000)
   let gateway = FakeGateway()
   let attest = FakeAttest()
@@ -31,7 +33,12 @@ final class PushCoordinatorWorld: @unchecked Sendable {
       environment: { .development },
       saveKey: { key, id in self.lock.withLock { self.keys[id] = key } },
       removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
-      now: { self.now })
+      now: { self.now },
+      showsDetails: { self.showsDetails },
+      saveShowsDetails: { value in
+        if self.failsToSaveDetails { throw MirrorPushKeyStore.Failure(status: -1) }
+        self.showsDetails = value
+      })
   }
 }
 
@@ -185,6 +192,18 @@ struct MirrorPushCoordinatorTests {
     #expect(world.gateway.routes().filter { $0 == "DELETE /v1/tokens/push-1" }.count == 2)
   }
 
+  @Test func showDetailsIsSavedWhereTheExtensionReadsIt() {
+    world.showsDetails = true
+    let coordinator = world.coordinator()
+    #expect(coordinator.showsDetails)
+    coordinator.setShowsDetails(false)
+    #expect(!world.showsDetails && !coordinator.showsDetails)
+
+    world.failsToSaveDetails = true
+    coordinator.setShowsDetails(true)
+    #expect(!coordinator.showsDetails)
+  }
+
   @Test func keepsTheHostsAnswer() {
     let coordinator = world.coordinator()
     let status = MirrorMessage.PushStatusPayload(pushEnabled: true, pushAllowedByMac: false, registered: true)
@@ -213,5 +232,30 @@ struct MirrorPushStatusTextTests {
     #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off on the Mac")
     push.setKinds([], for: hostID)
     #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off")
+  }
+}
+
+struct MirrorNotificationRouterTests {
+  private let hostID = UUID()
+  private let paneID = UUID()
+
+  @Test func readsTheTargetOfAnOpenedNotificationOnly() {
+    let target = MirrorNotificationRouter.target(of: ["hostID": hostID.uuidString, "paneID": paneID.uuidString])
+    #expect(target == .init(hostID: hostID, paneID: paneID))
+    #expect(MirrorNotificationRouter.target(of: ["sealed": "x"]) == nil)
+    #expect(MirrorNotificationRouter.target(of: ["hostID": hostID.uuidString, "paneID": "nope"]) == nil)
+  }
+
+  @Test func routesToThePaneWhileTheHostListsIt() {
+    let host = MirrorHostRecord(
+      id: UUID(), address: "mac", port: 7880, hostID: hostID, pairedAt: Date(timeIntervalSince1970: 0))
+    let pane = MirrorPaneDescriptor(id: paneID, title: "Claude Code · main", directory: "/repo", busy: false)
+    let target = MirrorNotificationRouter.Target(hostID: hostID, paneID: paneID)
+
+    #expect(MirrorNotificationRouter.route(for: target, host: host, panes: [pane])?.pane.id == paneID)
+    #expect(MirrorNotificationRouter.route(for: target, host: host, panes: []) == nil)
+    var other = host
+    other.hostID = UUID()
+    #expect(MirrorNotificationRouter.route(for: target, host: other, panes: [pane]) == nil)
   }
 }

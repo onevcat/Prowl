@@ -75,6 +75,15 @@ struct MirrorPushKeyStoreTests {
     try MirrorPushKeyStore.remove(hostID: hostID)
   }
 
+  @Test func showDetailsIsStoredInTheSharedGroup() throws {
+    let before = MirrorPushKeyStore.showsDetails
+    defer { try? MirrorPushKeyStore.setShowsDetails(before) }
+    try MirrorPushKeyStore.setShowsDetails(true)
+    #expect(MirrorPushKeyStore.showsDetails)
+    try MirrorPushKeyStore.setShowsDetails(false)
+    #expect(!MirrorPushKeyStore.showsDetails)
+  }
+
   @Test func usesTheSharedGroup() {
     #expect(MirrorPushKeyStore.accessGroup?.hasSuffix("com.onevcat.prowl.mirror.shared") == true)
   }
@@ -99,7 +108,7 @@ struct MirrorPushNotificationTests {
       let content = UNMutableNotificationContent()
       content.title = "fallback title"
       content.userInfo = ["sealed": try sealed(kind), "aps": ["mutable-content": 1]]
-      MirrorPushNotification.apply(opened, to: content)
+      MirrorPushNotification.apply(opened, to: content, showsDetails: false)
 
       #expect(content.title == "Prowl")
       #expect(content.body == body)
@@ -112,6 +121,22 @@ struct MirrorPushNotificationTests {
       #expect(content.userInfo["kind"] as? String == kind.rawValue)
       #expect(content.userInfo["aps"] != nil)
     }
+  }
+
+  @Test func showDetailsUsesTheHostsTitleAndText() throws {
+    let opened = try #require(MirrorPushNotification.open(userInfo: ["sealed": sealed(.blocked)], key: keys))
+    let content = UNMutableNotificationContent()
+    MirrorPushNotification.apply(opened, to: content, showsDetails: true)
+    #expect(content.title == "Prowl · main")
+    #expect(content.body == "Allow rm -rf build?")
+    #expect(content.userInfo["paneID"] as? String == paneID.uuidString)
+
+    let untitled = MirrorPushNotification.Opened(
+      hostID: hostID,
+      content: MirrorPushContent(kind: .done, paneID: paneID, title: "", body: "x", stateChangedAt: nil))
+    MirrorPushNotification.apply(untitled, to: content, showsDetails: true)
+    #expect(content.title == "Prowl")
+    #expect(content.body == "An agent finished")
   }
 
   @Test func leavesTheFallbackWhenThePushCannotBeOpened() throws {

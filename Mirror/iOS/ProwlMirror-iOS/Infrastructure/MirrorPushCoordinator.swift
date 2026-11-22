@@ -50,6 +50,7 @@ final class MirrorPushCoordinator {
   @ObservationIgnored private let saveKey: (SymmetricKey, UUID) throws -> Void
   @ObservationIgnored private let now: () -> Date
   @ObservationIgnored private let removeKey: (UUID) throws -> Void
+  @ObservationIgnored private let saveShowsDetails: (Bool) throws -> Void
 
   init(
     defaults: UserDefaults = .standard,
@@ -59,7 +60,9 @@ final class MirrorPushCoordinator {
     environment: @escaping () -> MirrorAPNsEnvironment = { .current },
     saveKey: @escaping (SymmetricKey, UUID) throws -> Void = { try MirrorPushKeyStore.save($0, hostID: $1) },
     removeKey: @escaping (UUID) throws -> Void = { try MirrorPushKeyStore.remove(hostID: $0) },
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    showsDetails: @escaping () -> Bool = { MirrorPushKeyStore.showsDetails },
+    saveShowsDetails: @escaping (Bool) throws -> Void = { try MirrorPushKeyStore.setShowsDetails($0) }
   ) {
     self.defaults = defaults
     self.gateway = gateway
@@ -69,6 +72,8 @@ final class MirrorPushCoordinator {
     self.saveKey = saveKey
     self.now = now
     self.removeKey = removeKey
+    self.saveShowsDetails = saveShowsDetails
+    self.showsDetails = showsDetails()
     isEnabled = defaults.bool(forKey: Self.enabledKey)
     let stored = defaults.dictionary(forKey: Self.kindsKey) as? [String: [String]] ?? [:]
     hostKinds = Dictionary(
@@ -79,6 +84,19 @@ final class MirrorPushCoordinator {
 
   /// The global switch. Mirrored in a stored property so that views observe it.
   private(set) var isEnabled: Bool
+  /// **Show Details**: the extension shows the tab name and the Host's text instead of the
+  /// generic text. Stored in the shared Keychain group, where the extension reads it.
+  private(set) var showsDetails: Bool
+
+  func setShowsDetails(_ on: Bool) {
+    do {
+      try saveShowsDetails(on)
+      showsDetails = on
+    } catch {
+      MirrorLog.push.error("Saving Show Details failed: \(String(describing: error), privacy: .private)")
+    }
+  }
+
   /// Event kinds per Host UUID; a Host missing here gets every kind.
   private(set) var hostKinds: [UUID: Set<MirrorPushKind>]
 

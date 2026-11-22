@@ -15,7 +15,7 @@ final class NotificationService: UNNotificationServiceExtension {
       contentHandler(original)
       return
     }
-    MirrorPushNotification.apply(opened, to: content)
+    MirrorPushNotification.apply(opened, to: content, showsDetails: MirrorPushKeyStore.showsDetails)
     contentHandler(content)
   }
 }

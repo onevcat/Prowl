@@ -404,7 +404,9 @@ permission the first time). Each paired Host has a row with its state (**On**, *
 Mac**, **Update Prowl on the Mac**, **Not connected yet**) and a page that chooses the events:
 **An agent needs you** and **An agent finished**. Notifications show only "An agent needs your
 attention" or "An agent finished"; the phone decrypts them and keeps the Host's text off the
-lock screen. Turning notifications off, turning off every event of a Host, or forgetting a
+lock screen. **Show Details** (off by default) shows the tab and worktree name instead, also on
+the lock screen. Tapping a notification opens that Host and pane, and connects first if needed;
+a pane that has closed since leaves the agents list in view. Turning notifications off, turning off every event of a Host, or forgetting a
 Host deletes that Host's push token at the push service, so a Host that is offline at that
 moment cannot notify the phone either.
 
