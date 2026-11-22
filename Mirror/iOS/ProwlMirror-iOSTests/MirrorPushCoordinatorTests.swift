@@ -12,6 +12,7 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   var apnsToken: String? = "aa11"
   var showsDetails = false
   var failsToSaveDetails = false
+  var failsToSaveKey = false
   var now = Date(timeIntervalSince1970: 1_000_000)
   var environment = MirrorAPNsEnvironment.development
   let gateway = FakeGateway()
@@ -48,7 +49,10 @@ final class PushCoordinatorWorld: @unchecked Sendable {
         return self.apnsToken
       },
       environment: { self.environment },
-      saveKey: { key, id in self.lock.withLock { self.keys[id] = key } },
+      saveKey: { key, id in
+        if self.failsToSaveKey { throw MirrorPushKeyStore.Failure(status: -1) }
+        self.lock.withLock { self.keys[id] = key }
+      },
       removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
       now: { self.now },
       showsDetails: { self.showsDetails },
@@ -265,8 +269,9 @@ struct MirrorPushCoordinatorTests {
     #expect(world.record(credential.hostID)?.pushToken == "push-2")
   }
 
-  @Test(.timeLimit(.minutes(1))) func anOlderRegistrationDoesNotSendStaleKindsButKeepsItsToken() async {
+  @Test(.timeLimit(.minutes(1))) func anOlderRegistrationWithStaleKindsSendsNothingAndKeepsNoToken() async {
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
     world.gateway.hold("POST /v1/tokens")
     let coordinator = world.coordinator()
     let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
@@ -275,8 +280,32 @@ struct MirrorPushCoordinatorTests {
     coordinator.setKinds([.done], for: credential.hostID)
     world.gateway.release("POST /v1/tokens")
     #expect(await registering.value == nil)
+    #expect(world.record(credential.hostID) == nil)
+    #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") && world.stored.revoking.isEmpty })
+  }
+
+  @Test func aReplacementThatCannotBeDeliveredKeepsTheWorkingOwner() async {
+    let otherAddress = MirrorDeviceCredential(hostID: credential.hostID, deviceID: UUID(), key: Data(repeating: 3, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-3"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-2", 204)
+    world.gateway.answer("DELETE /v1/tokens/push-3", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    let ownerKey = world.keys[credential.hostID]
+
+    // The connection closed while the gateway answered.
+    #expect(await coordinator.registration(for: otherAddress, capabilities: push, deliverable: { false }) == nil)
+    // The key could not be saved.
+    world.failsToSaveKey = true
+    #expect(await coordinator.registration(for: otherAddress, capabilities: push) == nil)
+
     #expect(world.record(credential.hostID)?.pushToken == "push-1")
-    #expect(world.stored.revoking.isEmpty)
+    #expect(world.keys[credential.hostID] == ownerKey)
+    #expect(await eventually { world.stored.revoking.isEmpty })
+    let deleted = world.gateway.routes().filter { $0.hasPrefix("DELETE") }
+    #expect(deleted == ["DELETE /v1/tokens/push-2", "DELETE /v1/tokens/push-3"])
   }
 
   @Test(.timeLimit(.minutes(1))) func aQueuedRequestDoesNotLeaveAfterTurningOff() async {

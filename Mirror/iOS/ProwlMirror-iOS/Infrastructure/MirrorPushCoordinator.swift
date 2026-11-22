@@ -272,7 +272,11 @@ final class MirrorPushCoordinator {
   /// The message for a Host connection that just listed its panes, or `nil` when nothing should
   /// be sent: notifications are off, the Host lacks `push-v1`, a step failed, or the settings
   /// changed while it ran.
-  func registration(for credential: MirrorDeviceCredential, capabilities: Set<String>) async -> MirrorMessage? {
+  /// `deliverable` says whether the connection that asked can still send the result; a
+  /// replacement token is committed only while it can.
+  func registration(
+    for credential: MirrorDeviceCredential, capabilities: Set<String>, deliverable: @escaping () -> Bool = { true }
+  ) async -> MirrorMessage? {
     guard isEnabled, capabilities.contains("push-v1") else { return nil }
     let hostID = credential.hostID
     let kinds = kinds(for: hostID)
@@ -285,27 +289,70 @@ final class MirrorPushCoordinator {
     let previous = hostQueues[hostID]
     let task = Task { () -> MirrorMessage? in
       await previous?.value
-      return await self.register(credential, kinds: kinds, ticket: ticket)
+      return await self.register(credential, kinds: kinds, ticket: ticket, deliverable: deliverable)
     }
     hostQueues[hostID] = Task { _ = await task.value }
     return await task.value
   }
 
-  /// The push key is saved only together with a token that this pairing owns, so a pairing
-  /// that fails never replaces the key of the one that carries the Host's notifications.
+  /// A new token is only prepared by the gateway. It becomes the Host's owner in one
+  /// synchronous step, after the settings are still current, the connection can still send
+  /// it, and its key is saved; only then is the token it replaces deleted. Otherwise the new
+  /// token is revoked and the previous owner keeps working.
   private func register(
-    _ credential: MirrorDeviceCredential, kinds: Set<MirrorPushKind>, ticket: Ticket
+    _ credential: MirrorDeviceCredential, kinds: Set<MirrorPushKind>, ticket: Ticket,
+    deliverable: () -> Bool
   ) async -> MirrorMessage? {
     guard isCurrent(ticket), let apnsToken = await registerAPNs(), isCurrent(ticket) else { return nil }
+    let prepared: PreparedToken
     do {
-      let pushToken = try await pushToken(for: credential, apnsToken: apnsToken, ticket: ticket)
-      guard isCurrent(ticket) else { return nil }
-      try saveKey(MirrorPushCrypto.key(deviceSecret: credential.key, hostID: credential.hostID), credential.hostID)
-      return .pushRegister(.init(pushToken: pushToken, kinds: kinds.map(\.rawValue).sorted()))
+      prepared = try await pushToken(for: credential, apnsToken: apnsToken, ticket: ticket)
     } catch {
       MirrorLog.push.error("Push registration for a Host failed: \(String(describing: error), privacy: .private)")
       return nil
     }
+    guard isCurrent(ticket), deliverable() else {
+      abandon(prepared)
+      return nil
+    }
+    do {
+      try saveKey(MirrorPushCrypto.key(deviceSecret: credential.key, hostID: credential.hostID), credential.hostID)
+    } catch {
+      MirrorLog.push.error("Saving the push key failed: \(String(describing: error), privacy: .private)")
+      abandon(prepared)
+      return nil
+    }
+    if case .created(let record) = prepared { commit(record, for: credential.hostID) }
+    return .pushRegister(.init(pushToken: prepared.pushToken, kinds: kinds.map(\.rawValue).sorted()))
+  }
+
+  private enum PreparedToken {
+    /// The Host's own token, already stored.
+    case existing(String)
+    /// A new token from the gateway, not stored yet.
+    case created(MirrorPushTokenRecord)
+
+    var pushToken: String {
+      switch self {
+      case .existing(let token): token
+      case .created(let record): record.pushToken
+      }
+    }
+  }
+
+  private func abandon(_ prepared: PreparedToken) {
+    guard case .created(let record) = prepared else { return }
+    mutate { $0.revoking.append(record.pushToken) }
+    Task { await retryRevocations() }
+  }
+
+  private func commit(_ record: MirrorPushTokenRecord, for hostID: UUID) {
+    let replaced = state.records[hostID]
+    mutate {
+      $0.records[hostID] = record
+      if let replaced, replaced.pushToken != record.pushToken { $0.revoking.append(replaced.pushToken) }
+    }
+    if replaced != nil { Task { await retryRevocations() } }
   }
 
   func received(_ status: MirrorMessage.PushStatusPayload, hostID: UUID) {
@@ -316,18 +363,17 @@ final class MirrorPushCoordinator {
 
   /// The stored token while it belongs to this pairing and build, is fresh, and points at this
   /// APNs token. Otherwise the gateway confirms it with `PUT` (which also moves it to a new
-  /// APNs token). A token the gateway no longer knows, or that an earlier installation owns, is
-  /// replaced; a token of another pairing or build stays until its replacement exists, then is
-  /// deleted. Nothing reaches the gateway once the Host or pairing was revoked, and a token
-  /// created meanwhile is revoked at once.
+  /// APNs token). A token the gateway no longer knows, or that an earlier installation owns,
+  /// or a token of another pairing or build, gets a replacement, which `register` commits or
+  /// abandons. Nothing reaches the gateway once the Host or pairing was revoked.
   private func pushToken(
     for credential: MirrorDeviceCredential, apnsToken: String, ticket: Ticket
-  ) async throws -> String {
+  ) async throws -> PreparedToken {
     let hostID = credential.hostID
     let environment = environment().rawValue
     if let record = state.records[hostID], record.deviceID == credential.deviceID, record.environment == environment {
       if record.apnsToken == apnsToken, now().timeIntervalSince(record.checkedAt) < Self.checkInterval {
-        return record.pushToken
+        return .existing(record.pushToken)
       }
       do {
         try await gateway.updateToken(record.pushToken, apnsToken: apnsToken, allowed: permission(ticket))
@@ -335,7 +381,7 @@ final class MirrorPushCoordinator {
           throw Superseded()
         }
         mutate { $0.records[hostID] = record.moved(to: apnsToken, at: now()) }
-        return record.pushToken
+        return .existing(record.pushToken)
       } catch MirrorPushGatewayError.refused(let status) where status == 404 || status == 403 {
         if state.records[hostID]?.pushToken == record.pushToken { mutate { $0.records[hostID] = nil } }
       }
@@ -343,20 +389,10 @@ final class MirrorPushCoordinator {
     guard isCurrent(ticket, forToken: true) else { throw Superseded() }
     let pushToken = try await gateway.createToken(
       apnsToken: apnsToken, environment: .init(rawValue: environment) ?? .production, allowed: permission(ticket))
-    guard isCurrent(ticket, forToken: true) else {
-      mutate { $0.revoking.append(pushToken) }
-      Task { await retryRevocations() }
-      throw Superseded()
-    }
-    let replaced = state.records[hostID]
-    mutate {
-      $0.records[hostID] = .init(
+    return .created(
+      .init(
         pushToken: pushToken, apnsToken: apnsToken, environment: environment, deviceID: credential.deviceID,
-        checkedAt: now())
-      if let replaced, replaced.pushToken != pushToken { $0.revoking.append(replaced.pushToken) }
-    }
-    if replaced != nil { Task { await retryRevocations() } }
-    return pushToken
+        checkedAt: now()))
   }
 }
 

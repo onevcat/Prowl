@@ -238,7 +238,10 @@ final class MirrorHostSession {
     pushRegistrationAttempt = attempt
     let capabilities = capabilities
     Task { [weak self, push] in
-      guard let message = await push.registration(for: credential, capabilities: capabilities) else { return }
+      let deliverable = { [weak self] in self?.generation == attempt && self?.status == .ready }
+      guard
+        let message = await push.registration(for: credential, capabilities: capabilities, deliverable: deliverable)
+      else { return }
       guard let self, self.generation == attempt, self.status == .ready else { return }
       self.send(message)
     }

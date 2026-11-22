@@ -69,6 +69,15 @@ the top branch of the stack (#1153); the stack merges as one.
 - **Kind changes reach every connected address of the Mac** (`MirrorHostSessions.pushSettingsChanged(hostID:)`),
   not only the entry whose settings page was used.
 
+## Round 4 changes
+
+- **Prepare, then commit.** A new token from the gateway is only prepared. It becomes the
+  Host's owner in one synchronous step: the settings must still be current, the connection
+  that asked must still be ready (`deliverable`), and the push key must be saved. Only then is
+  the token that it replaces deleted. Otherwise the new token is revoked and the previous
+  owner keeps working. A registration whose kinds changed while it ran keeps no new token
+  (the re-registration that the change triggers creates one).
+
 ## Refs
 
 #1153 (review round 1 of the stack review for #1149–#1153). Tests:
