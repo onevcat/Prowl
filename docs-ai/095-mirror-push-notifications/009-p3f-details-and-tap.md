@@ -44,4 +44,4 @@ Reading pane A while pane B blocks (Mac locked by onevcat, PASS):
 
 ## Refs
 
-PR: P3f (stacked on #1152).
+PR: #1153 (stacked on #1152).
