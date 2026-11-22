@@ -98,6 +98,18 @@ Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes
 
 The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
 not currently enforce T1; maintainers running the script must complete this check first.
+
+### Mirror push release check
+
+Before every public release, run `scripts/test-mirror-push.sh` from the release source, with
+a checkout of the private `prowl-push-gateway` repository next to this one (or set
+`GATEWAY_DIR`). It runs the push tests of the Host, the iOS app and the gateway against the
+shared contract `Mirror/Fixtures/push/contract.json`, and fails when the gateway's copy of the
+contract differs. A warm run takes about two minutes. CI does not run it: the iOS suite runs
+only on Mirror changes, and the gateway lives in another repository, so a change on one side
+alone can break the contract without a failing check. Do not publish while it fails. The
+scenarios and the manual device checklist are in
+[test-scenarios.md](../095-mirror-push-notifications/test-scenarios.md).
 These diagnostics belong in the release conversation/evidence, not public release notes.
 
 ### Full Public Release
