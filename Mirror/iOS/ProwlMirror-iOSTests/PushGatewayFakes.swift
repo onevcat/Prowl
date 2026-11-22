@@ -97,11 +97,17 @@ final class MemoryStorage: @unchecked Sendable {
   }
 }
 
-/// Yields until `condition` holds; bounded so a broken test fails instead of hanging.
+/// Yields until `condition` holds. It gives up only after both 10,000 yields and 10 seconds:
+/// a count alone fails on a loaded CI runner before actor hops finish, and a time alone fails
+/// when the main thread is starved.
 @MainActor func eventually(_ condition: () -> Bool) async -> Bool {
-  for _ in 0..<10_000 {
+  let clock = ContinuousClock()
+  let deadline = clock.now + .seconds(10)
+  var yields = 0
+  while yields < 10_000 || clock.now < deadline {
     if condition() { return true }
     await Task.yield()
+    yields += 1
   }
   return condition()
 }
