@@ -55,11 +55,15 @@ struct MirrorRootView: View {
   }
 
   /// A tapped notification (docs-ai 095 P3f): show its Host, connect if needed, and open the
-  /// pane once the Host lists it. A pane that is gone leaves the agents list in view.
+  /// pane once the Host lists it. A pane that is gone, or a Host that cannot be reached, shows
+  /// the agents list. A newer tap or a Host switch by the user takes over: this one then
+  /// changes nothing.
   private func openNotificationTarget() async {
     guard let target = router.pending else { return }
-    defer { router.pending = nil }
-    guard let host = store.hosts.first(where: { $0.hostID == target.hostID }) else { return }
+    guard let host = store.hosts.first(where: { $0.hostID == target.hostID }) else {
+      router.finish(target)
+      return
+    }
     showsAdd = false
     showsHosts = false
     if store.selectedHost?.id != host.id {
@@ -72,12 +76,18 @@ struct MirrorRootView: View {
     // The roster arrives within the connect timeout, or the connection failed.
     let deadline = ContinuousClock.now + MirrorHostSession.connectTimeoutDuration
     while session.status != .ready, ContinuousClock.now < deadline {
-      if case .failed = session.status { return }
+      if case .failed = session.status { break }
       try? await Task.sleep(for: .milliseconds(200))
       if Task.isCancelled { return }
     }
-    guard let route = MirrorNotificationRouter.route(for: target, host: host, panes: session.panes) else { return }
-    path = NavigationPath([route])
+    guard router.owns(target, selectedHostID: store.selectedHost?.id, hostRecordID: host.id) else {
+      router.finish(target)
+      return
+    }
+    router.finish(target)
+    let route = session.status == .ready
+      ? MirrorNotificationRouter.route(for: target, host: host, panes: session.panes) : nil
+    path = route.map { NavigationPath([$0]) } ?? NavigationPath()
   }
 }
 

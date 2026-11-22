@@ -86,6 +86,10 @@ actor MirrorPushGatewayClient {
   private let storage: MirrorPushInstallationStorage
   private let send: Send
   private var installing: Task<MirrorPushInstallation, any Error>?
+  /// The last queued management request. App Attest counters must reach the gateway in order
+  /// (it refuses a lower counter as a replay), and an actor does not keep awaits in order, so
+  /// each request waits for the one before it.
+  private var queue: Task<Void, Never>?
 
   init(
     baseURL: URL = MirrorPushGatewayAddress.url, attest: any MirrorAppAttesting = DeviceAppAttest(),
@@ -105,6 +109,30 @@ actor MirrorPushGatewayClient {
 
   /// A new push token for this APNs token; the Host gets it with `pushRegister`.
   func createToken(apnsToken: String, environment: MirrorAPNsEnvironment) async throws -> String {
+    try await inOrder { try await self.create(apnsToken: apnsToken, environment: environment) }
+  }
+
+  /// Points an existing push token at a new APNs token.
+  func updateToken(_ pushToken: String, apnsToken: String) async throws {
+    try await inOrder { try await self.update(pushToken, apnsToken: apnsToken) }
+  }
+
+  /// Deletes a push token, so no Host can use it again; an unknown token is already gone.
+  func deleteToken(_ pushToken: String) async throws {
+    try await inOrder { try await self.delete(pushToken) }
+  }
+
+  private func inOrder<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    let previous = queue
+    let task = Task<T, any Error> {
+      await previous?.value
+      return try await operation()
+    }
+    queue = Task { _ = try? await task.value }
+    return try await task.value
+  }
+
+  private func create(apnsToken: String, environment: MirrorAPNsEnvironment) async throws -> String {
     let body = try JSONEncoder().encode(["apnsToken": apnsToken, "environment": environment.rawValue])
     let (data, status) = try await manage("POST", path: "/v1/tokens", body: body)
     switch status {
@@ -118,15 +146,13 @@ actor MirrorPushGatewayClient {
     }
   }
 
-  /// Points an existing push token at a new APNs token.
-  func updateToken(_ pushToken: String, apnsToken: String) async throws {
+  private func update(_ pushToken: String, apnsToken: String) async throws {
     let body = try JSONEncoder().encode(["apnsToken": apnsToken])
     let (_, status) = try await manage("PUT", path: "/v1/tokens/\(pushToken)", body: body)
     guard status == 204 else { throw MirrorPushGatewayError.refused(status: status) }
   }
 
-  /// Deletes a push token, so no Host can use it again; an unknown token is already gone.
-  func deleteToken(_ pushToken: String) async throws {
+  private func delete(_ pushToken: String) async throws {
     let (_, status) = try await manage("DELETE", path: "/v1/tokens/\(pushToken)", body: nil)
     guard status == 204 || status == 404 else { throw MirrorPushGatewayError.refused(status: status) }
   }
@@ -134,7 +160,9 @@ actor MirrorPushGatewayClient {
   // MARK: Management
 
   /// Sends a management request. A `401` means the gateway no longer accepts this installation
-  /// (deleted, or its counter moved on); the app attests a new key and tries once more.
+  /// (deleted, or its counter moved on), and a missing local key means a reinstall; either way
+  /// the app attests a new key and tries once more. A token of the earlier installation then
+  /// answers `403`, which the caller handles.
   private func manage(_ method: String, path: String, body: Data?) async throws -> (Data, Int) {
     var renewed = false
     while true {
@@ -142,8 +170,17 @@ actor MirrorPushGatewayClient {
       let challenge = try await challenge()
       let bodyText = body.map { String(decoding: $0, as: UTF8.self) } ?? ""
       let clientData = Data("\(method) \(path)\n\(challenge)\n\(bodyText)".utf8)
-      let assertion = try await attest.generateAssertion(
-        installation.keyID, clientDataHash: Data(SHA256.hash(data: clientData)))
+      let assertion: Data
+      do {
+        assertion = try await attest.generateAssertion(
+          installation.keyID, clientDataHash: Data(SHA256.hash(data: clientData)))
+      } catch let error as DCError where error.code == .invalidKey && !renewed {
+        // The App Attest key lives as long as the app install, the Keychain record longer: after
+        // a reinstall the saved installation has no key. Attest a new one.
+        renewed = true
+        if storage.load() == installation { storage.save(nil) }
+        continue
+      }
       var request = request(method, path: path, body: body)
       request.setValue(installation.installationID, forHTTPHeaderField: "X-Prowl-Installation")
       request.setValue(challenge, forHTTPHeaderField: "X-Prowl-Challenge")

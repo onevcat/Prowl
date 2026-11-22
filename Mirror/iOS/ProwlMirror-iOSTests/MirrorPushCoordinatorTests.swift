@@ -4,10 +4,10 @@ import Testing
 
 @testable import ProwlMirror_iOS
 
-/// In-memory token records and push keys, with the time under test control.
+/// In-memory token state and push keys, with the time and APNs under test control.
 final class PushCoordinatorWorld: @unchecked Sendable {
   private let lock = NSLock()
-  private var records: [UUID: MirrorPushTokenRecord] = [:]
+  private var state = MirrorPushTokenState()
   private(set) var keys: [UUID: SymmetricKey] = [:]
   var apnsToken: String? = "aa11"
   var showsDetails = false
@@ -15,21 +15,37 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   var now = Date(timeIntervalSince1970: 1_000_000)
   let gateway = FakeGateway()
   let attest = FakeAttest()
+  let installation = MemoryStorage()
   let defaults = UserDefaults(suiteName: "push-coordinator-\(UUID().uuidString)")!
+  /// While set, APNs registration waits until `releaseAPNs()`.
+  var holdsAPNs = false
+  private var apnsWaiter: CheckedContinuation<Void, Never>?
 
-  func record(_ hostID: UUID) -> MirrorPushTokenRecord? { lock.withLock { records[hostID] } }
+  var stored: MirrorPushTokenState { lock.withLock { state } }
+  func record(_ hostID: UUID) -> MirrorPushTokenRecord? { stored.records[hostID] }
+  var isWaitingForAPNs: Bool { lock.withLock { apnsWaiter != nil } }
+
+  func releaseAPNs() {
+    holdsAPNs = false
+    lock.withLock { apnsWaiter.take() }?.resume()
+  }
 
   @MainActor func coordinator(enabled: Bool = true) -> MirrorPushCoordinator {
     defaults.set(enabled, forKey: MirrorPushCoordinator.enabledKey)
     return MirrorPushCoordinator(
       defaults: defaults,
       gateway: MirrorPushGatewayClient(
-        baseURL: URL(string: "https://gateway.test")!, attest: attest, storage: MemoryStorage().storage,
+        baseURL: URL(string: "https://gateway.test")!, attest: attest, storage: installation.storage,
         send: gateway.send),
       tokens: MirrorPushTokenStorage(
-        load: { id in self.lock.withLock { self.records[id] } },
-        save: { record, id in self.lock.withLock { self.records[id] = record } }),
-      registerAPNs: { self.apnsToken },
+        load: { self.lock.withLock { self.state } },
+        save: { new in self.lock.withLock { self.state = new } }),
+      registerAPNs: {
+        if self.holdsAPNs {
+          await withCheckedContinuation { continuation in self.lock.withLock { self.apnsWaiter = continuation } }
+        }
+        return self.apnsToken
+      },
       environment: { .development },
       saveKey: { key, id in self.lock.withLock { self.keys[id] = key } },
       removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
@@ -157,9 +173,9 @@ struct MirrorPushCoordinatorTests {
       Issue.record("Expected pushUnregister")
       return
     }
-    #expect(world.gateway.routes().last == "DELETE /v1/tokens/push-1")
     #expect(world.record(credential.hostID) == nil)
     #expect(world.keys[credential.hostID] == nil)
+    #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") && world.stored.revoking.isEmpty })
   }
 
   @Test func settingsSurviveARestart() {
@@ -173,7 +189,7 @@ struct MirrorPushCoordinatorTests {
     #expect(second.kinds(for: UUID()) == Set(MirrorPushKind.allCases))
   }
 
-  @Test func removingARegistrationDeletesTheTokenAndTheKey() async {
+  @Test func aFailedDeletionIsRetriedAfterARestartEvenForAForgottenHost() async {
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
     world.gateway.answer("DELETE /v1/tokens/push-1", 500)
     world.gateway.answer("DELETE /v1/tokens/push-1", 204)
@@ -181,15 +197,114 @@ struct MirrorPushCoordinatorTests {
     _ = await coordinator.registration(for: credential, capabilities: push)
     coordinator.received(.init(pushEnabled: true, pushAllowedByMac: true, registered: true), hostID: credential.hostID)
 
-    // An unreachable gateway keeps the record, so the next call tries again.
     await coordinator.removeRegistration(for: credential.hostID)
-    #expect(world.record(credential.hostID) != nil)
+    #expect(world.record(credential.hostID) == nil)
+    #expect(world.stored.revoking == ["push-1"])
     #expect(world.keys[credential.hostID] == nil)
     #expect(coordinator.statuses[credential.hostID] == nil)
 
-    await coordinator.removeRegistration(for: credential.hostID)
-    #expect(world.record(credential.hostID) == nil)
+    // A new launch, with notifications off: the deletion is still tried, nothing else.
+    let relaunched = world.coordinator(enabled: false)
+    await relaunched.appBecameActive()
+    #expect(world.stored.revoking.isEmpty)
     #expect(world.gateway.routes().filter { $0 == "DELETE /v1/tokens/push-1" }.count == 2)
+    #expect(!world.gateway.routes().contains("PUT /v1/tokens/push-1"))
+  }
+
+  @Test(.timeLimit(.minutes(1))) func turningOffWhileWaitingForAPNsContactsNoGateway() async {
+    world.holdsAPNs = true
+    let coordinator = world.coordinator()
+    let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.isWaitingForAPNs })
+
+    coordinator.setEnabled(false)
+    world.releaseAPNs()
+    #expect(await registering.value == nil)
+    #expect(!world.gateway.routes().contains("POST /v1/tokens"))
+    #expect(world.record(credential.hostID) == nil)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func aTokenCreatedAfterTurningOffIsRevokedAndNotRegistered() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    world.gateway.hold("POST /v1/tokens")
+    let coordinator = world.coordinator()
+    let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.gateway.isWaiting("POST /v1/tokens") })
+
+    coordinator.setEnabled(false)
+    world.gateway.release("POST /v1/tokens")
+    #expect(await registering.value == nil)
+    #expect(world.record(credential.hostID) == nil)
+    #expect(await eventually { world.gateway.routes().contains("DELETE /v1/tokens/push-1") && world.stored.revoking.isEmpty })
+  }
+
+  @Test(.timeLimit(.minutes(1))) func offThenOnDoesNotReuseATokenBeingDeleted() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    world.gateway.hold("DELETE /v1/tokens/push-1")
+
+    coordinator.setEnabled(false)
+    coordinator.setEnabled(true)
+    #expect(await eventually { world.gateway.isWaiting("DELETE /v1/tokens/push-1") })
+    let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
+    world.gateway.release("DELETE /v1/tokens/push-1")
+    guard case .pushRegister(let payload) = await registering.value else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.pushToken == "push-2")
+    #expect(world.record(credential.hostID)?.pushToken == "push-2")
+  }
+
+  @Test(.timeLimit(.minutes(1))) func anOlderRegistrationDoesNotSendStaleKindsButKeepsItsToken() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.hold("POST /v1/tokens")
+    let coordinator = world.coordinator()
+    let registering = Task { await coordinator.registration(for: credential, capabilities: push) }
+    #expect(await eventually { world.gateway.isWaiting("POST /v1/tokens") })
+
+    coordinator.setKinds([.done], for: credential.hostID)
+    world.gateway.release("POST /v1/tokens")
+    #expect(await registering.value == nil)
+    #expect(world.record(credential.hostID)?.pushToken == "push-1")
+    #expect(world.stored.revoking.isEmpty)
+  }
+
+  @Test func aNewAPNsTokenMovesTheTokensOfEveryHost() async throws {
+    let other = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 9, count: 32))
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    world.gateway.answer("PUT /v1/tokens/push-1", 204)
+    world.gateway.answer("PUT /v1/tokens/push-2", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    _ = await coordinator.registration(for: other, capabilities: push)
+
+    world.apnsToken = "bb22"
+    await coordinator.appBecameActive()
+    #expect(world.gateway.routes().contains("PUT /v1/tokens/push-1"))
+    #expect(world.gateway.routes().contains("PUT /v1/tokens/push-2"))
+    #expect(world.record(credential.hostID)?.apnsToken == "bb22")
+    #expect(world.record(other.hostID)?.apnsToken == "bb22")
+  }
+
+  @Test func aTokenOfAnEarlierInstallationIsReplaced() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("PUT /v1/tokens/push-1", 403, #"{"error":"not-owner"}"#)
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    world.now.addTimeInterval(MirrorPushCoordinator.checkInterval + 1)
+
+    guard case .pushRegister(let payload) = await coordinator.registration(for: credential, capabilities: push) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.pushToken == "push-2")
   }
 
   @Test func showDetailsIsSavedWhereTheExtensionReadsIt() {
@@ -241,9 +356,25 @@ struct MirrorNotificationRouterTests {
 
   @Test func readsTheTargetOfAnOpenedNotificationOnly() {
     let target = MirrorNotificationRouter.target(of: ["hostID": hostID.uuidString, "paneID": paneID.uuidString])
-    #expect(target == .init(hostID: hostID, paneID: paneID))
+    #expect(target?.hostID == hostID && target?.paneID == paneID)
     #expect(MirrorNotificationRouter.target(of: ["sealed": "x"]) == nil)
     #expect(MirrorNotificationRouter.target(of: ["hostID": hostID.uuidString, "paneID": "nope"]) == nil)
+  }
+
+  @Test @MainActor func onlyTheLatestTapIsCleared() {
+    let router = MirrorNotificationRouter()
+    let first = MirrorNotificationRouter.Target(hostID: hostID, paneID: paneID)
+    let second = MirrorNotificationRouter.Target(hostID: hostID, paneID: paneID)
+    #expect(first != second)
+    router.pending = second
+    router.finish(first)
+    #expect(router.pending == second)
+    let record = UUID()
+    #expect(!router.owns(first, selectedHostID: record, hostRecordID: record))
+    #expect(router.owns(second, selectedHostID: record, hostRecordID: record))
+    #expect(!router.owns(second, selectedHostID: UUID(), hostRecordID: record))
+    router.finish(second)
+    #expect(router.pending == nil)
   }
 
   @Test func routesToThePaneWhileTheHostListsIt() {

@@ -11,9 +11,17 @@ final class MirrorNotificationRouter {
   nonisolated struct Target: Equatable, Sendable {
     let hostID: UUID
     let paneID: UUID
+    /// Each tap is its own request, also for the same pane.
+    var id = UUID()
   }
 
+  /// The latest tap. A newer tap replaces it; only the request itself clears it.
   var pending: Target?
+
+  /// Clears `target` if it is still the latest tap.
+  func finish(_ target: Target) {
+    if pending == target { pending = nil }
+  }
 
   /// The target of a notification that the extension opened; `nil` for the fallback text,
   /// which carries no route.
@@ -22,6 +30,12 @@ final class MirrorNotificationRouter {
       let pane = (userInfo[MirrorPushNotification.paneIDKey] as? String).flatMap(UUID.init(uuidString:))
     else { return nil }
     return Target(hostID: host, paneID: pane)
+  }
+
+  /// Whether a tap still owns the navigation: it is the latest tap and its Host is still the one
+  /// shown (the user may have switched while it waited).
+  func owns(_ target: Target, selectedHostID: UUID?, hostRecordID: UUID) -> Bool {
+    pending == target && selectedHostID == hostRecordID
   }
 
   /// Where a target leads once the Host's panes are known: the pane, or `nil` when the pane is

@@ -104,6 +104,37 @@ struct MirrorPushGatewayClientTests {
     }
   }
 
+  @Test(.timeLimit(.minutes(1))) func requestsReachTheGatewayOneAfterAnother() async throws {
+    gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
+    gateway.hold("POST /v1/tokens")
+    let client = client()
+    async let first = client.createToken(apnsToken: "ab", environment: .production)
+    #expect(await eventually { gateway.isWaiting("POST /v1/tokens") })
+    async let second = client.createToken(apnsToken: "cd", environment: .production)
+    // The second request may not even take its challenge before the first one is answered.
+    for _ in 0..<200 { await Task.yield() }
+    #expect(gateway.routes().filter { $0 == "POST /v1/challenge" }.count == 2)
+
+    gateway.release("POST /v1/tokens")
+    #expect(try await [first, second] == ["push-1", "push-2"])
+    #expect(gateway.routes().filter { $0 == "POST /v1/installations" }.count == 1)
+  }
+
+  @Test func aLostAppAttestKeyIsReplacedOnce() async throws {
+    let saved = MirrorPushInstallation(keyID: "old-key", installationID: "i-old")
+    let memory = MemoryStorage(saved)
+    attest.lostKeys = ["old-key"]
+    gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    let client = MirrorPushGatewayClient(
+      baseURL: URL(string: "https://gateway.test")!, attest: attest, storage: memory.storage, send: gateway.send)
+
+    #expect(try await client.createToken(apnsToken: "ab", environment: .production) == "push-1")
+    #expect(memory.current == MirrorPushInstallation(keyID: "key-1", installationID: "i1"))
+    let tokens = try #require(gateway.requests.last)
+    #expect(tokens.value(forHTTPHeaderField: "X-Prowl-Installation") == "i1")
+  }
+
   @Test func aRefusedAttestationKeepsNoInstallation() async throws {
     gateway.answer("POST /v1/installations", 401, #"{"error":"invalid-attestation"}"#)
 

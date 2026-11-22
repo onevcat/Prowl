@@ -1,4 +1,5 @@
 import CryptoKit
+import DeviceCheck
 import Foundation
 
 @testable import ProwlMirror_iOS
@@ -8,6 +9,8 @@ final class FakeAttest: MirrorAppAttesting, @unchecked Sendable {
   private let lock = NSLock()
   private var keys = 0
   private(set) var assertedHashes: [Data] = []
+  /// Keys that this install no longer has (a reinstall): assertions with them fail.
+  var lostKeys: Set<String> = []
 
   init(isSupported: Bool = true) { self.isSupported = isSupported }
 
@@ -21,6 +24,7 @@ final class FakeAttest: MirrorAppAttesting, @unchecked Sendable {
   func attestKey(_ keyID: String, clientDataHash: Data) async throws -> Data { Data("attest:\(keyID)".utf8) }
 
   func generateAssertion(_ keyID: String, clientDataHash: Data) async throws -> Data {
+    if lock.withLock({ lostKeys.contains(keyID) }) { throw DCError(.invalidKey) }
     lock.withLock { assertedHashes.append(clientDataHash) }
     return Data("assert:\(keyID)".utf8)
   }
@@ -33,6 +37,17 @@ final class FakeGateway: @unchecked Sendable {
   private var challenges = 0
   private var installations = 0
   private(set) var requests: [URLRequest] = []
+  private var holds: Set<String> = []
+  private var waiting: [String: CheckedContinuation<Void, Never>] = [:]
+
+  /// The next request to `route` waits until `release(route)`.
+  func hold(_ route: String) { lock.withLock { _ = holds.insert(route) } }
+
+  func release(_ route: String) {
+    lock.withLock { waiting.removeValue(forKey: route) }?.resume()
+  }
+
+  func isWaiting(_ route: String) -> Bool { lock.withLock { waiting[route] != nil } }
 
   func answer(_ route: String, _ status: Int, _ body: String = "{}") {
     lock.withLock { answers[route, default: []].append((status, body)) }
@@ -44,9 +59,13 @@ final class FakeGateway: @unchecked Sendable {
 
   var send: MirrorPushGatewayClient.Send {
     { request in
-      let (status, body, headers): (Int, String, [String: String]) = self.lock.withLock {
+      let route = "\(request.httpMethod ?? "") \(request.url?.path() ?? "")"
+      let held = self.lock.withLock {
         self.requests.append(request)
-        let route = "\(request.httpMethod ?? "") \(request.url?.path() ?? "")"
+        return self.holds.remove(route) != nil
+      }
+      if held { await withCheckedContinuation { continuation in self.lock.withLock { self.waiting[route] = continuation } } }
+      let (status, body, headers): (Int, String, [String: String]) = self.lock.withLock {
         if route == "POST /v1/challenge" {
           self.challenges += 1
           return (200, #"{"challenge":"c\#(self.challenges)"}"#, [:])
@@ -69,9 +88,20 @@ final class FakeGateway: @unchecked Sendable {
 final class MemoryStorage: @unchecked Sendable {
   private let lock = NSLock()
   private var value: MirrorPushInstallation?
+
+  init(_ value: MirrorPushInstallation? = nil) { self.value = value }
   var current: MirrorPushInstallation? { lock.withLock { value } }
   var storage: MirrorPushInstallationStorage {
     MirrorPushInstallationStorage(
       load: { self.lock.withLock { self.value } }, save: { new in self.lock.withLock { self.value = new } })
   }
+}
+
+/// Yields until `condition` holds; bounded so a broken test fails instead of hanging.
+@MainActor func eventually(_ condition: () -> Bool) async -> Bool {
+  for _ in 0..<10_000 {
+    if condition() { return true }
+    await Task.yield()
+  }
+  return condition()
 }

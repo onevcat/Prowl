@@ -13,8 +13,9 @@ on every connection, so the Host's P2 sender can reach it.
   when notifications are on (`mirrorPushEnabled`) and the Host lists `push-v1`, it saves the
   Host's push key (P3a), gets an APNs token (P3b), and a push token per Host (P3c), then
   returns `pushRegister` with `blocked` and `done`. Nothing is stored or sent while off.
-  - The token record per Host (Keychain account `push-token:<Host UUID>`) keeps the APNs token
-    and when the gateway last confirmed it. A record older than a day, or for another APNs
+  - The token record per Host keeps the APNs token and when the gateway last confirmed it.
+    (Since the review fixes in [010](010-p3-review-fixes.md), all records are one Keychain item
+    `push-tokens` with a revocation queue.) A record older than a day, or for another APNs
     token, is confirmed with `PUT`; a `404` replaces it. Without this, a token the gateway
     deleted after 90 days idle would be registered again on every connection while the Host
     keeps getting `410`.

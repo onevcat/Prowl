@@ -49,14 +49,11 @@ struct MirrorNotificationsSection: View {
     }
   }
 
+  /// The switch flips first, so connected Hosts hear `pushUnregister`; turning off also revokes
+  /// every token (`MirrorPushCoordinator.setEnabled`).
   private func setEnabled(_ enabled: Bool) {
     push.setEnabled(enabled)
     sessions.pushSettingsChanged()
-    guard !enabled else { return }
-    let hostIDs = store.hosts.compactMap(\.hostID)
-    Task {
-      for hostID in hostIDs { await push.removeRegistration(for: hostID) }
-    }
   }
 }
 
@@ -88,10 +85,9 @@ struct MirrorHostNotificationsView: View {
       set: { on in
         var kinds = push.kinds(for: hostID)
         if on { kinds.insert(kind) } else { kinds.remove(kind) }
+        // No kinds left revokes the token at once, also while the Host is offline.
         push.setKinds(kinds, for: hostID)
         sessions.existing(for: host)?.pushSettingsChanged()
-        // With nothing left to send, the token goes at once, also while the Host is offline.
-        if kinds.isEmpty { Task { await push.removeRegistration(for: hostID) } }
       })
   }
 }
