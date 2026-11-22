@@ -334,3 +334,4 @@ S0 notes for P3:
 - Updated 2026-11-22: P3a push key and content on iOS — see [004-p3a-push-key.md](004-p3a-push-key.md)
 - Updated 2026-11-22: P3b Notification Service Extension — see [005-p3b-notification-service.md](005-p3b-notification-service.md)
 - Updated 2026-11-22: P3c gateway client and App Attest — see [006-p3c-gateway-client.md](006-p3c-gateway-client.md)
+- Updated 2026-11-22: P3d registration with each Host — see [007-p3d-host-registration.md](007-p3d-host-registration.md)
