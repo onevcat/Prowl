@@ -29,4 +29,4 @@ notification within 10 s; none while the user is at the Mac.
 
 ## Refs
 
-PR: P3d (stacked on #1150).
+PR: #1151 (stacked on #1150).
