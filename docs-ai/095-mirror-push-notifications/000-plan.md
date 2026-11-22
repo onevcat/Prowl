@@ -258,6 +258,22 @@ phone is away.
   notification; on the device, the tap opens the pane; reading pane A on the phone while pane B
   blocks, then locking the phone → pane B is pushed.
 
+**M — maintenance before P4**, in four small PRs stacked on P3. From the architecture review
+after P3 (see [test-scenarios.md](test-scenarios.md), "Known gaps"). They make later changes
+and fault finding cheaper; M3 also closes a delivery gap.
+
+- **M1 — token ledger and settings** (no device, no behavior change). The token bookkeeping
+  becomes a pure value type (`MirrorPushTokenLedger`) with its own unit tests; the user's
+  choices move to `MirrorPushSettings`. `MirrorPushCoordinator` keeps the orchestration
+  (tickets, Host queues, the deletion drain).
+- **M2 — flows out of views**. The tap flow leaves `MirrorRootView` for a testable type; the
+  order of forgetting a pairing and of settings changes moves into `MirrorHostSessions`; the
+  phone's settings show one row per Mac, not per pairing.
+- **M3 — dead tokens**. A token that the Host dropped on `410` is not registered again for up
+  to a day: the Host refuses the dropped token, and the phone gets a new one at once.
+- **M4 — diagnostics**. The Mac shows each device's last push result; the gateway returns the
+  APNs reason; the phone and the extension log decisions without private data.
+
 **P4 — Live Activity** (P2 phase)
 - Content: gateway activity mapping, Host `activityStart`/`activityEnd` and stop rules, widget
   extension.
@@ -339,3 +355,4 @@ S0 notes for P3:
 - Updated 2026-11-22: P3f Show Details and tap to open — see [009-p3f-details-and-tap.md](009-p3f-details-and-tap.md)
 - Updated 2026-11-22: P3 review fixes (token lifecycle, ordered attestation, tap ownership) — see [010-p3-review-fixes.md](010-p3-review-fixes.md)
 - Updated 2026-11-22: shared push contract (`Mirror/Fixtures/push/contract.json`, `Mirror/Shared/MirrorPushContract.swift`), scenario list and `scripts/test-mirror-push.sh` — see [test-scenarios.md](test-scenarios.md)
+- Updated 2026-11-22: maintenance slices M1–M4 before P4 (see Slices); M1 token ledger and settings — see [011-m1-token-ledger.md](011-m1-token-ledger.md)

@@ -7,7 +7,7 @@ import Testing
 /// In-memory token state and push keys, with the time and APNs under test control.
 final class PushCoordinatorWorld: @unchecked Sendable {
   private let lock = NSLock()
-  private var state = MirrorPushTokenState()
+  private var state = MirrorPushTokenLedger()
   private(set) var keys: [UUID: SymmetricKey] = [:]
   var apnsToken: String? = "aa11"
   var showsDetails = false
@@ -23,7 +23,7 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   var holdsAPNs = false
   private var apnsWaiter: CheckedContinuation<Void, Never>?
 
-  var stored: MirrorPushTokenState { lock.withLock { state } }
+  var stored: MirrorPushTokenLedger { lock.withLock { state } }
   func record(_ hostID: UUID) -> MirrorPushTokenRecord? { stored.records[hostID] }
   var isWaitingForAPNs: Bool { lock.withLock { apnsWaiter != nil } }
 
@@ -33,9 +33,9 @@ final class PushCoordinatorWorld: @unchecked Sendable {
   }
 
   @MainActor func coordinator(enabled: Bool = true) -> MirrorPushCoordinator {
-    defaults.set(enabled, forKey: MirrorPushCoordinator.enabledKey)
+    defaults.set(enabled, forKey: MirrorPushSettings.enabledKey)
     return MirrorPushCoordinator(
-      defaults: defaults,
+      settings: settings(),
       gateway: MirrorPushGatewayClient(
         baseURL: URL(string: "https://gateway.test")!, attest: attest, storage: installation.storage,
         send: gateway.send),
@@ -54,8 +54,12 @@ final class PushCoordinatorWorld: @unchecked Sendable {
         self.lock.withLock { self.keys[id] = key }
       },
       removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
-      now: { self.now },
-      showsDetails: { self.showsDetails },
+      now: { self.now })
+  }
+
+  @MainActor func settings() -> MirrorPushSettings {
+    MirrorPushSettings(
+      defaults: defaults, showsDetails: { self.showsDetails },
       saveShowsDetails: { value in
         if self.failsToSaveDetails { throw MirrorPushKeyStore.Failure(status: -1) }
         self.showsDetails = value
@@ -123,7 +127,7 @@ struct MirrorPushCoordinatorTests {
     let coordinator = world.coordinator()
     _ = await coordinator.registration(for: credential, capabilities: push)
 
-    world.now.addTimeInterval(MirrorPushCoordinator.checkInterval)
+    world.now.addTimeInterval(MirrorPushTokenRecord.checkInterval)
     _ = await coordinator.registration(for: credential, capabilities: push)
     #expect(world.gateway.routes().last == "PUT /v1/tokens/push-1")
     #expect(world.record(credential.hostID)?.checkedAt == world.now)
@@ -145,7 +149,7 @@ struct MirrorPushCoordinatorTests {
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
     let coordinator = world.coordinator()
     _ = await coordinator.registration(for: credential, capabilities: push)
-    world.now.addTimeInterval(MirrorPushCoordinator.checkInterval + 1)
+    world.now.addTimeInterval(MirrorPushTokenRecord.checkInterval + 1)
 
     guard case .pushRegister(let payload) = await coordinator.registration(for: credential, capabilities: push) else {
       Issue.record("Expected pushRegister")
@@ -192,7 +196,7 @@ struct MirrorPushCoordinatorTests {
     first.setEnabled(true)
     first.setKinds([.blocked], for: credential.hostID)
 
-    let second = MirrorPushCoordinator(defaults: world.defaults)
+    let second = world.settings()
     #expect(second.isEnabled)
     #expect(second.kinds(for: credential.hostID) == [.blocked])
     #expect(second.kinds(for: UUID()) == Set(MirrorPushKind.allCases))
@@ -471,7 +475,7 @@ struct MirrorPushCoordinatorTests {
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-2"}"#)
     let coordinator = world.coordinator()
     _ = await coordinator.registration(for: credential, capabilities: push)
-    world.now.addTimeInterval(MirrorPushCoordinator.checkInterval + 1)
+    world.now.addTimeInterval(MirrorPushTokenRecord.checkInterval + 1)
 
     guard case .pushRegister(let payload) = await coordinator.registration(for: credential, capabilities: push) else {
       Issue.record("Expected pushRegister")
@@ -482,14 +486,14 @@ struct MirrorPushCoordinatorTests {
 
   @Test func showDetailsIsSavedWhereTheExtensionReadsIt() {
     world.showsDetails = true
-    let coordinator = world.coordinator()
-    #expect(coordinator.showsDetails)
-    coordinator.setShowsDetails(false)
-    #expect(!world.showsDetails && !coordinator.showsDetails)
+    let settings = world.settings()
+    #expect(settings.showsDetails)
+    settings.setShowsDetails(false)
+    #expect(!world.showsDetails && !settings.showsDetails)
 
     world.failsToSaveDetails = true
-    coordinator.setShowsDetails(true)
-    #expect(!coordinator.showsDetails)
+    settings.setShowsDetails(true)
+    #expect(!settings.showsDetails)
   }
 
   @Test func keepsTheHostsAnswer() {

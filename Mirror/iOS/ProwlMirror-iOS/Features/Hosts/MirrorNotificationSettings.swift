@@ -11,10 +11,10 @@ struct MirrorNotificationsSection: View {
 
   var body: some View {
     Section {
-      Toggle("Notifications", isOn: Binding(get: { push.isEnabled }, set: setEnabled))
+      Toggle("Notifications", isOn: Binding(get: { push.settings.isEnabled }, set: setEnabled))
         .accessibilityIdentifier("push-enabled")
-      if push.isEnabled {
-        Toggle("Show Details", isOn: Binding(get: { push.showsDetails }, set: push.setShowsDetails))
+      if push.settings.isEnabled {
+        Toggle("Show Details", isOn: Binding(get: { push.settings.showsDetails }, set: push.settings.setShowsDetails))
           .accessibilityIdentifier("push-show-details")
         ForEach(store.hosts) { host in
           if let hostID = host.hostID {
@@ -32,7 +32,7 @@ struct MirrorNotificationsSection: View {
     } header: {
       Text("Notifications")
     } footer: {
-      if systemDenied, push.isEnabled {
+      if systemDenied, push.settings.isEnabled {
         Text("Notifications are turned off for Prowl Mirror in the Settings app.")
       } else {
         Text(
@@ -43,7 +43,7 @@ struct MirrorNotificationsSection: View {
           """)
       }
     }
-    .task(id: push.isEnabled) {
+    .task(id: push.settings.isEnabled) {
       let settings = await UNUserNotificationCenter.current().notificationSettings()
       systemDenied = settings.authorizationStatus == .denied
     }
@@ -81,9 +81,9 @@ struct MirrorHostNotificationsView: View {
 
   private func binding(_ kind: MirrorPushKind) -> Binding<Bool> {
     Binding(
-      get: { push.kinds(for: hostID).contains(kind) },
+      get: { push.settings.kinds(for: hostID).contains(kind) },
       set: { on in
-        var kinds = push.kinds(for: hostID)
+        var kinds = push.settings.kinds(for: hostID)
         if on { kinds.insert(kind) } else { kinds.remove(kind) }
         // No kinds left revokes the token at once, also while the Host is offline.
         push.setKinds(kinds, for: hostID)
@@ -96,7 +96,7 @@ enum MirrorPushStatusText {
   /// One word or phrase for the Host row. `supportsPush` is `nil` while the Host is not
   /// connected.
   static func summary(push: MirrorPushCoordinator, hostID: UUID, supportsPush: Bool?) -> String {
-    if push.kinds(for: hostID).isEmpty { return String(localized: "Off") }
+    if push.settings.kinds(for: hostID).isEmpty { return String(localized: "Off") }
     if supportsPush == false { return String(localized: "Update Prowl on the Mac") }
     guard let status = push.statuses[hostID] else { return String(localized: "Not connected yet") }
     if !status.pushEnabled || !status.pushAllowedByMac { return String(localized: "Off on the Mac") }
@@ -104,7 +104,7 @@ enum MirrorPushStatusText {
   }
 
   static func detail(push: MirrorPushCoordinator, hostID: UUID, supportsPush: Bool?) -> String {
-    if push.kinds(for: hostID).isEmpty { return String(localized: "This Host sends no notifications to this phone.") }
+    if push.settings.kinds(for: hostID).isEmpty { return String(localized: "This Host sends no notifications to this phone.") }
     if supportsPush == false {
       return String(localized: "The Prowl version on this Mac cannot send notifications. Update Prowl on the Mac.")
     }

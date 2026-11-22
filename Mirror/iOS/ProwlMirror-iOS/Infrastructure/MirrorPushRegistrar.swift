@@ -69,7 +69,7 @@ final class MirrorAppDelegate: NSObject, UIApplicationDelegate {
     /// `MIRROR_PUSH_DEBUG_ENABLE=1|0` turns notifications on or off until settings exist (P3e).
     private static func applyPushDebugKey() {
       if let value = ProcessInfo.processInfo.environment["MIRROR_PUSH_DEBUG_ENABLE"] {
-        UserDefaults.standard.set(value == "1", forKey: MirrorPushCoordinator.enabledKey)
+        UserDefaults.standard.set(value == "1", forKey: MirrorPushSettings.enabledKey)
       }
       if ProcessInfo.processInfo.environment["MIRROR_PUSH_DEBUG_GATEWAY"] == "1" {
         Task {

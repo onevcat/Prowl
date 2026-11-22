@@ -222,7 +222,7 @@ final class MirrorHostSession {
   /// controls.
   func pushSettingsChanged() {
     guard status == .ready, capabilities.contains(MirrorPushContract.capability) else { return }
-    if push.isEnabled {
+    if push.settings.isEnabled {
       pushRegistrationAttempt = nil
       registerForPush()
     } else {

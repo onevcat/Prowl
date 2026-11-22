@@ -66,14 +66,12 @@ checks and the slice records `005`–`009`.
 
 ## Known gaps and follow-ups
 
-From the architecture review after the stack review (2026-11-22). They are not done yet.
+From the architecture review after the stack review (2026-11-22). Slices M1–M4 in the plan address them; each slice removes its item here.
 - **Diagnostics:**
   - The Mac keeps and shows no last push result per device.
   - Gateway errors and the APNs `reason` are not reported.
   - iOS logs only private errors.
   - The extension logs nothing.
-- **iOS structure:**
-  - `MirrorPushCoordinator` holds settings, the token ledger, tickets and orchestration. Before P4, extract the token ledger (a pure struct) and the settings.
-  - The tap flow lives in `MirrorRootView`. The forget and settings-change ordering lives in views.
+- **iOS structure:** the tap flow lives in `MirrorRootView`. The forget and settings-change ordering lives in views. (The token ledger and the settings left `MirrorPushCoordinator` in M1.)
 - **A dead token** can be registered again for up to a day (`checkInterval`) after the Host dropped it on `410`.
 - **`remoteMirrorPushGatewayURL`** (Mac) is for tests with a fake gateway only. Tokens from the real gateway are unknown elsewhere, so the Host would drop every registration.
