@@ -15,6 +15,12 @@ final class MirrorConnection {
   private var closed = false
   private var finishing = false
   private var queuedBytes = 0
+  /// Set once the peer asked for compressed messages (docs-ai 097); compresses every later send.
+  private var deflater: MirrorWireCompression.Deflater?
+  /// Created on the first compressed message received.
+  private var inflater: MirrorWireCompression.Inflater?
+  /// How many compressed messages arrived, so a test can tell that the peer compresses.
+  private(set) var compressedMessagesReceived = 0
   private var heartbeat: Task<Void, Never>?
   private var deadline: Task<Void, Never>?
   private let clock: any Clock<Duration>
@@ -112,7 +118,7 @@ final class MirrorConnection {
   func send(_ message: MirrorMessage, closeAfterSending: Bool = false) {
     guard !closed, !finishing else { return }
     do {
-      let bytes = try MirrorWire.encode(message)
+      let bytes = try MirrorWire.encode(message, compressor: deflater)
       guard queuedBytes + bytes.count <= 2 * MirrorWire.maximumPayload else {
         close(String(localized: "Remote receiver is too slow."))
         return
@@ -136,6 +142,12 @@ final class MirrorConnection {
           }
         })
     } catch { close(error.localizedDescription) }
+  }
+
+  /// Compresses every message sent from now on. Once per connection; later calls do nothing.
+  func startCompressing() throws {
+    guard deflater == nil else { return }
+    deflater = try MirrorWireCompression.Deflater()
   }
 
   func close(_ reason: String? = nil) {
@@ -178,7 +190,10 @@ final class MirrorConnection {
         self.read(count: length) { [weak self] payload in
           guard let self else { return }
           do {
-            let message = try MirrorWire.decode(payload)
+            if payload.first == MirrorWireCompression.payloadType { self.compressedMessagesReceived += 1 }
+            let plain = try MirrorWireCompression.expand(
+              payload, with: &self.inflater, limit: MirrorWire.maximumPayload)
+            let message = try MirrorWire.decode(plain)
             self.receive(message)
             if !self.closed { self.readHeader() }
           } catch { self.close(error.localizedDescription) }

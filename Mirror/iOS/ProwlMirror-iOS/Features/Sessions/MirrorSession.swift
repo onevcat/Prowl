@@ -282,6 +282,8 @@ final class MirrorSession: Identifiable {
   private(set) var isSuspended = false
   var onVerifiedConnection: ((MirrorSavedConnection) -> Void)?
   @ObservationIgnored private var transport: (any MirrorTransport)?
+  /// This connection already asked the Host to compress (docs-ai 097).
+  @ObservationIgnored private var requestedCompression = false
   @ObservationIgnored private var subscriptionID: UUID?
   @ObservationIgnored private var generation = UUID()
   @ObservationIgnored private var intent: MirrorMessage.Intent = .ifFree
@@ -324,6 +326,7 @@ final class MirrorSession: Identifiable {
     do {
       let channel = try makeTransport(configuration)
       transport = channel
+      requestedCompression = false
       channel.onEnrolled = { [weak self] enrolled in
         guard let self, self.generation == attempt else { return }
         self.configuration = enrolled
@@ -837,6 +840,11 @@ final class MirrorSession: Identifiable {
         error = "Update Prowl on this Host to enable mobile text mirrors."
         transport?.close(nil)
         return
+      }
+      // Before anything else this connection sends, so the replies to it come compressed.
+      if message.capabilities?.contains(MirrorWireCompression.capability) == true, !requestedCompression {
+        requestedCompression = true
+        send(.compress)
       }
       supportsLaunch = message.capabilities?.contains("launch-profile") == true
       supportsAgentInput = message.capabilities?.contains("agent-input") == true

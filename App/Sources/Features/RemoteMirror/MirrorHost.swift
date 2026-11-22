@@ -710,6 +710,7 @@ final class MirrorHost {
               panes: panes,
               capabilities: [
                 "vt-v1", "text-v1", "conversation-v1", "takeover", "refresh", MirrorPushContract.capability,
+                MirrorWireCompression.capability,
               ]
                 + (commandService != nil
                   ? [
@@ -731,27 +732,37 @@ final class MirrorHost {
       case .acknowledge:
         try acknowledge(message, peer: peer)
       case .refresh:
-        guard var subscription = subscription(for: message, peer: peer) else {
-          throw MirrorProtocolError.invalidMessage
-        }
-        subscription.gate.requestRefresh()
-        subscription.textGate.requestRefresh()
-        subscriptions[peer.id] = subscription
+        try refresh(message, peer: peer)
       case .input:
-        guard let subscription = subscription(for: message, peer: peer),
-          subscription.representation == .terminal, let bytes = message.bytes,
-          !bytes.isEmpty, bytes.count <= MirrorWire.maximumInput
-        else { throw MirrorProtocolError.invalidMessage }
-        try source.write(bytes, to: subscription.paneID)
+        try writeInput(message, peer: peer)
       case .scroll:
         try scroll(message, peer: peer)
       case .history:
         try sendHistory(message, to: peer)
       case .pushRegister, .pushUnregister:
         try updatePushRegistration(message, peer: peer)
+      case .compress:
+        try peer.startCompressing()
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch { peer.close(error.localizedDescription) }
+  }
+
+  private func refresh(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard var subscription = subscription(for: message, peer: peer) else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    subscription.gate.requestRefresh()
+    subscription.textGate.requestRefresh()
+    subscriptions[peer.id] = subscription
+  }
+
+  private func writeInput(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard let subscription = subscription(for: message, peer: peer),
+      subscription.representation == .terminal, let bytes = message.bytes,
+      !bytes.isEmpty, bytes.count <= MirrorWire.maximumInput
+    else { throw MirrorProtocolError.invalidMessage }
+    try source.write(bytes, to: subscription.paneID)
   }
 
   private func scroll(_ message: MirrorMessage, peer: MirrorConnection) throws {

@@ -40,6 +40,8 @@ final class MirrorClient: Identifiable {
   @ObservationIgnored private var configuration: MirrorSavedConnection
   @ObservationIgnored private let makeConnection: (MirrorSavedConnection) -> MirrorRemoteConnection
   @ObservationIgnored private var peer: MirrorRemoteConnection?
+  /// This connection already asked the Host to compress (docs-ai 097).
+  @ObservationIgnored private var requestedCompression = false
   @ObservationIgnored private var historyID: UUID?
   @ObservationIgnored private var historyPageGate = MirrorHistoryPageGate()
   @ObservationIgnored private var subscriptionID: UUID?
@@ -93,6 +95,7 @@ final class MirrorClient: Identifiable {
     isConnecting = true
     let peer = makeConnection(configuration)
     self.peer = peer
+    requestedCompression = false
     peer.onEnrolled = { [weak self, weak peer] enrolled in
       guard let self, let peer, self.peer === peer else { return }
       self.configuration = enrolled
@@ -382,6 +385,11 @@ final class MirrorClient: Identifiable {
   }
 
   private func receivePanes(_ message: MirrorMessage) {
+    // Before anything else this connection sends, so the replies to it come compressed.
+    if message.capabilities?.contains(MirrorWireCompression.capability) == true, !requestedCompression {
+      requestedCompression = true
+      peer?.send(.compress)
+    }
     panes = message.panes ?? []
     supportsProfileLaunch = message.capabilities?.contains("launch-profile") == true
     supportsShellLaunch = message.capabilities?.contains("launch-shell") == true

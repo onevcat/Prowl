@@ -13,6 +13,8 @@ final class MirrorConnection {
   private var closed = false
   private var finishing = false
   private var queuedBytes = 0
+  /// The Host's compressed messages (docs-ai 097); created on the first one received.
+  private var inflater: MirrorWireCompression.Inflater?
   private var heartbeat: Task<Void, Never>?
   private var deadline: Task<Void, Never>?
   private let clock: any Clock<Duration>
@@ -188,7 +190,9 @@ final class MirrorConnection {
         self.read(count: length) { [weak self] payload in
           guard let self else { return }
           do {
-            let message = try MirrorWire.decode(payload)
+            let plain = try MirrorWireCompression.expand(
+              payload, with: &self.inflater, limit: MirrorWire.maximumPayload)
+            let message = try MirrorWire.decode(plain)
             self.resetDeadline()
             if message.kind == .ping {
               self.send(.pong)

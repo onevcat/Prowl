@@ -167,6 +167,24 @@ struct MirrorHostSessionTests {
     #expect(world.gateway.routes().filter { $0 == "POST /v1/tokens" }.count == 2)
   }
 
+  @Test func asksAHostThatCompressesToCompressBeforeAnythingElse() {
+    let channel = Channel()
+    channel.capabilities.append(MirrorWireCompression.capability)
+    let session = makeSession(channel)
+    defer { session.stop() }
+    session.start()
+    #expect(channel.sent.map(\.kind).prefix(2) == [.list, .compress])
+    // The roster repeats; the request does not.
+    session.refresh()
+    #expect(channel.sent.filter { $0.kind == .compress }.count == 1)
+
+    let plain = Channel()
+    let older = makeSession(plain)
+    defer { older.stop() }
+    older.start()
+    #expect(!plain.sent.contains { $0.kind == .compress })
+  }
+
   @Test(.timeLimit(.minutes(1))) func settingsChangesReachTheConnectedHost() async {
     let world = PushCoordinatorWorld()
     world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
