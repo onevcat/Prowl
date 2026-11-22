@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026.11.23](https://github.com/onevcat/Prowl/releases/tag/v2026.11.23)
+
+Prowl Mirror brings agent notifications to iPhone and opens long chats faster. Prowl Mirror for iPhone is in TestFlight beta.
+
+### New
+
+- Get an end-to-end encrypted notification on your paired iPhone when an agent needs your input or finishes a turn while you’re away from your Mac. Turn on **Send notifications to paired devices** in **Settings → Remote Mirror** on the Mac, then enable notifications under **Hosts → Notifications** on iPhone.
+- Tap a notification to open the agent’s pane. Notifications are generic by default. Enable **Show Details** to include the tab name and a preview of the agent’s question or reply, including on the lock screen.
+- Start a Claude Code or Codex session with a first message on iPhone and it opens directly in Chat. Claude Code no longer asks for permission to run a Prowl completion command during these sessions.
+
+### Improved
+
+- Mirror uses less bandwidth on iPhone and Mac, especially while the agents list is open or a terminal produces repeated output.
+
+### Fixed
+
+- Long chats reopen faster on iPhone after you’ve been away from the conversation.
+- Claude Code background task updates now appear as one-line notices in Chat, without raw XML or duplicate queued messages.
+- The **Blocked** and **Done** tiles on iPhone now show their full selection borders.
+- VoiceOver now reads the current pairing code after you choose **Refresh Code** in **Add a Device**.
+
 ## [2026.11.21](https://github.com/onevcat/Prowl/releases/tag/v2026.11.21)
 
 Prowl keeps long worktree lists compact and can restore your terminal layout sooner at launch.
