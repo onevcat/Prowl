@@ -2146,6 +2146,16 @@
         }
       }
     },
+    "Allow notifications to this device again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新允许向此设备发送通知"
+          }
+        }
+      }
+    },
     "Alpha" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2232,6 +2242,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 worktree 中已在运行的 Agent 将担任此角色。"
+          }
+        }
+      }
+    },
+    "An agent finished" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 已完成"
+          }
+        }
+      }
+    },
+    "An agent needs your attention" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 需要你处理"
           }
         }
       }
@@ -10299,6 +10329,36 @@
         }
       }
     },
+    "Last notification at %@ failed (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知（%1$@）发送失败（%2$@）"
+          }
+        }
+      }
+    },
+    "Last notification at %@ not delivered · open Prowl Mirror on the device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知（%@）未送达 · 请在该设备上打开 Prowl Mirror"
+          }
+        }
+      }
+    },
+    "Last notification sent at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知已于 %@ 发送"
+          }
+        }
+      }
+    },
     "Last seen %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12249,12 +12309,62 @@
         }
       }
     },
+    "Notifications not turned on in Prowl Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在 Prowl Mirror 中开启通知"
+          }
+        }
+      }
+    },
+    "Notifications off for this device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭此设备的通知"
+          }
+        }
+      }
+    },
+    "Notifications on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知已开启"
+          }
+        }
+      }
+    },
     "Notifications. Hover or click to show all notifications." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "通知。悬停或点击可显示所有通知。"
+          }
+        }
+      }
+    },
+    "Notify paired devices when an agent needs you or finishes while you are away. End-to-end encrypted." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你离开时，若 Agent 需要你处理或已完成，会通知已配对的设备。端到端加密。"
+          }
+        }
+      }
+    },
+    "Notify paired iPhones and iPads when you are away from this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你离开这台 Mac 时通知已配对的 iPhone 和 iPad"
           }
         }
       }
@@ -18236,6 +18346,16 @@
         }
       }
     },
+    "Send notifications to paired devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向已配对的设备发送通知"
+          }
+        }
+      }
+    },
     "Send one command line from a mirror." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19743,6 +19863,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止脚本"
+          }
+        }
+      }
+    },
+    "Stop notifications to this device until you turn them on here" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止向此设备发送通知，直到你在这里重新开启"
           }
         }
       }
