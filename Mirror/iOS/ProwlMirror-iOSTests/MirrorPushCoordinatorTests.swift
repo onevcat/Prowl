@@ -565,11 +565,11 @@ struct MirrorNotificationRouterTests {
     let target = MirrorNotificationRouter.Target(hostID: hostID, paneID: paneID)
     let hosts = [unrelated, lan, name]
 
-    #expect(MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: lan.id, isConnected: { _ in false }) == lan)
+    #expect(MirrorNotificationRouter.entry(for: target.hostID, among: hosts, selectedID: lan.id, isConnected: { _ in false }) == lan)
     #expect(
-      MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: unrelated.id, isConnected: { $0 == lan }) == lan)
-    #expect(MirrorNotificationRouter.entry(for: target, among: hosts, selectedID: nil, isConnected: { _ in false }) == name)
-    #expect(MirrorNotificationRouter.entry(for: .init(hostID: UUID(), paneID: paneID), among: hosts, selectedID: nil, isConnected: { _ in true }) == nil)
+      MirrorNotificationRouter.entry(for: target.hostID, among: hosts, selectedID: unrelated.id, isConnected: { $0 == lan }) == lan)
+    #expect(MirrorNotificationRouter.entry(for: target.hostID, among: hosts, selectedID: nil, isConnected: { _ in false }) == name)
+    #expect(MirrorNotificationRouter.entry(for: UUID(), among: hosts, selectedID: nil, isConnected: { _ in true }) == nil)
   }
 
   @Test func routesToThePaneWhileTheHostListsIt() {

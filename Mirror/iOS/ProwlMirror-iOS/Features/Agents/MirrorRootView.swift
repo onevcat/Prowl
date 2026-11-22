@@ -54,44 +54,24 @@ struct MirrorRootView: View {
     .task(id: router.pending) { await openNotificationTarget() }
   }
 
-  /// A tapped notification (docs-ai 095 P3f): show its Host, connect if needed, and open the
-  /// pane once the Host lists it. A pane that is gone, or a Host that cannot be reached, shows
-  /// the agents list. A newer tap or a Host switch by the user takes over: this one then
-  /// changes nothing.
+  /// A tapped notification (docs-ai 095 P3f); `MirrorNotificationOpener` decides, this view
+  /// applies the result.
   private func openNotificationTarget() async {
     guard let target = router.pending else { return }
-    guard
-      let host = MirrorNotificationRouter.entry(
-        for: target, among: store.hosts, selectedID: store.selectedHost?.id,
-        isConnected: { sessions.existing(for: $0)?.status == .ready })
-    else {
-      router.finish(target)
-      return
-    }
-    showsAdd = false
-    showsHosts = false
-    if store.selectedHost?.id != host.id {
+    let opener = MirrorNotificationOpener(router: router, store: store, sessions: sessions)
+    let outcome = await opener.open(target) { host in
+      showsAdd = false
+      showsHosts = false
+      guard store.selectedHost?.id != host.id else { return }
       path = NavigationPath()
       notificationHostID = host.id
       store.select(host.id)
     }
-    let session = sessions.session(for: host)
-    if case .failed = session.status { session.retry() } else { session.start() }
-    // The roster arrives within the connect timeout, or the connection failed.
-    let deadline = ContinuousClock.now + MirrorHostSession.connectTimeoutDuration
-    while session.status != .ready, ContinuousClock.now < deadline {
-      if case .failed = session.status { break }
-      try? await Task.sleep(for: .milliseconds(200))
-      if Task.isCancelled { return }
+    switch outcome {
+    case .unchanged: break
+    case .agents: path = NavigationPath()
+    case .pane(let route): path = NavigationPath([route])
     }
-    guard router.owns(target, selectedHostID: store.selectedHost?.id, hostRecordID: host.id) else {
-      router.finish(target)
-      return
-    }
-    router.finish(target)
-    let route = session.status == .ready
-      ? MirrorNotificationRouter.route(for: target, host: host, panes: session.panes) : nil
-    path = route.map { NavigationPath([$0]) } ?? NavigationPath()
   }
 }
 

@@ -37,6 +37,7 @@ xcodebuild test -project Mirror/iOS/ProwlMirror-iOS.xcodeproj -scheme ProwlMirro
   -only-testing:ProwlMirror-iOSTests/MirrorPushTokenLedgerTests \
   -only-testing:ProwlMirror-iOSTests/MirrorPushStatusTextTests \
   -only-testing:ProwlMirror-iOSTests/MirrorNotificationRouterTests \
+  -only-testing:ProwlMirror-iOSTests/MirrorNotificationOpenerTests \
   -only-testing:ProwlMirror-iOSTests/MirrorHostSessionTests \
   | mise exec -- xcsift -w --format toon || status=1
 

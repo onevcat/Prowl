@@ -16,16 +16,15 @@ struct MirrorNotificationsSection: View {
       if push.settings.isEnabled {
         Toggle("Show Details", isOn: Binding(get: { push.settings.showsDetails }, set: push.settings.setShowsDetails))
           .accessibilityIdentifier("push-show-details")
-        ForEach(store.hosts) { host in
-          if let hostID = host.hostID {
-            NavigationLink {
-              MirrorHostNotificationsView(host: host, hostID: hostID)
-            } label: {
-              LabeledContent(
-                host.displayName,
-                value: MirrorPushStatusText.summary(
-                  push: push, hostID: hostID, supportsPush: sessions.existing(for: host)?.supportsPush))
-            }
+        // One row per Mac: its addresses share the kinds and the token.
+        ForEach(macs, id: \.hostID) { mac in
+          NavigationLink {
+            MirrorHostNotificationsView(name: mac.host.displayName, hostID: mac.hostID)
+          } label: {
+            LabeledContent(
+              mac.host.displayName,
+              value: MirrorPushStatusText.summary(
+                push: push, hostID: mac.hostID, supportsPush: sessions.supportsPush(hostID: mac.hostID)))
           }
         }
       }
@@ -49,17 +48,31 @@ struct MirrorNotificationsSection: View {
     }
   }
 
-  /// The switch flips first, so connected Hosts hear `pushUnregister`; turning off also revokes
-  /// every token (`MirrorPushCoordinator.setEnabled`).
+  private var macs: [(hostID: UUID, host: MirrorHostRecord)] {
+    MirrorNotificationsSection.macs(
+      among: store.hosts, selectedID: store.selectedHost?.id,
+      isConnected: { sessions.existing(for: $0)?.status == .ready })
+  }
+
+  /// Each paired Mac once, in list order, named after the entry that a tap would open.
+  static func macs(
+    among hosts: [MirrorHostRecord], selectedID: UUID?, isConnected: (MirrorHostRecord) -> Bool
+  ) -> [(hostID: UUID, host: MirrorHostRecord)] {
+    var seen = Set<UUID>()
+    return hosts.compactMap(\.hostID).filter { seen.insert($0).inserted }.compactMap { hostID in
+      MirrorNotificationRouter.entry(for: hostID, among: hosts, selectedID: selectedID, isConnected: isConnected)
+        .map { (hostID: hostID, host: $0) }
+    }
+  }
+
   private func setEnabled(_ enabled: Bool) {
-    push.setEnabled(enabled)
-    sessions.pushSettingsChanged()
+    sessions.setNotificationsEnabled(enabled)
   }
 }
 
 /// The event kinds of one Host, and what the Host last said.
 struct MirrorHostNotificationsView: View {
-  let host: MirrorHostRecord
+  let name: String
   let hostID: UUID
   @Environment(MirrorHostSessions.self) private var sessions
   private let push = MirrorPushCoordinator.shared
@@ -70,12 +83,10 @@ struct MirrorHostNotificationsView: View {
         Toggle("An agent needs you", isOn: binding(.blocked))
         Toggle("An agent finished", isOn: binding(.done))
       } footer: {
-        Text(
-          MirrorPushStatusText.detail(
-            push: push, hostID: hostID, supportsPush: sessions.existing(for: host)?.supportsPush))
+        Text(MirrorPushStatusText.detail(push: push, hostID: hostID, supportsPush: sessions.supportsPush(hostID: hostID)))
       }
     }
-    .navigationTitle(host.displayName)
+    .navigationTitle(name)
     .navigationBarTitleDisplayMode(.inline)
   }
 
@@ -85,9 +96,7 @@ struct MirrorHostNotificationsView: View {
       set: { on in
         var kinds = push.settings.kinds(for: hostID)
         if on { kinds.insert(kind) } else { kinds.remove(kind) }
-        // No kinds left revokes the token at once, also while the Host is offline.
-        push.setKinds(kinds, for: hostID)
-        sessions.pushSettingsChanged(hostID: hostID)
+        sessions.setNotificationKinds(kinds, for: hostID)
       })
   }
 }

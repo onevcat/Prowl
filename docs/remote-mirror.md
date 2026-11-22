@@ -400,7 +400,8 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
   no paired device registered.
 
 On the phone, **Hosts → Notifications** turns notifications on for this phone (iOS asks for
-permission the first time). Each paired Host has a row with its state (**On**, **Off on the
+permission the first time). Each paired Mac has one row, also when it is paired at several
+addresses, with its state (**On**, **Off on the
 Mac**, **Update Prowl on the Mac**, **Not connected yet**) and a page that chooses the events:
 **An agent needs you** and **An agent finished**. Notifications show only "An agent needs your
 attention" or "An agent finished"; the phone decrypts them and keeps the Host's text off the

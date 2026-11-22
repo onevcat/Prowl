@@ -47,7 +47,7 @@ contract tests pass. A change to the contract file must be copied to the gateway
 | 6 | Mac switch off, or the device turned off on the Mac: no request | Host `pushSenderContactsTheGatewayOnlyWhenEveryGateIsOpen`, `aGateClosedAfterAPushWasQueuedStopsTheRequest` |
 | 7 | Phone turns notifications off: `pushUnregister` to connected Hosts, every token deleted (offline Hosts too), no other gateway request | iOS `turningOffDeletesTheTokenOfEveryHostAndSendsNothingElse`, `settingsChangesReachTheConnectedHost`, `turningOffWhileWaitingForAPNsContactsNoGateway`, `aQueuedRequestDoesNotLeaveAfterTurningOff`, `turningOffWhileAttestingStartsNoFurtherRequest` |
 | 8 | Forget one pairing of a Mac paired at two addresses: only its token goes | iOS `anotherPairingOfTheSameHostTakesOverAndForgettingTheOldOneKeepsIt`, `forgettingAPairingStopsItsRegistrationWithoutTouchingTheOwner`, `aFailedDeletionIsRetriedAfterARestartEvenForAForgottenHost` |
-| 9 | Tap a notification: the pane opens; a closed pane shows the list | iOS `routesToThePaneWhileTheHostListsIt`, `opensTheConnectedAddressOfAHostPairedTwice`, `onlyTheLatestTapIsCleared` (helpers only; the flow in `MirrorRootView` is checked on a device) |
+| 9 | Tap a notification: the pane opens; a closed pane shows the list | iOS `MirrorNotificationOpenerTests` (`opensThePaneOnceTheHostListsIt`, `aPaneThatIsGoneLeavesTheAgentsList`, `aNewerTapTakesOverWhileConnecting`), `opensTheConnectedAddressOfAHostPairedTwice`, `onlyTheLatestTapIsCleared` |
 | 10 | Show Details off: generic text; on: tab and worktree name | iOS `showsGenericTextByKindAndKeepsTheRouteForTheTap`, `showDetailsUsesTheHostsTitleAndText`, `theGatewayPayloadOpensAndItsFallbackKeysExist` |
 | 11 | The gateway answers `410`: the Host drops the registration; the phone replaces a dead token | Host `pushSenderDropsARegistrationThatTheGatewayNoLongerKnows`, `aLateTokenGoneForAnOldTokenKeepsTheNewRegistrationAndItsPrompts`; iOS `aTokenTheGatewayDeletedIsReplaced` |
 
@@ -72,6 +72,5 @@ From the architecture review after the stack review (2026-11-22). Slices M1–M4
   - Gateway errors and the APNs `reason` are not reported.
   - iOS logs only private errors.
   - The extension logs nothing.
-- **iOS structure:** the tap flow lives in `MirrorRootView`. The forget and settings-change ordering lives in views. (The token ledger and the settings left `MirrorPushCoordinator` in M1.)
 - **A dead token** can be registered again for up to a day (`checkInterval`) after the Host dropped it on `410`.
 - **`remoteMirrorPushGatewayURL`** (Mac) is for tests with a fake gateway only. Tokens from the real gateway are unknown elsewhere, so the Host would drop every registration.

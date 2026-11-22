@@ -164,6 +164,16 @@ final class MirrorHostSession {
     start()
   }
 
+  /// Returns once this connection is no longer connecting: the Host listed its panes, the
+  /// connection failed (also after `connectTimeoutDuration`), or it was stopped.
+  func settled() async {
+    while status == .connecting {
+      await withCheckedContinuation { continuation in
+        withObservationTracking { _ = status } onChange: { continuation.resume() }
+      }
+    }
+  }
+
   func refresh() {
     guard status == .ready else { return }
     send(.list)
