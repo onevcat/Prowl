@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import UserNotifications
 
 @testable import ProwlMirror_iOS
 
@@ -76,5 +77,54 @@ struct MirrorPushKeyStoreTests {
 
   @Test func usesTheSharedGroup() {
     #expect(MirrorPushKeyStore.accessGroup?.hasSuffix("com.onevcat.prowl.mirror.shared") == true)
+  }
+}
+
+struct MirrorPushNotificationTests {
+  private let hostID = UUID()
+  private let paneID = UUID()
+  private let key = SymmetricKey(size: .bits256)
+
+  private func sealed(_ kind: MirrorPushKind, key: SymmetricKey? = nil) throws -> String {
+    let content = MirrorPushContent(
+      kind: kind, paneID: paneID, title: "Prowl · main", body: "Allow rm -rf build?", stateChangedAt: nil)
+    return try MirrorPushCrypto.seal(JSONEncoder().encode(content), key: key ?? self.key, hostID: hostID)
+  }
+
+  private func keys(_ id: UUID) -> SymmetricKey? { id == hostID ? key : nil }
+
+  @Test func showsGenericTextByKindAndKeepsTheRouteForTheTap() throws {
+    for (kind, body) in [(MirrorPushKind.blocked, "An agent needs your attention"), (.done, "An agent finished")] {
+      let opened = try #require(MirrorPushNotification.open(userInfo: ["sealed": sealed(kind)], key: keys))
+      let content = UNMutableNotificationContent()
+      content.title = "fallback title"
+      content.userInfo = ["sealed": try sealed(kind), "aps": ["mutable-content": 1]]
+      MirrorPushNotification.apply(opened, to: content)
+
+      #expect(content.title == "Prowl")
+      #expect(content.body == body)
+      #expect(!content.body.contains("rm -rf"))
+      #expect(content.threadIdentifier == hostID.uuidString)
+      #expect(content.targetContentIdentifier == paneID.uuidString)
+      #expect(content.userInfo["sealed"] == nil)
+      #expect(content.userInfo["hostID"] as? String == hostID.uuidString)
+      #expect(content.userInfo["paneID"] as? String == paneID.uuidString)
+      #expect(content.userInfo["kind"] as? String == kind.rawValue)
+      #expect(content.userInfo["aps"] != nil)
+    }
+  }
+
+  @Test func leavesTheFallbackWhenThePushCannotBeOpened() throws {
+    let otherKey = SymmetricKey(size: .bits256)
+    #expect(MirrorPushNotification.open(userInfo: [:], key: keys) == nil)
+    #expect(MirrorPushNotification.open(userInfo: ["sealed": 42], key: keys) == nil)
+    #expect(MirrorPushNotification.open(userInfo: ["sealed": "corrupt"], key: keys) == nil)
+    #expect(MirrorPushNotification.open(userInfo: ["sealed": try sealed(.blocked)], key: { _ in nil }) == nil)
+    #expect(MirrorPushNotification.open(userInfo: ["sealed": try sealed(.blocked, key: otherKey)], key: keys) == nil)
+  }
+
+  @Test func theAppShipsTheGatewayFallbackStrings() {
+    #expect(String(localized: "MIRROR_PUSH_TITLE") == "Prowl")
+    #expect(String(localized: "MIRROR_PUSH_FALLBACK") == "An agent on your Mac has an update")
   }
 }

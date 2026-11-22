@@ -1,0 +1,6 @@
+/* Mirror push notifications (docs-ai 095). The gateway's APNs payload names the first two
+   keys, so iOS shows them when the Notification Service Extension cannot open a push. */
+"MIRROR_PUSH_TITLE" = "Prowl";
+"MIRROR_PUSH_FALLBACK" = "An agent on your Mac has an update";
+"MIRROR_PUSH_BLOCKED" = "An agent needs your attention";
+"MIRROR_PUSH_DONE" = "An agent finished";

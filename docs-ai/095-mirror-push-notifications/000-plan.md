@@ -232,11 +232,12 @@ phone is away.
   extensions (`$(AppIdentifierPrefix)com.onevcat.prowl.mirror` first). Accept: unit tests with
   the wire vector; a corrupt or foreign `sealed` fails; existing pairings still load.
 - **P3b — Notification Service Extension** (device: 5 min). The NSE target, the strings
-  `MIRROR_PUSH_TITLE` and `MIRROR_PUSH_FALLBACK`, generic text by kind. Accept: unit tests for
+  `MIRROR_PUSH_TITLE` and `MIRROR_PUSH_FALLBACK`, generic text by kind, APNs registration
+  (`aps-environment`, the app delegate token hand-off). Accept: unit tests for
   the text by kind and for failures; on the device, a push sent straight to APNs with the
   sandbox key shows the generic text of its kind when locked, and the fallback for a corrupt
   `sealed`.
-- **P3c — gateway client and App Attest** (device: 5 min). APNs registration, App Attest key
+- **P3c — gateway client and App Attest** (device: 5 min). App Attest key
   and installation, `POST`/`PUT`/`DELETE /v1/tokens`, the APNs environment from the embedded
   provisioning profile (none = production). Accept: unit tests with a fake HTTP layer for
   each status (401 renews the installation once, 409, 429); on the device, a real
@@ -331,3 +332,4 @@ S0 notes for P3:
   both APNs keys — see [003-p2-sender.md](003-p2-sender.md); P3 split into six small slices
   (P3a–P3f, see Slices)
 - Updated 2026-11-22: P3a push key and content on iOS — see [004-p3a-push-key.md](004-p3a-push-key.md)
+- Updated 2026-11-22: P3b Notification Service Extension — see [005-p3b-notification-service.md](005-p3b-notification-service.md)
