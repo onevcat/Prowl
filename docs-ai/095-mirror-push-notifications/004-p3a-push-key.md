@@ -26,4 +26,4 @@ slice provides both without a caller yet. No device check is needed.
 
 ## Refs
 
-PR: P3a (stacked on #1145).
+PR: #1148 (stacked on #1145).
