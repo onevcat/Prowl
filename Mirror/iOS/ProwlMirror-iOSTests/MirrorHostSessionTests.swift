@@ -134,6 +134,46 @@ struct MirrorHostSessionTests {
     #expect(push.statuses[credential.hostID] == status)
   }
 
+  @Test(.timeLimit(.minutes(1))) func settingsChangesReachTheConnectedHost() async {
+    let world = PushCoordinatorWorld()
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    let push = world.coordinator()
+    let credential = MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 1, count: 32))
+    let channel = Channel()
+    channel.capabilities.append("push-v1")
+    let session = makeSession(channel, credential: credential, push: push)
+    defer { session.stop() }
+    session.start()
+    await waitUntil { channel.sent.contains { $0.kind == .pushRegister } }
+
+    push.setKinds([.blocked], for: credential.hostID)
+    session.pushSettingsChanged()
+    await waitUntil { channel.sent.filter { $0.kind == .pushRegister }.count == 2 }
+    guard case .pushRegister(let payload) = channel.sent.last(where: { $0.kind == .pushRegister }) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.kinds == ["blocked"])
+
+    push.setEnabled(false)
+    session.pushSettingsChanged()
+    #expect(channel.sent.last?.kind == .pushUnregister)
+  }
+
+  @Test func aHostWithoutPushHearsNothingWhenSettingsChange() {
+    let world = PushCoordinatorWorld()
+    let push = world.coordinator()
+    let channel = Channel()
+    let session = makeSession(
+      channel, credential: MirrorDeviceCredential(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 1, count: 32)),
+      push: push)
+    defer { session.stop() }
+    session.start()
+    push.setEnabled(false)
+    session.pushSettingsChanged()
+    #expect(!channel.sent.contains { $0.kind == .pushUnregister || $0.kind == .pushRegister })
+  }
+
   @Test func aHostWithoutPushGetsNoRegistration() async {
     let world = PushCoordinatorWorld()
     let channel = Channel()

@@ -44,6 +44,8 @@ final class MirrorHostSession {
   var supportsConversation: Bool { capabilities.contains("conversation-v1") }
   var supportsLaunch: Bool { capabilities.contains("launch-profile") }
   var supportsShellLaunch: Bool { capabilities.contains("launch-shell") }
+  /// `nil` until the Host listed its capabilities on this connection.
+  var supportsPush: Bool? { status == .ready ? capabilities.contains("push-v1") : nil }
 
   @ObservationIgnored private var transport: (any MirrorTransport)?
   @ObservationIgnored private var generation = UUID()
@@ -213,6 +215,19 @@ final class MirrorHostSession {
     guard let pending = pendingCommands.removeValue(forKey: id) else { return }
     pending.timeout.cancel()
     pending.continuation.resume(with: result)
+  }
+
+  /// Notification settings changed (docs-ai 095 P3e): register again with the new kinds, or
+  /// tell the Host to stop. Hosts without `push-v1` get nothing, since they close on unknown
+  /// controls.
+  func pushSettingsChanged() {
+    guard status == .ready, capabilities.contains("push-v1") else { return }
+    if push.isEnabled {
+      pushRegistrationAttempt = nil
+      registerForPush()
+    } else {
+      send(.pushUnregister)
+    }
   }
 
   /// Once per connection: `pushRegister` when notifications are on and the Host has `push-v1`

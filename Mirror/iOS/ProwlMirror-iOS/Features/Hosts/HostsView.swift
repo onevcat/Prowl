@@ -27,24 +27,10 @@ struct HostsManagerView: View {
   var body: some View {
     NavigationStack {
       List {
-        ForEach(store.hosts) { host in
-          Button {
-            store.select(host.id)
-            dismiss()
-          } label: {
-            HostRow(host: host, session: sessions.existing(for: host), selected: host.id == store.selectedHost?.id)
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("host-\(host.endpoint)")
-          .swipeActions(edge: .trailing) {
-            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-            Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
-          }
-          .contextMenu {
-            Button("Rename…", systemImage: "pencil") { startRenaming(host) }
-            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-          }
+        Section {
+          hostRows
         }
+        MirrorNotificationsSection(store: store)
       }
       .navigationTitle("Hosts")
       .navigationBarTitleDisplayMode(.inline)
@@ -75,12 +61,35 @@ struct HostsManagerView: View {
     }
   }
 
+  private var hostRows: some View {
+    ForEach(store.hosts) { host in
+      Button {
+        store.select(host.id)
+        dismiss()
+      } label: {
+        HostRow(host: host, session: sessions.existing(for: host), selected: host.id == store.selectedHost?.id)
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("host-\(host.endpoint)")
+      .swipeActions(edge: .trailing) {
+        Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
+        Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
+      }
+      .contextMenu {
+        Button("Rename…", systemImage: "pencil") { startRenaming(host) }
+        Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
+      }
+    }
+  }
+
   private func startRenaming(_ host: MirrorHostRecord) {
     alias = host.alias ?? ""
     renaming = host
   }
 
   private func forget(_ host: MirrorHostRecord) {
+    // The Host may be offline: deleting the push token at the gateway stops it anyway.
+    if let hostID = host.hostID { Task { await MirrorPushCoordinator.shared.removeRegistration(for: hostID) } }
     sessions.forget(host.id)
     store.remove(host.id)
     if store.hosts.isEmpty { dismiss() }

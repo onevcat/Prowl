@@ -30,6 +30,7 @@ final class PushCoordinatorWorld: @unchecked Sendable {
       registerAPNs: { self.apnsToken },
       environment: { .development },
       saveKey: { key, id in self.lock.withLock { self.keys[id] = key } },
+      removeKey: { id in _ = self.lock.withLock { self.keys.removeValue(forKey: id) } },
       now: { self.now })
   }
 }
@@ -133,10 +134,84 @@ struct MirrorPushCoordinatorTests {
     #expect(world.record(credential.hostID) == nil)
   }
 
+  @Test func registersOnlyTheChosenKindsAndUnregistersWhenNoneIsLeft() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    let coordinator = world.coordinator()
+    coordinator.setKinds([.done], for: credential.hostID)
+    guard case .pushRegister(let payload) = await coordinator.registration(for: credential, capabilities: push) else {
+      Issue.record("Expected pushRegister")
+      return
+    }
+    #expect(payload.kinds == ["done"])
+
+    coordinator.setKinds([], for: credential.hostID)
+    guard case .pushUnregister = await coordinator.registration(for: credential, capabilities: push) else {
+      Issue.record("Expected pushUnregister")
+      return
+    }
+    #expect(world.gateway.routes().last == "DELETE /v1/tokens/push-1")
+    #expect(world.record(credential.hostID) == nil)
+    #expect(world.keys[credential.hostID] == nil)
+  }
+
+  @Test func settingsSurviveARestart() {
+    let first = world.coordinator(enabled: false)
+    first.setEnabled(true)
+    first.setKinds([.blocked], for: credential.hostID)
+
+    let second = MirrorPushCoordinator(defaults: world.defaults)
+    #expect(second.isEnabled)
+    #expect(second.kinds(for: credential.hostID) == [.blocked])
+    #expect(second.kinds(for: UUID()) == Set(MirrorPushKind.allCases))
+  }
+
+  @Test func removingARegistrationDeletesTheTokenAndTheKey() async {
+    world.gateway.answer("POST /v1/tokens", 201, #"{"pushToken":"push-1"}"#)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 500)
+    world.gateway.answer("DELETE /v1/tokens/push-1", 204)
+    let coordinator = world.coordinator()
+    _ = await coordinator.registration(for: credential, capabilities: push)
+    coordinator.received(.init(pushEnabled: true, pushAllowedByMac: true, registered: true), hostID: credential.hostID)
+
+    // An unreachable gateway keeps the record, so the next call tries again.
+    await coordinator.removeRegistration(for: credential.hostID)
+    #expect(world.record(credential.hostID) != nil)
+    #expect(world.keys[credential.hostID] == nil)
+    #expect(coordinator.statuses[credential.hostID] == nil)
+
+    await coordinator.removeRegistration(for: credential.hostID)
+    #expect(world.record(credential.hostID) == nil)
+    #expect(world.gateway.routes().filter { $0 == "DELETE /v1/tokens/push-1" }.count == 2)
+  }
+
   @Test func keepsTheHostsAnswer() {
     let coordinator = world.coordinator()
     let status = MirrorMessage.PushStatusPayload(pushEnabled: true, pushAllowedByMac: false, registered: true)
     coordinator.received(status, hostID: credential.hostID)
     #expect(coordinator.statuses[credential.hostID] == status)
+  }
+}
+
+@MainActor
+struct MirrorPushStatusTextTests {
+  private let world = PushCoordinatorWorld()
+  private let hostID = UUID()
+
+  @Test func describesEachState() {
+    let push = world.coordinator()
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: nil) == "Not connected yet")
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: false) == "Update Prowl on the Mac")
+    push.received(.init(pushEnabled: true, pushAllowedByMac: true, registered: true), hostID: hostID)
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "On")
+    push.received(.init(pushEnabled: false, pushAllowedByMac: true, registered: true), hostID: hostID)
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off on the Mac")
+    #expect(
+      MirrorPushStatusText.detail(push: push, hostID: hostID, supportsPush: true)
+        == "Turn on Send Notifications to Paired Devices in Remote Mirror settings on the Mac.")
+    push.received(.init(pushEnabled: true, pushAllowedByMac: false, registered: true), hostID: hostID)
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off on the Mac")
+    push.setKinds([], for: hostID)
+    #expect(MirrorPushStatusText.summary(push: push, hostID: hostID, supportsPush: true) == "Off")
   }
 }

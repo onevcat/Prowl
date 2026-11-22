@@ -32,6 +32,11 @@ final class MirrorHostSessions {
     sessions.removeValue(forKey: id)?.stop()
   }
 
+  /// Every connected Host hears about a change of the notification switch.
+  func pushSettingsChanged() {
+    for session in sessions.values { session.pushSettingsChanged() }
+  }
+
   func suspendAll() {
     for session in sessions.values { session.stop() }
   }

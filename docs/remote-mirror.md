@@ -399,6 +399,15 @@ its push token to the Mac; the Mac sends nothing until both sides are on.
 - Nothing is sent while Remote Mirror is off, the Host does not listen, the switch is off, or
   no paired device registered.
 
+On the phone, **Hosts → Notifications** turns notifications on for this phone (iOS asks for
+permission the first time). Each paired Host has a row with its state (**On**, **Off on the
+Mac**, **Update Prowl on the Mac**, **Not connected yet**) and a page that chooses the events:
+**An agent needs you** and **An agent finished**. Notifications show only "An agent needs your
+attention" or "An agent finished"; the phone decrypts them and keeps the Host's text off the
+lock screen. Turning notifications off, turning off every event of a Host, or forgetting a
+Host deletes that Host's push token at the push service, so a Host that is offline at that
+moment cannot notify the phone either.
+
 What leaves the Mac: one HTTPS request per notification to the Prowl push service (`prowl-push.onev.dev`), with the
 device's push token, a collapse identifier derived from the pane with a key the service does
 not have, and the end-to-end encrypted content (the agent's tab and worktree name and the
