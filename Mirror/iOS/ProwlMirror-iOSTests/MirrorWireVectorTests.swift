@@ -32,4 +32,21 @@ struct MirrorWireVectorTests {
       #expect(throws: (any Error).self) { try MirrorWire.decode(invalid) }
     }
   }
+
+  /// The `deflate-v1` vector of `App/Tests/RemoteMirror/MirrorWireCompressionTests.swift`, made by
+  /// another zlib: `{"list":{}}` twice, then `{"pong":{}}`, in one stream (docs-ai 097).
+  @Test func readsTheCompressedVector() throws {
+    let vector: [[UInt8]] = [
+      [98, 168, 86, 202, 201, 44, 46, 81, 178, 170, 174, 173, 5, 0, 0, 0, 255, 255],
+      [98, 64, 98, 3, 0, 0, 0, 255, 255],
+      [2, 178, 11, 242, 243, 210, 193, 108, 0, 0, 0, 0, 255, 255],
+    ]
+    var inflater: MirrorWireCompression.Inflater?
+    let kinds = try vector.map { body in
+      try MirrorWire.decode(
+        MirrorWireCompression.expand(Data([3] + body), with: &inflater, limit: MirrorWire.maximumPayload)
+      ).kind
+    }
+    #expect(kinds == [.list, .list, .pong])
+  }
 }

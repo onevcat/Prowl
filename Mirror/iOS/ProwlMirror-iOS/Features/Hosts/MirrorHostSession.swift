@@ -48,6 +48,8 @@ final class MirrorHostSession {
   var supportsPush: Bool? { status == .ready ? capabilities.contains(MirrorPushContract.capability) : nil }
 
   @ObservationIgnored private var transport: (any MirrorTransport)?
+  /// This connection already asked the Host to compress (docs-ai 097).
+  @ObservationIgnored private var requestedCompression = false
   @ObservationIgnored private var generation = UUID()
   /// The pane this device just stopped mirroring, and how many rosters may still call it busy.
   @ObservationIgnored private var releasedPane: (id: UUID, rosters: Int)?
@@ -108,6 +110,7 @@ final class MirrorHostSession {
     do {
       let channel = try makeTransport(configuration)
       transport = channel
+      requestedCompression = false
       channel.onEnrolled = { [weak self] enrolled in
         guard let self, self.generation == attempt else { return }
         self.configuration = enrolled
@@ -279,6 +282,11 @@ final class MirrorHostSession {
       }
       panes = listed
       capabilities = Set(message.capabilities ?? [])
+      // The roster repeats every few seconds; compressed, an unchanged list costs a few dozen bytes.
+      if capabilities.contains(MirrorWireCompression.capability), !requestedCompression {
+        requestedCompression = true
+        send(.compress)
+      }
       hostRunID = message.hostRunID
       if let name = message.hostName { hostName = name }
       lastRefreshedAt = Date()

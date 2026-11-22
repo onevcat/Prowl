@@ -20,6 +20,21 @@ struct MirrorSessionTests {
     #expect(transport.sent.last?.intent == .takeover)
   }
 
+  @Test func asksAHostThatCompressesBeforeSubscribing() {
+    let transport = FakeTransport()
+    let session = makeSession(transport)
+    let pane = MirrorPaneDescriptor(id: UUID(), title: "Fixture", directory: "/", busy: false)
+    session.connect()
+    let capabilities = ["text-v1", MirrorWireCompression.capability]
+    transport.onMessage?(.panes(.init(panes: [pane], capabilities: capabilities, hostRunID: UUID())))
+    session.select(pane)
+    let kinds = transport.sent.map(\.kind)
+    #expect(kinds.firstIndex(of: .compress).map { index in kinds[index...].contains(.subscribe) } == true)
+    // Once per connection, also when the Host lists its panes again.
+    transport.onMessage?(.panes(.init(panes: [pane], capabilities: capabilities, hostRunID: UUID())))
+    #expect(transport.sent.filter { $0.kind == .compress }.count == 1)
+  }
+
   @Test func selectingABusyPaneUsesTheDisplayedTakeOverAction() {
     let transport = FakeTransport()
     let session = makeSession(transport)

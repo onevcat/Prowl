@@ -3,13 +3,15 @@
 All integers in binary packets are unsigned big-endian. A packet is `length:u32`,
 then `kind:u8`, then payload. Length includes kind, excludes the four-byte prefix,
 and must be 1…8,388,608. Unknown kinds, malformed UTF-8, missing required fields and
-invalid payloads close the connection. This revision has no compatibility negotiation.
+invalid payloads close the connection. Optional behavior is negotiated through the
+`panes` capabilities.
 
 | Kind | Payload |
 | --- | --- |
 | 0 | UTF-8 JSON control message |
 | 1 | subscription UUID:16 raw bytes, sequence:u64, columns:u32, rows:u32, raw VT bytes |
 | 2 | subscription UUID:16 raw bytes, sequence:u64, columns:u32, rows:u32, truncated:u8, UTF-8 text |
+| 3 | compressed: one complete kind 0, 1 or 2 packet body (`deflate-v1`, below) |
 
 Sequence starts at 1. VT grid dimensions are 1…1000. Text dimensions allow zero for
 an unspecified test/source grid; production Ghostty sources supply actual sizes.
@@ -24,7 +26,7 @@ fixed-byte vectors, independent of encode/decode round-trip tests.
 
 Controls: challenge, authenticate, pair, paired, authenticated; list, panes;
 subscribe, subscribed, acknowledge, input, refresh, scroll, scrollResult, viewport; history, historyPage; command,
-commandResult, commandReceipt; pushRegister, pushUnregister, pushStatus; failure, ended, ping, pong. There is no private
+commandResult, commandReceipt; pushRegister, pushUnregister, pushStatus; compress; failure, ended, ping, pong. There is no private
 Agent-state or private submission control. Command envelopes preserve the public
 CLI JSON and UUID request ID. See the feature documentation for command scope.
 
@@ -38,6 +40,31 @@ typed, with no dispatch receipt and no completion instruction, so the `create` r
 The remote `list` command result adds optional `data.worktrees`, using the same
 worktree fields as `data.items[].worktree`, to include known worktrees without
 terminal panes. Clients without that field can still use worktrees from `items`.
+
+## Compression (`deflate-v1`)
+
+A Host that lists `deflate-v1` in `panes` compresses what it sends on a connection once the
+client sends `{"compress":{}}` there (docs-ai 097). A client sends it once per connection, right
+after the first `panes` and before anything else it wants compressed, such as `subscribe`.
+Never send it to a Host without the capability: older Hosts close on unknown controls.
+
+From then on every Host packet is kind 3. Its payload is the next part of one raw DEFLATE
+stream (RFC 1951, no zlib or gzip header, 32 KB window) that holds exactly one plain packet
+body (kind byte included) and ends with a sync flush (`00 00 FF FF`). The stream continues
+across packets for the life of the connection, so a client keeps one inflate state per
+connection and feeds it the packets in order. The inflated body is decoded as usual; a nested
+kind 3, an inflate error, or more than 8,388,608 inflated bytes closes the connection. Clients
+do not compress what they send. Clients that never ask, and Hosts without the capability,
+exchange plain packets as before.
+
+Vector (one stream, three packets; made by Python's zlib, level 6), which must inflate to
+`{"list":{}}`, `{"list":{}}` and `{"pong":{}}` behind kind byte 0:
+
+```
+62 a8 56 ca c9 2c 2e 51 b2 aa ae ad 05 00 00 00 ff ff
+62 40 62 03 00 00 00 ff ff
+02 b2 0b f2 f3 d2 c1 6c 00 00 00 00 ff ff
+```
 
 ## Authentication and lifecycle
 

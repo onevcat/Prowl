@@ -1135,6 +1135,44 @@ struct MirrorHostTests {
     #expect(saved.devices[0].push?.token == dead)
   }
 
+  @Test(.timeLimit(.minutes(1))) func aClientThatAsksGetsCompressedMessagesAndOthersDoNot() async throws {
+    var saved = Self.identity
+    let host = MirrorHost(
+      source: Source(), defaults: .mirrorTests, enabled: true, loadIdentity: { saved },
+      saveIdentity: { saved = $0 })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let compressing = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { compressing.connection.close() }
+    let plain = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { plain.connection.close() }
+    var compressed = compressing.messages.makeAsyncIterator()
+    var uncompressed = plain.messages.makeAsyncIterator()
+
+    compressing.connection.send(.list)
+    guard case .panes(let first) = await compressed.next() else {
+      Issue.record("Expected panes")
+      return
+    }
+    #expect(first.capabilities.contains(MirrorWireCompression.capability))
+    #expect(compressing.connection.compressedMessagesReceived == 0)
+
+    compressing.connection.send(.compress)
+    compressing.connection.send(.compress)
+    for _ in 0..<3 {
+      compressing.connection.send(.list)
+      #expect(await compressed.next()?.kind == .panes)
+    }
+    // Asking twice is harmless; every reply after the request came compressed.
+    #expect(compressing.connection.compressedMessagesReceived == 3)
+
+    plain.connection.send(.list)
+    #expect(await uncompressed.next()?.kind == .panes)
+    #expect(plain.connection.compressedMessagesReceived == 0)
+  }
+
   @Test(.timeLimit(.minutes(1))) func pushControlsArePerConnectionLimited() async throws {
     var saved = Self.identity
     let host = MirrorHost(
