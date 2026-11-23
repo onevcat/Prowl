@@ -58,6 +58,10 @@ struct MirrorPairingView: View {
         }
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
+        if kind == .iPhone {
+          MirrorAppStoreButton(title: "No Prowl Mirror on the iPhone yet? Get it from the App Store…")
+            .buttonStyle(.link)
+        }
         code
         connection
       }

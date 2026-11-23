@@ -1,7 +1,8 @@
 import ComposableArchitecture
 import SwiftUI
 
-/// The Remote Mirror tab (docs-ai 091). While the alpha switch is off, it shows the switch only.
+/// The Remote Mirror tab (docs-ai 091). While the alpha switch is off, it shows the switch and the
+/// App Store link for Prowl Mirror only.
 /// The groups are named by direction: connections to this Mac, and connections to another Mac.
 struct RemoteMirrorSettingsView: View {
   @Bindable var store: StoreOf<SettingsFeature>
@@ -49,6 +50,12 @@ struct RemoteMirrorSettingsView: View {
         }
         .help("Show the Remote Mirror button in the toolbar and let paired devices connect to this Mac")
         .accessibilityIdentifier("remote-mirror-enable")
+        LabeledContent {
+          MirrorAppStoreButton(title: "Get the App…")
+        } label: {
+          Text("Prowl Mirror for iPhone and iPad")
+          Text("Follow and answer your agents from your phone. Free on the App Store.")
+        }
       }
       if store.remoteMirrorEnabled {
         ConnectToThisMacSection(
