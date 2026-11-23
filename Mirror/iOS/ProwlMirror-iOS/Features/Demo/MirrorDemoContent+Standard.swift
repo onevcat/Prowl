@@ -251,8 +251,9 @@ extension MirrorDemoContent {
         + tool(
           .init(
             id: "f2", name: "Shell", kind: .shell, title: "Find image names built at run time",
-            command: #"rg -n 'UIImage\(named: "[^"]*\\\(' Sources"#),
-          output: #"Sources/Onboarding/PageView.swift:41:    UIImage(named: "onboarding-\(index)")"#, at: ago(3.2))
+            // No backslashes: the terminal screen reads Markdown, which would drop them.
+            command: #"rg -n 'named: "onboarding-' Sources"#),
+          output: #"Sources/Onboarding/PageView.swift:41:    UIImage(named: "onboarding-" + page.id)"#, at: ago(3.2))
         + [
           .demo(
             .assistantMessage,
