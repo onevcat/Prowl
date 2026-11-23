@@ -99,8 +99,9 @@ same pin, so an app update usually downloads nothing.
 ### Relays and admission
 
 - `derper` needs a long-running process with TCP 443 and UDP 3478, so it cannot run on
-  Workers. First relay: a dedicated Oracle Cloud Always Free instance in Tokyo, not shared with
-  other services. A second region on a small paid server when subscribers need it.
+  Workers. First relay: a dedicated RackNerd VPS in Los Angeles (`derp-lax1.onev.dev`), not
+  shared with other services. If it is too slow or too small, a second relay on Alibaba Cloud
+  in Singapore. See [002-g3-first-relay.md](002-g3-first-relay.md).
 - Admission: `derper` asks the gateway whether a node key may connect (client verification
   URL; to verify in R0). The phone registers its node key and the Host's node key with the
   gateway together with its RevenueCat app user ID; the gateway allows both keys while the
@@ -170,7 +171,7 @@ one stack (`gh stack`). Every Prowl PR passes `make check` and `make test`, and 
   any grant names it; every grant request carries a valid App Attest assertion.
 
 **G3 — relay deployment** (infrastructure)
-- Accept: a dedicated instance (not the telemetry VM) serves DERP on 443 and STUN on 3478;
+- Accept: a dedicated instance (the Los Angeles VPS) serves DERP on 443 and STUN on 3478;
   `--verify-client-url-fail-open=false` is set and tested; certificates renew without help;
   an alert fires when the relay is down.
 
@@ -260,3 +261,6 @@ Wi-Fi network, Tailscale's public relays, one echo server on the Mac.
 - Updated 2026-11-21: dedicated loopback listener for the helper, revocation by server
   restart, fail-open off, authorization model, user-initiated paywall, R0 real Mirror session.
   From a second review of #1142.
+- Updated 2026-11-23: first relay is a RackNerd VPS in Los Angeles, not Oracle Cloud in Tokyo;
+  Alibaba Cloud in Singapore is the second relay if needed — see
+  [002-g3-first-relay.md](002-g3-first-relay.md)
