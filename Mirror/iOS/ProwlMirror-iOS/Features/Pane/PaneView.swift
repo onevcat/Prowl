@@ -16,6 +16,8 @@ struct PaneView: View {
   @State private var startsInChat: Bool
   @State private var userChoseMode = false
   @State private var isComposing = false
+  /// The whole pane's height, reader and bottom bar together.
+  @State private var paneHeight: CGFloat = 0
   @Environment(MirrorHostSessions.self) private var sessions
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @Environment(\.scenePhase) private var scenePhase
@@ -148,7 +150,10 @@ struct PaneView: View {
         if session.status == .live, session.supportsPromptRespond, let prompt = openPrompt,
           !(prompt.choices ?? []).isEmpty
         {
-          MirrorPromptPanel(prompt: prompt, answer: session.promptAnswer) { choice, toggles in
+          // At most half the pane, so the reader keeps the context of the question.
+          MirrorPromptPanel(
+            prompt: prompt, answer: session.promptAnswer, maxHeight: paneHeight > 0 ? paneHeight / 2 : .infinity
+          ) { choice, toggles in
             session.answerPrompt(prompt.id, choice: choice, toggles: toggles)
           }
           .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -168,6 +173,8 @@ struct PaneView: View {
       .padding(.bottom, 6)
       .frame(maxWidth: .infinity)
     }
+    // Measured outside the bar, so its own height does not feed back into the measure.
+    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { paneHeight = $0 }
     .navigationBarTitleDisplayMode(.inline)
     .navigationTitle(shown.displayTitle)
     .toolbar {

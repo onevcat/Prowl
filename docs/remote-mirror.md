@@ -50,8 +50,11 @@ revoking a device that already paired. When a device completes pairing, the shee
 shows **Paired with** its name and closes by itself. On the other Mac, open
 **Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…** and enter the address (an IP or a
 host name such as `mini.local`), port, and code. On iOS, **Pair with a Mac** on the
-first launch, or **Add Host…** in the Mac menu, takes the same address, port and code, or
-scans the QR code.
+first launch, or **Add Host…** in the Settings menu (the gear at the top left), takes the same address, port and code, or
+scans the QR code. Before any Mac is paired, the same screen offers a **Try the Demo** link: it
+opens the app on a sample Mac with agents in every state, so the app can be explored without
+a Mac. The demo keeps nothing; **Exit Demo** or **Pair with a Mac** in the Settings menu ends it.
+A link to `https://prowl.cat/` on that screen is for people who do not use Prowl yet.
 Successful enrollment consumes the code. The client saves its device credential in
 Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved
@@ -147,8 +150,12 @@ Fit to Window text small. iOS
 renders replacement text with local reflow. Cleared output is not an archive.
 
 On iOS, the first launch asks you to pair with a Mac. After that the app opens on the
-agents of the last Mac you chose, titled with the Mac's name; the Mac menu at the top left
-switches the Host, adds one, or opens **Manage Hosts** (rename, forget). Three counts on
+agents of the last Mac you chose, titled with the Mac's name; the Settings menu (the gear at the top left)
+switches the Host, adds one, or opens **Settings…**. The menu lists up to five Hosts; with more,
+**All Hosts…** opens Settings. The gear shows a red mark when the Mac cannot be reached.
+**Settings** holds **Hosts** (tap one to show it, swipe to rename or forget, **Add Host…**),
+**Notifications**, and **About** (version, website, privacy policy, terms of use). In the demo,
+Settings shows About only. Three counts on
 top show how many agents are **Blocked**, **Working** and **Done** (finished and not looked
 at yet); tap one to show only those agents, tap it again to show all. The panes follow the
 Mac sidebar: projects in sidebar order with their repository color and group, agents
@@ -345,7 +352,7 @@ question) and the choices; tap one to answer. In a multi-select question, each t
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
 "Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
 still shows the same question before it presses any key, so a stale tap is refused with a
-reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
+reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. The panel takes at most half the pane, so the chat or the screen stays readable on a short display such as a phone on its side; answers that do not fit scroll inside the panel. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 On a wide screen such as an iPad, the chat and its composer keep a readable column in the
 middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows

@@ -72,8 +72,9 @@ Corrected 2026-11-06 in S1 (see [003-s1-agents-home.md](003-s1-agents-home.md)):
 draft followed the reference screenshots too closely (a "Needs You" card rail, project chips,
 a centered "Host ⌄" title). The shipped screen uses Prowl's own structure and words:
 
-- Large navigation title: the Mac's computer name. A `macbook` menu at the top left carries
-  the connection mark and switches the Host, adds one, or opens Manage Hosts. When the Host
+- Large navigation title: the Mac's computer name. A menu at the top left switches the Host,
+  adds one, or opens Manage Hosts (since 098 it is the Settings menu, a gear with a mark only
+  when the connection failed). When the Host
   cannot be reached, a row on top shows the reason and Retry; the last roster stays.
 - A state summary: three counts, **Blocked**, **Working**, **Done**, as the Mac's Active
   Agents panel ranks them. A count filters the list to that state.
@@ -181,3 +182,4 @@ Each slice ships simulator screenshots (light and dark) against a live Host and 
 - Updated 2026-11-06: S4 answers screen prompts from the phone (`promptRespond`, D6 via the screen instead of hooks) — see [006-s4-prompt-answers.md](006-s4-prompt-answers.md)
 - Updated 2026-11-06: S5 added the Terminal key bar and Stop (`agentKeys`); the `vt-v1` terminal view is deferred — see [007-s5-terminal-keys.md](007-s5-terminal-keys.md)
 - Updated 2026-11-06: S6 lets the phone send to a working agent; the agent queues or steers the message, and only a blocked agent refuses it — see [008-s6-input-while-working.md](008-s6-input-while-working.md)
+- Updated 2026-11-23: the top-left `macbook` Host menu became the Settings menu (gear) with the same items, so app settings can join it — see [098-mirror-demo-mode/001-action.md](../098-mirror-demo-mode/001-action.md)

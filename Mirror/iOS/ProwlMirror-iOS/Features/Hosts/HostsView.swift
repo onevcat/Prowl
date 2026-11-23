@@ -14,9 +14,9 @@ extension MirrorPaneDescriptor: Hashable {
   nonisolated func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-/// The paired Hosts, opened from the Agents title menu (docs-ai 089): pick the Host to show,
-/// rename or forget one, or pair another.
-struct HostsManagerView: View {
+/// The paired Hosts in Settings (docs-ai 098): pick the Host to show, rename or forget one,
+/// or pair another.
+struct MirrorHostsSection: View {
   @Bindable var store: MirrorHostStore
   let onAddHost: () -> Void
   @Environment(MirrorHostSessions.self) private var sessions
@@ -25,39 +25,24 @@ struct HostsManagerView: View {
   @State private var alias = ""
 
   var body: some View {
-    NavigationStack {
-      List {
-        Section {
-          hostRows
-        }
-        MirrorNotificationsSection(store: store)
+    Section("Hosts") {
+      hostRows
+      Button("Add Host…", systemImage: "plus") {
+        dismiss()
+        onAddHost()
       }
-      .navigationTitle("Hosts")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Close", systemImage: "xmark") { dismiss() }
-            .help("Close the Host list")
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Button("Add Host", systemImage: "plus") {
-            dismiss()
-            onAddHost()
-          }
-          .accessibilityIdentifier("add-host")
-          .help("Pair with a Mac running Prowl")
-        }
+      .accessibilityIdentifier("settings-add-host")
+      .help("Pair with a Mac running Prowl")
+    }
+    .alert("Rename Host", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+      TextField("Name", text: $alias)
+      Button("Save") {
+        if let renaming { store.rename(renaming.id, alias: alias) }
+        renaming = nil
       }
-      .alert("Rename Host", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-        TextField("Name", text: $alias)
-        Button("Save") {
-          if let renaming { store.rename(renaming.id, alias: alias) }
-          renaming = nil
-        }
-        Button("Cancel", role: .cancel) { renaming = nil }
-      } message: {
-        Text("Shown on this device only.")
-      }
+      Button("Cancel", role: .cancel) { renaming = nil }
+    } message: {
+      Text("Shown on this device only.")
     }
   }
 
