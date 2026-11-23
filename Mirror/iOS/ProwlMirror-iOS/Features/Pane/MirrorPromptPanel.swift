@@ -6,6 +6,9 @@ import SwiftUI
 struct MirrorPromptPanel: View {
   let prompt: MirrorConversationEvent.Prompt
   let answer: MirrorSession.PromptAnswer?
+  /// The tallest the panel may be. On a short screen, such as a phone on its side, the reader
+  /// keeps the rest and the panel scrolls inside.
+  var maxHeight: CGFloat = .infinity
   /// Sends a choice id; `toggles` is true for a box of a multi-select menu.
   let respond: (_ choice: String, _ toggles: Bool) -> Void
 
@@ -36,6 +39,29 @@ struct MirrorPromptPanel: View {
   }
 
   var body: some View {
+    ScrollView {
+      content
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .scrollDisabled(contentHeight <= maxHeight)
+    // Answers below the edge must not go unseen.
+    .scrollIndicatorsFlash(trigger: contentHeight > maxHeight)
+    .frame(height: min(contentHeight, maxHeight))
+    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+    )
+    .animation(.snappy, value: answer)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("prompt-panel")
+  }
+
+  /// The panel's own height; it is as tall as this up to `maxHeight`.
+  @State private var contentHeight: CGFloat = 0
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: 10) {
       Label(kindTitle, systemImage: prompt.kind == .permission ? "lock.shield" : "questionmark.bubble")
         .font(.footnote.weight(.semibold))
@@ -71,13 +97,6 @@ struct MirrorPromptPanel: View {
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
-    )
-    .animation(.snappy, value: answer)
-    .accessibilityElement(children: .contain)
-    .accessibilityIdentifier("prompt-panel")
   }
 
   /// About seven lines of the detail's type; it grows with Dynamic Type.
