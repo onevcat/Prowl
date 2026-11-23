@@ -15,7 +15,7 @@ struct ContentView: View {
       if CommandLine.arguments.contains("--mirror-ui-launch-fixture") {
         NavigationStack { LaunchFixtureView() }
       } else if let hostsFixture {
-        MirrorRootView(store: hostsFixture.store).environment(hostsFixture.sessions)
+        MirrorAppRoot(hosts: hostsFixture.store, sessions: hostsFixture.sessions)
       } else if let fixture = MirrorUIFixture.paneFixture() {
         NavigationStack { PaneView(session: fixture.session, pane: fixture.pane, host: nil) }
           .environment(sessions)
@@ -28,8 +28,7 @@ struct ContentView: View {
   }
 
   private var content: some View {
-    MirrorRootView(store: hosts)
-      .environment(sessions)
+    MirrorAppRoot(hosts: hosts, sessions: sessions)
       .task { await MirrorPushCoordinator.shared.appBecameActive() }
       .onChange(of: scenePhase) { _, phase in
         switch phase {
@@ -40,6 +39,42 @@ struct ContentView: View {
         default: break
         }
       }
+  }
+}
+
+/// The paired Hosts, or the demo while it runs (docs-ai 098). Both show the same app; only the
+/// store and the sessions, and so the data source, differ.
+struct MirrorAppRoot: View {
+  let hosts: MirrorHostStore
+  let sessions: MirrorHostSessions
+  @State private var demo: MirrorDemo?
+  @State private var pairsAfterDemo = false
+
+  var body: some View {
+    if let demo {
+      MirrorRootView(store: demo.store)
+        .environment(demo.sessions)
+        .environment(
+          \.mirrorDemo, MirrorDemoActions(pair: { endDemo(pairing: true) }, exit: { endDemo(pairing: false) }))
+    } else {
+      MirrorRootView(
+        store: hosts, startsPairing: pairsAfterDemo,
+        // Only a phone with no paired Mac is offered the demo.
+        onTryDemo: hosts.hosts.isEmpty ? { startDemo() } : nil
+      )
+      .environment(sessions)
+    }
+  }
+
+  private func startDemo() {
+    pairsAfterDemo = false
+    demo = MirrorDemo()
+  }
+
+  private func endDemo(pairing: Bool) {
+    demo?.end()
+    pairsAfterDemo = pairing
+    demo = nil
   }
 }
 

@@ -4,6 +4,10 @@ import SwiftUI
 /// Host. Hosts are switched from the Agents title menu, never from a screen of their own.
 struct MirrorRootView: View {
   @Bindable var store: MirrorHostStore
+  /// Opens pairing when the view appears, as after leaving the demo with Pair with a Mac.
+  var startsPairing = false
+  /// Starts the demo from onboarding (docs-ai 098); nil where no demo is offered.
+  var onTryDemo: (() -> Void)?
   @Environment(MirrorHostSessions.self) private var sessions
   @State private var path = NavigationPath()
   @State private var showsAdd = false
@@ -26,9 +30,10 @@ struct MirrorRootView: View {
           }
         }
       } else {
-        MirrorOnboardingView { showsAdd = true }
+        MirrorOnboardingView(onAdd: { showsAdd = true }, onTryDemo: onTryDemo)
       }
     }
+    .task { if startsPairing { showsAdd = true } }
     .sheet(isPresented: $showsAdd) {
       AddHostView(store: store) { host in
         showsAdd = false
@@ -78,6 +83,7 @@ struct MirrorRootView: View {
 /// The first launch: what the app does and how to pair, with the QR code as the main path.
 struct MirrorOnboardingView: View {
   let onAdd: () -> Void
+  var onTryDemo: (() -> Void)?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -115,9 +121,28 @@ struct MirrorOnboardingView: View {
       .buttonStyle(.glassProminent)
       .controlSize(.large)
       .padding(.horizontal, 24)
-      .padding(.bottom, 24)
       .accessibilityIdentifier("add-host")
       .help("Pair with a Mac running Prowl")
+      if let onTryDemo {
+        Button(action: onTryDemo) {
+          Label("Try the Demo", systemImage: "play.circle")
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .accessibilityIdentifier("try-demo")
+        .help("Explore the app with sample agents, without a Mac")
+      }
+      Text("New to Prowl? Visit [prowl.cat](https://prowl.cat/)")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .padding(.top, 14)
+        .padding(.bottom, 24)
+        .accessibilityIdentifier("prowl-website")
     }
     .frame(maxWidth: 520)
     .frame(maxWidth: .infinity)

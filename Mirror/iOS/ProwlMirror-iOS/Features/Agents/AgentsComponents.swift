@@ -8,32 +8,44 @@ struct HostMenu: View {
   let select: (MirrorHostRecord) -> Void
   let onAddHost: () -> Void
   let onManageHosts: () -> Void
+  @Environment(\.mirrorDemo) private var demo
 
   var body: some View {
     Menu {
-      Section(status.label) {
-        ForEach(hosts) { host in
-          Button {
-            select(host)
-          } label: {
-            if host.id == current.id {
-              Label(host.displayName, systemImage: "checkmark")
-            } else {
-              Text(host.displayName)
+      if let demo {
+        // The demo has one sample Mac and nothing to manage (docs-ai 098).
+        Section("Demo · Sample data") {
+          Label(current.displayName, systemImage: "checkmark")
+        }
+        Button("Pair with a Mac", systemImage: "qrcode.viewfinder", action: demo.pair)
+          .accessibilityIdentifier("demo-pair")
+        Button("Exit Demo", systemImage: "xmark.circle", action: demo.exit)
+          .accessibilityIdentifier("demo-exit")
+      } else {
+        Section(status.label) {
+          ForEach(hosts) { host in
+            Button {
+              select(host)
+            } label: {
+              if host.id == current.id {
+                Label(host.displayName, systemImage: "checkmark")
+              } else {
+                Text(host.displayName)
+              }
+              Text(host.endpoint)
             }
-            Text(host.endpoint)
           }
         }
+        Button("Add Host…", systemImage: "plus", action: onAddHost)
+        Button("Manage Hosts", systemImage: "list.bullet", action: onManageHosts)
       }
-      Button("Add Host…", systemImage: "plus", action: onAddHost)
-      Button("Manage Hosts", systemImage: "list.bullet", action: onManageHosts)
     } label: {
       Image(systemName: "macbook")
         .overlay(alignment: .bottomTrailing) { connectionMark.offset(x: 4, y: 3) }
     }
     .accessibilityIdentifier("host-menu")
     .accessibilityLabel("\(current.displayName), \(status.label)")
-    .help("Switch the Host or manage paired Hosts")
+    .help(demo == nil ? "Switch the Host or manage paired Hosts" : "Leave the demo or pair with a Mac")
   }
 
   @ViewBuilder private var connectionMark: some View {

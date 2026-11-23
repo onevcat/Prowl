@@ -690,6 +690,47 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
   }
 
+  /// The demo (docs-ai 098): onboarding offers it, it runs the real app on sample panes, and
+  /// leaving it returns to onboarding with nothing paired.
+  @MainActor
+  func testDemoRunsTheAppWithoutAMacAndLeavesNothing() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let tryDemo = app.buttons["try-demo"]
+    XCTAssertTrue(tryDemo.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "prowl-website").firstMatch.exists)
+    attach("Onboarding with the demo")
+    tryDemo.tap()
+
+    let blocked = app.descendants(matching: .any).matching(identifier: "pane-D0000000-0000-0000-0000-000000000001")
+      .firstMatch
+    XCTAssertTrue(blocked.waitForExistence(timeout: 10))
+    attach("Demo agents")
+    blocked.tap()
+    let allow = app.descendants(matching: .any).matching(identifier: "prompt-choice-1").firstMatch
+    XCTAssertTrue(allow.waitForExistence(timeout: 10))
+    attach("Demo permission prompt")
+    allow.tap()
+    let panel = app.descendants(matching: .any).matching(identifier: "prompt-panel").firstMatch
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: panel)
+    waitForExpectations(timeout: 15)
+    XCTAssertTrue(
+      app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "The flaky failure is fixed."))
+        .firstMatch.waitForExistence(timeout: 15))
+    attach("Demo agent finished")
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+
+    app.descendants(matching: .any).matching(identifier: "host-menu").firstMatch.tap()
+    let exit = app.buttons["demo-exit"]
+    XCTAssertTrue(exit.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Manage Hosts"].exists)
+    exit.tap()
+    XCTAssertTrue(app.buttons["add-host"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["try-demo"].exists)
+  }
+
   @MainActor
   func testPairingCodeUsesTwoEditableHalves() {
     let app = XCUIApplication()

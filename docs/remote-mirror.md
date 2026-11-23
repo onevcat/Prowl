@@ -51,7 +51,10 @@ shows **Paired with** its name and closes by itself. On the other Mac, open
 **Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…** and enter the address (an IP or a
 host name such as `mini.local`), port, and code. On iOS, **Pair with a Mac** on the
 first launch, or **Add Host…** in the Mac menu, takes the same address, port and code, or
-scans the QR code.
+scans the QR code. Before any Mac is paired, the same screen offers **Try the Demo**: it
+opens the app on a sample Mac with agents in every state, so the app can be explored without
+a Mac. The demo keeps nothing; **Exit Demo** or **Pair with a Mac** in the Mac menu ends it.
+A link to `https://prowl.cat/` on that screen is for people who do not use Prowl yet.
 Successful enrollment consumes the code. The client saves its device credential in
 Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved

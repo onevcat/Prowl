@@ -33,6 +33,13 @@ The app has three levels (docs-ai 088):
 
 iPhone and iPad use the same stack navigation (iOS 26+).
 
+With no Host paired, onboarding also offers **Try the Demo** (docs-ai 098). It runs this same
+app against `MirrorDemoHost`, an in-memory Host that serves the wire protocol to the real
+sessions, with sample panes from `MirrorDemoContent`. Answers, messages, Stop and New Session
+play scripted replies. The demo has its own `MirrorHostStore` in a cleared `UserDefaults`
+suite, makes no socket, Keychain item or push registration, and ends with **Exit Demo** or
+**Pair with a Mac** in the Mac menu. Paired users never see it.
+
 ## Chat
 
 Chat renders the Host's normalized events (see the [wire contract](../../docs/remote-mirror-wire.md#conversation-stream-conversation-v1)):
