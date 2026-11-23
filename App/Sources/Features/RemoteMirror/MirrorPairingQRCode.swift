@@ -8,15 +8,8 @@ struct MirrorPairingQRCode: View {
   let expires: Date
 
   var body: some View {
-    if let image = image {
-      Image(decorative: image, scale: 1)
-        .interpolation(.none)
-        .resizable()
-        .scaledToFit()
-        .frame(width: 180, height: 180)
-        .padding(12)
-        // A fixed light quiet zone keeps the code readable in either appearance.
-        .background(.white)
+    if let text {
+      MirrorQRCodeImage(text: text, size: 180)
         .accessibilityLabel("Pairing QR code")
         .accessibilityIdentifier("remote-mirror-pairing-qr")
     } else {
@@ -25,13 +18,12 @@ struct MirrorPairingQRCode: View {
     }
   }
 
-  private var image: CGImage? {
+  private var text: String? {
     guard let number = UInt16(port),
       let payload = try? MirrorPairingPayload(
-        address: address, port: number, code: code, expires: expires),
-      let text = try? payload.encoded()
+        address: address, port: number, code: code, expires: expires)
     else { return nil }
-    return Self.image(for: text)
+    return try? payload.encoded()
   }
 
   static func image(for text: String) -> CGImage? {
@@ -41,5 +33,26 @@ struct MirrorPairingQRCode: View {
     guard let output = filter.outputImage else { return nil }
     let scaled = output.transformed(by: CGAffineTransform(scaleX: 6, y: 6))
     return CIContext().createCGImage(scaled, from: scaled.extent)
+  }
+}
+
+/// A QR code on a light quiet zone, so that it scans in either appearance.
+struct MirrorQRCodeImage: View {
+  let text: String
+  let size: CGFloat
+
+  var body: some View {
+    if let image = MirrorPairingQRCode.image(for: text) {
+      Image(decorative: image, scale: 1)
+        .interpolation(.none)
+        .resizable()
+        .scaledToFit()
+        .frame(width: size, height: size)
+        .padding(12)
+        .background(.white)
+    } else {
+      Text("Unable to generate the QR code.")
+        .font(.caption).foregroundStyle(.secondary)
+    }
   }
 }
