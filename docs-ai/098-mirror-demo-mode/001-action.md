@@ -4,7 +4,7 @@
 
 | Date | Change | Ref |
 | --- | --- | --- |
-| 2026-11-23 | Plan, demo Host, demo content, onboarding entry, demo Host menu, tests, docs | PR (this entry's PR) |
+| 2026-11-23 | Plan, demo Host, demo content, onboarding entry, demo Host menu, tests, docs | #1164 |
 
 ## Outcome & current state (as of 2026-11-23)
 

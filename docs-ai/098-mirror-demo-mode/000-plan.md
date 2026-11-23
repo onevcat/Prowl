@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-11-23 |
-| **Primary PRs** | see [001-action.md](001-action.md) |
+| **Primary PRs** | #1164 |
 | **Related** | [088-mirror-ios-app](../088-mirror-ios-app/000-plan.md), [089-mirror-ios-redesign](../089-mirror-ios-redesign/000-plan.md), [095-mirror-push-notifications](../095-mirror-push-notifications/000-plan.md) |
 
 ## Background
