@@ -12,6 +12,67 @@ class InterfaceTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
     @Test
+    fun demoOpensAConversationAndExitsWithoutPairing() {
+        rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithText("Demo Mac").assertIsDisplayed()
+        rule.onNodeWithText("Review the release").performClick()
+        rule.onNodeWithText("The release notes are ready for review. You can reply from here.").assertIsDisplayed()
+        rule.onNodeWithTag("composer").performTextInput("Can we ship?")
+        rule.onNodeWithContentDescription("Send").performClick()
+        rule.onNodeWithText("This is a demo response. No message was sent to a Mac.").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Agents").performClick()
+        rule.onNodeWithContentDescription("Settings").performClick()
+        rule.onNodeWithText("Exit Demo").performClick()
+        rule.onNodeWithText("Pair with a Mac").assertIsDisplayed()
+    }
+
+    @Test
+    fun demoApprovalAndTerminalUseTheNormalPaneControls() {
+        rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithText("Draft the migration guide").performClick()
+        rule.onNodeWithText("Apply the migration plan?").assertIsDisplayed()
+        rule.onNodeWithTag("prompt-choice-approve").performClick()
+        rule.onNodeWithText("Approved · Apply the migration plan?").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Terminal").performClick()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").performClick()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Chat").performClick()
+        rule.onNodeWithText("Approved · Apply the migration plan?").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Agents").performClick()
+        rule.onNodeWithContentDescription("Settings").performClick()
+        rule.onNodeWithText("Settings…").performClick()
+        rule.onNodeWithText("Prowl Website").assertIsDisplayed()
+        rule.onNodeWithText("Paired Hosts").assertDoesNotExist()
+    }
+
+    @Test
+    fun demoShellEchoesInputAndKeepsASnapshot() {
+        rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithText("1 terminal").performClick()
+        rule.onNodeWithText("Terminal").performClick()
+        rule.onNodeWithTag("composer").performTextInput("pwd")
+        rule.onNodeWithContentDescription("Send").performClick()
+        rule.onNodeWithText("demo: Commands do not run in the demo.", substring = true).assertIsDisplayed()
+        rule.onNodeWithContentDescription("Pane actions").performClick()
+        rule.onNodeWithText("History").performClick()
+        rule.onNodeWithText("Loaded lines 1–152").assertIsDisplayed()
+    }
+
+    @Test
+    fun onboardingArrangesTheBrandAndActionsForTheWindowShape() {
+        val window = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        val brand = rule.onNodeWithTag("onboarding-brand").fetchSemanticsNode().boundsInRoot
+        val setup = rule.onNodeWithTag("onboarding-setup").fetchSemanticsNode().boundsInRoot
+        if (window.width > window.height)
+            org.junit.Assert.assertTrue(brand.right <= setup.left)
+        else org.junit.Assert.assertTrue(brand.bottom <= setup.top)
+        rule.onNodeWithText("Pair with a Mac").assertIsDisplayed()
+        rule.onNodeWithText("Try the Demo").assertIsDisplayed()
+    }
+
+    @Test
     fun contentExtendsBehindTransparentSystemBars() {
         rule.onNodeWithText("Pair with a Mac").assertIsDisplayed()
         rule.runOnIdle {
@@ -64,6 +125,17 @@ class InterfaceTest {
         rule.onNodeWithTag("code-second").performTextReplacement("6789")
         rule.onNodeWithTag("code-second").assertTextContains("6789")
         rule.onNodeWithTag("code-first").assertTextContains("JKLM")
+    }
+
+    @Test
+    fun pairingFieldsSurviveActivityRecreation() {
+        rule.onNodeWithText("Pair with a Mac").performClick()
+        rule.onNodeWithTag("host-address").performTextInput("192.168.1.12")
+        rule.onNodeWithTag("code-first").performTextInput("ABCD2345")
+        rule.activityRule.scenario.recreate()
+        rule.onNodeWithTag("host-address").assertTextContains("192.168.1.12")
+        rule.onNodeWithTag("code-first").assertTextContains("ABCD")
+        rule.onNodeWithTag("code-second").assertTextContains("2345")
     }
 
     @Test

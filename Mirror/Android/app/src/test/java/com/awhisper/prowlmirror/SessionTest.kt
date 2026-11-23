@@ -296,7 +296,7 @@ class SessionTest {
         runCurrent()
         assertNull(f.session.state.value.scrolling)
         assertEquals(Status.live, f.session.state.value.status)
-        assertTrue(f.session.state.value.error!!.contains("timed out"))
+        assertTrue(f.session.state.value.scrollError!!.contains("timed out"))
         assertEquals(1, f.peer.sent.count { it.kind == "scroll" })
         f.session.scrollRemote(ScrollDirection.DOWN)
         val newID = f.peer.sent.last().payload().string("requestID")

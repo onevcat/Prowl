@@ -200,15 +200,17 @@ class RemoteConnection(
                         outbound.send(control("ping"))
                     }
                 }
+                val inflater = MirrorInflater()
                 try {
                     while (isActive && !stopped) {
-                        val packet = Wire.read(input)
+                        val packet = Wire.read(input, inflater)
                         if (packet is Packet.Control && packet.kind == "ping")
                             outbound.send(control("pong"))
                         else if (!(packet is Packet.Control && packet.kind == "pong"))
                             withContext(Dispatchers.Main) { receive(packet) }
                     }
                 } finally {
+                    inflater.close()
                     writer.cancel()
                     heartbeat.cancel()
                 }

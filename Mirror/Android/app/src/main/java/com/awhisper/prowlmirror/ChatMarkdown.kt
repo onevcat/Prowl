@@ -4,12 +4,21 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 private val headingPattern = Regex("^(#{1,6})[ \\t]+(.+)$")
@@ -46,8 +55,8 @@ internal fun ChatMarkdown(text: String) {
                             block.rows.forEachIndexed { index, cells ->
                                 Row {
                                     cells.forEach { cell ->
-                                        Text(
-                                            inlineMarkdown(cell), Modifier.width(132.dp).padding(6.dp),
+                                        MarkdownText(
+                                            cell, Modifier.width(132.dp).padding(6.dp),
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = if (index == 0) FontWeight.SemiBold else FontWeight.Normal,
                                         )
@@ -73,8 +82,8 @@ private fun MarkdownLines(text: String) {
             val list = listPattern.matchEntire(line)
             when {
                 stripped.isEmpty() -> Spacer(Modifier.height(4.dp))
-                heading != null -> Text(
-                    inlineMarkdown(heading.groupValues[2]),
+                heading != null -> MarkdownText(
+                    heading.groupValues[2],
                     style = if (heading.groupValues[1].length <= 2) MaterialTheme.typography.titleLarge
                     else MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
@@ -84,7 +93,7 @@ private fun MarkdownLines(text: String) {
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.small,
                 ) {
-                    Text(inlineMarkdown(stripped.drop(1).trimStart()), Modifier.fillMaxWidth().padding(8.dp))
+                    MarkdownText(stripped.drop(1).trimStart(), Modifier.fillMaxWidth().padding(8.dp))
                 }
                 list != null -> {
                     val entry = list.groupValues[3]
@@ -100,10 +109,59 @@ private fun MarkdownLines(text: String) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(marker)
-                        Text(inlineMarkdown(if (task == "[x] " || task == "[ ] ") entry.drop(4) else entry))
+                        MarkdownText(if (task == "[x] " || task == "[ ] ") entry.drop(4) else entry)
                     }
                 }
-                else -> Text(inlineMarkdown(line))
+                else -> MarkdownText(line)
+            }
+        }
+    }
+}
+
+private val inlinePattern = Regex("""`([^`\n]+)`|\[([^\]\n]+)]\((https?://[^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|(?<!\w)_([^_\n]+)_(?!\w)""")
+
+internal fun chatInline(text: String, linkStyle: SpanStyle): AnnotatedString = buildAnnotatedString {
+    var start = 0
+    for (match in inlinePattern.findAll(text)) {
+        append(text.substring(start, match.range.first))
+        val group = match.groups
+        when {
+            group[1] != null -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(group[1]!!.value) }
+            group[2] != null && group[3] != null -> {
+                pushStringAnnotation("URL", group[3]!!.value)
+                withStyle(linkStyle) { append(group[2]!!.value) }
+                pop()
+            }
+            group[4] != null || group[5] != null ->
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append((group[4] ?: group[5])!!.value) }
+            group[6] != null ->
+                withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(group[6]!!.value) }
+            else -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append((group[7] ?: group[8])!!.value) }
+        }
+        start = match.range.last + 1
+    }
+    append(text.substring(start))
+}
+
+@Composable
+private fun MarkdownText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    fontWeight: FontWeight? = null,
+) {
+    val uri = LocalUriHandler.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    val contentColor = LocalContentColor.current
+    val parsed = remember(text, linkColor) {
+        chatInline(text, SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+    }
+    if (parsed.getStringAnnotations("URL", 0, parsed.length).isEmpty()) {
+        Text(parsed, modifier, style = style, fontWeight = fontWeight)
+    } else {
+        ClickableText(parsed, modifier, style = style.copy(color = contentColor, fontWeight = fontWeight ?: style.fontWeight)) { offset ->
+            parsed.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
+                runCatching { uri.openUri(it.item) }
             }
         }
     }

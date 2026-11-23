@@ -5,6 +5,8 @@ import java.io.*
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.util.UUID
+import java.util.zip.DataFormatException
+import java.util.zip.Inflater
 
 fun uuid(): String = UUID.randomUUID().toString().uppercase()
 
@@ -112,6 +114,7 @@ sealed interface Packet {
 
 object Wire {
     const val MAX_PAYLOAD = 8 * 1024 * 1024
+    const val DEFLATE = "deflate-v1"
     const val MAX_INPUT = 64 * 1024
     private val controls =
         setOf(
@@ -131,6 +134,7 @@ object Wire {
             "scrollResult",
             "scrollState",
             "history",
+            "compress",
             "historyPage",
             "conversationSnapshot",
             "conversationEvents",
@@ -143,7 +147,7 @@ object Wire {
             "ping",
             "pong",
         )
-    private val empty = setOf("list", "ping", "pong")
+    private val empty = setOf("list", "ping", "pong", "compress")
 
     fun encode(packet: Packet.Control): ByteArray {
         require(packet.kind in controls)
@@ -155,13 +159,15 @@ object Wire {
         return ByteBuffer.allocate(bytes.size + 5).putInt(bytes.size + 1).put(0).put(bytes).array()
     }
 
-    fun read(input: InputStream): Packet {
+    fun read(input: InputStream, inflater: MirrorInflater? = null): Packet {
         val stream = DataInputStream(input)
         val length = stream.readInt()
         if (length !in 1..MAX_PAYLOAD) throw IOException("Invalid mirror packet length")
         val bytes = ByteArray(length)
         stream.readFully(bytes)
-        return decode(bytes)
+        return if (bytes[0] == 3.toByte()) {
+            decode(inflater?.expand(bytes) ?: throw IOException("Unexpected compressed mirror packet"))
+        } else decode(bytes)
     }
 
     fun decode(bytes: ByteArray): Packet {
@@ -202,6 +208,32 @@ object Wire {
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))
             .toString()
+}
+
+/** The Host sync-flushes each frame and retains its DEFLATE window across frames. */
+class MirrorInflater : Closeable {
+    private val stream = Inflater(true)
+    private val chunk = ByteArray(64 * 1024)
+
+    fun expand(frame: ByteArray): ByteArray {
+        stream.setInput(frame, 1, frame.size - 1)
+        val output = ByteArrayOutputStream()
+        try {
+            while (true) {
+                val size = stream.inflate(chunk)
+                if (stream.finished() || stream.needsDictionary() || output.size() + size > Wire.MAX_PAYLOAD)
+                    throw IOException("Invalid compressed mirror packet")
+                output.write(chunk, 0, size)
+                if (stream.needsInput() && size < chunk.size) break
+                if (size == 0) throw IOException("Invalid compressed mirror packet")
+            }
+        } catch (e: DataFormatException) {
+            throw IOException("Invalid compressed mirror packet", e)
+        }
+        return output.toByteArray()
+    }
+
+    override fun close() = stream.end()
 }
 
 fun control(kind: String, payload: JsonElement? = null) = Packet.Control(kind, payload)

@@ -485,10 +485,20 @@ The QR expires with the existing 60-second, single-use code. Refresh Code on Hos
 and scan again if it expires. Camera permission is requested only when scanning;
 manual entry remains available if permission is denied or scanning is unsupported.
 On Android, the scanner opens in portrait without a red scanning line. The Live
-scroll toolbar places **Scroll up** and **Scroll down** at opposite ends, with
-loading feedback between them. Each completed scroll moves the reader to the top
-once. Switching panes or recreating the Android reader preserves subsequent local
+reader floats **Scroll Up** and **Scroll Down** in the lower right, with loading
+or error feedback beside them and **Latest** below when paused. Each completed
+scroll moves the reader to the top once. Switching panes or recreating the Android reader preserves subsequent local
 reading positions instead of repeating that move.
+
+On Android, Chat opens when the Host can provide a conversation. A new Codex or
+Claude session with an opening message shows Chat while it waits for the Host's
+transcript, with Terminal available from the pane toolbar. Chat exposes earlier
+rows in pages. The independent Terminal History reader shows the captured time
+and loaded line range and can refresh or request earlier lines.
+
+From the Android welcome screen, **Try the Demo** opens a sample Mac, without
+pairing or sending any traffic to a Host. Use **Settings → Exit Demo** to discard
+the sample sessions. Android Settings includes paired Hosts and About.
 
 ### Native history appearance on Mac
 

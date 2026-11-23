@@ -18,6 +18,8 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
     var saved by mutableStateOf<List<Host>>(emptyList())
     var roster by mutableStateOf<Session?>(null)
         private set
+    private var demo by mutableStateOf<DemoHost?>(null)
+    val isDemo: Boolean get() = demo != null
     var error by mutableStateOf<String?>(null)
 
     init {
@@ -58,23 +60,46 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
         if (last != null) add(last, "")
     }
 
+    fun startDemo() {
+        if (roster != null) return
+        val host = DemoHost()
+        demo = host
+        roster = Session(host.address, viewModelScope, host.transport, onLaunch = ::openLaunchedPane)
+            .also { it.connect() }
+    }
+
+    fun exitDemo() {
+        if (demo == null) return
+        sessions.forEach(Session::close)
+        sessions.clear()
+        selected = null
+        roster?.close()
+        roster = null
+        demo = null
+    }
+
     fun add(host: Host, code: String) {
         closePane()
         roster?.close()
-        val session = Session(host, viewModelScope, factory, onLaunch = ::openPane)
+        val session = Session(
+            host, viewModelScope, factory, onLaunch = ::openLaunchedPane,
+            loadProfile = { vault.lastProfile }, saveProfile = { vault.lastProfile = it },
+        )
         roster = session
         vault.selectedEndpoint = host.endpoint
         session.connect(code)
     }
 
-    fun openPane(pane: Pane) {
+    fun openPane(pane: Pane) = openLaunchedPane(pane, null)
+
+    private fun openLaunchedPane(pane: Pane, kickoff: String?) {
         val host = roster?.state?.value?.host ?: return
-        if (host.credential == null) return
+        if (host.credential == null && demo == null) return
         closePane()
-        val session = Session(host, viewModelScope, factory)
+        val session = Session(host, viewModelScope, demo?.transport ?: factory)
         sessions += session
         selected = session.id
-        session.choose(pane)
+        session.choose(pane, kickoff = kickoff)
         session.connect()
     }
 

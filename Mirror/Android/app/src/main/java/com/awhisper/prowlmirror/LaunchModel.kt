@@ -24,7 +24,7 @@ data class LaunchState(
                 !creating &&
                 !uncertain &&
                 worktrees.any { it.string("id") == worktree } &&
-                profiles.any { it.string("id") == profile } &&
+                profiles.any { it.string("id") == profile && it.canLaunchProfile() } &&
                 prompt.toByteArray().size <= Wire.MAX_INPUT
 }
 
@@ -32,7 +32,9 @@ data class LaunchState(
 class LaunchModel(
     private val scope: CoroutineScope,
     private val execute: suspend (JsonObject) -> JsonObject,
-    private val choose: (Pane, Boolean) -> Unit,
+    private val loadProfile: () -> String? = { null },
+    private val saveProfile: (String) -> Unit = {},
+    private val choose: (Pane, String?) -> Unit,
 ) {
     val state = MutableStateFlow(LaunchState())
 
@@ -41,6 +43,7 @@ class LaunchModel(
     }
 
     fun selectProfile(id: String) {
+        if (state.value.profiles.none { it.string("id") == id && it.canLaunchProfile() }) return
         state.update { it.copy(profile = id) }
     }
 
@@ -52,19 +55,25 @@ class LaunchModel(
         state.update { it.copy(uncertain = false, error = null) }
     }
 
-    fun open(project: String? = null) {
-        if (state.value.creating || state.value.loading) return
-        state.update { it.copy(loading = true, created = null) }
+    fun open(projectPanes: Set<String>? = null) {
+        if (state.value.creating || state.value.loading || state.value.uncertain) return
+        state.update { it.copy(loading = true, created = null, error = null) }
         scope.launch {
             try {
                 val listing = execute(Commands.list())
                 require(listing.flag("ok")) { "Could not list workspaces" }
-                val worktrees =
-                    listing
-                        .record("data")
-                        .array("items")
-                        .map { it.asJsonObject.record("worktree") }
-                        .distinctBy { it.string("id") }
+                val data = listing.record("data")
+                val items = data.array("items").map { it.asJsonObject }
+                val worktrees = (data.get("worktrees")?.takeUnless { it.isJsonNull }?.asJsonArray?.map { it.asJsonObject }
+                    ?: items.map { it.record("worktree") }).distinctBy { it.string("id") }
+                val projectDefault = projectPanes?.let { ids ->
+                    val treeIDs = items.filter { item ->
+                        item.get("pane")?.takeUnless { it.isJsonNull }?.asJsonObject?.optionalString("id")?.uppercase() in ids
+                    }.mapTo(mutableSetOf()) { it.record("worktree").string("id") }
+                    val matches = worktrees.filter { it.string("id") in treeIDs }
+                    matches.firstOrNull { it.string("path").trimEnd('/') == it.string("root_path").trimEnd('/') }
+                        ?: matches.firstOrNull()
+                }
                 val catalog = execute(Commands.profiles())
                 require(catalog.flag("ok")) { "Could not load profiles" }
                 val profiles =
@@ -72,22 +81,18 @@ class LaunchModel(
                         .record("data")
                         .array("profiles")
                         .map { it.asJsonObject }
-                        .filter {
-                            it.flag("enabled") &&
-                                it.record("availability").string("status") == "available"
-                        }
+                val availableProfiles = profiles.filter { it.canLaunchProfile() }.map { it.string("id") }
                 state.update {
                     it.copy(
                         worktrees = worktrees,
                         profiles = profiles,
-                        worktree =
-                            worktrees.firstOrNull { tree ->
-                                project != null && tree.string("root_path").substringAfterLast('/') == project
-                            }?.string("id") ?: it.worktree.takeIf { id -> worktrees.any { w -> w.string("id") == id } }
-                                ?: worktrees.firstOrNull()?.string("id").orEmpty(),
+                        worktree = if (projectPanes != null) projectDefault?.string("id").orEmpty()
+                        else it.worktree.takeIf { id -> worktrees.any { w -> w.string("id") == id } }
+                            ?: worktrees.firstOrNull()?.string("id").orEmpty(),
                         profile =
-                            it.profile.takeIf { id -> profiles.any { p -> p.string("id") == id } }
-                                ?: profiles.firstOrNull()?.string("id").orEmpty(),
+                            loadProfile()?.takeIf { id -> id in availableProfiles }
+                                ?: it.profile.takeIf { id -> id in availableProfiles }
+                                ?: availableProfiles.firstOrNull().orEmpty(),
                     )
                 }
             } catch (e: Exception) {
@@ -131,8 +136,10 @@ class LaunchModel(
                                 .firstOrNull { it.string("id") == snapshot.profile }?.optionalString("runtime"),
                             worktreeName = tree.string("name"),
                         )
-                    choose(descriptor, false)
-                    state.update { it.copy(created = descriptor.id) }
+                    saveProfile(snapshot.profile)
+                    val kickoff = snapshot.prompt.takeIf { it.isNotBlank() && descriptor.agent in setOf("codex", "claude") }
+                    choose(descriptor, kickoff)
+                    state.update { it.copy(created = descriptor.id, prompt = "") }
                 }
             } catch (e: Exception) {
                 state.update {
@@ -147,3 +154,6 @@ class LaunchModel(
         }
     }
 }
+
+internal fun JsonObject.canLaunchProfile() =
+    flag("enabled") && record("availability").string("status") == "available"

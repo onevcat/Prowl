@@ -21,12 +21,16 @@ data class ConversationFeed(
 ) {
     val openPrompt: JsonObject?
         get() = events.asReversed().firstOrNull {
-            it.kind in setOf("session.changed", "session.pending", "session.ended") ||
+            it.kind in SESSION_EDGES ||
                 (it.source == "screen" && it.kind in setOf("prompt.opened", "prompt.resolved"))
         }?.takeIf { it.kind == "prompt.opened" }?.data
 
-    val agentState: String?
-        get() = events.lastOrNull { it.kind == "agent.status" }?.data?.optionalString("state")
+    private val status: JsonObject?
+        get() = events.lastOrNull { it.kind == "agent.status" || it.kind in SESSION_EDGES }
+            ?.takeIf { it.kind == "agent.status" }?.data
+
+    val agentState: String? get() = status?.optionalString("state")
+    val attentionKind: String? get() = status?.optionalString("kind")
 
     fun accept(packet: JsonObject, snapshot: Boolean): ConversationFeed {
         val end = packet.longInteger("sequence")
@@ -48,6 +52,7 @@ data class ConversationFeed(
     }
 
     companion object {
+        private val SESSION_EDGES = setOf("session.changed", "session.pending", "session.ended")
         const val MAX_EVENTS = 2_000
     }
 }

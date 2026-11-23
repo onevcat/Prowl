@@ -112,26 +112,25 @@ class RemoteScrollTest {
     fun buttonsShowLoadingAndUnchangedFrameFinishesWithoutDisconnect() {
         show()
         val outputBounds = rule.onNodeWithTag("mirror-output").fetchSemanticsNode().boundsInRoot
-        val upBounds = rule.onNodeWithText("Scroll up").fetchSemanticsNode().boundsInRoot
-        val downBounds = rule.onNodeWithText("Scroll down").fetchSemanticsNode().boundsInRoot
-        assertTrue(upBounds.left <= outputBounds.left + outputBounds.width * 0.2f)
+        val upBounds = rule.onNodeWithContentDescription("Scroll Up").fetchSemanticsNode().boundsInRoot
+        val downBounds = rule.onNodeWithContentDescription("Scroll Down").fetchSemanticsNode().boundsInRoot
+        assertEquals(upBounds.left, downBounds.left)
         assertTrue(downBounds.right >= outputBounds.right - outputBounds.width * 0.2f)
-        assertTrue(downBounds.left - upBounds.right > outputBounds.width * 0.4f)
-        assertTrue(upBounds.bottom <= outputBounds.top)
-        rule.onNodeWithText("Scroll up").assertIsEnabled().performClick()
-        rule.onNodeWithText("Scroll up").assertIsNotEnabled()
-        rule.onNodeWithText("Scroll down").assertIsNotEnabled()
-        rule.onNodeWithText("Loading…").assertIsDisplayed()
-        assertEquals(upBounds, rule.onNodeWithText("Scroll up").fetchSemanticsNode().boundsInRoot)
-        assertEquals(downBounds, rule.onNodeWithText("Scroll down").fetchSemanticsNode().boundsInRoot)
+        assertTrue(upBounds.bottom <= downBounds.top)
+        assertTrue(upBounds.top >= outputBounds.top + outputBounds.height * 0.5f)
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled().performClick()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsNotEnabled()
+        rule.onNodeWithTag("mirror-scroll-progress").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Latest").assertIsNotEnabled()
         screenshot("loading")
         rule.runOnIdle {
             assertEquals(1, sent.count { it.kind == "scroll" })
             assertFalse(session.state.value.follow)
         }
         complete()
-        rule.onNodeWithText("Loading…").assertDoesNotExist()
-        rule.onNodeWithText("Scroll down").assertIsEnabled().performClick()
+        rule.onNodeWithTag("mirror-scroll-progress").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled().performClick()
         complete("Later viewport\nRemote scroll completed.")
         rule.onNodeWithText("Later viewport\nRemote scroll completed.").assertIsDisplayed()
         rule.runOnIdle {
@@ -144,31 +143,31 @@ class RemoteScrollTest {
     @Test
     fun hostBoundsDisableOnlyTheirDirectionAndRestoreOnNewFrames() {
         show(scrollState = true)
-        rule.onNodeWithText("Scroll up").assertIsEnabled()
-        rule.onNodeWithText("Scroll down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
         rule.runOnIdle { bounds(sequence + 1, atTop = true, atBottom = false) }
-        rule.onNodeWithText("Scroll up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
         rule.runOnIdle {
             receive(Packet.Text(lease, ++sequence, 80, 24, false, session.state.value.text))
         }
-        rule.onNodeWithText("Scroll up").assertIsNotEnabled()
-        rule.onNodeWithText("Scroll down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
         screenshot("at-top")
         rule.runOnIdle {
             bounds(sequence + 1, atTop = false, atBottom = true)
             receive(Packet.Text(lease, ++sequence, 80, 24, false, session.state.value.text))
         }
-        rule.onNodeWithText("Scroll up").assertIsEnabled()
-        rule.onNodeWithText("Scroll down").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsNotEnabled()
         screenshot("at-bottom")
         rule.runOnIdle {
             bounds(sequence + 1)
             receive(Packet.Text(lease, ++sequence, 80, 24, false, session.state.value.text))
         }
-        rule.onNodeWithText("Scroll down").assertIsEnabled()
-        rule.onNodeWithText("Scroll up").assertIsEnabled().performClick()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled().performClick()
         complete()
-        rule.onNodeWithText("Scroll up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
         rule.runOnIdle { assertEquals(1, sent.count { it.kind == "scroll" }) }
     }
 
@@ -180,8 +179,8 @@ class RemoteScrollTest {
         output.performTouchInput { swipeDown() }
         output.performTouchInput { swipeUp() }
         rule.runOnIdle { assertEquals(0, sent.count { it.kind == "scroll" }) }
-        rule.onNodeWithText("Scroll up").assertIsEnabled()
-        rule.onNodeWithText("Scroll down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
     }
 
     @Test
@@ -206,7 +205,7 @@ class RemoteScrollTest {
             assertEquals(0, sent.count { it.kind == "scroll" })
             assertTrue(session.liveScrollIndex > 0 || session.liveScrollOffset > 0)
         }
-        rule.onNodeWithText("Scroll up").performClick()
+        rule.onNodeWithContentDescription("Scroll Up").performClick()
         complete(text)
         rule.runOnIdle {
             assertEquals(0, session.liveScrollIndex)
@@ -214,7 +213,7 @@ class RemoteScrollTest {
         }
         output.performTouchInput { swipeUp() }
         rule.runOnIdle { assertTrue(session.liveScrollIndex > 0 || session.liveScrollOffset > 0) }
-        rule.onNodeWithText("Scroll down").performClick()
+        rule.onNodeWithContentDescription("Scroll Down").performClick()
         complete(text)
         rule.runOnIdle {
             assertEquals(0, session.liveScrollIndex)
@@ -233,7 +232,7 @@ class RemoteScrollTest {
     fun rebuildingReaderDoesNotReplayCompletedRemoteScroll() {
         val text = (1..140).joinToString("\n") { "Terminal row $it" }
         show(text)
-        rule.onNodeWithText("Scroll up").performClick()
+        rule.onNodeWithContentDescription("Scroll Up").performClick()
         complete(text)
         rule.onNodeWithTag("mirror-output").performTouchInput { swipeUp() }
         var position = 0 to 0
@@ -251,10 +250,39 @@ class RemoteScrollTest {
     @Test
     fun oldHostsHaveNoRemoteControlsOrRemoteGestures() {
         show(capability = false)
-        rule.onNodeWithText("Scroll up").assertDoesNotExist()
-        rule.onNodeWithText("Scroll down").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Scroll Up").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Scroll Down").assertDoesNotExist()
         rule.onNodeWithTag("mirror-output").performTouchInput { swipeDown() }
         rule.runOnIdle { assertEquals(0, sent.count { it.kind == "scroll" }) }
+    }
+
+    @Test
+    fun latestRevealsTheEndOfOneOversizedTextBlock() {
+        show((1..95).joinToString("\n") { "Row $it" })
+        rule.onNodeWithContentDescription("Latest").performClick()
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(0, session.liveScrollIndex)
+            assertTrue(session.liveScrollOffset > 0)
+        }
+    }
+
+    @Test
+    fun frozenTableKeepsItsGridWhenTheLiveFrameChanges() {
+        val table = buildString {
+            append("| Step | Result |\n| --- | --- |\n")
+            for (index in 1..60) append("| Row $index | Result $index |\n")
+        }
+        show(table)
+        rule.onNodeWithText("Table · 60 rows").assertIsDisplayed()
+        rule.onNodeWithText("Expand").performClick()
+        val detail = rule.onNodeWithTag("mirror-frozen-table")
+        detail.assertIsDisplayed()
+        rule.runOnIdle { receive(Packet.Text(lease, ++sequence, 80, 24, false, "Host moved on")) }
+        detail.performScrollToIndex(60)
+        rule.onNodeWithText("Result 60").assertExists()
+        rule.onNodeWithText("Done").performClick()
+        rule.onNodeWithText("Host moved on").assertIsDisplayed()
     }
 
     @Test
@@ -269,10 +297,10 @@ class RemoteScrollTest {
                 "lines" to listOf("Frozen history", "Still available"),
             )))
         }
-        rule.onNodeWithText("Frozen history\nStill available").assertIsDisplayed()
-        rule.onNodeWithText("Scroll up").assertDoesNotExist()
-        rule.onNodeWithText("Scroll down").assertDoesNotExist()
-        rule.onNodeWithText("Load earlier").assertIsNotEnabled()
+        rule.onNodeWithText("Frozen history").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Scroll Up").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Scroll Down").assertDoesNotExist()
+        rule.onNodeWithText("Load Earlier 200 Lines").assertIsNotEnabled()
         rule.onNodeWithTag("mirror-output").performTouchInput { swipeDown() }
         rule.runOnIdle { assertEquals(0, sent.count { it.kind == "scroll" }) }
         screenshot("history")
@@ -283,7 +311,7 @@ class RemoteScrollTest {
     @Test
     fun unavailableEndsLoadingAndKeepsLiveControlsUsable() {
         show()
-        rule.onNodeWithText("Scroll up").performClick()
+        rule.onNodeWithContentDescription("Scroll Up").performClick()
         rule.runOnIdle {
             val request = sent.last { it.kind == "scroll" }.payload()
             receive(control("failure", obj(
@@ -292,9 +320,9 @@ class RemoteScrollTest {
                 "error" to "SCROLL_UNAVAILABLE: The pane is not available for scrolling.",
             )))
         }
-        rule.onNodeWithText("Loading…").assertDoesNotExist()
+        rule.onNodeWithTag("mirror-scroll-progress").assertDoesNotExist()
         rule.onNodeWithText("SCROLL_UNAVAILABLE: The pane is not available for scrolling.").assertIsDisplayed()
-        rule.onNodeWithText("Scroll down").assertIsEnabled()
+        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
         rule.runOnIdle { assertEquals(Status.live, session.state.value.status) }
         screenshot("unavailable")
     }

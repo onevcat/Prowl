@@ -1,6 +1,5 @@
 package com.awhisper.prowlmirror
 
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.google.gson.JsonObject
 
 private fun JsonObject.bounded(key: String): String? =
@@ -28,7 +28,7 @@ private fun JsonObject.bounded(key: String): String? =
         if (it.optionalFlag("truncated") == true) "$text\n…" else text
     }
 
-private sealed interface ChatRow {
+internal sealed interface ChatRow {
     val key: Long
     data class Event(val event: ConversationEvent) : ChatRow {
         override val key = event.sequence
@@ -38,10 +38,25 @@ private sealed interface ChatRow {
     }
 }
 
-private fun chatRows(events: List<ConversationEvent>): List<ChatRow> {
-    val started = events.filter { it.kind == "tool.started" }.mapNotNull { it.data.optionalString("id") }.toSet()
-    val lastQueue = events.lastOrNull { it.kind == "user.queued" || it.kind == "user.unqueued" }
-        ?.takeIf { it.kind == "user.queued" }
+private fun toolCompletions(events: List<ConversationEvent>): Map<Long, ConversationEvent> {
+    val starts = mutableMapOf<String, Long>()
+    val matched = mutableMapOf<Long, ConversationEvent>()
+    for (event in events) {
+        when (event.kind) {
+            "session.changed", "session.pending", "session.ended" -> starts.clear()
+            "tool.started" -> event.data.optionalString("id")?.let { starts[it] = event.sequence }
+            "tool.completed" -> starts.remove(event.data.optionalString("id"))?.let { matched[it] = event }
+        }
+    }
+    return matched
+}
+
+internal fun chatRows(events: List<ConversationEvent>): List<ChatRow> =
+    chatRows(events, toolCompletions(events))
+
+private fun chatRows(events: List<ConversationEvent>, completed: Map<Long, ConversationEvent>): List<ChatRow> {
+    val absorbed = duplicatePromptAnswers(events)
+    val attached = completed.values.mapTo(mutableSetOf()) { it.sequence }
     val result = mutableListOf<ChatRow>()
     val tools = mutableListOf<ConversationEvent>()
     fun flushTools() {
@@ -51,32 +66,83 @@ private fun chatRows(events: List<ConversationEvent>): List<ChatRow> {
         }
     }
     for (event in events) {
+        if (event.sequence in absorbed) continue
         when (event.kind) {
             "tool.started" -> tools += event
-            "tool.completed" -> if (event.data.optionalString("id") !in started) tools += event
-            "assistant.message", "assistant.reasoning", "user.message", "session.changed",
+            "tool.completed" -> if (event.sequence !in attached) tools += event
+            "user.unqueued" -> {
+                val text = event.data.bounded("text")
+                val index = result.indexOfLast {
+                    it is ChatRow.Event && it.event.kind == "user.queued" && it.event.data.bounded("text") == text
+                }
+                if (index >= 0) result.removeAt(index)
+            }
+            "assistant.message", "assistant.reasoning", "user.message", "user.queued", "session.changed",
             "context.compacted", "notice", "prompt.resolved", "subagent.started", "subagent.completed" -> {
+                if (event.kind == "notice" && event.data.optionalString("level") == "debug") continue
+                if (event.kind == "assistant.reasoning" && event.data.bounded("summary").isNullOrEmpty()) continue
                 flushTools()
                 result += ChatRow.Event(event)
             }
         }
     }
     flushTools()
-    if (lastQueue != null) result += ChatRow.Event(lastQueue)
     return result
 }
 
-@Composable
-internal fun ConversationReader(session: Session, feed: ConversationFeed) {
-    val tools = remember(feed.events) {
-        feed.events.filter { it.kind == "tool.completed" }.associateBy { it.data.optionalString("id") }
+private fun duplicatePromptAnswers(events: List<ConversationEvent>): Set<Long> {
+    val absorbed = mutableSetOf<Long>()
+    val screen = mutableMapOf<String, Int>()
+    val transcript = mutableListOf<Pair<Long, String>>()
+    val opened = mutableMapOf<String, String>()
+    fun finishTurn() {
+        for ((sequence, title) in transcript) {
+            val count = screen[title] ?: continue
+            if (count == 1) screen.remove(title) else screen[title] = count - 1
+            absorbed += sequence
+        }
+        screen.clear()
+        transcript.clear()
     }
-    val rows = remember(feed.events) { chatRows(feed.events) }
+    for (event in events) {
+        when (event.kind) {
+            "user.message", "assistant.message", "session.changed", "session.pending", "session.ended" -> {
+                finishTurn()
+                if (event.kind.startsWith("session.")) opened.clear()
+            }
+            "prompt.opened", "prompt.resolved" -> {
+                val id = event.data.optionalString("id") ?: continue
+                val title = event.data.optionalString("title")
+                    ?: event.data.getAsJsonArray("questions")?.firstOrNull()?.asJsonObject?.optionalString("question")
+                if (event.kind == "prompt.opened") {
+                    if (title != null) opened[id] = title
+                } else {
+                    val openTitle = opened.remove(id)
+                    val question = title ?: openTitle ?: continue
+                    if (id.startsWith("screen:")) screen[question] = (screen[question] ?: 0) + 1
+                    else transcript += event.sequence to question
+                }
+            }
+        }
+    }
+    finishTurn()
+    return absorbed
+}
+
+internal const val CHAT_PAGE = 120
+
+@Composable
+internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLatest: Boolean = false) {
+    val tools = remember(feed.events) { toolCompletions(feed.events) }
+    val allRows = remember(feed.events, tools) { chatRows(feed.events, tools) }
+    var visibleLimit by remember(session.id) { mutableIntStateOf(session.chatVisibleLimit) }
+    val rows = remember(allRows, visibleLimit) { allRows.takeLast(visibleLimit) }
+    val hidden = allRows.size - rows.size
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = session.chatScrollIndex,
         initialFirstVisibleItemScrollOffset = session.chatScrollOffset,
     )
-    val lastIndex = rows.size + if (feed.gap) 0 else -1
+    val lastIndex = rows.lastIndex + (if (feed.gap) 1 else 0) + (if (hidden > 0) 1 else 0)
     var follow by remember { mutableStateOf(session.chatFollowsLatest) }
     val awayFromLatest by remember {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.isNotEmpty() && listState.canScrollForward }
@@ -100,15 +166,9 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed) {
     }
     LaunchedEffect(rows.lastOrNull()?.key, follow, lastIndex) {
         session.chatFollowsLatest = follow
-        if (follow && lastIndex >= 0) {
-            listState.scrollToItem(lastIndex)
-            val layout = listState.layoutInfo
-            val last = layout.visibleItemsInfo.lastOrNull { it.index == lastIndex }
-            if (last != null) listState.scrollBy(
-                (last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset).coerceAtLeast(0).toFloat(),
-            )
-        }
+        if (follow && rows.isNotEmpty()) listState.revealEnd(lastIndex)
     }
+
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -117,7 +177,17 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (feed.gap) item { ChatCaption("Some earlier messages are unavailable.") }
+            if (feed.gap) item(key = "gap") { ChatCaption("Earlier messages are not available on this device.") }
+            if (hidden > 0) item(key = "earlier") {
+                OutlinedButton(
+                    onClick = {
+                        follow = false
+                        visibleLimit += CHAT_PAGE
+                        session.chatVisibleLimit = visibleLimit
+                    },
+                    modifier = Modifier.testTag("conversation-earlier"),
+                ) { Text("Show ${minOf(hidden, CHAT_PAGE)} earlier") }
+            }
             if (rows.isEmpty()) item { ChatCaption("Waiting for conversation…") }
             items(rows, key = { it.key }) { row ->
                 Box(Modifier.widthIn(max = 720.dp).fillMaxWidth().testTag("chat-reading-column")) {
@@ -128,7 +198,7 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed) {
                 }
             }
         }
-        if (!follow && awayFromLatest && lastIndex >= 0) {
+        if (!hideLatest && !follow && awayFromLatest && lastIndex >= 0) {
             Box(Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp)) {
                 FilledTonalIconButton(onClick = { follow = true }, modifier = Modifier.align(Alignment.CenterEnd)) {
                     Icon(Icons.Default.ArrowDownward, "Latest")
@@ -144,9 +214,10 @@ private fun MessageRow(event: ConversationEvent) {
     when (event.kind) {
         "user.message", "user.queued" -> BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             var expanded by remember { mutableStateOf(false) }
-            var overflows by remember { mutableStateOf(false) }
             var instructions by remember { mutableStateOf(false) }
-            val text = data.bounded("text").orEmpty()
+            val message = data.getAsJsonObject("text")
+            val text = message?.optionalString("text").orEmpty()
+            val truncated = message?.optionalFlag("truncated") == true
             val marker = "\n\n---\nProwl dispatch completion protocol v"
             val injected = text.indexOf(marker).takeIf { it >= 0 }
             val stamp = event.timestamp?.let {
@@ -155,39 +226,56 @@ private fun MessageRow(event: ConversationEvent) {
                     java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT).format(local)
                 }.getOrNull()
             }
-            val origin = if (event.kind == "user.queued") "Queued" else data.optionalString("origin")
-                ?.takeUnless { it == "manual" }?.replaceFirstChar { it.uppercase() }
-            Surface(
-                modifier = Modifier.widthIn(max = maxWidth * 0.86f),
-                color = if (isSystemInDarkTheme()) Color(0xFF22625C) else Color(0xFF2E7D77),
-                contentColor = Color.White,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            val origin = if (event.kind == "user.queued") "queued" else data.optionalString("origin")
+                ?.takeUnless { it == "manual" || it == "human" }
+            val body = if (injected == null) text else text.substring(0, injected).trimEnd()
+            val isLong = body.codePointCount(0, body.length) > 700 || body.lineSequence().count { it.isNotEmpty() } > 12
+            Column(
+                modifier = Modifier.widthIn(max = (maxWidth - 48.dp).coerceAtLeast(maxWidth * .72f)),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    val images = data.optionalInteger("images") ?: 0
-                    if (images > 0) Text("$images ${if (images == 1) "image" else "images"}",
-                        style = MaterialTheme.typography.labelSmall)
-                    SelectionContainer {
-                        Text(
-                            if (injected == null) text else text.substring(0, injected).trimEnd(),
-                            maxLines = if (expanded) Int.MAX_VALUE else 12,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
-                        )
+                Surface(
+                    color = if (isSystemInDarkTheme()) Color(0xFF22625C) else Color(0xFF2E7D77),
+                    contentColor = Color.White,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        val images = data.optionalInteger("images") ?: 0
+                        if (images > 0) Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Image, null, Modifier.size(14.dp))
+                            Text("$images ${if (images == 1) "image" else "images"}", style = MaterialTheme.typography.labelSmall)
+                        }
+                        SelectionContainer {
+                            Text(
+                                body,
+                                maxLines = if (!isLong || expanded) Int.MAX_VALUE else 12,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (isLong) TextButton(onClick = { expanded = !expanded }) {
+                            Text(if (expanded) "Show less" else "Show more", color = Color.White)
+                        }
+                        if (injected != null) {
+                            TextButton(onClick = { instructions = !instructions }) { Text("Prowl instructions", color = Color.White) }
+                            if (instructions) SelectionContainer {
+                                Text(text.substring(injected + "\n\n---\n".length) + if (truncated) "…" else "",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (truncated && injected == null) Text("…")
                     }
-                    if (overflows || expanded) TextButton(onClick = { expanded = !expanded }) {
-                        Text(if (expanded) "Show less" else "Show more", color = Color.White)
-                    }
-                    if (injected != null) {
-                        TextButton(onClick = { instructions = !instructions }) { Text("Prowl instructions", color = Color.White) }
-                        if (instructions) Text(text.substring(injected + "\n\n---\n".length), style = MaterialTheme.typography.bodySmall)
-                    }
-                    val metadata = listOfNotNull(origin, stamp).joinToString(" · ")
-                    if (metadata.isNotBlank()) Text(metadata, style = MaterialTheme.typography.labelSmall)
                 }
+                val metadata = listOfNotNull(origin, stamp).joinToString(" · ")
+                if (metadata.isNotBlank()) ChatCaption(metadata)
             }
         }
-        "assistant.message" -> ChatMarkdown(data.bounded("text").orEmpty())
+        "assistant.message" -> Column {
+            data.getAsJsonObject("text")?.let {
+                ChatMarkdown(it.optionalString("text").orEmpty())
+                if (it.optionalFlag("truncated") == true) ChatCaption("Message truncated by the Host.")
+            }
+        }
         "assistant.reasoning" -> data.bounded("summary")?.let { ChatCaption(it) }
         "session.changed" -> ChatCaption("Session changed")
         "context.compacted" -> ChatCaption("Context compacted")
@@ -209,13 +297,17 @@ private fun ChatCaption(text: String) {
 }
 
 @Composable
-private fun ToolSteps(calls: List<ConversationEvent>, ends: Map<String?, ConversationEvent>) {
+private fun ToolSteps(calls: List<ConversationEvent>, ends: Map<Long, ConversationEvent>) {
     var expanded by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<ConversationEvent?>(null) }
     fun end(event: ConversationEvent) =
-        if (event.kind == "tool.completed") event.data else ends[event.data.optionalString("id")]?.data
-    val failed = calls.count { end(it)?.optionalString("status")?.let { status -> status != "succeeded" } == true }
-    val running = calls.lastOrNull { end(it) == null }?.data?.optionalString("title")
+        if (event.kind == "tool.completed") event.data else ends[event.sequence]?.data
+    val failed = calls.count {
+        val result = end(it)
+        result != null && (result.optionalString("status") != "succeeded" || (result.optionalInteger("exitCode") ?: 0) != 0)
+    }
+    val running = calls.lastOrNull { end(it) == null && it.data.optionalString("kind") != "question" }
+        ?.let(::toolTitle)
     Column {
         TextButton(onClick = { expanded = !expanded }) {
             Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
@@ -259,47 +351,133 @@ private fun toolTitle(call: ConversationEvent): String =
     call.data.optionalString("title") ?: call.data.optionalString("name") ?: "Tool call"
 
 @Composable
-internal fun MirrorActions(session: Session, state: SessionState) {
+internal fun MirrorActions(session: Session, state: SessionState, promptHeight: Dp = Dp.Unspecified, showKeys: Boolean = true) {
     val prompt = state.openPrompt
-    val canAnswer = state.canAct && "prompt-respond" in state.capabilities
-    val agentState = if (state.chat) state.conversation.agentState ?: state.pane?.agentState else state.pane?.agentState
-    if (prompt != null && canAnswer && prompt.optionalString("id") != state.answeredPrompt) {
-        ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text(prompt.optionalString("title") ?: "Needs your answer", style = MaterialTheme.typography.titleSmall)
+    val agentState = if (state.chat) state.conversation.agentState ?: state.pane?.rosterState else state.pane?.rosterState
+    if (prompt != null && "prompt-respond" in state.capabilities) {
+        val id = prompt.string("id")
+        val answer = state.promptAction?.takeIf { it.id == id }
+        val sent = state.answeredPrompt == id
+        val canAnswer = state.canAct && !sent
+        OutlinedCard(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("prompt-panel"),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = .35f)),
+        ) {
+            Column(
+                Modifier.heightIn(max = promptHeight).verticalScroll(rememberScrollState()).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    if (prompt.optionalString("kind") == "permission") "Permission" else "Needs your answer",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                prompt.optionalString("title")?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
                 prompt.bounded("detail")?.let {
-                    Text(it, Modifier.heightIn(max = 100.dp).verticalScroll(rememberScrollState()),
-                        style = MaterialTheme.typography.bodySmall)
+                    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
+                        SelectionContainer {
+                            Text(
+                                it, Modifier.fillMaxWidth().heightIn(max = 132.dp).verticalScroll(rememberScrollState()).padding(8.dp),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            )
+                        }
+                    }
                 }
+                fun progressFor(choice: String) = state.actionPending && answer?.choice == choice
                 prompt.getAsJsonArray("choices")?.forEach {
                     val choice = it.asJsonObject
+                    val choiceID = choice.string("id")
                     val checked = choice.optionalFlag("checked")
-                    val prefix = when (checked) {
-                        true -> "☑ "
-                        false -> "☐ "
-                        null -> ""
-                    }
-                    TextButton(onClick = { session.answerPrompt(prompt, choice.string("id")) }) {
-                        Column {
-                            Text(prefix + choice.string("label"))
-                            choice.optionalString("description")?.let { ChatCaption(it) }
+                    Surface(
+                        onClick = { session.answerPrompt(prompt, choiceID) }, enabled = canAnswer,
+                        modifier = Modifier.fillMaxWidth().testTag("prompt-choice-$choiceID"),
+                        shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            when (checked) {
+                                true -> Icon(Icons.Default.CheckBox, "Checked")
+                                false -> Icon(Icons.Default.CheckBoxOutlineBlank, "Not checked")
+                                null -> Text(choiceID, style = MaterialTheme.typography.labelMedium)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(choice.string("label"))
+                                choice.optionalString("description")?.let { ChatCaption(it) }
+                            }
+                            if (progressFor(choiceID)) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            else if (sent && answer?.choice == choiceID) Icon(Icons.Default.Check, "Sent")
                         }
                     }
                 }
                 if (prompt.optionalFlag("multiSelect") == true) {
-                    Button(onClick = { session.answerPrompt(prompt, "submit") }) { Text("Submit") }
+                    Button(onClick = { session.answerPrompt(prompt, "submit") }, enabled = canAnswer) {
+                        if (progressFor("submit")) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Text("Submit")
+                    }
+                }
+                when {
+                    answer?.error != null -> Text(answer.error, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                    sent -> ChatCaption("Sent to the Mac")
+                    prompt.optionalFlag("freeform") == true -> ChatCaption("To type your own answer, use the Mac.")
                 }
             }
         }
-    } else if (state.chat && agentState == "blocked" && state.keysAvailable) {
-        TextButton(onClick = { session.showChat(false) }, enabled = state.canAct) { Text("Answer in Terminal") }
+    } else if (agentState == "blocked" && state.status == Status.live) {
+        val reason = when (state.conversation.attentionKind) {
+            "permission" -> "a permission decision"
+            "question" -> "your answer"
+            "auth" -> "sign-in"
+            else -> "you"
+        }
+        Surface(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.errorContainer,
+        ) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Blocked · Waiting for $reason" + if (state.keysAvailable) "" else " on the Mac",
+                    Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                )
+                if (state.chat && state.keysAvailable)
+                    TextButton(onClick = { session.showChat(false) }, enabled = state.canAct) { Text("Answer in Terminal") }
+            }
+        }
     }
-    if (!state.chat && state.keysAvailable) {
+    if (!state.chat && state.keysAvailable && showKeys) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-            listOf("Esc" to "esc", "Ctrl+C" to "ctrl-c", "Shift+Tab" to "shift-tab", "Tab" to "tab",
-                "↑" to "up", "↓" to "down", "←" to "left", "→" to "right", "Return" to "enter").forEach { (label, key) ->
+            Button(onClick = { session.sendKey("enter") }, enabled = state.canAct) { Text("Return") }
+            val keys = if (state.pane?.agent != null)
+                listOf("↑" to "up", "↓" to "down", "Esc" to "esc", "Tab" to "tab", "Shift+Tab" to "shift-tab",
+                    "←" to "left", "→" to "right", "Ctrl+C" to "ctrl-c")
+            else listOf("Ctrl+C" to "ctrl-c", "Tab" to "tab", "↑" to "up", "↓" to "down", "Esc" to "esc",
+                "←" to "left", "→" to "right", "Shift+Tab" to "shift-tab")
+            keys.forEach { (label, key) ->
                 TextButton(onClick = { session.sendKey(key) }, enabled = state.canAct) { Text(label) }
             }
+        }
+    }
+}
+
+@Composable
+internal fun StartingChat(kickoff: String) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Box(Modifier.widthIn(max = 720.dp).fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Surface(Modifier.fillMaxWidth(.85f), shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.secondaryContainer) {
+                Text(kickoff, Modifier.padding(12.dp), maxLines = 12)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            ChatCaption("Starting session…")
         }
     }
 }

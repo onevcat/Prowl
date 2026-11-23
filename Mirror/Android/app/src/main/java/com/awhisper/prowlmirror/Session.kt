@@ -28,6 +28,8 @@ enum class Delivery {
 
 data class HostDraft(val text: String, val complete: Boolean, val replaceable: Boolean, val discardable: Boolean)
 
+data class PromptAction(val id: String, val choice: String, val error: String? = null)
+
 data class SessionState(
     val host: Host,
     val hostName: String? = null,
@@ -51,13 +53,16 @@ data class SessionState(
     val showsHistory: Boolean = false,
     val follow: Boolean = true,
     val scrolling: ScrollDirection? = null,
+    val scrollError: String? = null,
     val scrollCompletion: ScrollCompletion? = null,
     val scrollBounds: ScrollBounds = ScrollBounds(),
     val chat: Boolean = false,
+    val kickoff: String? = null,
     val conversation: ConversationFeed = ConversationFeed(),
     val screenPrompt: JsonObject? = null,
     val actionPending: Boolean = false,
     val answeredPrompt: String? = null,
+    val promptAction: PromptAction? = null,
     val hostDraft: HostDraft? = null,
     val broughtDraftPolicy: String? = null,
 ) {
@@ -153,15 +158,18 @@ class Session(
     host: Host,
     private val scope: CoroutineScope,
     private val factory: TransportFactory,
-    onLaunch: ((Pane) -> Unit)? = null,
+    onLaunch: ((Pane, String?) -> Unit)? = null,
+    loadProfile: () -> String? = { null },
+    saveProfile: (String) -> Unit = {},
 ) {
     val id = uuid()
     val state = MutableStateFlow(SessionState(host))
-    val launch = LaunchModel(scope, ::command) { pane, takeover ->
-        if (onLaunch == null) choose(pane, takeover) else onLaunch(pane)
+    val launch = LaunchModel(scope, ::command, loadProfile, saveProfile) { pane, kickoff ->
+        if (onLaunch == null) choose(pane, kickoff = kickoff) else onLaunch(pane, kickoff)
     }
     private var transport: Transport? = null
     private var generation = 0
+    private var requestedCompression = false
     private var lease: String? = null
     private var runID: String? = null
     private var intent = "ifFree"
@@ -193,6 +201,7 @@ class Session(
     )
 
     private var submission: Submission? = null
+    var chatVisibleLimit = CHAT_PAGE
     var chatScrollIndex = 0
     var chatScrollOffset = 0
     var chatFollowsLatest = true
@@ -205,6 +214,7 @@ class Session(
         if (transport != null) return
         retryJob?.cancel()
         val attempt = ++generation
+        requestedCompression = false
         state.update {
             it.copy(
                 host = if (code.isNotBlank()) it.host.copy(credential = null) else it.host,
@@ -370,7 +380,7 @@ class Session(
         else if (state.value.chat && pane.conversation == "unsupported") switchMode(false)
     }
 
-    fun choose(pane: Pane, takeover: Boolean = false) {
+    fun choose(pane: Pane, takeover: Boolean = false, kickoff: String? = null) {
         choseMode = false
         submission = null
         historyGate.reset()
@@ -378,8 +388,10 @@ class Session(
             it.copy(
                 pane = pane,
                 chat = pane.conversation == "available",
+                kickoff = kickoff,
                 conversation = ConversationFeed(),
                 answeredPrompt = null,
+                promptAction = null,
                 hostDraft = null,
                 broughtDraftPolicy = null,
                 text = "",
@@ -396,6 +408,15 @@ class Session(
         subscribe()
     }
 
+    fun showTerminalAfterKickoff() {
+        choseMode = true
+        state.update { it.copy(kickoff = null, chat = false) }
+    }
+
+    fun stopWaitingForKickoff() {
+        state.update { it.copy(kickoff = null) }
+    }
+
     fun showChat(chat: Boolean) {
         if (switchMode(chat)) choseMode = true
     }
@@ -406,7 +427,7 @@ class Session(
             current.delivery == Delivery.PENDING || commandPending != null || current.scrolling != null
         ) return false
         if (chat && (current.pane?.conversation != "available" || "conversation-v1" !in current.capabilities)) return false
-        state.update { it.copy(chat = chat) }
+        state.update { it.copy(chat = chat, kickoff = null) }
         intent = "ifFree"
         subscribe()
         return true
@@ -451,21 +472,27 @@ class Session(
         ) return
         val toggles = prompt.optionalFlag("multiSelect") == true && choice != "submit"
         runAction(obj("promptRespond" to obj("_0" to obj("pane" to pane.id, "prompt" to id, "choice" to choice))),
-            id.takeUnless { toggles })
+            prompt = PromptAction(id, choice), lockPrompt = !toggles)
     }
 
-    private fun runAction(request: JsonObject, answered: String? = null) {
+    private fun runAction(request: JsonObject, prompt: PromptAction? = null, lockPrompt: Boolean = false) {
         if (!state.value.canAct || commandPending != null) return
-        state.update { it.copy(actionPending = true, error = null) }
+        state.update { it.copy(actionPending = true, error = null, promptAction = prompt) }
         scope.launch {
             try {
                 val result = command(request)
                 if (!result.flag("ok")) throw IOException(result.record("error").string("message"))
-                if (answered != null) state.update { it.copy(answeredPrompt = answered) }
+                if (prompt != null) state.update {
+                    it.copy(answeredPrompt = if (lockPrompt) prompt.id else it.answeredPrompt)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.update { it.copy(error = e.message ?: "Host action failed") }
+                val message = e.message ?: "Host action failed"
+                state.update {
+                    if (prompt != null) it.copy(promptAction = prompt.copy(error = message))
+                    else it.copy(error = message)
+                }
             } finally {
                 state.update { it.copy(actionPending = false) }
             }
@@ -601,7 +628,7 @@ class Session(
         clearScroll()
         if (refresh) {
             historyGate.reset()
-            state.update { it.copy(history = emptyList()) }
+            state.update { it.copy(history = emptyList(), historyOffset = 0, historyTime = null, historyTruncated = false) }
         }
         if (historyGate.id != null && historyGate.offset == 0) {
             state.update { it.copy(showsHistory = true) }
@@ -635,14 +662,14 @@ class Session(
         val request = ScrollRequest(uuid(), active, direction, state.value.sequence)
         scrollRequest = request
         state.update {
-            it.copy(scrolling = direction, scrollCompletion = null, follow = false, error = null)
+            it.copy(scrolling = direction, scrollCompletion = null, follow = false, scrollError = null)
         }
         scrollTimeout = scope.launch {
             delay(5_000)
             if (scrollRequest?.id == request.id) {
                 clearScroll()
                 state.update {
-                    it.copy(error = "Remote scroll timed out. Check the current screen before trying again.")
+                    it.copy(scrollError = "Remote scroll timed out. Check the current screen before trying again.")
                 }
             }
         }
@@ -663,7 +690,7 @@ class Session(
         scrollTimeout?.cancel()
         scrollTimeout = null
         scrollRequest = null
-        state.update { it.copy(scrolling = null, scrollCompletion = null) }
+        state.update { it.copy(scrolling = null, scrollCompletion = null, scrollError = null) }
     }
 
     private fun scrollResult(p: JsonObject) {
@@ -737,6 +764,10 @@ class Session(
             "panes" -> {
                 val caps = p.array("capabilities").map { it.asString }.toSet()
                 require("text-v1" in caps) { "Update Host to support text mirrors" }
+                if (Wire.DEFLATE in caps && !requestedCompression) {
+                    requestedCompression = true
+                    send(control("compress"))
+                }
                 val hostRun = canonical(p.string("hostRunID"))
                 val sameRun = runID == hostRun
                 runID = hostRun
@@ -752,6 +783,7 @@ class Session(
                             it.chat && "conversation-v1" in caps && updatedPane?.conversation == "available",
                         conversation = if (sameRun) it.conversation else ConversationFeed(),
                         answeredPrompt = it.answeredPrompt.takeIf { sameRun },
+                        promptAction = it.promptAction.takeIf { sameRun },
                     )
                 }
                 if (state.value.pane == null) state.update { it.copy(status = Status.choosing) }
@@ -759,7 +791,7 @@ class Session(
                     state.update { it.copy(status = Status.paneClosed) }
                 else if (state.value.status != Status.live) {
                     if (!choseMode && "conversation-v1" in caps && state.value.pane?.conversation == "available")
-                        state.update { it.copy(chat = true) }
+                        state.update { it.copy(chat = true, kickoff = null) }
                     subscribe()
                 }
             }
@@ -833,7 +865,7 @@ class Session(
                         p.optionalString("subscriptionID")?.let(::canonical) == request.lease &&
                         p.optionalString("requestID")?.let(::canonical) == request.id) {
                         clearScroll()
-                        state.update { it.copy(error = error) }
+                        state.update { it.copy(scrollError = error) }
                     }
                 } else if (
                     error.startsWith("HISTORY_UNAVAILABLE") &&

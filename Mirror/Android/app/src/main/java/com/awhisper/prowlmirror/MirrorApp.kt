@@ -8,14 +8,18 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -31,24 +35,32 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 
 @Composable
 fun MirrorApp(model: MirrorModel) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF18A190))
-        else lightColorScheme(primary = Color(0xFF0A7A72))
-    ) {
-        var add by remember { mutableStateOf(false) }
-        var pairingSession by remember { mutableStateOf<String?>(null) }
-        var manage by remember { mutableStateOf(false) }
+    val colors = if (isSystemInDarkTheme()) darkColorScheme(
+        primary = Color(0xFF18A190),
+        background = Color(0xFF121212), surface = Color(0xFF121212), surfaceVariant = Color(0xFF242426),
+        secondaryContainer = Color(0xFF2C2C2E), onSecondaryContainer = Color(0xFFF2F2F7),
+    ) else lightColorScheme(
+        primary = Color(0xFF0A7A72),
+        background = Color.White, surface = Color.White, surfaceVariant = Color(0xFFF2F2F7),
+        secondaryContainer = Color(0xFFF2F2F7), onSecondaryContainer = Color(0xFF1C1C1E),
+    )
+    MaterialTheme(colorScheme = colors) {
+        var add by rememberSaveable { mutableStateOf(false) }
+        var pairingSession by rememberSaveable { mutableStateOf<String?>(null) }
+        var manage by rememberSaveable { mutableStateOf(false) }
         val session = model.sessions.firstOrNull { it.id == model.selected }
         val roster = model.roster
         val pane = session?.state?.collectAsState()?.value?.pane
         val rosterState = roster?.state?.collectAsState()?.value
-        LaunchedEffect(roster, rosterState?.status) {
+        val waitingForChat = session?.state?.collectAsState()?.value?.kickoff != null
+        LaunchedEffect(roster, rosterState?.status, waitingForChat) {
             if (roster != null && rosterState?.status == Status.choosing) {
                 while (true) {
-                    kotlinx.coroutines.delay(3_000)
+                    delay(if (waitingForChat) 1_000 else 3_000)
                     roster.refreshPanes()
                 }
             }
@@ -56,16 +68,19 @@ fun MirrorApp(model: MirrorModel) {
         LaunchedEffect(session, rosterState?.panes) {
             rosterState?.panes?.firstOrNull { it.id == pane?.id }?.let { session?.updatePane(it) }
         }
-        androidx.activity.compose.BackHandler(session != null) { model.closePane() }
+        androidx.activity.compose.BackHandler(session != null || model.isDemo) {
+            if (session != null) model.closePane() else model.exitDemo()
+        }
         Surface(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                 when {
                     session != null -> key(session.id) { Detail(session, model::closePane) }
                     roster != null && rosterState != null -> AgentsHome(
-                        roster, rosterState, model.saved, model::openPane,
+                        roster, rosterState, if (model.isDemo) emptyList() else model.saved, model::openPane,
                         selectHost = { model.add(it, "") }, addHost = { add = true }, manageHosts = { manage = true },
+                        demo = model.isDemo, exitDemo = model::exitDemo,
                     )
-                    else -> MirrorOnboarding { add = true }
+                    else -> MirrorOnboarding(pair = { add = true }, demo = model::startDemo)
                 }
             }
         }
@@ -100,6 +115,14 @@ fun MirrorApp(model: MirrorModel) {
 private fun Detail(session: Session, back: () -> Unit) {
     val state by session.state.collectAsState()
     val pane = state.pane
+    val kickoff = state.kickoff.takeUnless { state.chat || state.status !in setOf(Status.live, Status.connecting, Status.subscribing) }
+    val showsChat = state.chat || kickoff != null
+    LaunchedEffect(kickoff) {
+        if (kickoff != null) {
+            delay(10_000)
+            session.stopWaitingForKickoff()
+        }
+    }
     val agentState = if (state.chat) state.conversation.agentState ?: pane?.displayState else pane?.displayState
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -108,72 +131,81 @@ private fun Detail(session: Session, back: () -> Unit) {
     val hideKeyboard = { focus.clearFocus(); keyboard?.hide(); Unit }
     var menu by remember { mutableStateOf(false) }
     var confirmTakeover by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Column {
-                    Text(pane?.tabTitle ?: pane?.title ?: "Prowl Mirror", maxLines = 1)
-                    val subtitle = listOfNotNull(
-                        agentState?.replaceFirstChar { it.uppercase() },
-                        listOfNotNull(pane?.projectName, pane?.worktreeName).joinToString(" / ").ifBlank { null },
-                    ).joinToString(" · ")
-                    if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                }
-            },
-            navigationIcon = { IconButton(onClick = back) { Icon(Icons.Default.ArrowBack, "Agents") } },
-            actions = {
-                if (composing && compact) IconButton(onClick = hideKeyboard) {
-                    Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
-                }
-                if (pane?.conversation == "available" && "conversation-v1" in state.capabilities)
-                    IconButton(onClick = { session.showChat(!state.chat) }) {
-                        Icon(if (state.chat) Icons.Default.Terminal else Icons.Default.ChatBubbleOutline,
-                            if (state.chat) "Terminal" else "Chat")
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val promptHeight = maxHeight / 2
+        Column(Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(pane?.tabTitle ?: pane?.title ?: "Prowl Mirror", maxLines = 1)
+                        val subtitle = listOfNotNull(
+                            agentState?.replaceFirstChar { it.uppercase() },
+                            listOfNotNull(pane?.projectName, pane?.worktreeName).joinToString(" / ").ifBlank { null },
+                        ).joinToString(" · ")
+                        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
-                Box {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, "Pane actions") }
-                    DropdownMenu(menu, { menu = false }) {
-                        if (!state.chat) DropdownMenuItem(
-                            text = { Text(if (state.showsHistory) "Live Output" else "History") },
-                            enabled = state.showsHistory || (state.status == Status.live && "history" in state.capabilities),
-                            onClick = {
-                                menu = false
-                                if (state.showsHistory) session.showLive() else session.loadHistory(refresh = true)
-                            },
-                        )
-                        if (state.status == Status.takenOver) DropdownMenuItem(
-                            text = { Text("Take Over") }, onClick = { menu = false; confirmTakeover = true },
-                        ) else if (state.status !in setOf(Status.live, Status.connecting, Status.subscribing))
-                            DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; session.retry() })
-                        DropdownMenuItem(text = { Text("Disconnect") }, onClick = { menu = false; back() })
-                    }
-                }
-            },
-        )
-        if (state.status != Status.live || state.error != null) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(state.error ?: state.status.label, Modifier.weight(1f),
-                    color = if (state.error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
-                if (state.status == Status.takenOver) TextButton(onClick = { confirmTakeover = true }) { Text("Take Over") }
-            }
-        }
-        Box(Modifier.weight(1f)) {
-            if (state.chat) ConversationReader(session, state.conversation) else Reading(session, state, hideLatest = composing && compact)
-            if (composing && !compact) {
-                Box(
-                    Modifier.align(Alignment.BottomCenter).widthIn(max = if (state.chat) 720.dp else Dp.Unspecified)
-                        .fillMaxWidth().padding(horizontal = 12.dp),
-                ) {
-                    FilledTonalIconButton(onClick = hideKeyboard, modifier = Modifier.align(Alignment.CenterStart)) {
+                },
+                navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Agents") } },
+                actions = {
+                    if (composing && compact) IconButton(onClick = hideKeyboard) {
                         Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
                     }
+                    if (kickoff != null || (pane?.conversation == "available" && "conversation-v1" in state.capabilities))
+                        IconButton(onClick = {
+                            if (kickoff != null) session.showTerminalAfterKickoff() else session.showChat(!state.chat)
+                        }) {
+                            Icon(if (showsChat) Icons.Default.Terminal else Icons.Default.ChatBubbleOutline,
+                                if (showsChat) "Terminal" else "Chat")
+                        }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreHoriz, "Pane actions") }
+                        DropdownMenu(menu, { menu = false }) {
+                            if (!showsChat) DropdownMenuItem(
+                                text = { Text(if (state.showsHistory) "Live Output" else "History") },
+                                enabled = state.showsHistory || (state.status == Status.live && "history" in state.capabilities),
+                                onClick = {
+                                    menu = false
+                                    if (state.showsHistory) session.showLive() else session.loadHistory(refresh = true)
+                                },
+                            )
+                            if (state.status == Status.takenOver) DropdownMenuItem(
+                                text = { Text("Take Over") }, onClick = { menu = false; confirmTakeover = true },
+                            ) else if (state.status !in setOf(Status.live, Status.connecting, Status.subscribing))
+                                DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; session.retry() })
+                            DropdownMenuItem(text = { Text("Disconnect") }, onClick = { menu = false; back() })
+                        }
+                    }
+                },
+            )
+            if (state.status != Status.live || state.error != null) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(state.error ?: state.status.label, Modifier.weight(1f),
+                        color = if (state.error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
+                    if (state.status == Status.takenOver) TextButton(onClick = { confirmTakeover = true }) { Text("Take Over") }
                 }
             }
-        }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Column(Modifier.widthIn(max = if (state.chat) 720.dp else Dp.Unspecified).fillMaxWidth()) {
-                MirrorActions(session, state)
-                Composer(session, state)
+            Box(Modifier.weight(1f)) {
+                when {
+                    state.chat -> ConversationReader(session, state.conversation, hideLatest = composing && compact)
+                    kickoff != null -> StartingChat(kickoff)
+                    else -> Reading(session, state, hideControls = composing && compact)
+                }
+                if (composing && !compact) {
+                    Box(
+                        Modifier.align(Alignment.BottomCenter).widthIn(max = if (showsChat) 720.dp else Dp.Unspecified)
+                            .fillMaxWidth().padding(horizontal = 12.dp),
+                    ) {
+                        FilledTonalIconButton(onClick = hideKeyboard, modifier = Modifier.align(Alignment.CenterStart)) {
+                            Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
+                        }
+                    }
+                }
+            }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(Modifier.widthIn(max = if (showsChat) 720.dp else Dp.Unspecified).fillMaxWidth()) {
+                    if (kickoff == null) MirrorActions(session, state, promptHeight, showKeys = !(composing && compact))
+                    Composer(session, state)
+                }
             }
         }
     }
@@ -193,13 +225,14 @@ private fun HostDialog(
     dismiss: () -> Unit,
     connect: (Host, String) -> Unit,
 ) {
-    var chosen by remember { mutableStateOf<Host?>(null) }
+    var chosenEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
+    val chosen = saved.firstOrNull { it.endpoint == chosenEndpoint }
     val connecting = pairing?.status == Status.connecting
-    var address by remember { mutableStateOf(chosen?.address ?: "") }
-    var port by remember { mutableStateOf((chosen?.port ?: DEFAULT_HOST_PORT).toString()) }
-    var first by remember { mutableStateOf("") }
-    var second by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var address by rememberSaveable { mutableStateOf("") }
+    var port by rememberSaveable { mutableStateOf(DEFAULT_HOST_PORT.toString()) }
+    var first by rememberSaveable { mutableStateOf("") }
+    var second by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text("Pair with a Mac") },
@@ -212,7 +245,7 @@ private fun HostDialog(
                 saved.takeLast(5).reversed().forEach { host ->
                     TextButton(
                         onClick = {
-                            chosen = host
+                            chosenEndpoint = host.endpoint
                             address = host.address
                             port = host.port.toString()
                             first = ""
@@ -275,7 +308,9 @@ private fun HostDialog(
                             "Enter a Host address and valid port"
                         }
                         val raw = first + second
-                        val credential = if (raw.isBlank()) chosen?.credential else null
+                        val credential = chosen?.credential.takeIf {
+                            raw.isBlank() && chosen?.address == hostAddress && chosen.port == hostPort
+                        }
                         val code = if (credential != null) "" else Authentication.code(raw)
                         connect(Host(hostAddress, hostPort, credential), code)
                     } catch (e: Exception) {
@@ -292,77 +327,44 @@ private fun HostDialog(
 }
 
 @Composable
-private fun Reading(session: Session, state: SessionState, hideLatest: Boolean) {
-    val source = if (state.showsHistory) state.history.joinToString("\n") else state.text
-    val blocks = remember(source) { Document.blocks(source) }
+private fun Reading(session: Session, state: SessionState, hideControls: Boolean) {
+    if (state.showsHistory) {
+        HistoryReader(session, state)
+        return
+    }
+    val blocks = remember(state.text) { Document.blocks(state.text) }
     var detail by remember(session.id) { mutableStateOf<Block?>(null) }
-    key(session.id, state.showsHistory) {
-        val scroll =
-            rememberLazyListState(
-                if (state.showsHistory) session.historyScrollIndex else session.liveScrollIndex,
-                if (state.showsHistory) session.historyScrollOffset else session.liveScrollOffset,
-            )
+    key(session.id) {
+        val scroll = rememberLazyListState(session.liveScrollIndex, session.liveScrollOffset)
         LaunchedEffect(scroll) {
+            var userScrolled = false
             scroll.interactionSource.interactions.collect {
-                if (it is DragInteraction.Start && !state.showsHistory) session.setFollow(false)
+                if (it is DragInteraction.Start) {
+                    userScrolled = true
+                    session.setFollow(false)
+                }
+                if (userScrolled && it is DragInteraction.Stop && !scroll.canScrollForward)
+                    session.setFollow(true)
             }
         }
         LaunchedEffect(scroll) {
             snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }
                 .collect { (index, offset) ->
-                    if (state.showsHistory) {
-                        session.historyScrollIndex = index
-                        session.historyScrollOffset = offset
-                    } else {
-                        session.liveScrollIndex = index
-                        session.liveScrollOffset = offset
-                    }
+                    session.liveScrollIndex = index
+                    session.liveScrollOffset = offset
                 }
         }
         LaunchedEffect(state.sequence, state.follow, blocks.size) {
-            if (state.follow && !state.showsHistory && blocks.isNotEmpty())
-                scroll.scrollToItem(blocks.lastIndex)
+            if (state.follow && blocks.isNotEmpty()) scroll.revealEnd(blocks.lastIndex)
         }
         LaunchedEffect(state.scrollCompletion) {
             val completion = state.scrollCompletion
-            if (!state.showsHistory && completion != null && blocks.isNotEmpty()) {
-                scroll.scrollToItem(0)
+            if (completion != null) {
+                if (blocks.isNotEmpty()) scroll.scrollToItem(0)
                 session.consumeScrollCompletion(completion.requestID)
             }
         }
-        Column(Modifier.fillMaxSize()) {
-            if (state.showsHistory)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = session::showLive) { Text("Back to Live") }
-                    TextButton(
-                        onClick = { session.loadHistory() },
-                        enabled = !state.loadingHistory && state.historyOffset > 0,
-                    ) {
-                        Text(if (state.loadingHistory) "Loading…" else "Load earlier")
-                    }
-                    if (state.historyTruncated)
-                        Text("History truncated", style = MaterialTheme.typography.labelSmall)
-                }
-            else if ("remote-scroll" in state.capabilities)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { session.scrollRemote(ScrollDirection.UP) },
-                        enabled = state.canScrollRemote(ScrollDirection.UP),
-                    ) { Text("Scroll up") }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        if (state.scrolling != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Text("Loading…", modifier = Modifier.padding(start = 8.dp))
-                            }
-                        }
-                    }
-                    TextButton(
-                        onClick = { session.scrollRemote(ScrollDirection.DOWN) },
-                        enabled = state.canScrollRemote(ScrollDirection.DOWN),
-                    ) { Text("Scroll down") }
-                }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 Modifier.fillMaxSize().testTag("mirror-output"),
                 state = scroll,
@@ -378,55 +380,77 @@ private fun Reading(session: Session, state: SessionState, hideLatest: Boolean) 
                                     style = MaterialTheme.typography.bodyLarge,
                                 )
                             }
-                        is Block.Code ->
-                            OutlinedCard(
-                                onClick = { detail = block },
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            ) {
-                                Text(
-                                    block.language.ifBlank { "Code" } + " · Expand",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(12.dp),
-                                )
-                                Text(
-                                    block.raw.lines().take(6).joinToString("\n"),
-                                    fontFamily = FontFamily.Monospace,
-                                    maxLines = 6,
-                                    modifier = Modifier.padding(12.dp),
-                                )
+                        is Block.Code -> ReadingPreview(
+                            block.language.ifBlank { "Code" },
+                            open = { detail = block },
+                        ) {
+                            SelectionContainer {
+                                Text(block.raw, fontFamily = FontFamily.Monospace, maxLines = 6)
                             }
-                        is Block.Table ->
-                            OutlinedCard(
-                                onClick = { detail = block },
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            ) {
-                                Text(
-                                    "Table · Expand",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(12.dp),
-                                )
-                                Text(
-                                    block.rows.take(4).joinToString("\n") {
-                                        it.joinToString("  |  ")
-                                    },
-                                    maxLines = 5,
-                                    modifier = Modifier.padding(12.dp),
-                                )
+                        }
+                        is Block.Table -> ReadingPreview(
+                            "Table · ${(block.rows.size - 1).coerceAtLeast(0)} rows",
+                            open = { detail = block },
+                        ) {
+                            Column(Modifier.horizontalScroll(rememberScrollState())) {
+                                block.rows.take(5).forEachIndexed { index, cells ->
+                                    ReadingTableRow(cells, header = index == 0, cellWidth = 160.dp)
+                                    if (index == 0) HorizontalDivider()
+                                }
                             }
+                        }
                     }
                 }
             }
-                if (!state.showsHistory) {
-                    if (state.truncated)
-                        Text("Snapshot truncated", Modifier.align(Alignment.BottomStart).padding(12.dp),
-                            style = MaterialTheme.typography.labelSmall)
-                    if (!hideLatest && !state.follow && scroll.canScrollForward)
-                        FilledTonalIconButton(
-                            onClick = { session.setFollow(true) },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(horizontal = 12.dp),
-                        ) { Icon(Icons.Default.ArrowDownward, "Latest") }
+                if (state.truncated)
+                    Text("Snapshot truncated", Modifier.align(Alignment.BottomStart).padding(12.dp),
+                        style = MaterialTheme.typography.labelSmall)
+                if (!hideControls) {
+                    Column(
+                        Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 4.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        if ("remote-scroll" in state.capabilities) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
+                                if (state.scrolling != null) {
+                                    Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 4.dp) {
+                                        CircularProgressIndicator(
+                                            Modifier.padding(10.dp).size(18.dp).testTag("mirror-scroll-progress"),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    }
+                                } else if (state.scrollError != null) {
+                                    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 4.dp) {
+                                        Text(
+                                            state.scrollError,
+                                            Modifier.widthIn(max = 224.dp).padding(10.dp),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 3,
+                                        )
+                                    }
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    FilledTonalIconButton(
+                                        onClick = { session.scrollRemote(ScrollDirection.UP) },
+                                        enabled = state.canScrollRemote(ScrollDirection.UP),
+                                    ) { Icon(Icons.Default.KeyboardArrowUp, "Scroll Up") }
+                                    FilledTonalIconButton(
+                                        onClick = { session.scrollRemote(ScrollDirection.DOWN) },
+                                        enabled = state.canScrollRemote(ScrollDirection.DOWN),
+                                    ) { Icon(Icons.Default.KeyboardArrowDown, "Scroll Down") }
+                                }
+                            }
+                        }
+                        if (!state.follow)
+                            FilledTonalIconButton(
+                                onClick = { session.setFollow(true) },
+                                enabled = state.scrolling == null,
+                            ) { Icon(Icons.Default.ArrowDownward, "Latest") }
+                    }
                 }
-            }
         }
     }
     detail?.let { frozen ->
@@ -438,19 +462,109 @@ private fun Reading(session: Session, state: SessionState, hideLatest: Boolean) 
             Surface(Modifier.fillMaxSize().padding(20.dp), shape = MaterialTheme.shapes.large) {
                 Column(Modifier.padding(16.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = { detail = null }) { Text("Close") }
-                        TextButton(onClick = { clipboard.setText(AnnotatedString(frozen.raw)) }) {
-                            Text("Copy")
-                        }
+                        Text("Frozen detail", Modifier.weight(1f).align(Alignment.CenterVertically),
+                            style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(frozen.raw)) }) { Text("Copy") }
+                        TextButton(onClick = { detail = null }) { Text("Done") }
                     }
-                    LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                        itemsIndexed(Document.chunks(frozen.raw)) { _, chunk ->
-                            SelectionContainer { Text(chunk, fontFamily = FontFamily.Monospace) }
+                    if (frozen is Block.Table) {
+                        Box(Modifier.weight(1f).fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                            LazyColumn(Modifier.testTag("mirror-frozen-table"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                itemsIndexed(frozen.rows) { index, cells ->
+                                    ReadingTableRow(cells, header = index == 0, cellWidth = 220.dp)
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+                            itemsIndexed(Document.chunks(frozen.raw)) { _, chunk ->
+                                SelectionContainer { Text(chunk, fontFamily = FontFamily.Monospace) }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+internal suspend fun LazyListState.revealEnd(lastIndex: Int) {
+    // A newly composed reader can start while the parent is still being measured.
+    withFrameNanos { }
+    scrollToItem(lastIndex)
+    val layout = layoutInfo
+    val last = layout.visibleItemsInfo.lastOrNull { it.index == lastIndex } ?: return
+    val remaining = last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset
+    if (remaining > 0) scrollBy(remaining.toFloat())
+}
+
+@Composable
+private fun ReadingPreview(title: String, open: () -> Unit, content: @Composable () -> Unit) {
+    Surface(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = open) { Text("Expand") }
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ReadingTableRow(cells: List<String>, header: Boolean, cellWidth: Dp) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        cells.forEach { cell ->
+            SelectionContainer(Modifier.width(cellWidth)) {
+                Text(cell, fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+    }
+}
+
+private fun historyCaptureTime(seconds: Double): String =
+    java.text.DateFormat.getTimeInstance().format(java.util.Date((seconds * 1_000).toLong()))
+
+@Composable
+private fun HistoryReader(session: Session, state: SessionState) {
+    val scroll = rememberLazyListState(session.historyScrollIndex, session.historyScrollOffset)
+    LaunchedEffect(scroll) {
+        snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.collect { (index, offset) ->
+            session.historyScrollIndex = index
+            session.historyScrollOffset = offset
+        }
+    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = session::showLive) { Text("Back to Live") }
+            state.historyTime?.let { Text("Captured ${historyCaptureTime(it)}", style = MaterialTheme.typography.labelSmall) }
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = { session.loadHistory(refresh = true) },
+                enabled = !state.loadingHistory && state.status == Status.live,
+            ) { Text("Refresh History") }
+        }
+        if (state.historyTruncated)
+            Text("Older lines omitted. The first retained line may begin mid-paragraph.", style = MaterialTheme.typography.labelSmall)
+        if (state.history.isNotEmpty()) {
+            val last = state.historyOffset + state.history.size
+            Text("Loaded lines ${state.historyOffset + 1}–$last", style = MaterialTheme.typography.labelSmall)
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("mirror-output"), state = scroll) {
+            item(key = "earlier") {
+                TextButton(
+                    onClick = { session.loadHistory() },
+                    enabled = !state.loadingHistory && state.historyOffset > 0 && state.status == Status.live,
+                ) { Text("Load Earlier 200 Lines") }
+            }
+            itemsIndexed(state.history, key = { index, _ -> state.historyOffset + index }) { _, line ->
+                SelectionContainer { Text(line.ifEmpty { " " }, Modifier.fillMaxWidth()) }
+            }
+        }
+        if (state.loadingHistory) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("mirror-history-progress"))
     }
 }
 
@@ -522,19 +636,30 @@ internal fun Composer(session: Session, state: SessionState) {
             placeholder = { Text(if (state.pane?.agent == null) "Type a command" else "Message") },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
             ),
             trailingIcon = {
-                IconButton(
+                val sending = state.delivery == Delivery.PENDING
+                FilledIconButton(
+                    modifier = Modifier.size(34.dp),
                     enabled = if (showStop) state.canAct else state.canSend && value.composition == null,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (showStop) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        disabledContainerColor = if (sending) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+                        disabledContentColor = Color.White,
+                    ),
                     onClick = {
                         gesture.cancel()
                         if (showStop) stop = true else session.submit()
                     },
                 ) {
                     when {
-                        state.delivery == Delivery.PENDING -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        sending -> CircularProgressIndicator(Modifier.size(16.dp).testTag("composer-sending"), color = Color.White, strokeWidth = 2.dp)
                         showStop -> Icon(Icons.Default.Stop, "Stop")
                         else -> Icon(Icons.Default.ArrowUpward, "Send")
                     }
@@ -640,14 +765,14 @@ internal fun Composer(session: Session, state: SessionState) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun LaunchDialog(session: Session, project: String? = null, dismiss: () -> Unit) {
+internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, dismiss: () -> Unit) {
     val model = session.launch
     val state by model.state.collectAsState()
     var worktrees by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(false) }
     val worktree = state.worktrees.firstOrNull { it.string("id") == state.worktree }
     val profile = state.profiles.firstOrNull { it.string("id") == state.profile }
-    LaunchedEffect(model, project) { model.open(project) }
+    LaunchedEffect(model, projectPanes) { model.open(projectPanes) }
     LaunchedEffect(state.created) { if (state.created != null) dismiss() }
     ModalBottomSheet(onDismissRequest = { if (!state.creating) dismiss() }) {
         Column(
@@ -692,9 +817,15 @@ internal fun LaunchDialog(session: Session, project: String? = null, dismiss: ()
                                         Text(entry.string("name"))
                                         val detail = listOfNotNull(entry.optionalString("model"), entry.optionalString("reasoning_effort")).joinToString(" · ")
                                         if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall)
+                                        if (!entry.canLaunchProfile()) Text(
+                                            if (!entry.flag("enabled")) "Disabled"
+                                            else entry.record("availability").optionalString("reason") ?: "Unavailable",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
                                     }
                                 },
                                 leadingIcon = { entry.optionalString("runtime")?.let { AgentMark(it) } },
+                                enabled = entry.canLaunchProfile(),
                                 onClick = { model.selectProfile(entry.string("id")); profiles = false },
                             )
                         }

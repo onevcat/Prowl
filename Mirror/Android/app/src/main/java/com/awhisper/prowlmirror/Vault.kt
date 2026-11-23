@@ -70,6 +70,10 @@ class Vault(context: Context) {
         get() = prefs.getString("selected-host", null)
         set(value) { prefs.edit().putString("selected-host", value).apply() }
 
+    var lastProfile: String?
+        get() = prefs.getString("last-profile", null)
+        set(value) { prefs.edit().putString("last-profile", value).apply() }
+
     private fun write(saved: List<Host>) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())

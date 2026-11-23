@@ -63,6 +63,43 @@ class CoreTest {
     }
 
     @Test
+    fun swiftDeflateVectorKeepsItsWindowForTheConnection() {
+        val bodies = listOf(
+            intArrayOf(98, 168, 86, 202, 201, 44, 46, 81, 178, 170, 174, 173, 5, 0, 0, 0, 255, 255),
+            intArrayOf(98, 64, 98, 3, 0, 0, 0, 255, 255),
+            intArrayOf(2, 178, 11, 242, 243, 210, 193, 108, 0, 0, 0, 0, 255, 255),
+        )
+        fun frame(body: ByteArray) = ByteArrayInputStream(
+            ByteBuffer.allocate(5).putInt(body.size + 1).put(3).array() + body
+        )
+        MirrorInflater().use { inflater ->
+            val result = bodies.map { body ->
+                (Wire.read(frame(body.map(Int::toByte).toByteArray()), inflater) as Packet.Control).kind
+            }
+            assertEquals(listOf("list", "list", "pong"), result)
+        }
+        assertThrows(java.io.IOException::class.java) { Wire.read(frame(byteArrayOf())) }
+        assertEquals("{\"compress\":{}}", Wire.encode(control("compress")).drop(5).toByteArray().decodeToString())
+    }
+
+    @Test
+    fun compressedPayloadCannotExpandBeyondTheWireLimit() {
+        val deflater = java.util.zip.Deflater(6, true)
+        val bytes = ByteArray(32 * 1024)
+        val compressedSize = try {
+            deflater.setInput(ByteArray(Wire.MAX_PAYLOAD + 1))
+            deflater.deflate(bytes, 0, bytes.size, java.util.zip.Deflater.SYNC_FLUSH)
+        } finally {
+            deflater.end()
+        }
+        val framed = ByteBuffer.allocate(5 + compressedSize).putInt(compressedSize + 1)
+            .put(3).put(bytes, 0, compressedSize).array()
+        MirrorInflater().use {
+            assertThrows(java.io.IOException::class.java) { Wire.read(ByteArrayInputStream(framed), it) }
+        }
+    }
+
+    @Test
     fun scrollControlsUseSwiftEnvelopeAndStrictSequenceNumbers() {
         val requestID = "00010203-0405-0607-0809-0A0B0C0D0E0F"
         val lease = "11111111-2222-3333-4444-555555555555"
