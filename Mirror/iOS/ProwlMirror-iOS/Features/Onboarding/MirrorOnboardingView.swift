@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The first launch: what the app does and how to pair, with the QR code as the main path.
 ///
-/// The layout follows the space the app has, not the device or its orientation (docs-ai 099):
+/// The layout follows the space the app has, not the device or its orientation:
 /// wider than tall, the mark and title sit in the leading half and the steps and actions in
 /// the trailing half, so on a foldable held like a book the fold runs between them. Taller
 /// than wide, everything is one column with the actions at the bottom. Content that does not
@@ -18,7 +18,11 @@ struct MirrorOnboardingView: View {
       ScrollView { layout }
         .scrollBounceBehavior(.basedOnSize)
     }
-    .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isWide = $0 }
+    .onGeometryChange(for: Bool.self) {
+      $0.size.width > $0.size.height
+    } action: {
+      isWide = $0
+    }
   }
 
   @ViewBuilder private var layout: some View {
@@ -67,6 +71,7 @@ struct MirrorOnboardingView: View {
       Text("Prowl Mirror")
         .font(.largeTitle.bold())
         .padding(.top, 28)
+        .accessibilityIdentifier("onboarding-title")
       Text("Follow the agents on your Mac, answer them, and start new ones — from here.")
         .font(.body)
         .foregroundStyle(.secondary)
@@ -116,7 +121,9 @@ struct MirrorOnboardingView: View {
 
   private func step(_ symbol: String, _ text: LocalizedStringKey) -> some View {
     HStack(alignment: .center, spacing: 14) {
+      // Decoration: the sentence says it all.
       Image(systemName: symbol).font(.title3).foregroundStyle(.tint).frame(width: 28)
+        .accessibilityHidden(true)
       Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
     }
   }

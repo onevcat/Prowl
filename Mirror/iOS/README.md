@@ -44,6 +44,17 @@ The gear at the top left of Agents is the Settings menu: quick actions (switch a
 Hosts, **Add Host…**) and **Settings…**, a sheet with Hosts, Notifications and About. New
 app-level settings, such as a subscription, add a section to that sheet, not items to the menu.
 
+## iPhone Duo and other sizes
+
+The app builds with the iOS 27.2 SDK, so on iPhone Duo it fills both displays and the system
+moves toolbar items into the vertical bar on the cover display and in landscape. Layouts depend
+on the space the app has, never on the device or the orientation: onboarding is one column when
+taller than wide and two halves when wider than tall, which keeps the fold of a book-held device
+between them. The Agents list, Chat, Terminal, New Session and Settings use system containers and
+need nothing of their own. Checked on the iPhone Duo simulator (cover and inner display, portrait
+and landscape) on 2026-11-23; partially folded poses cannot be set in the simulator from the
+command line and are not checked.
+
 ## Chat
 
 Chat renders the Host's normalized events (see the [wire contract](../../docs/remote-mirror-wire.md#conversation-stream-conversation-v1)):
