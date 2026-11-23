@@ -31,10 +31,11 @@ struct MirrorSettingsView: View {
   }
 }
 
-/// The version, the website, the privacy policy and the license.
+/// The version, the website, the privacy policy, the terms and the license.
 struct MirrorAboutSection: View {
   static let website = URL(string: "https://prowl.cat/")!
   static let privacyPolicy = URL(string: "https://prowl.cat/privacy")!
+  static let terms = URL(string: "https://prowl.cat/terms")!
 
   var body: some View {
     Section {
@@ -48,6 +49,10 @@ struct MirrorAboutSection: View {
         Label("Privacy Policy", systemImage: "hand.raised")
       }
       .accessibilityIdentifier("settings-privacy")
+      Link(destination: Self.terms) {
+        Label("Terms of Use", systemImage: "doc.plaintext")
+      }
+      .accessibilityIdentifier("settings-terms")
       NavigationLink {
         MirrorLicenseView()
       } label: {

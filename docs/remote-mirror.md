@@ -154,7 +154,7 @@ agents of the last Mac you chose, titled with the Mac's name; the Settings menu 
 switches the Host, adds one, or opens **Settings…**. The menu lists up to five Hosts; with more,
 **All Hosts…** opens Settings. The gear shows a red mark when the Mac cannot be reached.
 **Settings** holds **Hosts** (tap one to show it, swipe to rename or forget, **Add Host…**),
-**Notifications**, and **About** (version, website, privacy policy, license). In the demo,
+**Notifications**, and **About** (version, website, privacy policy, terms of use, license). In the demo,
 Settings shows About only. Three counts on
 top show how many agents are **Blocked**, **Working** and **Done** (finished and not looked
 at yet); tap one to show only those agents, tap it again to show all. The panes follow the
