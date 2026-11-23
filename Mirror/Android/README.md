@@ -1,9 +1,9 @@
 # Prowl Mirror for Android
 
 Experimental **native Kotlin / Jetpack Compose** text mirror client. One application
-supports Android phones and tablets (Android 8.0 / API 26 or later). At 840 dp
-available width the pane drawer becomes a persistent sidebar. Both layouts share
-session, protocol and rendering code; rotation is supported, not locked.
+supports Android phones and tablets (Android 8.0 / API 26 or later). On wider
+windows the app centers the roster and Chat while the Terminal uses the available
+width. Rotation preserves the current pane and reading position.
 
 The Android project lives in `Mirror/Android/` in the Prowl repository.
 The original Gradle project name and application ID are preserved.
@@ -31,8 +31,8 @@ project, worktree, Host Agent Profile and optional initial message.
   preserve the draft.
 - An unconfirmed delivery preserves the draft and blocks accidental resending.
   Check receipt only queries the original request; it never repeats input.
-- Mirror, Retry and foreground reconnection use `ifFree`; Take Over is explicit.
-  If another client claims a free pane before Mirror completes, Android reports it busy.
+- Opening a pane labeled **Mirrored elsewhere** requests takeover. Retry and
+  foreground reconnection request the pane only if free.
 - History is a bounded frozen snapshot with earlier-page loading. Returning to Live
   keeps receiving current output. Closing a mirror never stops the Host program.
 - Hosts with `remote-scroll` show **Scroll up / Scroll down** above the Live text.
@@ -111,8 +111,8 @@ Use **Scan QR Code** in the Host connection form to scan **Add a Device** on Hos
 Scanning connects with the encoded address, port and short-lived code. Camera
 permission is optional; manual entry remains available. The scanner opens in portrait
 without a red scanning line. Refresh expired codes on Host.
-The Live scroll toolbar places Scroll up on the left and Scroll down on the right,
-with loading feedback centered between them.
+The Terminal places **Scroll Up** and **Scroll Down** beside the lower-right edge
+with loading feedback next to the controls.
 
 ## License
 

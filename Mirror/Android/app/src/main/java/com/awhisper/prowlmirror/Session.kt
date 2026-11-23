@@ -16,6 +16,7 @@ enum class Status(val label: String) {
     takenOver("Taken over by another device"),
     hostStopped("Host stopped sharing"),
     paneClosed("Host pane closed"),
+    incompatible("Update Prowl on the Mac to use this version of Mirror"),
 }
 
 enum class Delivery {
@@ -65,6 +66,11 @@ data class SessionState(
     val promptAction: PromptAction? = null,
     val hostDraft: HostDraft? = null,
     val broughtDraftPolicy: String? = null,
+    val broughtDraftText: String? = null,
+    val replacedHostDraft: Boolean = false,
+    val submittedText: String? = null,
+    val keyRefusal: String? = null,
+    val localDemo: Boolean = false,
 ) {
     val canScrollRemote: Boolean
         get() = status == Status.live && !chat && "remote-scroll" in capabilities &&
@@ -74,8 +80,8 @@ data class SessionState(
         canScrollRemote && scrollBounds.allows(direction)
 
     val needsPairing: Boolean
-        get() = host.credential == null || error == "Device authentication failed" ||
-            error == "Host identity changed. Pair again."
+        get() = !localDemo && (host.credential == null || error == "Device authentication failed" ||
+            error == "Host identity changed. Pair again." || error == UNRECOGNIZED_DEVICE)
 
     val openPrompt: JsonObject?
         get() = if (chat) conversation.openPrompt else screenPrompt
@@ -161,11 +167,13 @@ class Session(
     onLaunch: ((Pane, String?) -> Unit)? = null,
     loadProfile: () -> String? = { null },
     saveProfile: (String) -> Unit = {},
+    private val onRoster: ((Session, Host) -> Unit)? = null,
+    localDemo: Boolean = false,
 ) {
     val id = uuid()
-    val state = MutableStateFlow(SessionState(host))
+    val state = MutableStateFlow(SessionState(host, localDemo = localDemo))
     val launch = LaunchModel(scope, ::command, loadProfile, saveProfile) { pane, kickoff ->
-        if (onLaunch == null) choose(pane, kickoff = kickoff) else onLaunch(pane, kickoff)
+        if (onLaunch == null) choose(pane, kickoff = kickoff, launched = true) else onLaunch(pane, kickoff)
     }
     private var transport: Transport? = null
     private var generation = 0
@@ -175,11 +183,17 @@ class Session(
     private var intent = "ifFree"
     private var choseMode = false
     private var retryJob: Job? = null
-    private var retryCount = 0
     private var suspended = false
+    private var rosterTimeout: Job? = null
+    private var rosterPolling: Job? = null
+    private val releasedPanes = mutableMapOf<String, Int>()
+    private var expectedLaunch: Pane? = null
+    private var latestDescriptor: Pane? = null
+    private var launchExpectation: Job? = null
+    internal val leasedPaneID get() = state.value.pane?.id.takeIf { lease != null }
     private val historyGate = HistoryGate()
     private var historyTimeout: Job? = null
-    private var commandPending: Pair<String, CompletableDeferred<JsonObject>>? = null
+    private val pendingCommands = mutableMapOf<String, CompletableDeferred<JsonObject>>()
     private var scrollTimeout: Job? = null
     private data class ScrollRequest(
         val id: String,
@@ -198,6 +212,8 @@ class Session(
         val pane: String,
         val text: String,
         val revision: Long,
+        val host: Host,
+        val policy: String?,
     )
 
     private var submission: Submission? = null
@@ -215,6 +231,10 @@ class Session(
         retryJob?.cancel()
         val attempt = ++generation
         requestedCompression = false
+        rosterTimeout = scope.launch {
+            delay(10_000)
+            if (attempt == generation) failed("Timed out waiting for the Host")
+        }
         state.update {
             it.copy(
                 host = if (code.isNotBlank()) it.host.copy(credential = null) else it.host,
@@ -253,7 +273,7 @@ class Session(
         state.update {
             it.copy(
                 status =
-                    if (it.status in setOf(Status.takenOver, Status.hostStopped, Status.paneClosed))
+                    if (it.status in setOf(Status.takenOver, Status.hostStopped, Status.paneClosed, Status.incompatible))
                         it.status
                     else Status.disconnected,
                 error = reason,
@@ -263,19 +283,23 @@ class Session(
         if (
             !suspended &&
                 state.value.status == Status.disconnected &&
-                state.value.host.credential != null &&
-                retryCount < 3
+                state.value.pane == null &&
+                !state.value.needsPairing &&
+                reason != INVALID_PAIRING_CODE
         ) {
-            val wait = 1_000L shl retryCount++
             retryJob =
                 scope.launch {
-                    delay(wait)
+                    delay(5_000)
                     retry()
                 }
         }
     }
 
     private fun detach() {
+        rosterTimeout?.cancel()
+        rosterTimeout = null
+        rosterPolling?.cancel()
+        rosterPolling = null
         clearScroll()
         pendingScrollState = null
         expectsScrollState = false
@@ -287,10 +311,9 @@ class Session(
         transport = null
         old?.close()
         lease = null
-        commandPending
-            ?.second
-            ?.completeExceptionally(IOException("Connection lost before confirmation"))
-        commandPending = null
+        val commands = pendingCommands.values.toList()
+        pendingCommands.clear()
+        commands.forEach { it.completeExceptionally(IOException("Connection lost before confirmation")) }
         if (state.value.delivery == Delivery.PENDING)
             state.update {
                 it.copy(
@@ -301,6 +324,7 @@ class Session(
     }
 
     fun close() {
+        launchExpectation?.cancel()
         suspended = true
         retryJob?.cancel()
         detach()
@@ -317,10 +341,10 @@ class Session(
 
     fun foreground() {
         suspended = false
-        retryCount = 0
         if (state.value.status == Status.disconnected && !state.value.needsPairing) retry()
         else if (state.value.status == Status.live) {
-            lease?.let { send(control("refresh", obj("subscriptionID" to it))) }
+            if ("refresh" in state.value.capabilities)
+                lease?.let { send(control("refresh", obj("subscriptionID" to it))) }
             queryReceipt()
         }
     }
@@ -333,7 +357,6 @@ class Session(
 
     fun takeOver() {
         detach()
-        retryCount = 0
         intent = "takeover"
         connect()
     }
@@ -350,7 +373,6 @@ class Session(
             return
         }
         detach()
-        retryCount = 0
         historyGate.reset()
         state.value =
             state.value.copy(
@@ -367,20 +389,54 @@ class Session(
     }
 
     fun refreshPanes() {
-        if (suspended) return
-        send(control("list"))
+        if (!suspended && state.value.status == Status.choosing) send(control("list"))
+    }
+
+    internal fun releasePane(id: String) {
+        releasedPanes[id] = 2
+        state.update { current -> current.copy(panes = current.panes.map {
+            if (it.id == id) it.copy(busy = false) else it
+        }) }
+    }
+
+    private fun mergeDescriptor(pane: Pane): Pane {
+        latestDescriptor = pane
+        val expected = expectedLaunch?.takeIf { it.id == pane.id } ?: return pane
+        if (pane.agent != null) {
+            expectedLaunch = null
+            launchExpectation?.cancel()
+            return pane
+        }
+        return pane.copy(
+            agent = expected.agent, subtitle = expected.subtitle,
+            conversation = pane.conversation.takeUnless { it == "unsupported" },
+        )
     }
 
     fun updatePane(pane: Pane) {
         val previous = state.value.pane
         if (previous?.id != pane.id) return
+        applyDescriptor(previous, mergeDescriptor(pane))
+    }
+
+    private fun applyDescriptor(previous: Pane, pane: Pane) {
         state.update { it.copy(pane = pane) }
         if (!choseMode && previous.conversation != "available" && pane.conversation == "available")
             switchMode(true)
         else if (state.value.chat && pane.conversation == "unsupported") switchMode(false)
     }
 
-    fun choose(pane: Pane, takeover: Boolean = false, kickoff: String? = null) {
+    fun choose(pane: Pane, takeover: Boolean = false, kickoff: String? = null, launched: Boolean = false) {
+        launchExpectation?.cancel()
+        latestDescriptor = null
+        expectedLaunch = pane.takeIf { launched && it.agent != null }
+        if (expectedLaunch != null) launchExpectation = scope.launch {
+            delay(30_000)
+            expectedLaunch = null
+            val latest = latestDescriptor ?: return@launch
+            val current = state.value.pane ?: return@launch
+            if (latest.id == current.id) applyDescriptor(current, latest)
+        }
         choseMode = false
         submission = null
         historyGate.reset()
@@ -394,6 +450,10 @@ class Session(
                 promptAction = null,
                 hostDraft = null,
                 broughtDraftPolicy = null,
+                broughtDraftText = null,
+                replacedHostDraft = false,
+                submittedText = null,
+                keyRefusal = null,
                 text = "",
                 sequence = 0,
                 history = emptyList(),
@@ -423,10 +483,8 @@ class Session(
 
     private fun switchMode(chat: Boolean): Boolean {
         val current = state.value
-        if (current.chat == chat || current.status != Status.live || current.loadingHistory ||
-            current.delivery == Delivery.PENDING || commandPending != null || current.scrolling != null
-        ) return false
-        if (chat && (current.pane?.conversation != "available" || "conversation-v1" !in current.capabilities)) return false
+        if (current.chat == chat || current.status !in setOf(Status.live, Status.subscribing)) return false
+        if (chat && "conversation-v1" !in current.capabilities) return false
         state.update { it.copy(chat = chat, kickoff = null) }
         intent = "ifFree"
         subscribe()
@@ -476,8 +534,8 @@ class Session(
     }
 
     private fun runAction(request: JsonObject, prompt: PromptAction? = null, lockPrompt: Boolean = false) {
-        if (!state.value.canAct || commandPending != null) return
-        state.update { it.copy(actionPending = true, error = null, promptAction = prompt) }
+        if (!state.value.canAct) return
+        state.update { it.copy(actionPending = true, error = null, promptAction = prompt, keyRefusal = null) }
         scope.launch {
             try {
                 val result = command(request)
@@ -491,7 +549,7 @@ class Session(
                 val message = e.message ?: "Host action failed"
                 state.update {
                     if (prompt != null) it.copy(promptAction = prompt.copy(error = message))
-                    else it.copy(error = message)
+                    else it.copy(keyRefusal = message)
                 }
             } finally {
                 state.update { it.copy(actionPending = false) }
@@ -515,17 +573,26 @@ class Session(
     }
 
     fun dismissHostDraft() {
-        state.update { it.copy(hostDraft = null) }
+        if (state.value.hostDraft == null) return
+        submission = null
+        state.update { it.copy(hostDraft = null, delivery = Delivery.NONE, submittedText = null) }
     }
 
     fun bringHostDraft(draft: HostDraft) {
         state.update {
-            if (!it.canAct || it.hostDraft != draft || !draft.complete || !draft.replaceable) it
+            if (it.hostDraft != draft || !draft.complete) it
             else it.copy(
-                draft = listOf(draft.text, it.draft).filter(String::isNotBlank).joinToString("\n\n"),
+                draft = listOf(draft.text, it.draft.trim()).filter(String::isNotEmpty).joinToString("\n"),
                 draftRevision = it.draftRevision + 1,
                 hostDraft = null,
-                broughtDraftPolicy = if (draft.discardable) "discard" else "replace",
+                delivery = Delivery.NONE,
+                submittedText = null,
+                broughtDraftText = draft.text,
+                broughtDraftPolicy = when {
+                    draft.discardable -> "discard"
+                    draft.replaceable -> "replace"
+                    else -> null
+                },
             )
         }
     }
@@ -542,13 +609,22 @@ class Session(
         val run = runID ?: return
         val pane = current.pane ?: return
         if (!current.canSend) return
-        val item = Submission(uuid(), run, pane.id, current.draft, current.draftRevision)
+        val item = Submission(uuid(), run, pane.id, current.draft, current.draftRevision, current.host, onDraft)
         submission = item
-        state.update { it.copy(delivery = Delivery.PENDING, hint = "Host is checking readiness…", hostDraft = null, broughtDraftPolicy = null) }
+        state.update {
+            it.copy(delivery = Delivery.PENDING, hint = "Sending…", hostDraft = null,
+                submittedText = item.text, replacedHostDraft = false)
+        }
+        scope.launch {
+            delay(30_000)
+            if (submission == item && state.value.delivery == Delivery.PENDING) state.update {
+                it.copy(delivery = Delivery.UNKNOWN, hint = "Delivery unconfirmed. Check Host before sending again.")
+            }
+        }
         scope.launch {
             try {
                 val listing = command(Commands.list())
-                if (lease != activeLease || submission != item) return@launch
+                if (lease != activeLease || submission != item || state.value.delivery != Delivery.PENDING) return@launch
                 val input = Commands.input(listing, item.pane, item.text, onDraft)
                 check(!input.has("agentsInput") || "agent-input" in state.value.capabilities) {
                     "Update Host to support interactive Agent input"
@@ -557,15 +633,6 @@ class Session(
                     "Host cannot verify an empty command line for remote shell Send. Use an Agent Profile or control the shell on Host"
                 }
                 send(Commands.request(item.id, input, activeLease))
-                delay(30_000)
-                if (submission == item && state.value.delivery == Delivery.PENDING)
-                    state.update {
-                        it.copy(
-                            delivery = Delivery.UNKNOWN,
-                            hint =
-                                "Delivery unconfirmed. Check receipt or Host before sending again.",
-                        )
-                    }
             } catch (e: Exception) {
                 if (submission == item && state.value.delivery == Delivery.PENDING)
                     state.update {
@@ -581,19 +648,20 @@ class Session(
     suspend fun command(command: JsonObject): JsonObject {
         check(
             transport != null &&
-                commandPending == null &&
-                "launch-profile" in state.value.capabilities
+                "launch-profile" in state.value.capabilities &&
+                (state.value.status == Status.choosing ||
+                    (state.value.status == Status.live && command.keySet().single() in setOf("list", "agentKeys", "promptRespond")))
         ) {
-            "Host command unavailable or pending"
+            "Host command unavailable"
         }
         val id = uuid()
         val result = CompletableDeferred<JsonObject>()
-        commandPending = id to result
-        send(Commands.request(id, command, lease))
+        pendingCommands[id] = result
         return try {
+            send(Commands.request(id, command, lease))
             withTimeout(30_000) { result.await() }
         } finally {
-            if (commandPending?.first == id) commandPending = null
+            pendingCommands.remove(id)
         }
     }
 
@@ -602,6 +670,7 @@ class Session(
         val active = lease ?: return
         if (
             s.runID == runID &&
+                sameConfiguration(s.host) &&
                 s.pane == state.value.pane?.id &&
                 state.value.delivery in setOf(Delivery.PENDING, Delivery.UNKNOWN)
         )
@@ -628,7 +697,6 @@ class Session(
         clearScroll()
         if (refresh) {
             historyGate.reset()
-            state.update { it.copy(history = emptyList(), historyOffset = 0, historyTime = null, historyTruncated = false) }
         }
         if (historyGate.id != null && historyGate.offset == 0) {
             state.update { it.copy(showsHistory = true) }
@@ -706,7 +774,7 @@ class Session(
     }
 
     private fun receiveScrollState(p: JsonObject) {
-        require(expectsScrollState && state.value.status == Status.live &&
+        require(expectsScrollState &&
             canonical(p.string("subscriptionID")) == lease) { "Unexpected scroll state" }
         val sequence = p.longInteger("sequence")
         require(pendingScrollState == null && sequence > state.value.sequence) {
@@ -720,12 +788,12 @@ class Session(
     private fun receive(packet: Packet) {
         if (packet is Packet.Text) {
             // Frames from the previous representation can precede the new lease.
-            if (state.value.status == Status.subscribing) return
+            if (state.value.status == Status.subscribing && lease == null) return
             require(packet.text.toByteArray().size <= 1024 * 1024) {
                 "Text snapshot exceeds capacity"
             }
             require(
-                state.value.status == Status.live &&
+                !state.value.chat &&
                     packet.lease == lease &&
                     packet.sequence > state.value.sequence
             ) {
@@ -741,6 +809,7 @@ class Session(
             pendingScrollState = null
             state.update {
                 it.copy(
+                    status = Status.live,
                     scrollBounds = bounds,
                     text = packet.text,
                     sequence = packet.sequence,
@@ -757,13 +826,14 @@ class Session(
         }
         packet as Packet.Control
         val p = packet.payload()
-        if (state.value.status == Status.subscribing &&
+        if (state.value.status == Status.subscribing && lease == null &&
             packet.kind in setOf("conversationSnapshot", "conversationEvents", "scrollState", "screenPrompt")
         ) return
         when (packet.kind) {
             "panes" -> {
                 val caps = p.array("capabilities").map { it.asString }.toSet()
-                require("text-v1" in caps) { "Update Host to support text mirrors" }
+                rosterTimeout?.cancel()
+                rosterTimeout = null
                 if (Wire.DEFLATE in caps && !requestedCompression) {
                     requestedCompression = true
                     send(control("compress"))
@@ -771,9 +841,16 @@ class Session(
                 val hostRun = canonical(p.string("hostRunID"))
                 val sameRun = runID == hostRun
                 runID = hostRun
-                val panes = p.array("panes").map { Pane.parse(it.asJsonObject) }
+                val panes = p.array("panes").map {
+                    val pane = Pane.parse(it.asJsonObject)
+                    val polls = releasedPanes[pane.id] ?: 0
+                    if (!pane.busy || polls == 1) releasedPanes.remove(pane.id)
+                    else if (polls > 1) releasedPanes[pane.id] = polls - 1
+                    if (polls > 0) pane.copy(busy = false) else pane
+                }
+                releasedPanes.keys.retainAll(panes.mapTo(mutableSetOf(), Pane::id))
+                val updatedPane = panes.firstOrNull { pane -> pane.id == state.value.pane?.id }?.let(::mergeDescriptor)
                 state.update {
-                    val updatedPane = panes.firstOrNull { pane -> pane.id == it.pane?.id }
                     it.copy(
                         panes = panes,
                         hostName = p.optionalString("hostName") ?: it.hostName,
@@ -786,10 +863,34 @@ class Session(
                         promptAction = it.promptAction.takeIf { sameRun },
                     )
                 }
-                if (state.value.pane == null) state.update { it.copy(status = Status.choosing) }
-                else if (panes.none { it.id == state.value.pane?.id })
+                if (state.value.pane == null) {
+                    val connected = state.value.status != Status.choosing
+                    state.update { it.copy(status = Status.choosing) }
+                    if (rosterPolling == null) rosterPolling = scope.launch {
+                        while (isActive) {
+                            delay(3_000)
+                            refreshPanes()
+                        }
+                    }
+                    val current = state.value
+                    if (current.host.credential != null &&
+                        (connected || current.hostName != current.host.hostName)
+                    ) {
+                        val now = System.currentTimeMillis()
+                        val verified = current.host.copy(
+                            hostName = current.hostName, lastConnectedAt = now,
+                            pairedAt = current.host.pairedAt ?: now,
+                        )
+                        state.update { it.copy(host = verified) }
+                        onRoster?.invoke(this, verified)
+                    }
+                } else if ("text-v1" !in caps) {
+                    state.update { it.copy(status = Status.incompatible) }
+                    detach()
+                } else if (updatedPane == null) {
                     state.update { it.copy(status = Status.paneClosed) }
-                else if (state.value.status != Status.live) {
+                    detach()
+                } else if (state.value.status == Status.connecting || !sameRun) {
                     if (!choseMode && "conversation-v1" in caps && state.value.pane?.conversation == "available")
                         state.update { it.copy(chat = true, kickoff = null) }
                     subscribe()
@@ -798,15 +899,14 @@ class Session(
             "subscribed" -> {
                 clearScroll()
                 pendingScrollState = null
-                require(canonical(p.string("paneID")) == state.value.pane?.id)
+                require(state.value.status == Status.subscribing && lease == null &&
+                    canonical(p.string("paneID")) == state.value.pane?.id)
                 lease = canonical(p.string("subscriptionID"))
                 runID = canonical(p.string("hostRunID"))
-                retryCount = 0
                 historyTimeout?.cancel()
                 historyGate.reset()
                 state.update {
                     it.copy(
-                        status = Status.live,
                         error = null,
                         scrollBounds = ScrollBounds(),
                         history = emptyList(),
@@ -850,7 +950,7 @@ class Session(
                     subscribe()
                     return
                 }
-                state.update { it.copy(conversation = it.conversation.accept(p, snapshot)) }
+                state.update { it.copy(status = Status.live, conversation = it.conversation.accept(p, snapshot)) }
                 if (!events.isEmpty) send(control("acknowledge", obj("subscriptionID" to active, "sequence" to sequence)))
             }
             "failure" -> {
@@ -886,11 +986,12 @@ class Session(
                 require(
                     canonical(p.string("subscriptionID")) == lease && state.value.loadingHistory
                 )
+                val continuation = historyGate.id != null
                 val lines = historyGate.accept(p)
                 historyTimeout?.cancel()
                 state.update {
                     it.copy(
-                        history = lines + it.history,
+                        history = if (continuation) lines + it.history else lines,
                         historyOffset = historyGate.offset,
                         historyTime = p.get("capturedAt").asDouble,
                         historyTruncated = p.flag("truncated"),
@@ -902,16 +1003,20 @@ class Session(
                 val response = p.record("commandResponse")
                 val id = canonical(response.string("requestID"))
                 val result = response.record("response")
-                if (commandPending?.first == id) commandPending?.second?.complete(result)
-                else delivery(id, result)
+                val pending = pendingCommands.remove(id)
+                if (pending != null) pending.complete(result) else delivery(id, result)
             }
             else -> throw IOException("Unexpected Host message: ${packet.kind}")
         }
     }
 
+    private fun sameConfiguration(host: Host) = state.value.host.let {
+        it.endpoint == host.endpoint && it.credential == host.credential
+    }
+
     private fun delivery(id: String, response: JsonObject) {
         val s = submission ?: return
-        if (s.id != id || state.value.delivery !in setOf(Delivery.PENDING, Delivery.UNKNOWN)) return
+        if (s.id != id || !sameConfiguration(s.host) || state.value.delivery !in setOf(Delivery.PENDING, Delivery.UNKNOWN)) return
         val data = response.getAsJsonObject("data")
         val accepted =
             response.flag("ok") &&
@@ -935,10 +1040,15 @@ class Session(
                     details.optionalFlag("discardable") == true,
                 )
             }
-        val recovery = data?.getAsJsonObject("input")?.getAsJsonObject("replaced_draft")
+        val recovery = data?.getAsJsonObject("input")?.getAsJsonObject("replaced_draft")?.takeUnless {
+            s.policy == "discard" && it.optionalString("text") == state.value.broughtDraftText
+        }
         state.update {
             it.copy(
                 hostDraft = hostDraft,
+                broughtDraftPolicy = it.broughtDraftPolicy.takeUnless { accepted },
+                broughtDraftText = it.broughtDraftText.takeUnless { accepted },
+                replacedHostDraft = accepted && recovery != null,
                 delivery =
                     if (accepted) Delivery.ACCEPTED
                     else if (rejection != null) Delivery.REJECTED else Delivery.UNKNOWN,

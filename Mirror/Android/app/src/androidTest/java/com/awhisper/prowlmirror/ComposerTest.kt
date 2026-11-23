@@ -61,12 +61,14 @@ class ComposerTest {
                 )
             )
             session.choose(pane)
+            val lease = uuid()
             receive!!(
                 control(
                     "subscribed",
-                    obj("paneID" to pane.id, "subscriptionID" to uuid(), "hostRunID" to uuid()),
+                    obj("paneID" to pane.id, "subscriptionID" to lease, "hostRunID" to uuid()),
                 )
             )
+            receive!!(Packet.Text(lease, 1, 80, 24, false, ""))
         }
         rule.setContent {
             MaterialTheme { Composer(session, session.state.collectAsState().value) }

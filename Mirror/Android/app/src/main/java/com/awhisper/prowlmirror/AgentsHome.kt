@@ -20,6 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -150,6 +156,32 @@ internal fun AgentsHome(
     val title = hosts.firstOrNull { it.endpoint == state.host.endpoint }?.name
         ?: state.hostName ?: state.host.address
     val groups = remember(state.panes, filter) { rosterProjects(state.panes, filter) }
+    val threshold = with(LocalDensity.current) { 72.dp.toPx() }
+    var pull by remember(session) { mutableFloatStateOf(0f) }
+    val refreshEnabled by rememberUpdatedState(state.status == Status.choosing)
+    val refresh = remember(session, threshold) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.Drag || !refreshEnabled || available.y <= 0) return Offset.Zero
+                pull = (pull + available.y).coerceAtMost(threshold)
+                return Offset(0f, available.y)
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.Drag || available.y >= 0f || pull == 0f) return Offset.Zero
+                val consumed = available.y.coerceAtLeast(-pull)
+                pull += consumed
+                return Offset(0f, consumed)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                val shouldRefresh = pull >= threshold && refreshEnabled
+                pull = 0f
+                if (shouldRefresh) session.refreshPanes()
+                return Velocity.Zero
+            }
+        }
+    }
     val counts = state.panes.filter { it.agent != null }.groupingBy(Pane::rosterState).eachCount()
     LaunchedEffect(counts, filter) {
         if (filter != null && counts[filter] == null) filter = null
@@ -168,7 +200,7 @@ internal fun AgentsHome(
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text(host.name ?: if (host.endpoint == state.host.endpoint) title else host.address)
+                                        Text(if (host.endpoint == state.host.endpoint) title else host.displayName)
                                         Text(host.endpoint, style = MaterialTheme.typography.labelSmall)
                                     }
                                 },
@@ -198,7 +230,7 @@ internal fun AgentsHome(
         )
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
             LazyColumn(
-                Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(),
+                Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight().nestedScroll(refresh).testTag("agents-roster"),
                 contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -286,7 +318,7 @@ internal fun AgentsHome(
                                         headlineContent = { Text("${shells.size} ${if (shells.size == 1) "terminal" else "terminals"}") },
                                         leadingContent = { Icon(Icons.Default.Terminal, null) },
                                         trailingContent = { Icon(if (terminals) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null) },
-                                        modifier = Modifier.clickable { terminals = !terminals },
+                                        modifier = Modifier.testTag("terminals-$project").clickable { terminals = !terminals },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     )
                                     if (terminals) shells.forEach { pane -> AgentRow(pane) { open(pane) } }
@@ -296,8 +328,17 @@ internal fun AgentsHome(
                     }
                 }
                 if (groups.isEmpty() && state.status == Status.choosing)
-                    item { Text(if (filter == null) "No running panes" else "No agents in this state") }
+                    item {
+                        Text(if (filter == null) "No running panes" else "No agents in this state")
+                        if (filter == null && "launch-profile" in state.capabilities) {
+                            TextButton(onClick = { launchProject = null; launch = true }) { Text("New Session") }
+                        }
+                    }
             }
+            if (pull > 0f) LinearProgressIndicator(
+                progress = { pull / threshold },
+                modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth(),
+            )
         }
     }
     if (launch) LaunchDialog(session, projectPanes = launchProject?.toSet()) { launch = false }
@@ -308,8 +349,15 @@ private fun AgentRow(pane: Pane, open: () -> Unit) {
     ListItem(
         headlineContent = { Text(pane.tabTitle ?: pane.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
-            val subtitle = listOfNotNull(pane.worktreeName ?: pane.subtitle, recent(pane)).joinToString(" · ")
-            if (subtitle.isNotBlank()) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val location = pane.worktreeName ?: pane.directory.trimEnd('/').substringAfterLast('/')
+            val status = if (pane.busy) "Mirrored elsewhere" else recent(pane).takeIf { pane.agent != null }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(location, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (status != null) {
+                    Text("·")
+                    Text(status, color = if (pane.busy) Color(0xFFC25C12) else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         },
         leadingContent = {
             if (pane.agent == null) Icon(Icons.Default.Terminal, null)
@@ -372,9 +420,22 @@ internal fun ManageHosts(model: MirrorModel, dismiss: () -> Unit, add: () -> Uni
                 if (!model.isDemo) item { Text("Paired Hosts", style = MaterialTheme.typography.titleSmall) }
                 items(if (model.isDemo) emptyList() else model.saved, key = Host::endpoint) { host ->
                     ListItem(
-                        headlineContent = { Text(host.name ?: host.address) },
-                        supportingContent = { Text(host.endpoint) },
-                        modifier = Modifier.clickable { model.add(host, ""); dismiss() },
+                        headlineContent = { Text(host.displayName) },
+                        supportingContent = {
+                            val current = model.hostSession(host)?.state?.collectAsState()?.value
+                            val detail = when (current?.status) {
+                                Status.choosing -> {
+                                    val count = current.panes.size
+                                    "$count ${if (count == 1) "pane" else "panes"}"
+                                }
+                                Status.connecting -> "Connecting…"
+                                else -> host.lastConnectedAt?.let {
+                                    "Last connected ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it))}"
+                                }
+                            }
+                            Text(listOfNotNull(host.endpoint, detail).joinToString(" · "))
+                        },
+                        modifier = Modifier.clickable { model.selectHost(host); dismiss() },
                         trailingContent = {
                             Row {
                                 IconButton(onClick = { name = host.name.orEmpty(); rename = host }) {

@@ -15,6 +15,7 @@ class InterfaceTest {
     fun demoOpensAConversationAndExitsWithoutPairing() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
         rule.onNodeWithText("Demo Mac").assertIsDisplayed()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Review the release"))
         rule.onNodeWithText("Review the release").performClick()
         rule.onNodeWithText("The release notes are ready for review. You can reply from here.").assertIsDisplayed()
         rule.onNodeWithTag("composer").performTextInput("Can we ship?")
@@ -32,6 +33,7 @@ class InterfaceTest {
     @Test
     fun workingDemoQueuesInputAndStopStartsIt() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Review the build"))
         rule.onNodeWithText("Review the build").performClick()
         rule.onNodeWithTag("composer").performTextInput("Check the queued follow-up")
         rule.onNodeWithContentDescription("Send").performClick()
@@ -47,6 +49,7 @@ class InterfaceTest {
     @Test
     fun demoApprovalAndTerminalUseTheNormalPaneControls() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Draft the migration guide"))
         rule.onNodeWithText("Draft the migration guide").performClick()
         rule.onNodeWithText("Apply the migration plan?").assertIsDisplayed()
         rule.onNodeWithTag("prompt-choice-approve").performClick()
@@ -68,7 +71,10 @@ class InterfaceTest {
     @Test
     fun demoShellEchoesInputAndKeepsASnapshot() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
-        rule.onNodeWithText("1 terminal").performClick()
+        val roster = rule.onNodeWithTag("agents-roster")
+        roster.performScrollToNode(hasTestTag("terminals-Prowl"))
+        rule.onNodeWithTag("terminals-Prowl").performClick()
+        roster.performScrollToNode(hasText("Terminal"))
         rule.onNodeWithText("Terminal").performClick()
         rule.onNodeWithTag("composer").performTextInput("pwd")
         rule.onNodeWithContentDescription("Send").performClick()
@@ -126,7 +132,7 @@ class InterfaceTest {
         for (character in "ABCD") {
             rule.onNode(isFocused()).performTextInput(character.toString())
         }
-        rule.onNodeWithTag("code-second").performClick()
+        rule.onNodeWithTag("code-second").assertIsFocused()
         for (character in "2345") {
             rule.onNode(isFocused()).performTextInput(character.toString())
         }
@@ -143,6 +149,14 @@ class InterfaceTest {
         rule.onNodeWithTag("code-second").performTextReplacement("6789")
         rule.onNodeWithTag("code-second").assertTextContains("6789")
         rule.onNodeWithTag("code-first").assertTextContains("JKLM")
+    }
+
+    @Test
+    fun pastingTheCompleteCodeInTheSecondFieldFillsBothHalves() {
+        rule.onNodeWithText("Pair with a Mac").performClick()
+        rule.onNodeWithTag("code-second").performTextInput("ABCD-2345")
+        rule.onNodeWithTag("code-first").assertTextContains("ABCD")
+        rule.onNodeWithTag("code-second").assertTextContains("2345")
     }
 
     @Test

@@ -220,4 +220,16 @@ class CoreTest {
         assertEquals(text, Document.blocks(text).joinToString("") { it.raw })
         assertTrue(Document.blocks(text).all { it.raw.length <= 4096 })
     }
+    @Test
+    fun documentKeepsFenceLengthsAndEscapedTableCells() {
+        val doc = Document.blocks("~~~~sh\necho hello\n~~~\necho world\n~~~~\nA | B\n--- | ---\nx \\| y | z\nmissing |")
+        val code = doc.filterIsInstance<Block.Code>().single()
+        assertEquals("sh", code.language)
+        assertTrue(code.raw.contains("~~~\necho world"))
+        val table = doc.filterIsInstance<Block.Table>().single()
+        assertTrue(table.raw.contains("x \\| y"))
+        assertEquals("x | y", table.rows[1][0])
+        assertEquals("", table.rows[2][1])
+    }
+
 }

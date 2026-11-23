@@ -494,12 +494,16 @@ On Android, Chat opens when the Host can provide a conversation. A new Codex or
 Claude session with an opening message shows Chat while it waits for the Host's
 transcript, with Terminal available from the pane toolbar. Chat exposes earlier
 rows in pages. The independent Terminal History reader shows the captured time
-and loaded line range and can refresh or request earlier lines.
+and loaded line range and retains the reading position when loading earlier lines.
+Pull down on the Agents list to refresh it. You can switch between saved
+Hosts, and a rejected or cancelled pairing keeps the current Host selected.
 
 From the Android welcome screen, **Try the Demo** opens a sample Mac, without
 pairing or sending any traffic to a Host. Messages sent to a working demo agent
 queue until its turn finishes. **Stop** interrupts that turn and starts the
-next queued message. Use **Settings → Exit Demo** to discard the sample sessions.
+next queued message. Demo Terminal paging moves through the sample pane’s actual
+text, and a new demo session opens in the selected worktree. Use **Settings → Exit Demo**
+to discard the sample sessions.
 Android Settings includes paired Hosts and About.
 
 ### Native history appearance on Mac

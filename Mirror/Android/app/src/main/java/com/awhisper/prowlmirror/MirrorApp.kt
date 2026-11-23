@@ -13,7 +13,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -22,6 +27,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -50,7 +57,7 @@ fun MirrorApp(model: MirrorModel) {
     )
     MaterialTheme(colorScheme = colors) {
         var add by rememberSaveable { mutableStateOf(false) }
-        var pairingSession by rememberSaveable { mutableStateOf<String?>(null) }
+        var pairingRequested by rememberSaveable { mutableStateOf(false) }
         var manage by rememberSaveable { mutableStateOf(false) }
         val session = model.sessions.firstOrNull { it.id == model.selected }
         val roster = model.roster
@@ -58,9 +65,9 @@ fun MirrorApp(model: MirrorModel) {
         val rosterState = roster?.state?.collectAsState()?.value
         val waitingForChat = session?.state?.collectAsState()?.value?.kickoff != null
         LaunchedEffect(roster, rosterState?.status, waitingForChat) {
-            if (roster != null && rosterState?.status == Status.choosing) {
+            if (waitingForChat && roster != null && rosterState?.status == Status.choosing) {
                 while (true) {
-                    delay(if (waitingForChat) 1_000 else 3_000)
+                    delay(1_000)
                     roster.refreshPanes()
                 }
             }
@@ -77,23 +84,27 @@ fun MirrorApp(model: MirrorModel) {
                     session != null -> key(session.id) { Detail(session, model::closePane) }
                     roster != null && rosterState != null -> AgentsHome(
                         roster, rosterState, if (model.isDemo) emptyList() else model.saved, model::openPane,
-                        selectHost = { model.add(it, "") }, addHost = { add = true }, manageHosts = { manage = true },
+                        selectHost = model::selectHost, addHost = { add = true }, manageHosts = { manage = true },
                         demo = model.isDemo, exitDemo = model::exitDemo,
                     )
                     else -> MirrorOnboarding(pair = { add = true }, demo = model::startDemo)
                 }
             }
         }
-        val pairing = rosterState.takeIf { pairingSession != null && pairingSession == roster?.id }
-        LaunchedEffect(pairing?.status) {
-            if (pairing?.status == Status.choosing) {
-                pairingSession = null
+        val pairing = model.pairing?.state?.collectAsState()?.value
+        LaunchedEffect(pairingRequested, model.pairing) {
+            if (pairingRequested && model.pairing == null) {
+                pairingRequested = false
                 add = false
             }
         }
-        if (add) HostDialog(model.saved, pairing, { add = false; pairingSession = null }) { host, code ->
-            model.add(host, code)
-            pairingSession = model.roster?.id
+        if (add) HostDialog(model.saved, pairing, {
+            pairingRequested = false
+            add = false
+            model.cancelPairing()
+        }) { host, code ->
+            model.beginPairing(host, code)
+            pairingRequested = true
         }
         if (manage) ManageHosts(model, { manage = false }) {
             manage = false
@@ -130,13 +141,12 @@ private fun Detail(session: Session, back: () -> Unit) {
     val compact = LocalConfiguration.current.screenHeightDp < 500
     val hideKeyboard = { focus.clearFocus(); keyboard?.hide(); Unit }
     var menu by remember { mutableStateOf(false) }
-    var confirmTakeover by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val promptHeight = maxHeight / 2
         Column(Modifier.fillMaxSize()) {
             TopAppBar(
                 title = {
-                    Column {
+                    if (!(composing && compact)) Column {
                         Text(pane?.tabTitle ?: pane?.title ?: "Prowl Mirror", maxLines = 1)
                         val subtitle = listOfNotNull(
                             agentState?.replaceFirstChar { it.uppercase() },
@@ -150,7 +160,7 @@ private fun Detail(session: Session, back: () -> Unit) {
                     if (composing && compact) IconButton(onClick = hideKeyboard) {
                         Icon(Icons.Default.KeyboardHide, "Hide Keyboard")
                     }
-                    if (kickoff != null || (pane?.conversation == "available" && "conversation-v1" in state.capabilities))
+                    if (showsChat || (pane?.conversation != "unsupported" && "conversation-v1" in state.capabilities))
                         IconButton(onClick = {
                             if (kickoff != null) session.showTerminalAfterKickoff() else session.showChat(!state.chat)
                         }) {
@@ -169,7 +179,7 @@ private fun Detail(session: Session, back: () -> Unit) {
                                 },
                             )
                             if (state.status == Status.takenOver) DropdownMenuItem(
-                                text = { Text("Take Over") }, onClick = { menu = false; confirmTakeover = true },
+                                text = { Text("Take Over") }, onClick = { menu = false; session.takeOver() },
                             ) else if (state.status !in setOf(Status.live, Status.connecting, Status.subscribing))
                                 DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; session.retry() })
                             DropdownMenuItem(text = { Text("Disconnect") }, onClick = { menu = false; back() })
@@ -181,7 +191,7 @@ private fun Detail(session: Session, back: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(state.error ?: state.status.label, Modifier.weight(1f),
                         color = if (state.error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
-                    if (state.status == Status.takenOver) TextButton(onClick = { confirmTakeover = true }) { Text("Take Over") }
+                    if (state.status == Status.takenOver) TextButton(onClick = session::takeOver) { Text("Take Over") }
                 }
             }
             Box(Modifier.weight(1f)) {
@@ -209,13 +219,6 @@ private fun Detail(session: Session, back: () -> Unit) {
             }
         }
     }
-    if (confirmTakeover) AlertDialog(
-        onDismissRequest = { confirmTakeover = false },
-        title = { Text("Take over this pane?") },
-        text = { Text("The other device will disconnect from this pane.") },
-        confirmButton = { TextButton(onClick = { confirmTakeover = false; session.takeOver() }) { Text("Take Over") } },
-        dismissButton = { TextButton(onClick = { confirmTakeover = false }) { Text("Cancel") } },
-    )
 }
 
 @Composable
@@ -225,14 +228,30 @@ private fun HostDialog(
     dismiss: () -> Unit,
     connect: (Host, String) -> Unit,
 ) {
-    var chosenEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
-    val chosen = saved.firstOrNull { it.endpoint == chosenEndpoint }
     val connecting = pairing?.status == Status.connecting
     var address by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf(DEFAULT_HOST_PORT.toString()) }
     var first by rememberSaveable { mutableStateOf("") }
     var second by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    val secondFocus = remember { FocusRequester() }
+    val codeKeyboard = KeyboardOptions(
+        capitalization = KeyboardCapitalization.Characters, autoCorrect = false, keyboardType = KeyboardType.Ascii,
+    )
+    fun setCode(raw: String, firstField: Boolean) {
+        error = null
+        val clean = raw.uppercase().filterNot { it.isWhitespace() || it == '-' }
+        if (clean.length == 8) {
+            first = clean.take(4)
+            second = clean.drop(4)
+        } else if (firstField) {
+            val filled = first.length < 4 && clean.length == 4 && second.isEmpty()
+            first = clean.take(4)
+            if (filled) secondFocus.requestFocus()
+        } else {
+            second = clean.take(4)
+        }
+    }
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text("Pair with a Mac") },
@@ -241,11 +260,19 @@ private fun HostDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (!connecting) PairingScanButton(connect = connect, failed = { error = it })
-                saved.takeLast(5).reversed().forEach { host ->
+                if (!connecting) PairingScanButton(
+                    connect = { host, code ->
+                        error = null
+                        address = host.address
+                        port = host.port.toString()
+                        setCode(code, firstField = true)
+                        connect(host, code)
+                    },
+                    failed = { error = it },
+                )
+                saved.take(5).forEach { host ->
                     TextButton(
                         onClick = {
-                            chosenEndpoint = host.endpoint
                             address = host.address
                             port = host.port.toString()
                             first = ""
@@ -266,22 +293,19 @@ private fun HostDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         first,
-                        { raw ->
-                            val clean = raw.uppercase().filterNot { it.isWhitespace() || it == '-' }
-                            first = clean.take(4)
-                            // Only a complete pasted code may replace the other field.
-                            if (clean.length >= 8) second = clean.drop(4).take(4)
-                        },
+                        { setCode(it, firstField = true) },
                         label = { Text("Code") },
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("code-first"),
+                        keyboardOptions = codeKeyboard,
                     )
                     Text(" – ")
                     OutlinedTextField(
                         second,
-                        { second = it.uppercase().take(4) },
+                        { setCode(it, firstField = false) },
                         singleLine = true,
-                        modifier = Modifier.weight(1f).testTag("code-second"),
+                        modifier = Modifier.weight(1f).focusRequester(secondFocus).testTag("code-second"),
+                        keyboardOptions = codeKeyboard,
                     )
                 }
                 Text(
@@ -308,9 +332,9 @@ private fun HostDialog(
                             "Enter a Host address and valid port"
                         }
                         val raw = first + second
-                        val credential = chosen?.credential.takeIf {
-                            raw.isBlank() && chosen?.address == hostAddress && chosen.port == hostPort
-                        }
+                        val credential = if (raw.isBlank())
+                            saved.firstOrNull { it.address == hostAddress && it.port == hostPort }?.credential
+                        else null
                         val code = if (credential != null) "" else Authentication.code(raw)
                         connect(Host(hostAddress, hostPort, credential), code)
                     } catch (e: Exception) {
@@ -336,15 +360,29 @@ private fun Reading(session: Session, state: SessionState, hideControls: Boolean
     var detail by remember(session.id) { mutableStateOf<Block?>(null) }
     key(session.id) {
         val scroll = rememberLazyListState(session.liveScrollIndex, session.liveScrollOffset)
+        var userReleased by remember { mutableStateOf(false) }
         LaunchedEffect(scroll) {
-            var userScrolled = false
             scroll.interactionSource.interactions.collect {
-                if (it is DragInteraction.Start) {
-                    userScrolled = true
-                    session.setFollow(false)
+                when (it) {
+                    is DragInteraction.Start -> {
+                        userReleased = false
+                        session.setFollow(false)
+                    }
+                    is DragInteraction.Stop -> userReleased = true
+                    is DragInteraction.Cancel -> userReleased = false
                 }
-                if (userScrolled && it is DragInteraction.Stop && !scroll.canScrollForward)
-                    session.setFollow(true)
+            }
+        }
+        LaunchedEffect(scroll) {
+            snapshotFlow { userReleased && !scroll.isScrollInProgress }.collect { settled ->
+                if (settled) {
+                    withFrameNanos { }
+                    val current = session.state.value
+                    if (!scroll.isScrollInProgress && current.scrolling == null && current.scrollCompletion == null) {
+                        session.setFollow(!scroll.canScrollForward)
+                        userReleased = false
+                    }
+                }
             }
         }
         LaunchedEffect(scroll) {
@@ -354,12 +392,14 @@ private fun Reading(session: Session, state: SessionState, hideControls: Boolean
                     session.liveScrollOffset = offset
                 }
         }
-        LaunchedEffect(state.sequence, state.follow, blocks.size) {
+        val viewportHeight by remember(scroll) { derivedStateOf { scroll.layoutInfo.viewportSize.height } }
+        LaunchedEffect(state.sequence, state.follow, blocks.size, viewportHeight) {
             if (state.follow && blocks.isNotEmpty()) scroll.revealEnd(blocks.lastIndex)
         }
         LaunchedEffect(state.scrollCompletion) {
             val completion = state.scrollCompletion
             if (completion != null) {
+                userReleased = false
                 if (blocks.isNotEmpty()) scroll.scrollToItem(0)
                 session.consumeScrollCompletion(completion.requestID)
             }
@@ -370,16 +410,22 @@ private fun Reading(session: Session, state: SessionState, hideControls: Boolean
                 state = scroll,
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 56.dp),
             ) {
-                itemsIndexed(blocks) { _, block ->
+                itemsIndexed(blocks) { index, block ->
                     when (block) {
-                        is Block.Text ->
+                        is Block.Text -> Column {
+                            val clipboard = LocalClipboardManager.current
+                            if (block.whole != null && (blocks.getOrNull(index - 1) as? Block.Text)?.whole !== block.whole)
+                                TextButton(onClick = { clipboard.setText(AnnotatedString(block.whole)) }) {
+                                    Text("Copy Full Text Block")
+                                }
                             SelectionContainer {
                                 Text(
-                                    inlineMarkdown(block.raw),
+                                    if (block.whole != null) AnnotatedString(block.raw) else inlineMarkdown(block.raw),
                                     modifier = Modifier.fillMaxWidth(),
                                     style = MaterialTheme.typography.bodyLarge,
                                 )
                             }
+                        }
                         is Block.Code -> ReadingPreview(
                             block.language.ifBlank { "Code" },
                             open = { detail = block },
@@ -531,6 +577,16 @@ private fun historyCaptureTime(seconds: Double): String =
 @Composable
 private fun HistoryReader(session: Session, state: SessionState) {
     val scroll = rememberLazyListState(session.historyScrollIndex, session.historyScrollOffset)
+    var oldTime by remember { mutableStateOf(state.historyTime) }
+    var oldStart by remember { mutableIntStateOf(state.historyOffset) }
+    LaunchedEffect(state.historyTime, state.historyOffset) {
+        if (state.historyTime != null && state.historyTime == oldTime && oldStart > state.historyOffset) {
+            withFrameNanos { }
+            scroll.scrollToItem(oldStart - state.historyOffset + 1)
+        }
+        oldTime = state.historyTime
+        oldStart = state.historyOffset
+    }
     LaunchedEffect(scroll) {
         snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.collect { (index, offset) ->
             session.historyScrollIndex = index
@@ -610,20 +666,37 @@ internal fun Composer(session: Session, state: SessionState) {
                         TextButton(onClick = { session.replaceHostDraft(draft) }, enabled = state.canSend && value.composition == null) {
                             Text("Replace and Send")
                         }
-                        if (draft.complete) TextButton(onClick = { session.bringHostDraft(draft) }, enabled = state.canAct && value.composition == null) {
-                            Text("Bring Draft Here")
-                        }
+                    }
+                    if (draft.complete) TextButton(onClick = { session.bringHostDraft(draft) }, enabled = value.composition == null) {
+                        Text("Bring Draft Here")
                     }
                     TextButton(onClick = session::dismissHostDraft) { Text("Cancel") }
                 }
             }
         }
-        if (state.hostDraft == null && state.delivery in setOf(Delivery.UNKNOWN, Delivery.REJECTED)) {
+        val note = when {
+            state.hostDraft != null -> null
+            state.delivery in setOf(Delivery.UNKNOWN, Delivery.REJECTED) -> state.hint
+            state.replacedHostDraft && state.draft.isEmpty() -> state.hint
+            state.status != Status.live -> null
+            state.keyRefusal != null -> state.keyRefusal
+            "launch-profile" !in state.capabilities -> "This Host does not accept messages for this pane."
+            else -> null
+        }
+        if (note != null) {
+            val problem = state.delivery in setOf(Delivery.UNKNOWN, Delivery.REJECTED) || state.keyRefusal != null
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text(state.hint, Modifier.fillMaxWidth().padding(10.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(note, Modifier.fillMaxWidth().padding(10.dp), style = MaterialTheme.typography.bodySmall,
+                    color = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(6.dp))
+        }
+        if (state.delivery == Delivery.UNKNOWN) {
+            var preview by remember(session.id) { mutableStateOf(false) }
+            TextButton(onClick = { preview = !preview }) { Text("Submitted message") }
+            if (preview) SelectionContainer {
+                Text(state.submittedText.orEmpty(), Modifier.heightIn(max = 120.dp).verticalScroll(rememberScrollState()))
+            }
         }
         TextField(
             value,
@@ -633,7 +706,13 @@ internal fun Composer(session: Session, state: SessionState) {
                 value = next
                 session.setDraft(next.text)
             },
-            placeholder = { Text(if (state.pane?.agent == null) "Type a command" else "Message") },
+            placeholder = {
+                Text(when {
+                    state.pane?.agent != null -> "Message"
+                    "shell-send" in state.capabilities -> "Command"
+                    else -> "Terminal is read-only here"
+                })
+            },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -733,7 +812,7 @@ internal fun Composer(session: Session, state: SessionState) {
         )
         if (state.delivery == Delivery.UNKNOWN)
             Row {
-                TextButton(onClick = session::queryReceipt) { Text("Check receipt") }
+                TextButton(onClick = session::queryReceipt, enabled = state.status == Status.live) { Text("Check receipt") }
                 var confirm by remember { mutableStateOf(false) }
                 TextButton(onClick = { confirm = true }) { Text("I checked Host…") }
                 if (confirm)
@@ -770,6 +849,7 @@ internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, d
     val state by model.state.collectAsState()
     var worktrees by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
     val worktree = state.worktrees.firstOrNull { it.string("id") == state.worktree }
     val profile = state.profiles.firstOrNull { it.string("id") == state.profile }
     LaunchedEffect(model, projectPanes) { model.open(projectPanes) }
@@ -779,11 +859,18 @@ internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, d
             Modifier.align(Alignment.CenterHorizontally).widthIn(max = 720.dp).fillMaxWidth()
                 .verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
         ) {
-            Text("New Session", style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("New Session", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                IconButton(onClick = { model.open(projectPanes) }, enabled = !state.creating && !state.loading && !state.uncertain) {
+                    Icon(Icons.Default.Refresh, "Refresh projects and Agent Profiles")
+                }
+            }
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 state.prompt, model::setPrompt, placeholder = { Text("What would you like to work on?") },
                 modifier = Modifier.fillMaxWidth(), maxLines = 6, enabled = !state.creating,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
@@ -794,11 +881,23 @@ internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, d
                         enabled = state.worktrees.isNotEmpty() && !state.creating,
                     )
                     DropdownMenu(worktrees, { worktrees = false }) {
-                        state.worktrees.forEach { tree ->
-                            DropdownMenuItem(
-                                text = { Text(tree.string("root_path").substringAfterLast('/') + " · " + tree.string("name")) },
-                                onClick = { model.selectWorktree(tree.string("id")); worktrees = false },
-                            )
+                        state.worktrees.groupBy { it.string("root_path") }.forEach { (root, trees) ->
+                            ListItem(headlineContent = { Text(root.substringAfterLast('/')) },
+                                supportingContent = { Text(root) })
+                            trees.forEach { tree ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(tree.string("name"))
+                                            Text(tree.string("path"), style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        if (tree.string("id") == state.worktree) Icon(Icons.Default.Check, "Selected")
+                                    },
+                                    onClick = { model.selectWorktree(tree.string("id")); worktrees = false },
+                                )
+                            }
                         }
                     }
                 }
@@ -832,7 +931,19 @@ internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, d
                     }
                 }
             }
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            val tooLong = state.prompt.toByteArray().size > Wire.MAX_INPUT
+            Text(
+                state.error ?: if (tooLong) "The message is too long."
+                else "Uses the Host Profile’s model, permissions and launch settings.",
+                color = if (state.error != null || tooLong) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!state.loading && state.worktrees.isEmpty()) Text(
+                "Open a project in Prowl on the Mac, then refresh.", style = MaterialTheme.typography.bodySmall,
+            )
+            if (!state.loading && state.profiles.isEmpty()) Text(
+                "Configure an Agent Profile in Prowl on the Mac, then refresh.", style = MaterialTheme.typography.bodySmall,
+            )
             if (state.uncertain) {
                 TextButton(onClick = { session.refreshPanes(); dismiss() }) { Text("Review Host panes") }
                 TextButton(onClick = model::acknowledgeUnknown) { Text("I checked Host; allow another creation") }

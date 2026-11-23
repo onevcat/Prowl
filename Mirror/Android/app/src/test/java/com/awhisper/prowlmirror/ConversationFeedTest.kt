@@ -1,11 +1,34 @@
 package com.awhisper.prowlmirror
 
+import com.google.gson.JsonParser
 import org.junit.Assert.*
 import org.junit.Test
 
 class ConversationFeedTest {
     private fun event(sequence: Long, kind: String = "assistant.message") =
         obj("seq" to sequence, "kind" to kind, "source" to "screen", "data" to obj("id" to "screen:prompt"))
+
+    @Test
+    fun replaysTheSharedCodexAndClaudeTranscripts() {
+        for (fixture in listOf("codex-review-1038", "claude-review-1038")) {
+            val entries = requireNotNull(javaClass.getResourceAsStream("/$fixture.events.jsonl"))
+                .bufferedReader().useLines { lines -> lines.map { JsonParser.parseString(it).asJsonObject }.toList() }
+            val split = entries.size / 2
+            val snapshot = ConversationFeed().accept(
+                obj("sequence" to split, "gap" to false, "events" to entries.take(split)), snapshot = true,
+            )
+            val final = snapshot.accept(
+                obj("sequence" to entries.size, "events" to entries.drop(split)), snapshot = false,
+            )
+            assertEquals(fixture, entries.size.toLong(), final.sequence)
+            assertEquals(fixture, entries.size, final.events.size)
+            assertFalse(fixture, final.gap)
+            val rows = chatRows(final.events)
+            assertTrue(fixture, rows.size > 10)
+            assertTrue(fixture, final.events.any { it.kind == "assistant.message" })
+            assertTrue(fixture, final.events.any { it.kind == "tool.completed" })
+        }
+    }
 
     @Test
     fun unqueueOnlyRemovesTheMatchingMessageAndDebugNoticesAreHidden() {

@@ -46,6 +46,8 @@ class SessionTest {
             remoteScroll: Boolean = false,
             scrollState: Boolean = false,
             conversation: Boolean = false,
+            refresh: Boolean = true,
+            text: Boolean = true,
         ) {
             peer.ready(host)
             peer.receive(
@@ -53,7 +55,7 @@ class SessionTest {
                     "panes",
                     obj(
                         "panes" to listOf(pane),
-                        "capabilities" to (listOf("text-v1", "launch-profile", "history", "refresh") +
+                        "capabilities" to (listOfNotNull("text-v1".takeIf { text }, "launch-profile", "history", "refresh".takeIf { refresh }) +
                             (if (interactive) listOf("agent-input") else emptyList()) +
                             (if (remoteScroll) listOf("remote-scroll") else emptyList()) +
                             (if (scrollState) listOf("scroll-state-v1") else emptyList()) +
@@ -64,11 +66,18 @@ class SessionTest {
             )
         }
 
-        fun live(remoteScroll: Boolean = false, scrollState: Boolean = false) {
+        fun live(remoteScroll: Boolean = false, scrollState: Boolean = false, firstFrame: Boolean = true) {
             session.connect()
             ready(remoteScroll = remoteScroll, scrollState = scrollState)
             session.choose(pane)
             subscribed()
+            if (firstFrame) frame(scrollState = scrollState)
+        }
+
+        fun frame(text: String = "", scrollState: Boolean = false) {
+            if (scrollState)
+                peer.receive(control("scrollState", obj("subscriptionID" to lease, "sequence" to 1)))
+            peer.receive(Packet.Text(lease, 1, 80, 24, false, text))
         }
 
         fun subscribed() {
@@ -111,6 +120,125 @@ class SessionTest {
     }
 
     @Test
+    fun leaseAloneDoesNotEnableInputAndOldHostDoesNotReceiveRefresh() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.ready(refresh = false)
+        f.session.choose(f.pane)
+        f.subscribed()
+        f.session.setDraft("hello")
+        assertEquals(Status.subscribing, f.session.state.value.status)
+        assertFalse(f.session.state.value.canSend)
+        f.frame()
+        assertEquals(Status.live, f.session.state.value.status)
+        assertTrue(f.session.state.value.canSend)
+        f.session.foreground()
+        assertFalse(f.peer.sent.any { it.kind == "refresh" })
+        f.session.close()
+    }
+
+    @Test
+    fun revokedCredentialStopsRosterRetries() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.peer.closed(UNRECOGNIZED_DEVICE)
+        assertTrue(f.session.state.value.needsPairing)
+        advanceTimeBy(20_000)
+        assertEquals(1, f.peers.size)
+        f.session.close()
+    }
+
+    @Test
+    fun oldHostStillListsPanesButCannotOpenATextMirror() = runTest {
+        val roster = Fixture(backgroundScope)
+        roster.session.connect()
+        roster.ready(text = false)
+        assertEquals(Status.choosing, roster.session.state.value.status)
+        assertEquals(listOf(roster.pane), roster.session.state.value.panes)
+        roster.session.close()
+
+        val detail = Fixture(backgroundScope)
+        detail.session.choose(detail.pane)
+        detail.session.connect()
+        detail.ready(text = false)
+        assertEquals(Status.incompatible, detail.session.state.value.status)
+        assertFalse(detail.peer.sent.any { it.kind == "subscribe" })
+        assertTrue(detail.peer.stopped)
+        detail.session.close()
+    }
+
+    @Test
+    fun ignoresTheFirstTwoStaleBusyFlagsAfterReleasingItsOwnLease() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(busy = true)
+        f.session.connect()
+        f.ready()
+        f.session.releasePane(f.pane.id)
+        assertFalse(f.session.state.value.panes.single().busy)
+        repeat(2) {
+            f.ready()
+            assertFalse(f.session.state.value.panes.single().busy)
+        }
+        f.ready()
+        assertTrue(f.session.state.value.panes.single().busy)
+        f.session.close()
+    }
+
+    @Test
+    fun preservesTheLaunchedAgentUntilTheHostDetectsItOrTheExpectationExpires() = runTest {
+        val f = Fixture(backgroundScope)
+        val launched = f.pane.copy(agent = "codex", subtitle = "Codex")
+        f.session.choose(launched, launched = true)
+        f.session.connect()
+        f.ready()
+        assertEquals("codex", f.session.state.value.pane?.agent)
+        val shell = f.pane.copy(conversation = "unsupported")
+        f.session.updatePane(shell)
+        assertEquals("Codex", f.session.state.value.pane?.subtitle)
+        assertNull(f.session.state.value.pane?.conversation)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(shell, f.session.state.value.pane)
+        f.session.close()
+    }
+
+    @Test
+    fun aConnectedRosterPollsAndCorrelatesConcurrentCommands() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.ready()
+        val first = async { f.session.command(Commands.list()) }
+        val second = async { f.session.command(Commands.profiles()) }
+        runCurrent()
+        val requests = f.peer.sent.filter { it.kind == "command" }
+            .map { it.payload().record("commandRequest").string("requestID") }
+        assertEquals(2, requests.size)
+        f.answer(requests[1], obj("name" to "profiles"))
+        f.answer(requests[0], obj("name" to "list"))
+        assertEquals("list", first.await().string("name"))
+        assertEquals("profiles", second.await().string("name"))
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(2, f.peer.sent.count { it.kind == "list" })
+        f.session.close()
+    }
+
+    @Test
+    fun unresponsiveRosterTimesOutAndRetries() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.peer.ready(f.host)
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertTrue(f.peer.stopped)
+        assertEquals(Status.disconnected, f.session.state.value.status)
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(2, f.peers.size)
+        f.session.close()
+    }
+
+    @Test
     fun conversationAndTerminalShareConnectionAndResumeAtLastAck() = runTest {
         val f = Fixture(backgroundScope)
         f.pane = f.pane.copy(conversation = "available")
@@ -138,12 +266,12 @@ class SessionTest {
     @Test
     fun scrollBoundsAreOptedInAndCommitWithTheirFrame() = runTest {
         val f = Fixture(backgroundScope)
-        f.live(remoteScroll = true, scrollState = true)
+        f.live(remoteScroll = true, scrollState = true, firstFrame = false)
         assertTrue(f.peer.sent.last { it.kind == "subscribe" }.payload().flag("includeScrollState"))
         f.peer.receive(control("scrollState", obj(
             "subscriptionID" to f.lease, "sequence" to 1, "atTop" to true, "atBottom" to false,
         )))
-        assertTrue(f.session.state.value.canScrollRemote(ScrollDirection.UP))
+        assertFalse(f.session.state.value.canScrollRemote(ScrollDirection.UP))
         f.peer.receive(Packet.Text(f.lease, 1, 80, 24, false, "same viewport"))
         assertFalse(f.session.state.value.canScrollRemote(ScrollDirection.UP))
         assertTrue(f.session.state.value.canScrollRemote(ScrollDirection.DOWN))
@@ -172,7 +300,7 @@ class SessionTest {
     fun malformedOrUnpairedScrollStateDisconnects() = runTest {
         for (failure in listOf("missing", "wrong-lease", "wrong-sequence", "duplicate", "invalid-flag", "stale")) {
             val f = Fixture(backgroundScope)
-            f.live(remoteScroll = true, scrollState = true)
+            f.live(remoteScroll = true, scrollState = true, firstFrame = false)
             val payload = obj("subscriptionID" to f.lease, "sequence" to 1, "atTop" to true)
             when (failure) {
                 "wrong-lease" -> payload.addProperty("subscriptionID", uuid())
@@ -192,7 +320,7 @@ class SessionTest {
     @Test
     fun scrollBoundsResetOnReconnectAndOlderHostsNeedNoMetadata() = runTest {
         val f = Fixture(backgroundScope)
-        f.live(remoteScroll = true, scrollState = true)
+        f.live(remoteScroll = true, scrollState = true, firstFrame = false)
         f.peer.receive(control("scrollState", obj(
             "subscriptionID" to f.lease, "sequence" to 1, "atTop" to true, "atBottom" to true,
         )))
@@ -230,7 +358,7 @@ class SessionTest {
     @Test
     fun remoteScrollIsSingleFlightAndCompletesOnlyAfterItsFrame() = runTest {
         val f = Fixture(backgroundScope)
-        f.live(remoteScroll = true)
+        f.live(remoteScroll = true, firstFrame = false)
         f.peer.receive(Packet.Text(f.lease, 1, 80, 24, false, "screen"))
         f.session.scrollRemote(ScrollDirection.UP)
         val request = f.peer.sent.last().payload()
@@ -269,7 +397,7 @@ class SessionTest {
     fun remoteScrollRejectsMissingStaleOrInvalidFrameSequence() = runTest {
         for (sequence in listOf(0L, 1L, 3L, -1L)) {
             val f = Fixture(backgroundScope)
-            f.live(remoteScroll = true)
+            f.live(remoteScroll = true, firstFrame = false)
             f.peer.receive(Packet.Text(f.lease, 1, 80, 24, false, "before"))
             f.session.scrollRemote(ScrollDirection.DOWN)
             val requestID = f.peer.sent.last().payload().string("requestID")
@@ -301,19 +429,19 @@ class SessionTest {
         f.session.scrollRemote(ScrollDirection.DOWN)
         val newID = f.peer.sent.last().payload().string("requestID")
         f.peer.receive(control("scrollResult", obj(
-            "requestID" to oldID, "subscriptionID" to f.lease, "sequence" to 1,
+            "requestID" to oldID, "subscriptionID" to f.lease, "sequence" to 2,
         )))
         f.peer.receive(control("scrollResult", obj(
-            "requestID" to newID, "subscriptionID" to uuid(), "sequence" to 1,
+            "requestID" to newID, "subscriptionID" to uuid(), "sequence" to 2,
         )))
         f.peer.receive(control("failure", obj(
             "requestID" to oldID, "subscriptionID" to f.lease,
             "error" to "SCROLL_UNAVAILABLE: old request",
         )))
         assertEquals(ScrollDirection.DOWN, f.session.state.value.scrolling)
-        f.peer.receive(Packet.Text(f.lease, 1, 80, 24, false, "next"))
+        f.peer.receive(Packet.Text(f.lease, 2, 80, 24, false, "next"))
         f.peer.receive(control("scrollResult", obj(
-            "requestID" to newID, "subscriptionID" to f.lease, "sequence" to 1,
+            "requestID" to newID, "subscriptionID" to f.lease, "sequence" to 2,
         )))
         assertEquals(ScrollDirection.DOWN, f.session.state.value.scrollCompletion?.direction)
         f.session.close()
@@ -350,6 +478,7 @@ class SessionTest {
         f.session.retry()
         f.ready(remoteScroll = true)
         f.subscribed()
+        f.frame()
         assertFalse(f.peer.sent.any { it.kind == "scroll" })
         advanceTimeBy(6_000)
         assertNull(f.session.state.value.error)
@@ -453,7 +582,7 @@ class SessionTest {
     @Test
     fun replacementAckAndStaleLease() = runTest {
         val f = Fixture(backgroundScope)
-        f.live()
+        f.live(firstFrame = false)
         f.peer.receive(Packet.Text(f.lease, 1, 80, 24, false, "old"))
         f.peer.receive(Packet.Text(f.lease, 2, 80, 24, false, ""))
         assertEquals("", f.session.state.value.text)
@@ -504,6 +633,7 @@ class SessionTest {
         f.ready(interactive = false)
         f.session.choose(f.pane)
         f.subscribed()
+        f.frame()
         f.session.setDraft("hello")
         f.session.submit()
         runCurrent()
@@ -513,6 +643,48 @@ class SessionTest {
         assertEquals("hello", f.session.state.value.draft)
         assertTrue(f.session.state.value.hint.contains("Update Host"))
         assertEquals(1, f.peer.sent.count { it.kind == "command" })
+        f.session.close()
+    }
+
+    @Test
+    fun broughtDraftAndItsDiscardPolicySurviveARejectedSend() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(agent = "codex")
+        f.live()
+        f.session.setDraft("local follow-up")
+
+        fun submit(): com.google.gson.JsonObject {
+            f.session.submit()
+            runCurrent()
+            f.listing()
+            runCurrent()
+            return f.peer.sent.last().payload().record("commandRequest")
+        }
+        val initial = submit()
+        f.answer(initial.string("requestID"), obj("ok" to false, "error" to obj(
+            "code" to "INPUT_NOT_READY", "message" to "Host draft",
+            "details" to obj("input" to obj(
+                "reason" to "draft", "discardable" to true,
+                "draft" to obj("text" to "host draft", "is_complete" to true),
+            )),
+        )))
+        f.session.bringHostDraft(requireNotNull(f.session.state.value.hostDraft))
+        assertEquals("host draft\nlocal follow-up", f.session.state.value.draft)
+        val firstTry = submit()
+        assertEquals("discard", firstTry.record("request").record("command").record("agentsInput").record("_0").string("on_draft"))
+        f.answer(firstTry.string("requestID"), obj("ok" to false, "error" to obj(
+            "code" to "INPUT_NOT_READY", "message" to "Agent is busy",
+        )))
+        val retry = submit()
+        val input = retry.record("request").record("command").record("agentsInput").record("_0")
+        assertEquals("discard", input.string("on_draft"))
+        assertEquals("host draft\nlocal follow-up", input.string("prompt"))
+        f.answer(retry.string("requestID"), obj("ok" to true, "command" to "agents.input", "data" to obj(
+            "input" to obj("bytes" to input.string("prompt").toByteArray().size, "trailing_enter_sent" to true),
+        )))
+        assertEquals(Delivery.ACCEPTED, f.session.state.value.delivery)
+        assertEquals("", f.session.state.value.draft)
+        assertNull(f.session.state.value.broughtDraftPolicy)
         f.session.close()
     }
 
@@ -576,6 +748,7 @@ class SessionTest {
         f.session.retry()
         f.ready()
         f.subscribed()
+        f.frame()
         old.closed("late close")
         old.receive(Packet.Text(f.lease, 99, 80, 24, false, "stale"))
         assertEquals(Status.live, f.session.state.value.status)

@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.*
@@ -15,8 +16,19 @@ import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto
 data class Credential(val hostID: String, val deviceID: String, val key: String)
 
 const val DEFAULT_HOST_PORT = 7880
+internal const val UNRECOGNIZED_DEVICE = "This Mac no longer recognizes this device. Pair again with Add Host."
+internal const val INVALID_PAIRING_CODE = "The Mac rejected the pairing code. Refresh it on the Mac and try again."
 
-data class Host(val address: String, val port: Int = DEFAULT_HOST_PORT, val credential: Credential? = null, val name: String? = null) {
+data class Host(
+    val address: String,
+    val port: Int = DEFAULT_HOST_PORT,
+    val credential: Credential? = null,
+    val name: String? = null,
+    val hostName: String? = null,
+    val lastConnectedAt: Long? = null,
+    val pairedAt: Long? = null,
+) {
+    val displayName get() = name ?: hostName ?: address
     val endpoint: String
         get() = "$address:$port"
 }
@@ -80,7 +92,8 @@ class RemoteConnection(
 ) : Transport {
     @Volatile private var stopped = false
     @Volatile private var socket: Socket? = null
-    private val outbound = Channel<Packet.Control>(32)
+    private val outbound = Channel<ByteArray>(Channel.UNLIMITED)
+    private val queuedBytes = AtomicInteger()
     private val job =
         scope.launch(Dispatchers.IO) {
             try {
@@ -95,9 +108,14 @@ class RemoteConnection(
         }
 
     override fun send(message: Packet.Control) {
-        if (!stopped && outbound.trySend(message).isFailure) {
+        if (stopped) return
+        val bytes = Wire.encode(message)
+        if (queuedBytes.addAndGet(bytes.size) > 2 * Wire.MAX_PAYLOAD) {
+            queuedBytes.addAndGet(-bytes.size)
             scope.launch { closed("Connection cannot keep up; reconnect") }
             close()
+        } else if (outbound.trySend(bytes).isFailure) {
+            queuedBytes.addAndGet(-bytes.size)
         }
     }
 
@@ -122,15 +140,21 @@ class RemoteConnection(
             next.soTimeout = 5_000
             next.tcpNoDelay = true
             val tls = TlsClientProtocol(next.getInputStream(), next.getOutputStream())
-            tls.connect(
-                object : PSKTlsClient(BcTlsCrypto(SecureRandom()), identity.toByteArray(), key) {
-                    override fun getSupportedVersions(): Array<ProtocolVersion> =
-                        arrayOf(ProtocolVersion.TLSv12)
+            try {
+                tls.connect(
+                    object : PSKTlsClient(BcTlsCrypto(SecureRandom()), identity.toByteArray(), key) {
+                        override fun getSupportedVersions(): Array<ProtocolVersion> =
+                            arrayOf(ProtocolVersion.TLSv12)
 
-                    override fun getSupportedCipherSuites(): IntArray =
-                        intArrayOf(CipherSuite.TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256)
-                }
-            )
+                        override fun getSupportedCipherSuites(): IntArray =
+                            intArrayOf(CipherSuite.TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256)
+                    }
+                )
+            } catch (error: TlsFatalAlertReceived) {
+                throw IOException(if (credential == null) INVALID_PAIRING_CODE else UNRECOGNIZED_DEVICE, error)
+            } catch (error: TlsFatalAlert) {
+                throw IOException(if (credential == null) INVALID_PAIRING_CODE else UNRECOGNIZED_DEVICE, error)
+            }
             val input = tls.inputStream
             val output = tls.outputStream
             fun write(packet: Packet.Control) {
@@ -160,7 +184,7 @@ class RemoteConnection(
             val who = if (credential == null) name else canonical(credential.deviceID)
             val proof = Authentication.proof(key, hostID, nonce, purpose, who)
             write(
-                if (credential == null) control("pair", obj("name" to name, "proof" to proof))
+                if (credential == null) control("pair", obj("name" to name, "proof" to proof, "platform" to "android"))
                 else control("authenticate", obj("deviceID" to who, "proof" to proof))
             )
             val response = readControl()
@@ -189,15 +213,23 @@ class RemoteConnection(
             ) {
                 "Device authentication failed"
             }
-            persist(host)
             next.soTimeout = 8_000
             withContext(Dispatchers.Main) { ready(host) }
             coroutineScope {
-                val writer = launch(Dispatchers.IO) { for (message in outbound) write(message) }
+                val writer = launch(Dispatchers.IO) {
+                    for (bytes in outbound) {
+                        try {
+                            output.write(bytes)
+                            output.flush()
+                        } finally {
+                            queuedBytes.addAndGet(-bytes.size)
+                        }
+                    }
+                }
                 val heartbeat = launch {
                     while (isActive) {
                         delay(2_000)
-                        outbound.send(control("ping"))
+                        send(control("ping"))
                     }
                 }
                 val inflater = MirrorInflater()
@@ -205,7 +237,7 @@ class RemoteConnection(
                     while (isActive && !stopped) {
                         val packet = Wire.read(input, inflater)
                         if (packet is Packet.Control && packet.kind == "ping")
-                            outbound.send(control("pong"))
+                            send(control("pong"))
                         else if (!(packet is Packet.Control && packet.kind == "pong"))
                             withContext(Dispatchers.Main) { receive(packet) }
                     }

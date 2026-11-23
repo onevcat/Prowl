@@ -18,6 +18,9 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
     var saved by mutableStateOf<List<Host>>(emptyList())
     var roster by mutableStateOf<Session?>(null)
         private set
+    var pairing by mutableStateOf<Session?>(null)
+        private set
+    private val rosters = mutableStateMapOf<String, Session>()
     private var demo by mutableStateOf<DemoHost?>(null)
     val isDemo: Boolean get() = demo != null
     var error by mutableStateOf<String?>(null)
@@ -39,32 +42,26 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
             host,
             code,
             Build.MODEL.take(80),
-            vault::save,
+            { vault.save(it.copy(pairedAt = System.currentTimeMillis()), replacingCredential = true) },
             scope,
             receive,
-            { verified ->
-                reloadHosts()
-                ready(verified)
-            },
+            ready,
             closed,
-            onEnrolled = { saved ->
-                reloadHosts()
-                enrolled(saved)
-            },
+            onEnrolled = enrolled,
         )
     }
 
     fun restoreHost() {
         if (roster != null || sessions.isNotEmpty()) return
-        val last = saved.firstOrNull { it.endpoint == vault.selectedEndpoint } ?: saved.lastOrNull()
-        if (last != null) add(last, "")
+        val last = saved.firstOrNull { it.endpoint == vault.selectedEndpoint } ?: saved.firstOrNull()
+        if (last != null) selectHost(last)
     }
 
     fun startDemo() {
         if (roster != null) return
         val host = DemoHost(viewModelScope)
         demo = host
-        roster = Session(host.address, viewModelScope, host.transport, onLaunch = ::openLaunchedPane)
+        roster = Session(host.address, viewModelScope, host.transport, onLaunch = ::openLaunchedPane, localDemo = true)
             .also { it.connect() }
     }
 
@@ -79,45 +76,92 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
         demo = null
     }
 
-    fun add(host: Host, code: String) {
-        closePane()
-        roster?.close()
-        val session = Session(
-            host, viewModelScope, factory, onLaunch = ::openLaunchedPane,
-            loadProfile = { vault.lastProfile }, saveProfile = { vault.lastProfile = it },
-        )
+    private fun newRoster(host: Host, onRoster: (Session, Host) -> Unit) = Session(
+        host, viewModelScope, factory, onLaunch = ::openLaunchedPane,
+        loadProfile = { vault.lastProfile }, saveProfile = { vault.lastProfile = it },
+        onRoster = onRoster,
+    )
+
+    private fun rememberVerifiedHost(host: Host) = updateVault { vault.save(host, replacingCredential = false) }
+
+    internal fun hostSession(host: Host) = rosters[host.endpoint]
+
+    fun selectHost(host: Host) {
+        val cached = rosters[host.endpoint]
+        if (roster !== cached || cached?.state?.value?.host?.credential != host.credential) closePane()
+        if (cached != null && cached.state.value.host.credential != host.credential) {
+            rosters.remove(host.endpoint)
+            cached.close()
+        }
+        val session = rosters.getOrPut(host.endpoint) { newRoster(host) { _, verified -> rememberVerifiedHost(verified) } }
         roster = session
         vault.selectedEndpoint = host.endpoint
-        session.connect(code)
+        session.foreground()
     }
 
-    fun openPane(pane: Pane) = openLaunchedPane(pane, null)
+    fun beginPairing(host: Host, code: String) {
+        cancelPairing()
+        val candidate = newRoster(host) { session, verified ->
+            if (pairing === session) {
+                try {
+                    vault.save(verified, replacingCredential = false)
+                    reloadHosts()
+                    closePane()
+                    rosters.put(verified.endpoint, session)?.close()
+                    roster = session
+                    vault.selectedEndpoint = verified.endpoint
+                    pairing = null
+                } catch (e: Exception) {
+                    session.close()
+                    pairing = null
+                    error = e.message
+                }
+            } else if (rosters[verified.endpoint] === session) rememberVerifiedHost(verified)
+        }
+        pairing = candidate
+        candidate.connect(code)
+    }
 
-    private fun openLaunchedPane(pane: Pane, kickoff: String?) {
+    fun cancelPairing() {
+        pairing?.close()
+        pairing = null
+        reloadHosts()
+    }
+
+    fun openPane(pane: Pane) = openPane(pane, null, launched = false)
+
+    private fun openLaunchedPane(pane: Pane, kickoff: String?) = openPane(pane, kickoff, launched = true)
+
+    private fun openPane(pane: Pane, kickoff: String?, launched: Boolean) {
         val host = roster?.state?.value?.host ?: return
         if (host.credential == null && demo == null) return
         closePane()
-        val session = Session(host, viewModelScope, demo?.transport ?: factory)
+        val session = Session(host, viewModelScope, demo?.transport ?: factory, localDemo = demo != null)
         sessions += session
         selected = session.id
-        session.choose(pane, kickoff = kickoff)
+        session.choose(pane, takeover = pane.busy, kickoff = kickoff, launched = launched)
         session.connect()
     }
 
     fun closePane() {
+        val released = sessions.mapNotNull(Session::leasedPaneID)
         sessions.forEach(Session::close)
         sessions.clear()
         selected = null
-        roster?.refreshPanes()
+        roster?.let { session ->
+            released.forEach(session::releasePane)
+            session.refreshPanes()
+        }
     }
 
     fun renameHost(host: Host, name: String) {
-        updateVault { vault.save(host.copy(name = name.trim().ifBlank { null })) }
+        updateVault { vault.rename(host.endpoint, name.trim().ifBlank { null }) }
     }
 
     fun forgetHost(host: Host) {
         updateVault {
             vault.forget(host.endpoint)
+            rosters.remove(host.endpoint)?.close()
             if (roster?.state?.value?.host?.endpoint == host.endpoint) {
                 closePane()
                 roster?.close()
@@ -138,17 +182,19 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
 
     fun foreground() {
         restoreHost()
-        roster?.foreground()
+        (rosters.values + listOfNotNull(roster)).distinct().forEach(Session::foreground)
         sessions.forEach(Session::foreground)
     }
 
     fun background() {
-        roster?.background()
+        (rosters.values + listOfNotNull(roster)).distinct().forEach(Session::background)
         sessions.forEach(Session::background)
     }
 
     override fun onCleared() {
-        roster?.close()
+        cancelPairing()
+        demo?.close()
+        (rosters.values + listOfNotNull(roster)).distinct().forEach(Session::close)
         sessions.forEach(Session::close)
     }
 }

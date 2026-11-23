@@ -22,12 +22,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 private val headingPattern = Regex("^(#{1,6})[ \\t]+(.+)$")
-private val listPattern = Regex("^(\\s*)([-+*]|\\d+[.)])[ \\t]+(.+)$")
+private val listPattern = Regex("^( *)([-+*]|\\d+[.)])[ \\t]+(.+)$", RegexOption.DOT_MATCHES_ALL)
 private val rulePattern = Regex("^(?:-{3,}|\\*{3,}|_{3,})$")
 
 @Composable
 internal fun ChatMarkdown(text: String) {
-    val blocks = remember(text) { Document.blocks(text) }
+    val blocks = remember(text) { Document.blocks(text, splitText = false) }
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (block in blocks) {
@@ -74,7 +74,20 @@ internal fun ChatMarkdown(text: String) {
 
 @Composable
 private fun MarkdownLines(text: String) {
-    val lines = remember(text) { text.lines() }
+    val lines = remember(text) {
+        val items = mutableListOf<String>()
+        var inList = false
+        for (line in text.lines()) {
+            if (inList && line.isNotBlank() && (line.startsWith("  ") || line.startsWith("\t")) &&
+                !listPattern.matches(line)
+            ) items[items.lastIndex] += "\n" + line.trim()
+            else {
+                items += line
+                inList = listPattern.matches(line)
+            }
+        }
+        items
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         lines.forEach { line ->
             val stripped = line.trim()

@@ -17,6 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -78,7 +82,8 @@ private fun chatRows(events: List<ConversationEvent>, completed: Map<Long, Conve
                 if (index >= 0) result.removeAt(index)
             }
             "assistant.message", "assistant.reasoning", "user.message", "user.queued", "session.changed",
-            "context.compacted", "notice", "prompt.resolved", "subagent.started", "subagent.completed" -> {
+            "context.compacted", "notice", "prompt.resolved", "subagent.started", "subagent.completed",
+            "session.started", "session.pending", "session.ended" -> {
                 if (event.kind == "notice" && event.data.optionalString("level") == "debug") continue
                 if (event.kind == "assistant.reasoning" && event.data.bounded("summary").isNullOrEmpty()) continue
                 flushTools()
@@ -142,14 +147,24 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
         initialFirstVisibleItemIndex = session.chatScrollIndex,
         initialFirstVisibleItemScrollOffset = session.chatScrollOffset,
     )
-    val lastIndex = rows.lastIndex + (if (feed.gap) 1 else 0) + (if (hidden > 0) 1 else 0)
+    val working = feed.agentState == "working"
+    val lastIndex = rows.lastIndex + (if (feed.gap) 1 else 0) + (if (hidden > 0) 1 else 0) +
+        (if (working) 1 else 0) + (if (rows.isEmpty()) 1 else 0)
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var userScrolled by remember { mutableStateOf(false) }
     var follow by remember { mutableStateOf(session.chatFollowsLatest) }
     val awayFromLatest by remember {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.isNotEmpty() && listState.canScrollForward }
     }
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect {
-            if (it is androidx.compose.foundation.interaction.DragInteraction.Start) follow = false
+            if (it is androidx.compose.foundation.interaction.DragInteraction.Start) {
+                userScrolled = true
+                focus.clearFocus()
+                keyboard?.hide()
+                follow = false
+            }
         }
     }
     LaunchedEffect(listState) {
@@ -161,12 +176,21 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
     }
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (moving, canAdvance) ->
-            if (!moving && !canAdvance && listState.layoutInfo.visibleItemsInfo.isNotEmpty()) follow = true
+            if (userScrolled && !moving && !canAdvance && listState.layoutInfo.visibleItemsInfo.isNotEmpty()) {
+                follow = true
+                userScrolled = false
+            }
         }
     }
-    LaunchedEffect(rows.lastOrNull()?.key, follow, lastIndex) {
+    val viewport by remember(listState, lastIndex) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            info.viewportSize.height to info.visibleItemsInfo.lastOrNull { it.index == lastIndex }?.size
+        }
+    }
+    LaunchedEffect(feed.sequence, follow, lastIndex, viewport) {
         session.chatFollowsLatest = follow
-        if (follow && rows.isNotEmpty()) listState.revealEnd(lastIndex)
+        if (follow && lastIndex >= 0) listState.revealEnd(lastIndex)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -188,13 +212,23 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
                     modifier = Modifier.testTag("conversation-earlier"),
                 ) { Text("Show ${minOf(hidden, CHAT_PAGE)} earlier") }
             }
-            if (rows.isEmpty()) item { ChatCaption("Waiting for conversation…") }
+            if (rows.isEmpty()) item {
+                if (session.state.collectAsState().value.status == Status.live) Column {
+                    Text("Nothing here yet", style = MaterialTheme.typography.titleSmall)
+                    ChatCaption("Messages appear as you and the agent write them.")
+                } else ChatCaption("Waiting for conversation…")
+            }
             items(rows, key = { it.key }) { row ->
                 Box(Modifier.widthIn(max = 720.dp).fillMaxWidth().testTag("chat-reading-column")) {
                     when (row) {
                         is ChatRow.Event -> MessageRow(row.event)
                         is ChatRow.Tools -> ToolSteps(row.events, tools)
                     }
+                }
+            }
+            if (working) item(key = "working") {
+                Row(Modifier.widthIn(max = 720.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AgentStateLabel("working")
                 }
             }
         }
@@ -212,23 +246,37 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
 private fun MessageRow(event: ConversationEvent) {
     val data = event.data
     when (event.kind) {
-        "user.message", "user.queued" -> BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        "user.queued" -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            val text = splitInjectedText(data.getAsJsonObject("text")?.optionalString("text").orEmpty()).first
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp).semantics {
+                        contentDescription = "Queued: $text"
+                    },
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Schedule, null, Modifier.size(16.dp))
+                    Text(text, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("queued", Modifier.testTag("queued-status"), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        "user.message" -> BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             var expanded by remember { mutableStateOf(false) }
             var instructions by remember { mutableStateOf(false) }
             val message = data.getAsJsonObject("text")
             val text = message?.optionalString("text").orEmpty()
+            val (body, injected) = splitInjectedText(text)
             val truncated = message?.optionalFlag("truncated") == true
-            val marker = "\n\n---\nProwl dispatch completion protocol v"
-            val injected = text.indexOf(marker).takeIf { it >= 0 }
             val stamp = event.timestamp?.let {
                 runCatching {
                     val local = java.time.Instant.parse(it).atZone(java.time.ZoneId.systemDefault())
                     java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT).format(local)
                 }.getOrNull()
             }
-            val origin = if (event.kind == "user.queued") "queued" else data.optionalString("origin")
+            val origin = data.optionalString("origin")
                 ?.takeUnless { it == "manual" || it == "human" }
-            val body = if (injected == null) text else text.substring(0, injected).trimEnd()
             val isLong = body.codePointCount(0, body.length) > 700 || body.lineSequence().count { it.isNotEmpty() } > 12
             Column(
                 modifier = Modifier.widthIn(max = (maxWidth - 48.dp).coerceAtLeast(maxWidth * .72f)),
@@ -259,7 +307,7 @@ private fun MessageRow(event: ConversationEvent) {
                         if (injected != null) {
                             TextButton(onClick = { instructions = !instructions }) { Text("Prowl instructions", color = Color.White) }
                             if (instructions) SelectionContainer {
-                                Text(text.substring(injected + "\n\n---\n".length) + if (truncated) "…" else "",
+                                Text(injected + if (truncated) "…" else "",
                                     style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -277,7 +325,15 @@ private fun MessageRow(event: ConversationEvent) {
             }
         }
         "assistant.reasoning" -> data.bounded("summary")?.let { ChatCaption(it) }
-        "session.changed" -> ChatCaption("Session changed")
+        "session.started", "session.changed", "session.pending", "session.ended" -> {
+            val label = when (event.kind) {
+                "session.started" -> "Session started"
+                "session.pending" -> "Waiting for session"
+                "session.ended" -> "Session ended"
+                else -> "Session changed"
+            }
+            ChatCaption(listOfNotNull(label, data.optionalString("model")).joinToString(" · "))
+        }
         "context.compacted" -> ChatCaption("Context compacted")
         "prompt.resolved" -> {
             val outcome = data.optionalString("outcome")?.replaceFirstChar { it.uppercase() } ?: "Answered"
@@ -354,7 +410,10 @@ private fun toolTitle(call: ConversationEvent): String =
 internal fun MirrorActions(session: Session, state: SessionState, promptHeight: Dp = Dp.Unspecified, showKeys: Boolean = true) {
     val prompt = state.openPrompt
     val agentState = if (state.chat) state.conversation.agentState ?: state.pane?.rosterState else state.pane?.rosterState
-    if (prompt != null && "prompt-respond" in state.capabilities) {
+    val choices = prompt?.getAsJsonArray("choices")
+    if (state.status == Status.live && prompt != null && choices != null && choices.size() > 0 &&
+        "prompt-respond" in state.capabilities
+    ) {
         val id = prompt.string("id")
         val answer = state.promptAction?.takeIf { it.id == id }
         val sent = state.answeredPrompt == id
@@ -368,7 +427,15 @@ internal fun MirrorActions(session: Session, state: SessionState, promptHeight: 
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    if (prompt.optionalString("kind") == "permission") "Permission" else "Needs your answer",
+                    when (prompt.optionalString("kind")) {
+                        "permission" -> "Blocked · Permission"
+                        "question" -> "Blocked · Question"
+                        "planApproval" -> "Blocked · Plan approval"
+                        "auth" -> "Blocked · Sign-in"
+                        "trust" -> "Blocked · Trust"
+                        "elicitation" -> "Blocked · Input"
+                        else -> "Needs your answer"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -384,7 +451,7 @@ internal fun MirrorActions(session: Session, state: SessionState, promptHeight: 
                     }
                 }
                 fun progressFor(choice: String) = state.actionPending && answer?.choice == choice
-                prompt.getAsJsonArray("choices")?.forEach {
+                choices.forEach {
                     val choice = it.asJsonObject
                     val choiceID = choice.string("id")
                     val checked = choice.optionalFlag("checked")
@@ -480,4 +547,15 @@ internal fun StartingChat(kickoff: String) {
             ChatCaption("Starting session…")
         }
     }
+}
+
+
+internal fun splitInjectedText(text: String): Pair<String, String?> {
+    val separator = "\n\n---\n"
+    val marker = separator + "Prowl dispatch completion protocol v"
+    val start = text.indexOf(marker).takeIf { it >= 0 } ?: text.lastIndexOf(separator)
+        .takeIf { it >= 0 && text.length - it >= separator.length + "Prowl".length &&
+            marker.startsWith(text.substring(it)) }
+        ?: return text to null
+    return text.substring(0, start).trim() to text.substring(start + separator.length)
 }

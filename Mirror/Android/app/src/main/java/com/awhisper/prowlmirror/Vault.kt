@@ -52,12 +52,26 @@ class Vault(context: Context) {
     }
 
     @Synchronized
-    fun save(host: Host) {
+    fun save(host: Host, replacingCredential: Boolean) {
         require(host.credential != null)
         val entries = hosts()
         val previous = entries.firstOrNull { it.endpoint == host.endpoint }
-        val saved = entries.filterNot { it.endpoint == host.endpoint } + host.copy(name = host.name ?: previous?.name)
-        write(saved)
+        // A roster already connected with an earlier key must not overwrite a new enrollment.
+        if (!replacingCredential && previous?.credential != host.credential) return
+        val remembered = host.copy(
+            name = if (previous == null) host.name else previous.name,
+            hostName = host.hostName ?: previous?.hostName,
+            lastConnectedAt = host.lastConnectedAt ?: previous?.lastConnectedAt,
+            pairedAt = previous?.pairedAt ?: host.pairedAt,
+        )
+        write(if (previous == null) listOf(remembered) + entries else entries.map {
+            if (it.endpoint == host.endpoint) remembered else it
+        })
+    }
+
+    @Synchronized
+    fun rename(endpoint: String, name: String?) {
+        write(hosts().map { if (it.endpoint == endpoint) it.copy(name = name) else it })
     }
 
     @Synchronized
@@ -77,7 +91,7 @@ class Vault(context: Context) {
     private fun write(saved: List<Host>) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
-        val encrypted = cipher.iv + cipher.doFinal(Gson().toJson(saved.takeLast(64)).toByteArray())
+        val encrypted = cipher.iv + cipher.doFinal(Gson().toJson(saved).toByteArray())
         check(
             prefs.edit().putString("hosts", Base64.getEncoder().encodeToString(encrypted)).commit()
         ) {

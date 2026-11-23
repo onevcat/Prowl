@@ -45,6 +45,40 @@ class DemoHostTest {
     }
 
     @Test
+    fun terminalPagesAnAgentViewportAndRestoresTheTail() = runTest {
+        val host = DemoHost(backgroundScope)
+        val packets = mutableListOf<Packet>()
+        val connection = host.transport.connect(
+            host.address, "", backgroundScope, { packets += it }, {}, { error(it) }, {},
+        )
+        fun latest(kind: String) =
+            packets.filterIsInstance<Packet.Control>().last { it.kind == kind }.payload()
+
+        connection.send(control("list"))
+        runCurrent()
+        val roster = latest("panes").array("panes").map { it.asJsonObject }
+        assertEquals(6, roster.size)
+        assertEquals(3, roster.map { it.string("projectName") }.toSet().size)
+        val pane = roster.single { it.string("tabTitle") == "Draft the migration guide" }.string("id")
+        connection.send(control("subscribe", obj("paneID" to pane, "representation" to "text-v1")))
+        runCurrent()
+        val tail = packets.filterIsInstance<Packet.Text>().last().text
+        assertTrue(latest("scrollState").flag("atBottom"))
+        assertFalse(latest("scrollState").flag("atTop"))
+        connection.send(control("scroll", obj("direction" to "up", "requestID" to uuid())))
+        runCurrent()
+        val earlier = packets.filterIsInstance<Packet.Text>().last().text
+        assertNotEquals(tail, earlier)
+        assertTrue(earlier.lines().size <= 24)
+        assertTrue(latest("scrollState").flag("atTop"))
+        assertFalse(latest("scrollState").flag("atBottom"))
+        connection.send(control("scroll", obj("direction" to "down", "requestID" to uuid())))
+        runCurrent()
+        assertEquals(tail, packets.filterIsInstance<Packet.Text>().last().text)
+        host.close()
+    }
+
+    @Test
     fun finishesAWorkingTurnAndStartsQueuedMessagesInOrder() = runTest {
         val peer = Peer(this)
         for (message in listOf("first", "second", "third")) {
