@@ -62,7 +62,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     }
     XCTAssertTrue(scrollUp.isEnabled)
     XCTAssertFalse(scrollDown.isEnabled)
-    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    // The buttons float over the lower reader, above Latest; the top keeps only the title bar.
+    XCTAssertGreaterThan(scrollUp.frame.minY, app.frame.midY)
+    XCTAssertLessThan(scrollUp.frame.maxY, scrollDown.frame.minY)
     scrollUp.tap()
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
@@ -70,7 +72,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(-2).waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.isEnabled)
     XCTAssertTrue(scrollDown.isEnabled)
-    attach("Top controls at Host scroll boundary")
+    attach("Scroll buttons at Host scroll boundary")
     scrollDown.tap()
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
@@ -88,19 +90,16 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   }
 
   @MainActor
-  func testOldHostKeepsScrollButtonsDisabledAndLocalReaderAvailable() {
+  func testOldHostShowsNoScrollButtonsAndKeepsTheLocalReader() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-no-scroll-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .portrait
-    let scrollUp = app.buttons["mirror-scroll-up"]
-    let scrollDown = app.buttons["mirror-scroll-down"]
-    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
-    XCTAssertFalse(scrollUp.isEnabled)
-    XCTAssertFalse(scrollDown.isEnabled)
     let text = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
-    XCTAssertTrue(text.exists)
-    XCTAssertLessThan(scrollUp.frame.maxY, text.frame.minY)
+    XCTAssertTrue(text.waitForExistence(timeout: 10))
+    // A Host without remote scrolling gets no buttons, rather than buttons that never work.
+    XCTAssertFalse(app.buttons["mirror-scroll-up"].exists)
+    XCTAssertFalse(app.buttons["mirror-scroll-down"].exists)
     app.scrollViews["mirror-live-scroll"].swipeDown()
     app.scrollViews["mirror-live-scroll"].swipeUp()
     XCTAssertTrue(text.exists)
@@ -234,7 +233,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     down.tap()
     XCTAssertTrue(page(0).waitForExistence(timeout: 5))
-    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    XCTAssertGreaterThan(scrollUp.frame.minY, app.frame.midY)
     let reading = app.scrollViews["mirror-live-scroll"]
     reading.swipeDown()
     XCTAssertTrue(page(0).exists)
