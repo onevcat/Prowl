@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The Host switcher in the toolbar: a Mac glyph that carries the connection state.
-struct HostMenu: View {
+/// The app's settings menu in the toolbar. For now it switches, adds and manages Hosts; app
+/// settings belong here too. The gear carries a mark only when the Host connection failed.
+struct MirrorSettingsMenu: View {
   let current: MirrorHostRecord
   let hosts: [MirrorHostRecord]
   let status: MirrorHostSession.Status
@@ -40,23 +41,19 @@ struct HostMenu: View {
         Button("Manage Hosts", systemImage: "list.bullet", action: onManageHosts)
       }
     } label: {
-      Image(systemName: "macbook")
-        .overlay(alignment: .bottomTrailing) { connectionMark.offset(x: 4, y: 3) }
+      Image(systemName: "gearshape")
+        .overlay(alignment: .topTrailing) {
+          if case .failed = status {
+            Image(systemName: "exclamationmark.circle.fill")
+              .font(.system(size: 9)).foregroundStyle(.white, .red)
+              .offset(x: 5, y: -4)
+          }
+        }
     }
-    .accessibilityIdentifier("host-menu")
-    .accessibilityLabel("\(current.displayName), \(status.label)")
-    .help(demo == nil ? "Switch the Host or manage paired Hosts" : "Leave the demo or pair with a Mac")
-  }
-
-  @ViewBuilder private var connectionMark: some View {
-    switch status {
-    case .ready:
-      Circle().fill(.green).frame(width: 7, height: 7)
-    case .connecting, .idle:
-      Circle().fill(.secondary).frame(width: 7, height: 7)
-    case .failed:
-      Image(systemName: "exclamationmark.circle.fill").font(.system(size: 9)).foregroundStyle(.white, .red)
-    }
+    .accessibilityIdentifier("settings-menu")
+    .accessibilityLabel("Settings")
+    .accessibilityValue("\(current.displayName), \(status.label)")
+    .help(demo == nil ? "Settings: switch, add or manage Hosts" : "Settings: leave the demo or pair with a Mac")
   }
 }
 

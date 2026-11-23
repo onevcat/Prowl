@@ -38,7 +38,7 @@ app against `MirrorDemoHost`, an in-memory Host that serves the wire protocol to
 sessions, with sample panes from `MirrorDemoContent`. Answers, messages, Stop and New Session
 play scripted replies. The demo has its own `MirrorHostStore` in a cleared `UserDefaults`
 suite, makes no socket, Keychain item or push registration, and ends with **Exit Demo** or
-**Pair with a Mac** in the Mac menu. Paired users never see it.
+**Pair with a Mac** in the Settings menu. Paired users never see it.
 
 ## Chat
 

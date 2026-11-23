@@ -5,6 +5,7 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-11-23 | Plan, demo Host, demo content, onboarding entry, demo Host menu, tests, docs | #1164 |
+| 2026-11-23 | Review: Try the Demo becomes a link under Pair with a Mac; the top-left Host menu becomes the Settings menu (gear, red mark only on a failed connection) so app settings can join it | #1164 |
 
 ## Outcome & current state (as of 2026-11-23)
 
@@ -27,7 +28,7 @@
 - `ContentView.swift`: `MirrorAppRoot` switches between the paired Hosts and the demo; the
   DEBUG connection fixture goes through it too, so UI tests reach the demo.
 - `MirrorRootView.swift`: onboarding shows **Try the Demo** (only with no paired Host) and
-  "New to Prowl? Visit prowl.cat". `AgentsComponents.swift`: `HostMenu` shows the demo items.
+  "New to Prowl? Visit prowl.cat". `AgentsComponents.swift`: `MirrorSettingsMenu` shows the demo items.
 - Tests: `MirrorDemoHostTests` (10, Swift Testing) drive real `MirrorHostSession` /
   `MirrorSession` against the demo Host; UI test
   `testDemoRunsTheAppWithoutAMacAndLeavesNothing` goes onboarding → demo → answer → exit.

@@ -68,7 +68,7 @@ struct AgentsView: View {
     .navigationBarTitleDisplayMode(.large)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        HostMenu(
+        MirrorSettingsMenu(
           current: host, hosts: store.hosts, status: session.status,
           select: { store.select($0.id) }, onAddHost: onAddHost, onManageHosts: onManageHosts)
       }

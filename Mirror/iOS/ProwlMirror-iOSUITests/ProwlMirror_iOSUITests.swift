@@ -645,7 +645,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     let pane = app.descendants(matching: .any).matching(identifier: "pane-0F1C2D3E-4A5B-6C7D-8E9F-A0B1C2D3E4F5")
       .firstMatch
     XCTAssertTrue(pane.waitForExistence(timeout: 10))
-    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "host-menu").firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.exists)
     attach("Agents of one Host")
     pane.tap()
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
@@ -722,7 +722,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Demo agent finished")
     app.navigationBars.buttons.element(boundBy: 0).tap()
 
-    app.descendants(matching: .any).matching(identifier: "host-menu").firstMatch.tap()
+    app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.tap()
     let exit = app.buttons["demo-exit"]
     XCTAssertTrue(exit.waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["Manage Hosts"].exists)

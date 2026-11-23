@@ -124,23 +124,18 @@ struct MirrorOnboardingView: View {
       .accessibilityIdentifier("add-host")
       .help("Pair with a Mac running Prowl")
       if let onTryDemo {
-        Button(action: onTryDemo) {
-          Label("Try the Demo", systemImage: "play.circle")
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-        }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-        .padding(.horizontal, 24)
-        .padding(.top, 10)
-        .accessibilityIdentifier("try-demo")
-        .help("Explore the app with sample agents, without a Mac")
+        // Secondary to pairing: a link, not a second large button.
+        Button("Try the Demo", action: onTryDemo)
+          .buttonStyle(.borderless)
+          .font(.subheadline.weight(.semibold))
+          .padding(.top, 14)
+          .accessibilityIdentifier("try-demo")
+          .help("Explore the app with sample agents, without a Mac")
       }
       Text("New to Prowl? Visit [prowl.cat](https://prowl.cat/)")
         .font(.footnote)
         .foregroundStyle(.secondary)
-        .padding(.top, 14)
+        .padding(.top, 8)
         .padding(.bottom, 24)
         .accessibilityIdentifier("prowl-website")
     }
@@ -149,7 +144,7 @@ struct MirrorOnboardingView: View {
   }
 
   private func step(_ symbol: String, _ text: LocalizedStringKey) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 14) {
+    HStack(alignment: .center, spacing: 14) {
       Image(systemName: symbol).font(.title3).foregroundStyle(.tint).frame(width: 28)
       Text(text).font(.callout)
     }
