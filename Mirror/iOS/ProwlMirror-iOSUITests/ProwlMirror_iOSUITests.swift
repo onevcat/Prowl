@@ -711,12 +711,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(privacy.waitForExistence(timeout: 5))
     XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-terms").firstMatch.exists)
     XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-version").firstMatch.exists)
+    // The MIT notice ships in the bundle; Settings has no row for it.
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "settings-license").firstMatch.exists)
     attach("Settings")
-    app.descendants(matching: .any).matching(identifier: "settings-license").firstMatch.tap()
-    XCTAssertTrue(
-      app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "MIT License")).firstMatch
-        .waitForExistence(timeout: 5))
-    app.navigationBars["License"].buttons["BackButton"].tap()
     app.buttons["settings-done"].tap()
     XCTAssertTrue(menu.waitForExistence(timeout: 5))
   }
