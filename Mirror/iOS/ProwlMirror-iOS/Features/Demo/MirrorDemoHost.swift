@@ -10,8 +10,10 @@ final class MirrorDemoHost {
   /// What the demo Host offers. No `push-v1`: the demo never registers for notifications.
   static let capabilities = [
     "text-v1", "conversation-v1", "history", "refresh", "launch-profile", "agent-input", "shell-send",
-    "agent-keys", "shell-keys", "prompt-respond",
+    "agent-keys", "shell-keys", "prompt-respond", "remote-scroll", "scroll-state-v1",
   ]
+  /// Lines one remote scroll moves the demo screen.
+  static let scrollPage = 24
 
   let hostName: String
   let runID = UUID()
@@ -248,7 +250,10 @@ final class MirrorDemoHost {
     let lease = UUID()
     let representation: MirrorMessage.Representation
     let includesScreenPrompt: Bool
+    let includesScrollState: Bool
     var sentSequence: UInt64
+    /// Lines the screen is scrolled up from the end; 0 follows the live end.
+    var scrollOffset = 0
     var frameSequence: UInt64 = 0
     var shownPromptID: String?
   }
@@ -309,6 +314,8 @@ final class MirrorDemoHost {
         break
       case .history(let payload):
         sendHistory(payload)
+      case .scroll(let payload):
+        scroll(payload)
       case .ping:
         emit(.pong)
       case .acknowledge, .compress, .pong:
@@ -341,7 +348,8 @@ final class MirrorDemoHost {
       let since = payload.representation == .conversation ? payload.since ?? 0 : 0
       let subscription = DemoSubscription(
         paneID: pane.descriptor.id, representation: payload.representation == .conversation ? .conversation : .text,
-        includesScreenPrompt: payload.includeScreenPrompt == true, sentSequence: since)
+        includesScreenPrompt: payload.includeScreenPrompt == true,
+        includesScrollState: payload.includeScrollState == true, sentSequence: since)
       self.subscription = subscription
       history = nil
       emit(.subscribed(.init(paneID: pane.descriptor.id, subscriptionID: subscription.lease, hostRunID: host.runID)))
@@ -371,13 +379,38 @@ final class MirrorDemoHost {
     private func sendScreen(_ id: UUID, force: Bool) {
       guard var subscription, subscription.paneID == id, let pane = host?.pane(id) else { return }
       subscription.frameSequence += 1
+      subscription.scrollOffset = min(subscription.scrollOffset, pane.maximumScroll)
+      if subscription.includesScrollState {
+        // A Host that reports scroll state sends it with the same sequence before each frame.
+        emit(
+          .scrollState(
+            .init(
+              atTop: subscription.scrollOffset >= pane.maximumScroll, atBottom: subscription.scrollOffset == 0,
+              sequence: subscription.frameSequence, subscriptionID: subscription.lease)))
+      }
       emit(
-        .textFrame(.init(sequence: subscription.frameSequence, text: pane.screen, subscriptionID: subscription.lease)))
+        .textFrame(
+          .init(
+            sequence: subscription.frameSequence, text: pane.screen(scrolledBy: subscription.scrollOffset),
+            subscriptionID: subscription.lease)))
       if subscription.includesScreenPrompt, force || subscription.shownPromptID != pane.prompt?.id {
         subscription.shownPromptID = pane.prompt?.id
         emit(.screenPrompt(.init(prompt: pane.prompt, subscriptionID: subscription.lease)))
       }
       self.subscription = subscription
+    }
+
+    /// A page up or down, confirmed after the frame that shows it.
+    private func scroll(_ payload: MirrorMessage.ScrollPayload) {
+      guard var subscription, payload.subscriptionID == subscription.lease,
+        let pane = host?.pane(subscription.paneID)
+      else { return }
+      let step = payload.direction == .upward ? MirrorDemoHost.scrollPage : -MirrorDemoHost.scrollPage
+      subscription.scrollOffset = min(pane.maximumScroll, max(0, subscription.scrollOffset + step))
+      self.subscription = subscription
+      sendScreen(subscription.paneID, force: false)
+      guard let sequence = self.subscription?.frameSequence else { return }
+      emit(.scrollResult(.init(requestID: payload.requestID, sequence: sequence, subscriptionID: subscription.lease)))
     }
 
     private func sendHistory(_ payload: MirrorMessage.HistoryPayload) {

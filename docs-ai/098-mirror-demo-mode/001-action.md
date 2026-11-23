@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 2026-11-23 | Plan, demo Host, demo content, onboarding entry, demo Host menu, tests, docs | #1164 |
 | 2026-11-23 | Review: Try the Demo becomes a link under Pair with a Mac; the top-left Host menu becomes the Settings menu (gear, red mark only on a failed connection) so app settings can join it | #1164 |
+| 2026-11-23 | Duo walkthrough: the demo terminal said “Update Host to enable remote scrolling”; the demo Host now pages its screen | #1164 |
 | 2026-11-23 | Review: the Settings menu keeps quick actions (up to five Hosts, Add Host…) and opens a Settings sheet with Hosts, Notifications and About; Manage Hosts is gone | #1164 |
 
 ## Outcome & current state (as of 2026-11-23)
@@ -14,8 +15,9 @@
   `makeTransport()` returns one `MirrorTransport` per connection; messages go out on the next
   main-actor turn, in order. It answers `list`, `subscribe` (conversation snapshot and events,
   or text frames with `screenPrompt`), `refresh`, `history`, `ping` and the commands `list`,
-  `profiles`, `create`, `agentsInput`, `send`, `promptRespond`, `agentKeys`. Capabilities leave
-  out `push-v1`, `deflate-v1`, `remote-scroll` and `launch-shell`.
+  `profiles`, `create`, `agentsInput`, `send`, `promptRespond`, `agentKeys`. It also pages the terminal
+  screen (`remote-scroll`, `scroll-state-v1`). Capabilities leave out `push-v1`, `deflate-v1` and
+  `launch-shell`.
 - `MirrorDemoContent.swift`: the pane model (descriptor, worktree, sequenced events, open
   screen prompt, answer scripts, autoplay), state tracking that marks a finished turn
   **done** like the Mac, the terminal screen and history rendered from the events, Stop's
