@@ -31,7 +31,7 @@ struct MirrorSettingsView: View {
   }
 }
 
-/// The version, the website, the privacy policy, the terms and the license.
+/// The version, the website, the privacy policy and the terms.
 struct MirrorAboutSection: View {
   static let website = URL(string: "https://prowl.cat/")!
   static let privacyPolicy = URL(string: "https://prowl.cat/privacy")!
@@ -53,12 +53,6 @@ struct MirrorAboutSection: View {
         Label("Terms of Use", systemImage: "doc.plaintext")
       }
       .accessibilityIdentifier("settings-terms")
-      NavigationLink {
-        MirrorLicenseView()
-      } label: {
-        Label("License", systemImage: "doc.text")
-      }
-      .accessibilityIdentifier("settings-license")
     } header: {
       Text("About")
     }
@@ -70,25 +64,5 @@ struct MirrorAboutSection: View {
     let short = info?["CFBundleShortVersionString"] as? String ?? "–"
     guard let build = info?["CFBundleVersion"] as? String, build != short else { return short }
     return "\(short) (\(build))"
-  }
-}
-
-/// The MIT notice that ships with the app.
-private struct MirrorLicenseView: View {
-  private var text: String {
-    Bundle.main.url(forResource: "LICENSE", withExtension: nil)
-      .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
-  }
-
-  var body: some View {
-    ScrollView {
-      Text(verbatim: text)
-        .font(.footnote.monospaced())
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-    }
-    .navigationTitle("License")
-    .navigationBarTitleDisplayMode(.inline)
   }
 }

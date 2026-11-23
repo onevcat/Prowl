@@ -41,7 +41,7 @@
   `listedHostLimit` = 5, **All Hosts…** beyond it, **Settings…**);
   `Features/Settings/MirrorSettingsView.swift` (sheet: `MirrorHostsSection` from
   `Features/Hosts/HostsView.swift`, `MirrorNotificationsSection`, `MirrorAboutSection` with
-  version, website, `https://prowl.cat/privacy`, `https://prowl.cat/terms` and the bundled LICENSE). The demo sheet shows
+  version, website, `https://prowl.cat/privacy` and `https://prowl.cat/terms`; the MIT LICENSE still ships in the bundle but has no Settings row). The demo sheet shows
   About only. Decision: the menu stays for frequent actions; every setting lives in the sheet,
   so a subscription section (096) or a long Host list needs no menu change. Notifications moved
   out of the Hosts sheet because they are app-wide.
