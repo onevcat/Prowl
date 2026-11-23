@@ -12,4 +12,6 @@ nonisolated enum MirrorLog {
   static let commands = Logger(subsystem: subsystem, category: "Commands")
   /// Screen prompts as they open, change and close, in Chat and Terminal.
   static let prompts = Logger(subsystem: subsystem, category: "Prompts")
+  /// Push registration (docs-ai 095). Tokens and keys are never logged.
+  static let push = Logger(subsystem: subsystem, category: "Push")
 }

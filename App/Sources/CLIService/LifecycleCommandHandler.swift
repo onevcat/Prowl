@@ -357,7 +357,8 @@ final class LifecycleCommandHandler: CommandHandler {
       cancelProfilePreparation(preparedRequest)
       return cancelledPreparationResponse()
     }
-    let dispatchResult = issuedDispatch(prompt: launch.prompt)
+    // An interactive kickoff (Remote Mirror) has a person reading the reply; nothing waits on a receipt.
+    let dispatchResult = launch.interactive ? (record: nil, response: nil) : issuedDispatch(prompt: launch.prompt)
     if let response = dispatchResult.response {
       cancelProfilePreparation(preparedRequest)
       return response

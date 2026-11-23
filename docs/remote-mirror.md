@@ -50,8 +50,11 @@ revoking a device that already paired. When a device completes pairing, the shee
 shows **Paired with** its name and closes by itself. On the other Mac, open
 **Settings → Remote Mirror → Connect to Another Mac → Connect to a Mac…** and enter the address (an IP or a
 host name such as `mini.local`), port, and code. On iOS, **Pair with a Mac** on the
-first launch, or **Add Host…** in the Mac menu, takes the same address, port and code, or
-scans the QR code.
+first launch, or **Add Host…** in the Settings menu (the gear at the top left), takes the same address, port and code, or
+scans the QR code. Before any Mac is paired, the same screen offers a **Try the Demo** link: it
+opens the app on a sample Mac with agents in every state, so the app can be explored without
+a Mac. The demo keeps nothing; **Exit Demo** or **Pair with a Mac** in the Settings menu ends it.
+A link to `https://prowl.cat/` on that screen is for people who do not use Prowl yet.
 Successful enrollment consumes the code. The client saves its device credential in
 Keychain, then opens a new authenticated connection. A pairing-only connection
 cannot list or operate panes. No extra long-lived code is required. A saved
@@ -147,8 +150,12 @@ Fit to Window text small. iOS
 renders replacement text with local reflow. Cleared output is not an archive.
 
 On iOS, the first launch asks you to pair with a Mac. After that the app opens on the
-agents of the last Mac you chose, titled with the Mac's name; the Mac menu at the top left
-switches the Host, adds one, or opens **Manage Hosts** (rename, forget). Three counts on
+agents of the last Mac you chose, titled with the Mac's name; the Settings menu (the gear at the top left)
+switches the Host, adds one, or opens **Settings…**. The menu lists up to five Hosts; with more,
+**All Hosts…** opens Settings. The gear shows a red mark when the Mac cannot be reached.
+**Settings** holds **Hosts** (tap one to show it, swipe to rename or forget, **Add Host…**),
+**Notifications**, and **About** (version, website, privacy policy, terms of use). In the demo,
+Settings shows About only. Three counts on
 top show how many agents are **Blocked**, **Working** and **Done** (finished and not looked
 at yet); tap one to show only those agents, tap it again to show all. The panes follow the
 Mac sidebar: projects in sidebar order with their repository color and group, agents
@@ -164,8 +171,8 @@ shows what it waits for above the composer. The **…** menu holds **History** a
 Output** for the terminal, **Reconnect** or **Take Over**, and **Disconnect**. The list keeps refreshing behind the pane, so a new agent or a closed pane
 is noticed within a few seconds.
 
-On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
-the live Host terminal by its current pane height minus three rows (at least one
+On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** (round buttons that
+float at the bottom right of Terminal, above **Latest**) move the live Host terminal by its current pane height minus three rows (at least one
 row). Native scrollback moves by that exact number of rows. Application-owned
 scrolling receives the equivalent precision wheel distance. Internal Agent defaults account for known application
 wheel steps: Codex uses three rows per event and reserves eight pane rows for its
@@ -194,7 +201,8 @@ The Host handles scrolling using its terminal's negotiated mouse/alternate-scrol
 mode, aimed at the center of its grid. Application-specific scroll regions or
 bindings can change the distance or response; this is not an exact line-number
 navigation contract. Both devices share the Host view, so scrolling can move the
-Host user's view too. An older Host leaves remote scrolling unavailable.
+Host user's view too. An older Host leaves remote scrolling unavailable, and the buttons do
+not show.
 
 The Mac client keeps the original styled terminal while an application redraws
 its own screen. Native terminal scrollback also keeps its styles when both Macs
@@ -241,7 +249,16 @@ out unavailable ones with the reason. The last Profile you started is chosen aga
 arrow starts the session and opens it. Host creates a normal background tab through its
 public CLI router. There is no special AI Control Console, bundled private control
 skill, or separate agent-launch implementation. Profile settings determine model
-and permissions.
+and permissions. The first message goes in as typed: unlike `prowl create --prompt`, a
+session started from the phone has no dispatch receipt and no completion instruction, because
+you read the reply yourself.
+
+A Claude Code or Codex session started with a first message opens in **Chat** at once: your
+message shows as the first bubble, with a playful line under it while the agent starts. The
+real conversation replaces it when the Host finds the agent's transcript, usually within a
+few seconds. If that takes more than 10 seconds, the pane shows the terminal instead (for
+example when the agent waits on a startup dialog). **Terminal** in the toolbar leaves the
+wait at any time. Other agents, and sessions without a first message, open on the terminal.
 
 Every Send first reads public `list`. A detected Agent uses structured `agentsInput`
 (`agents.input`), advertised by the `agent-input` capability. Update Host if this
@@ -325,7 +342,10 @@ blocks and tables), and each run of tool calls between two messages as one quiet
 ("6 tool calls", with failures counted in red and the running call shown with a turning
 hourglass while the agent works). A row opens to one line per call, and a line opens its command, changes and output
 in a sheet. Thinking the agent shows as text in its pane (Claude Code's visible thinking,
-Codex's reasoning summary) is its own row between the steps, in secondary type. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
+Codex's reasoning summary) is its own row between the steps, in secondary type. When a
+background command, agent or monitor of Claude Code finishes, Claude Code wakes the model with
+a task notification; the chat shows its summary as one line (orange when the task failed or was
+killed), not as a message. While the agent waits on a choice (a permission, a question, Codex's approval, or the folder
 trust question Claude Code and Codex ask before the first turn in a new folder), a panel
 above the composer shows the question, what it is about (the command to approve and, when
 Claude Code gives one, its note on why the command needs approval; the folder for a trust
@@ -333,7 +353,7 @@ question) and the choices; tap one to answer. In a multi-select question, each t
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
 "Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
 still shows the same question before it presses any key, so a stale tap is refused with a
-reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
+reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. The panel takes at most half the pane, so the chat or the screen stays readable on a short display such as a phone on its side; answers that do not fit scroll inside the panel. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 On a wide screen such as an iPad, the chat and its composer keep a readable column in the
 middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows
@@ -342,8 +362,10 @@ Hide Keyboard button shows too. Both float above the composer in one row, Hide K
 left edge and the arrow at the right edge; the chat leaves room under its last message so the
 button does not cover it. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
-confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
-TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
+confirm. In Terminal, agent and shell panes get a key bar ordered by use, with Return first. An agent
+pane's bar is Return, ↑, ↓, esc, ⇥, ⇧⇥, ←, →, ⌃C: the arrows and Return work a TUI's menus,
+and ⌃C, which can end the agent, is last. A shell pane's bar is Return, ⌃C, ⇥, ↑, ↓, esc, ←, →,
+⇧⇥: ⌃C stops a command, Tab completes and the arrows recall history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
 shows above the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
 When the agent is blocked and the Host cannot read the question as a menu (a dialog layout it
@@ -366,6 +388,52 @@ back; a Host from before `discard` stashes it as before); **Cancel** keeps the m
 phone. A draft the screen cannot carry (an
 image, a collapsed paste) can only be replaced or left. After a replacement, the receipt note
 says where the draft went.
+
+## Notifications to paired devices
+
+**Settings → Remote Mirror → Connect to This Mac → Send notifications to paired devices** (off
+by default) lets a paired iPhone or iPad get a notification when an agent on this Mac becomes
+blocked or finishes (docs-ai 095). The phone turns notifications on in Prowl Mirror and sends
+its push token to the Mac; the Mac sends nothing until both sides are on.
+
+- Prowl sends a notification only while you are **away** from this Mac: the screen is locked,
+  the display sleeps, or there was no keyboard or mouse input for 2 minutes. While you sit at
+  the Mac, its own notifications cover the event.
+- A prompt that opened while you were at the Mac, or while the phone was connected, is sent
+  once when you leave the Mac or the phone disconnects, if the agent still waits. A finished
+  turn is never sent late, and only after the agent worked for at least 10 seconds; an
+  interrupted agent is not a finished turn.
+- Each paired device in the list shows **Notifications on**, **Notifications off for this
+  device**, or **Notifications not turned on in Prowl Mirror**. **Turn Off** stops notifications to that device;
+  a new registration from the phone does not turn them on again. **Turn On** allows them again.
+  After a push, the row also shows the time of the last one and its result: sent, not delivered
+  because the device must renew its registration (it does so when it next connects), or failed
+  with the push service's reason (for example `ServiceUnavailable` or `rate-limited`). The
+  result is kept until Prowl quits.
+- Nothing is sent while Remote Mirror is off, the Host does not listen, the switch is off, or
+  no paired device registered.
+
+On the phone, **Hosts → Notifications** turns notifications on for this phone (iOS asks for
+permission the first time). Each paired Mac has one row, also when it is paired at several
+addresses, with its state (**On**, **Off on the
+Mac**, **Update Prowl on the Mac**, **Not connected yet**) and a page that chooses the events:
+**An agent needs you** and **An agent finished**. Notifications show only "An agent needs your
+attention" or "An agent finished"; the phone decrypts them and keeps the Host's text off the
+lock screen. **Show Details** (off by default) shows the tab and worktree name instead, with
+what the agent asks (the question and, for a permission, the command) or the start of its last
+reply, also on the lock screen. Tapping a notification opens that Host and pane, and connects first if needed;
+a pane that has closed since leaves the agents list in view. Turning notifications off, turning off every event of a Host, or forgetting a
+Host deletes that Host's push token at the push service, so a Host that is offline at that
+moment cannot notify the phone either.
+
+What leaves the Mac: one HTTPS request per notification to the Prowl push service (`prowl-push.onev.dev`), with the
+device's push token, a collapse identifier derived from the pane with a key the service does
+not have, and the end-to-end encrypted content (the agent's tab and worktree name, the
+event, and up to 180 characters of what the agent asks or last replied). The service and Apple cannot read the content. There is no other request: no health
+check and no registration of the Mac. For tests with a fake push service only, developers can
+point the Mac elsewhere with `defaults write com.onevcat.prowl remoteMirrorPushGatewayURL <URL>`;
+a phone's token works only at the service that issued it, so any other service answers `410`
+and the Mac drops every registration.
 
 ## Protocol and development
 

@@ -19,7 +19,7 @@ struct SidebarView: View {
       expandedRepoIDs: expandedRepoIDs
     )
     // Hotkeys and navigation skip the rows of collapsed groups (docs-ai 086).
-    let visibleHotkeyRows = state.orderedWorktreeRows(
+    let visibleHotkeyRows = state.navigableWorktreeRows(
       includingRepositoryIDs: state.visibleRepositoryIDs(ownExpanded: expandedRepoIDs))
     let visibleWorktreeIDs = Set(visibleHotkeyRows.map(\.id))
     let effectiveSelectedRows = selectedRows(state: state)
@@ -53,7 +53,10 @@ struct SidebarView: View {
     .onChange(of: sidebarSelections) { _, newValue in
       store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
     }
-    .onChange(of: repositoryIDs) { _, newValue in
+    .onChange(of: repositoryIDs) { oldValue, newValue in
+      // The sidebar shows before the first load. Going from no repositories removes none, and
+      // pruning against a partial first list would drop the state of repositories loaded later.
+      guard !oldValue.isEmpty else { return }
       let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
       $collapsedRepositoryIDs.withLock {
         $0 = Self.storedCollapsedIDs(collapsed, previous: $0, loaded: newValue)

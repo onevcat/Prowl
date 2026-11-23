@@ -12,6 +12,8 @@ struct MirrorDeviceRow: View {
   let host: MirrorHost
   let device: MirrorPairedDevice
   var revoke: (() -> Void)?
+  /// Settings shows the device's push notification state and the Mac's control for it.
+  var showsNotifications = false
   let disconnect: (MirrorDisconnectTarget) -> Void
 
   var body: some View {
@@ -25,6 +27,9 @@ struct MirrorDeviceRow: View {
         VStack(alignment: .leading, spacing: 4) {
           Text(device.name).lineLimit(1)
           Text(status(mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
+          if showsNotifications {
+            MirrorDeviceNotificationsRow(host: host, device: device)
+          }
         }
         Spacer()
         if let revoke {
@@ -73,6 +78,48 @@ struct MirrorDeviceRow: View {
   }
 }
 
+/// A device's push notification state, and the Mac user's control for it (docs-ai 095).
+private struct MirrorDeviceNotificationsRow: View {
+  let host: MirrorHost
+  let device: MirrorPairedDevice
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      controls
+      if let last = host.lastPushes[device.id] {
+        Text(last.summary).font(.caption).foregroundStyle(.secondary)
+          .accessibilityIdentifier("remote-mirror-device-last-push-\(device.id)")
+      }
+    }
+  }
+
+  private var controls: some View {
+    HStack(spacing: 6) {
+      Text(state).font(.caption).foregroundStyle(.secondary)
+      // The Mac's choice persists without a registration, so its control shows either way.
+      if !device.isPushAllowedByMac {
+        Button("Turn On") { host.setPushAllowed(true, for: device.id) }
+          .help("Allow notifications to this device again")
+          .accessibilityIdentifier("remote-mirror-device-notifications-on-\(device.id)")
+      } else if device.push != nil {
+        Button("Turn Off") { host.setPushAllowed(false, for: device.id) }
+          .help("Stop notifications to this device until you turn them on here")
+          .accessibilityIdentifier("remote-mirror-device-notifications-off-\(device.id)")
+      }
+    }
+    .buttonStyle(.link)
+    .font(.caption)
+  }
+
+  private var state: String {
+    guard device.isPushAllowedByMac else { return String(localized: "Notifications off for this device") }
+    guard device.push != nil else {
+      return String(localized: "Notifications not turned on in Prowl Mirror")
+    }
+    return String(localized: "Notifications on")
+  }
+}
+
 /// The listener state in words, shared by the toolbar panel and Settings.
 @MainActor
 enum MirrorHostStatus {
@@ -103,6 +150,21 @@ extension View {
         Disconnect \(target.deviceName) from \(target.paneTitle)? \
         The terminal keeps running. The device stays paired and can reconnect.
         """)
+    }
+  }
+}
+
+extension MirrorPushDelivery {
+  /// The last push in words, so that a missing notification can be traced (docs-ai 095 M4).
+  var summary: String {
+    let time = date.formatted(date: .omitted, time: .shortened)
+    switch result {
+    case .accepted:
+      return String(localized: "Last notification sent at \(time)")
+    case .tokenGone:
+      return String(localized: "Last notification at \(time) not delivered · open Prowl Mirror on the device")
+    case .failed(let reason):
+      return String(localized: "Last notification at \(time) failed (\(reason))")
     }
   }
 }

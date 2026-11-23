@@ -28,8 +28,37 @@ final class GhosttySurfaceState {
   var searchNeedle: String?
   var searchTotal: Int?
   var searchSelected: Int?
-  /// Set by a Find request; cleared when the Find field takes keyboard focus.
-  var searchFocusPending = false
+  enum SearchFocusRequest: Equatable {
+    case find
+    case restore
+  }
+  enum SearchFocusEvent: Equatable {
+    case findRequested
+    case restoreRequested
+    case searchEnded
+    case requestApplied(SearchFocusRequest)
+  }
+  private(set) var searchFocusRequest: SearchFocusRequest?
+
+  func transitionSearchFocus(_ event: SearchFocusEvent) {
+    switch (searchFocusRequest, event) {
+    case (.none, .findRequested), (.some(.find), .findRequested), (.some(.restore), .findRequested):
+      searchFocusRequest = .find
+    case (.none, .restoreRequested), (.some(.restore), .restoreRequested):
+      searchFocusRequest = .restore
+    case (.some(.find), .restoreRequested):
+      // A layout change must not cancel pending query selection.
+      break
+    case (_, .searchEnded):
+      searchFocusRequest = nil
+    case (let current?, .requestApplied(let applied)) where current == applied:
+      searchFocusRequest = nil
+    case (_, .requestApplied):
+      // Ignore a completion that no longer matches the pending request.
+      break
+    }
+  }
+
   var sizeLimitMinWidth: UInt32?
   var sizeLimitMinHeight: UInt32?
   var sizeLimitMaxWidth: UInt32?

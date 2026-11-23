@@ -124,10 +124,20 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     var title = question.title
     let titleIndex = question.lines.upperBound
     let titleStart = question.lines.lowerBound
+    var detail: String?
     if footerless {
-      guard footerlessTitles.contains(title.lowercased()) else { return nil }
+      if footerlessTitles.contains(title.lowercased()) {
+        detail = reviewSummary(lines, above: titleStart)
+      } else if let review = reviewPageWithoutQuestion(lines, above: top, options: menu.options) {
+        // Claude Code 2.1.330 dropped the question under the answers.
+        title = review.title
+        detail = review.summary
+      } else {
+        return nil
+      }
+    } else {
+      detail = quotedDetail(lines, above: titleStart)
     }
-    var detail = footerless ? reviewSummary(lines, above: titleStart) : quotedDetail(lines, above: titleStart)
     // Codex shows the command between its question and the options: a block that starts with
     // `$ ` and may continue over more lines, blank ones included. A command approval whose
     // command cannot be read in full never offers its answers.
@@ -381,6 +391,28 @@ nonisolated struct MirrorScreenPrompt: Equatable, Sendable {
     }
     .filter { !$0.isEmpty }
     return summary.isEmpty ? nil : summary.joined(separator: "\n")
+  }
+
+  /// Claude Code's review page from 2.1.330 on: the "Review your answers" heading, then only
+  /// the indented answers (`● question`, `→ answer`, and their wrapped lines), then a menu with a
+  /// Submit answers row. A numbered list in prose matches none of this.
+  private static func reviewPageWithoutQuestion(
+    _ lines: [String], above top: Int, options: [Option]
+  ) -> (title: String, summary: String?)? {
+    guard options.contains(where: { $0.label.lowercased() == "submit answers" }),
+      let heading = lines[max(0, top - 40)..<top].lastIndex(where: {
+        $0.trimmingCharacters(in: .whitespaces).lowercased() == "review your answers"
+      }),
+      lines[(heading + 1)..<top].allSatisfy(isReviewSummaryLine)
+    else { return nil }
+    return (lines[heading].trimmingCharacters(in: .whitespaces), reviewSummary(lines, above: top))
+  }
+
+  /// A line of the answers on a review page: blank, indented, or marked as a question or answer.
+  private static func isReviewSummaryLine(_ line: String) -> Bool {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return isFiller(line) || line.first?.isWhitespace == true
+      || ["│", "●", "→"].contains { trimmed.hasPrefix($0) }
   }
 
   /// A line without its `│` quote marker and the spaces around it.

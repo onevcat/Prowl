@@ -94,7 +94,7 @@ extension RepositoriesFeature {
             workspaceLog.warning("Workspace creation canceled, rollback finished")
             return
           }
-          workspaceLog.warning("Workspace creation failed: \(error.localizedDescription)")
+          workspaceLog.warning("Workspace creation failed", error: error)
           await send(.workspaceCreation(.workspaceCreationFailed(error.localizedDescription)))
         }
       }

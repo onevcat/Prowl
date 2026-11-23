@@ -1130,7 +1130,7 @@ nonisolated private func restoreGithubAccountIfNeeded(
     )
   } catch {
     ProwlLogger("GithubCLI").warning(
-      "Failed to restore gh active account for \(host) to \(previousLogin): \(error.localizedDescription)"
+      "Failed to restore gh active account for \(host) to \(previousLogin)", error: error
     )
   }
 }

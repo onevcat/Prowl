@@ -445,6 +445,9 @@ struct RepositoriesFeature {
     /// The Shelf's book list is derived from this set so a sidebar
     /// worktree that's never been touched does not appear as a spine.
     var openedWorktreeIDs: Set<Worktree.ID> = []
+    /// Set while the launch layout restore re-creates tabs. `openedWorktreeIDs` fills only
+    /// as tabs come back, so nothing folds until the restore finishes.
+    var isLaunchLayoutRestorePending = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -524,6 +527,10 @@ struct RepositoriesFeature {
     /// from WorkflowRunsFeature state (docs-ai 063 C2).
     var workflowRoleBadgesBySurfaceID: [UUID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
+    /// Repositories whose worktree list shows every row. Absent means collapsed: rows past
+    /// the first few that have no open tab are hidden (docs-ai 094).
+    @Shared(.appStorage("sidebarShowAllWorktreesRepositoryIDs"))
+    var showAllWorktreesRepositoryIDs: [Repository.ID] = []
     /// Collapsed sidebar groups, as UUID strings (docs-ai 086).
     @Shared(.appStorage("sidebarCollapsedGroupIDs")) var collapsedGroupIDs: [String] = []
     var groupTitlePrompt: GroupTitlePrompt?
@@ -626,6 +633,7 @@ struct RepositoriesFeature {
     case worktreeHistoryBack
     case worktreeHistoryForward
     case revealSelectedWorktreeInSidebar
+    case toggleShowAllWorktrees(Repository.ID)
     case consumePendingSidebarReveal(Int)
     case requestRenameBranchPrompt(Worktree.ID)
     case consumePendingRenameBranchRequest(Int)

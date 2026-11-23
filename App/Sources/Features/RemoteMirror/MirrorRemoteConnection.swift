@@ -94,7 +94,7 @@ final class MirrorRemoteConnection: MirrorTransport {
       }
       peer.start()
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host connection failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host connection failed", error: error)
       close(error.localizedDescription)
     }
   }
@@ -186,7 +186,7 @@ final class MirrorRemoteConnection: MirrorTransport {
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch {
-      ProwlLogger("RemoteMirror").warning("Host connection failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host connection failed", error: error)
       close(error.localizedDescription)
     }
   }

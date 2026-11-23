@@ -74,15 +74,19 @@ Optional inputs: `min_rounds=2`, `max_rounds=4` (each 1–30, minimum must not e
 maximum), and `focus=<one-line instruction>`. Any qualifying Profile can review.
 
 Prowl handles every round and handoff. Reviewer reports findings; main verifies and
-fixes or explains each disposition. Reviewer may run tests. Main owns commits,
+fixes or explains each disposition. Reviewer reports one finding per pattern with
+all instances, marks pre-existing findings (they do not block clean), and reports a
+design signal when a pattern comes back. Main fixes the whole pattern and lists
+uncertain items under `### Needs User Decision` with both views and a recommendation. Reviewer may run tests. Main owns commits,
 pushes, and existing PR updates unless it explicitly delegates them, subject to task
 restrictions. Do not dispatch the other role manually. Deliver each assigned step,
 then wait for its next task. Do not change reviewed code after your delivery.
 
 Clean exit needs the minimum rounds, a clean reviewer report, and no later changes
-or pending follow-up from main. At the maximum, main still addresses findings and
+or pending follow-up from main. If only user decisions remain, main uses verdict
+`decision` and the loop stops with `needs user decision`. At the maximum, main still addresses findings and
 reports remaining issues and fixes not reviewed again. `completed` means the procedure ended; read the final
-summary for `clean` versus `not clean`. The reviewer pane stays open.
+summary for `clean`, `not clean`, or `needs user decision`. The reviewer pane stays open.
 
 ## Running a workflow
 

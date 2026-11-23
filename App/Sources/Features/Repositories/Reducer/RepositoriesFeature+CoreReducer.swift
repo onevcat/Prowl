@@ -245,6 +245,7 @@ extension RepositoriesFeature {
       )
       state.repositoryRoots = roots
       state.isInitialLoadComplete = true
+      pruneShowAllWorktreesRepositoryIDs(state: &state)
       // A remote repository that this load did not keep as it was came through its host.
       let failedIDs = Set(failures.map(\.rootID))
       state.answeredRemoteRepositoryIDs = state.answeredRemoteRepositoryIDs
@@ -411,7 +412,7 @@ extension RepositoriesFeature {
           isSelectionValid(previousID, state: state)
         {
           setSingleWorktreeSelection(previousID, state: &state, recordHistory: false)
-          state.openedWorktreeIDs.insert(previousID)
+          state.addOpenedWorktreeID(previousID)
           state.pendingTerminalFocusWorktreeIDs.insert(previousID)
           if previousSegment == .shelf {
             state.isShelfActive = true
@@ -427,7 +428,7 @@ extension RepositoriesFeature {
             .first { $0.id == state.preArchivedWorkspaceChildID }?.id
           state.sidebarSelectedWorktreeIDs = []
           if let worktree = repository.terminalWorktree {
-            state.openedWorktreeIDs.insert(worktree.id)
+            state.addOpenedWorktreeID(worktree.id)
             state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
             state.isShelfActive = previousSegment == .shelf
           }
@@ -549,7 +550,7 @@ extension RepositoriesFeature {
       return shelfBookSelectionEffect(for: books[zeroBased])
 
     case .markWorktreeOpened(let worktreeID):
-      state.openedWorktreeIDs.insert(worktreeID)
+      state.addOpenedWorktreeID(worktreeID)
       return .none
 
     case .markWorktreeClosed(let worktreeID):
@@ -563,7 +564,7 @@ extension RepositoriesFeature {
         worktreeID: worktreeID,
         state: state
       )
-      state.openedWorktreeIDs.remove(worktreeID)
+      state.removeOpenedWorktreeID(worktreeID)
       if let replacement {
         return shelfBookSelectionEffect(for: replacement)
       }
@@ -603,11 +604,11 @@ extension RepositoriesFeature {
         // interaction (tab switch, etc.) forces focus through.
         switch state.selection {
         case .some(.worktree(let id)):
-          state.openedWorktreeIDs.insert(id)
+          state.addOpenedWorktreeID(id)
           state.pendingTerminalFocusWorktreeIDs.insert(id)
         case .some(.repository(let id))
         where state.repositories[id: id]?.kind == .plain:
-          state.openedWorktreeIDs.insert(id)
+          state.addOpenedWorktreeID(id)
           state.pendingTerminalFocusWorktreeIDs.insert(id)
         default:
           break
@@ -663,7 +664,7 @@ extension RepositoriesFeature {
       state.sidebarSelectedWorktreeIDs = []
       if state.repositories[id: repositoryID]?.kind == .plain {
         // Plain folder selection opens the folder as a Shelf book.
-        state.openedWorktreeIDs.insert(repositoryID)
+        state.addOpenedWorktreeID(repositoryID)
       }
       return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
@@ -678,7 +679,7 @@ extension RepositoriesFeature {
       state.selection = .repository(child.workspaceID)
       state.selectedWorkspaceChildID = child.id
       state.sidebarSelectedWorktreeIDs = []
-      state.openedWorktreeIDs.insert(child.workspaceID)
+      state.addOpenedWorktreeID(child.workspaceID)
       state.pendingTerminalFocusWorktreeIDs.insert(child.workspaceID)
       return .merge(
         .send(.delegate(.selectedWorktreeChanged(workspaceWorktree))),
@@ -703,7 +704,7 @@ extension RepositoriesFeature {
         state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
       }
       if let worktreeID {
-        state.openedWorktreeIDs.insert(worktreeID)
+        state.addOpenedWorktreeID(worktreeID)
       }
       let selectedWorktree = state.worktree(for: worktreeID)
       return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
@@ -859,6 +860,16 @@ extension RepositoriesFeature {
         id: state.nextPendingSidebarRevealID,
         target: target
       )
+      return .none
+
+    case .toggleShowAllWorktrees(let repositoryID):
+      state.$showAllWorktreesRepositoryIDs.withLock {
+        if let index = $0.firstIndex(of: repositoryID) {
+          $0.remove(at: index)
+        } else {
+          $0.append(repositoryID)
+        }
+      }
       return .none
 
     case .consumePendingSidebarReveal(let revealID):

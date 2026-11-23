@@ -56,9 +56,13 @@ by canonical path. Requirements are fixed independently of the production decode
 | OMP | `session_start`, `session_stop` | Not applicable: empty prompt can start a model turn |
 | OpenCode | `session.idle` | Not applicable: native plugin has no session lifecycle |
 
-OMP's one-shot host can exit before its queued shutdown relay starts. A two-second relay drain
-still did not consistently deliver shutdown; the headless contract requires start/stop and
-validates shutdown if received. This does not attest OMP interactive shutdown. Never run an
+OMP's one-shot host exits milliseconds after `session_shutdown`. From OMP 19.0.0 this is also
+before a queued `session_stop` relay starts, which failed the contract. OMP waits for a promise
+that a handler returns, so the extension's main-session `session_shutdown` handler returns the
+delivery queue, bounded to 5 seconds; a turn end never waits. With 19.0.0 the headless run then
+delivers start, stop, and shutdown. The contract still requires start/stop and validates
+shutdown if received, because older versions may not wait for the handler. This does not
+attest OMP interactive shutdown. Never run an
 empty OMP prompt as a zero-inference check. Qoder 1.1.81 sends one `SessionEnd` for a second
 session about 40 ms after the real one at a headless exit, with or without
 `--no-session-persistence`; the contract accepts exactly that last event. An interactive run

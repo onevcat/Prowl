@@ -35,7 +35,7 @@ struct GhosttySurfaceSearchOverlay: View {
           GhosttySearchField(
             text: searchText,
             owner: state,
-            focusPending: state.searchFocusPending,
+            focusRequest: state.searchFocusRequest,
             onSubmit: { isShifted in
               navigateSearch(isShifted ? .previous : .next)
             },
@@ -272,8 +272,8 @@ private struct SearchButtonLabel: View {
 struct GhosttySearchField: NSViewRepresentable {
   @Binding var text: String
   let owner: GhosttySurfaceState
-  /// Passed by value so that a new Find request makes SwiftUI call `updateNSView`.
-  let focusPending: Bool
+  /// Passed by value so a new focus request calls `updateNSView`.
+  let focusRequest: GhosttySurfaceState.SearchFocusRequest?
   var onSubmit: (Bool) -> Void
   var onEscape: () -> Void
 
@@ -298,14 +298,15 @@ struct GhosttySearchField: NSViewRepresentable {
   }
 
   func updateNSView(_ nsView: SearchField, context: Context) {
-    if nsView.stringValue != text {
+    // The binding can still contain the committed query while the editor composes new text.
+    if nsView.stringValue != text, (nsView.currentEditor() as? NSTextView)?.hasMarkedText() != true {
       nsView.stringValue = text
     }
     nsView.onSubmit = onSubmit
     nsView.onEscape = onEscape
     nsView.owner = owner
-    if focusPending {
-      nsView.takePendingFocus()
+    if let focusRequest {
+      nsView.takePendingFocus(for: focusRequest)
     }
   }
 
@@ -355,20 +356,42 @@ struct GhosttySearchField: NSViewRepresentable {
     ///
     /// SwiftUI can call `updateNSView` before it adds the field to a window. Then this call does
     /// nothing and `viewDidMoveToWindow` applies the request.
-    func takePendingFocus(requests: GhosttySurfaceView.FocusRequests = .shared) {
-      guard let owner, owner.searchFocusPending, let window else { return }
+    func takePendingFocus(
+      for request: GhosttySurfaceState.SearchFocusRequest,
+      onWindowAttachment: Bool = false,
+      requests: GhosttySurfaceView.FocusRequests = .shared
+    ) {
+      guard let owner, owner.searchFocusRequest == request, let window else { return }
       if !hasKeyboardFocus {
         window.makeFirstResponder(self)
       }
-      guard hasKeyboardFocus else { return }
-      owner.searchFocusPending = false
+      // AppKit runs focus callbacks synchronously; recheck the owner and request afterward.
+      guard self.owner === owner,
+        owner.searchFocusRequest == request,
+        let editor = currentEditor() as? NSTextView,
+        window.firstResponder === editor
+      else {
+        return
+      }
+      if request == .find, !editor.hasMarkedText() {
+        if editor.string == owner.searchNeedle {
+          editor.selectAll(nil)
+        } else if onWindowAttachment {
+          // The field can attach before its first text update.
+          return
+        }
+      }
+      // Do not complete this surface's request if SwiftUI rebound the field.
+      guard self.owner === owner else { return }
+      owner.transitionSearchFocus(.requestApplied(request))
       // An older terminal request that still retries must not take the focus back.
       requests.cancelPending()
     }
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
-      takePendingFocus()
+      guard let request = owner?.searchFocusRequest else { return }
+      takePendingFocus(for: request, onWindowAttachment: true)
     }
 
     override func cancelOperation(_ sender: Any?) {

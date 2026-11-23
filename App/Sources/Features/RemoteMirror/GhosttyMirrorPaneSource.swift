@@ -111,6 +111,27 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   /// The sidebar's names, colors and order, pushed from the repositories state (docs-ai 089).
   var decorations = MirrorRosterDecorations()
 
+  /// Agent display states by pane, for push events (docs-ai 095). It reads only the agent
+  /// states, so observing it does not follow title or layout changes.
+  func pushPaneStates() -> [UUID: MirrorPushPlanner.PaneState] {
+    var result: [UUID: MirrorPushPlanner.PaneState] = [:]
+    // Not `activeWorktreeStates`: its tab filter would make tab changes wake the sender.
+    for state in manager.allWorktreeStates {
+      for (surfaceID, agent) in state.surfaceAgentStates where agent.detectedAgent != nil {
+        // Completion, not the display state: a finished turn in a pane the Mac shows as seen
+        // is still a finished turn while the user is away.
+        result[surfaceID] =
+          switch agent.state {
+          case .working: .working
+          case .blocked: .blocked
+          case .idle: agent.isCompletedTurn ? .completed : .idle
+          case .unknown: .idle
+          }
+      }
+    }
+    return result
+  }
+
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
       let decoration = decorations.project(for: state.worktree.repositoryLocation.id)
@@ -159,7 +180,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
 
   /// The name the phone shows for a pane (docs-ai 089). A tab renamed on the Mac keeps its
   /// name. Otherwise a Profile launch titles its pane with
-  /// the launch command (`env -u PROWL_LAUNCH_DISPATCH …`) until the agent sets a title;
+  /// the launch command (`env -u PROWL_LAUNCH_PROMPT …`) until the agent sets a title;
   /// that, an empty title or the default "Terminal" falls back to the Profile, then the agent.
   static func rosterTitle(
     customTitle: String? = nil, paneTitle: String, profileName: String?, agent: DetectedAgent?
@@ -175,7 +196,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
         .drop { $0.unicodeScalars.allSatisfy { (0x2800...0x28FF).contains($0.value) } || $0 == " " })
     let isPlaceholder =
       title.isEmpty || title == "Terminal"
-      || (title.hasPrefix("env ") && title.contains(AgentProfileLaunchPlanner.dispatchCarrierName))
+      || (title.hasPrefix("env ") && title.contains(AgentProfileLaunchPlanner.carrierNamePrefix))
     guard isPlaceholder else { return title }
     return profileName ?? agent?.displayName ?? String(localized: "Shell")
   }

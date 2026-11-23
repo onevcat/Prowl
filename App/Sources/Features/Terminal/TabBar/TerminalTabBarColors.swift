@@ -30,14 +30,27 @@ enum TerminalTabBarColors {
 
   /// Resolves to `dark` under Dark Aqua and `light` otherwise, wrapped in a
   /// dynamic `NSColor` so callers stay appearance-agnostic.
+  ///
+  /// SwiftUI's async renderer calls the provider on its display-link thread
+  /// while it holds the view graph lock, so the provider must resolve on the
+  /// calling thread: waiting for the main thread there deadlocks whenever the
+  /// main thread is itself waiting for that lock.
   private nonisolated static func adaptiveFill(
-    dark: @escaping @MainActor () -> NSColor,
-    light: @escaping @MainActor () -> NSColor
+    dark: @escaping @Sendable () -> NSColor,
+    light: @escaping @Sendable () -> NSColor
   ) -> Color {
-    let resolver = TerminalTabBarAdaptiveFillResolver(dark: dark, light: light)
-    return Color(
+    Color(
       nsColor: NSColor(name: nil) { appearance in
-        resolver.resolve(for: appearance)
+        // Build the fill under the provider's appearance: `withAlphaComponent`
+        // freezes a dynamic system color at the appearance current when it runs.
+        var color: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+          color = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark() : light()
+        }
+        guard let color else {
+          preconditionFailure("NSAppearance did not resolve a terminal tab bar color")
+        }
+        return color
       }
     )
   }
@@ -60,50 +73,5 @@ enum TerminalTabBarColors {
 
   static var dirtyIndicator: Color {
     Color(nsColor: .labelColor).opacity(0.6)
-  }
-}
-
-// `NSAppearance` is read-only here and lives only through the synchronous main-queue handoff.
-private nonisolated struct TerminalTabBarAppearanceBox: @unchecked Sendable {
-  let appearance: NSAppearance
-}
-
-// The stored closures are immutable and invoked only from `resolvedColor(for:)` on the main actor.
-private nonisolated final class TerminalTabBarAdaptiveFillResolver: @unchecked Sendable {
-  private let dark: @MainActor () -> NSColor
-  private let light: @MainActor () -> NSColor
-
-  init(
-    dark: @escaping @MainActor () -> NSColor,
-    light: @escaping @MainActor () -> NSColor
-  ) {
-    self.dark = dark
-    self.light = light
-  }
-
-  func resolve(for appearance: NSAppearance) -> NSColor {
-    let appearanceBox = TerminalTabBarAppearanceBox(appearance: appearance)
-    if Thread.isMainThread {
-      return MainActor.assumeIsolated {
-        resolvedColor(for: appearanceBox.appearance)
-      }
-    }
-    return DispatchQueue.main.sync {
-      MainActor.assumeIsolated {
-        resolvedColor(for: appearanceBox.appearance)
-      }
-    }
-  }
-
-  @MainActor
-  private func resolvedColor(for appearance: NSAppearance) -> NSColor {
-    var color: NSColor?
-    appearance.performAsCurrentDrawingAppearance {
-      color = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark() : light()
-    }
-    guard let color else {
-      preconditionFailure("NSAppearance did not resolve a terminal tab bar color")
-    }
-    return color
   }
 }

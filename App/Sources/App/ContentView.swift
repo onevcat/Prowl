@@ -51,170 +51,164 @@ struct ContentView: View {
         }
       }
     )
-    Group {
-      if store.repositories.isInitialLoadComplete {
-        mainSplitView
-      } else {
-        AppLoadingView()
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(.background)
+    // The split view shows from launch, so the sidebar and detail layout stays put while the
+    // repositories load; the detail area shows the loading view meanwhile.
+    mainSplitView
+      .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
+      .onChange(of: store.leftSidebarVisibility) { _, newValue in
+        applyStoreVisibility(newValue)
       }
-    }
-    .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
-    .onChange(of: store.leftSidebarVisibility) { _, newValue in
-      applyStoreVisibility(newValue)
-    }
-    .onChange(of: columnVisibility) { _, newValue in
-      sendLocalVisibility(newValue)
-    }
-    .background {
-      if mirrors.isEnabled { MirrorRosterDecorationsSync(store: repositoriesStore) }
-    }
-    .onChange(of: mirrors.selectedID) { _, selectedID in
-      if selectedID != nil {
-        repositoriesStore.send(.selectWorktree(nil))
+      .onChange(of: columnVisibility) { _, newValue in
+        sendLocalVisibility(newValue)
       }
-    }
-    .fileImporter(
-      isPresented: $repositoriesStore.isOpenPanelPresented.sending(\.setOpenPanelPresented),
-      allowedContentTypes: [.folder],
-      allowsMultipleSelection: true
-    ) { result in
-      switch result {
-      case .success(let urls):
-        store.send(.repositories(.repositoryManagement(.openRepositories(urls))))
-      case .failure:
-        store.send(
-          .repositories(
-            .presentAlert(
-              title: String(localized: "Unable to open folders"),
-              message: String(localized: "Prowl could not read the selected folders.")
+      .background {
+        if mirrors.isEnabled { MirrorRosterDecorationsSync(store: repositoriesStore) }
+      }
+      .onChange(of: mirrors.selectedID) { _, selectedID in
+        if selectedID != nil {
+          repositoriesStore.send(.selectWorktree(nil))
+        }
+      }
+      .fileImporter(
+        isPresented: $repositoriesStore.isOpenPanelPresented.sending(\.setOpenPanelPresented),
+        allowedContentTypes: [.folder],
+        allowsMultipleSelection: true
+      ) { result in
+        switch result {
+        case .success(let urls):
+          store.send(.repositories(.repositoryManagement(.openRepositories(urls))))
+        case .failure:
+          store.send(
+            .repositories(
+              .presentAlert(
+                title: String(localized: "Unable to open folders"),
+                message: String(localized: "Prowl could not read the selected folders.")
+              )
             )
           )
-        )
+        }
       }
-    }
-    .alert($repositoriesStore.scope(state: \.alert, action: \.alert))
-    .alert($store.scope(state: \.alert, action: \.alert))
-    .sheet(item: $repositoriesStore.scope(state: \.worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
-      promptStore in
-      WorktreeCreationPromptView(store: promptStore)
-    }
-    .sheet(item: $repositoriesStore.scope(state: \.addRemoteFolder, action: \.addRemoteFolder)) { sheetStore in
-      AddRemoteFolderView(store: sheetStore)
-    }
-    .sheet(item: $repositoriesStore.scope(state: \.workspaceEditor, action: \.workspaceEditor)) {
-      promptStore in
-      WorkspaceEditorView(store: promptStore)
-    }
-    .sheet(item: groupTitlePrompt) { prompt in
-      GroupTitlePromptView(
-        prompt: prompt,
-        onCancel: {
-          repositoriesStore.send(.sidebarGroups(.titlePromptCanceled))
-        },
-        onSubmit: { title in
-          repositoriesStore.send(.sidebarGroups(.titlePromptSubmitted(title)))
-        }
-      )
-      .id(prompt.id)
-    }
-    .sheet(item: groupSymbolPicker) { picker in
-      TabIconPickerView(
-        initialIcon: picker.currentSymbol,
-        defaultIcon: TabIconSource(systemSymbol: "folder"),
-        title: "Group Icon",
-        subtitle: "Pick a preset or enter any SF Symbol name. The default folder opens with the group.",
-        resetHelp: "Use the default folder icon",
-        presets: RepositoryIconPresets.presets,
-        onApply: { symbolName in
-          repositoriesStore.send(.sidebarGroups(.symbolPickerApplied(symbolName)))
-        },
-        onCancel: {
-          repositoriesStore.send(.sidebarGroups(.symbolPickerCanceled))
-        }
-      )
-      .id(picker.id)
-    }
-    .sheet(item: renameBranchPromptRequest) { request in
-      RenameBranchPromptView(
-        currentName: request.currentName,
-        onCancel: {
-          repositoriesStore.send(.consumePendingRenameBranchRequest(request.id))
-        },
-        onSubmit: { newName in
-          repositoriesStore.send(.requestRenameBranch(request.worktreeID, newName))
-          repositoriesStore.send(.consumePendingRenameBranchRequest(request.id))
-        }
-      )
-      .id(request.id)
-    }
-    .sheet(isPresented: deleteWorktreeConfirmationPresented) {
-      if let confirmation = repositoriesStore.deleteWorktreeConfirmation {
-        DeleteWorktreeConfirmationView(
-          confirmation: confirmation,
-          onDeleteBranchChanged: {
-            repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptDeleteBranchChanged($0)))
+      .alert($repositoriesStore.scope(state: \.alert, action: \.alert))
+      .alert($store.scope(state: \.alert, action: \.alert))
+      .sheet(item: $repositoriesStore.scope(state: \.worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
+        promptStore in
+        WorktreeCreationPromptView(store: promptStore)
+      }
+      .sheet(item: $repositoriesStore.scope(state: \.addRemoteFolder, action: \.addRemoteFolder)) { sheetStore in
+        AddRemoteFolderView(store: sheetStore)
+      }
+      .sheet(item: $repositoriesStore.scope(state: \.workspaceEditor, action: \.workspaceEditor)) {
+        promptStore in
+        WorkspaceEditorView(store: promptStore)
+      }
+      .sheet(item: groupTitlePrompt) { prompt in
+        GroupTitlePromptView(
+          prompt: prompt,
+          onCancel: {
+            repositoriesStore.send(.sidebarGroups(.titlePromptCanceled))
+          },
+          onSubmit: { title in
+            repositoriesStore.send(.sidebarGroups(.titlePromptSubmitted(title)))
+          }
+        )
+        .id(prompt.id)
+      }
+      .sheet(item: groupSymbolPicker) { picker in
+        TabIconPickerView(
+          initialIcon: picker.currentSymbol,
+          defaultIcon: TabIconSource(systemSymbol: "folder"),
+          title: "Group Icon",
+          subtitle: "Pick a preset or enter any SF Symbol name. The default folder opens with the group.",
+          resetHelp: "Use the default folder icon",
+          presets: RepositoryIconPresets.presets,
+          onApply: { symbolName in
+            repositoriesStore.send(.sidebarGroups(.symbolPickerApplied(symbolName)))
           },
           onCancel: {
-            repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptDismissed))
+            repositoriesStore.send(.sidebarGroups(.symbolPickerCanceled))
+          }
+        )
+        .id(picker.id)
+      }
+      .sheet(item: renameBranchPromptRequest) { request in
+        RenameBranchPromptView(
+          currentName: request.currentName,
+          onCancel: {
+            repositoriesStore.send(.consumePendingRenameBranchRequest(request.id))
           },
-          onDelete: {
-            repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptConfirmed))
+          onSubmit: { newName in
+            repositoriesStore.send(.requestRenameBranch(request.worktreeID, newName))
+            repositoriesStore.send(.consumePendingRenameBranchRequest(request.id))
+          }
+        )
+        .id(request.id)
+      }
+      .sheet(isPresented: deleteWorktreeConfirmationPresented) {
+        if let confirmation = repositoriesStore.deleteWorktreeConfirmation {
+          DeleteWorktreeConfirmationView(
+            confirmation: confirmation,
+            onDeleteBranchChanged: {
+              repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptDeleteBranchChanged($0)))
+            },
+            onCancel: {
+              repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptDismissed))
+            },
+            onDelete: {
+              repositoriesStore.send(.worktreeLifecycle(.deleteWorktreePromptConfirmed))
+            }
+          )
+        }
+      }
+      .sheet(isPresented: removeWorkspaceConfirmationPresented) {
+        if let confirmation = repositoriesStore.removeWorkspaceConfirmation {
+          RemoveWorkspaceConfirmationView(
+            confirmation: confirmation,
+            onDeleteFilesChanged: {
+              repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteFilesChanged($0)))
+            },
+            onDeleteBranchChanged: {
+              repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteBranchChanged($0, $1)))
+            },
+            onCancel: {
+              repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptDismissed))
+            },
+            onRemove: {
+              repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptConfirmed))
+            }
+          )
+        }
+      }
+      .sheet(isPresented: isRunScriptPromptPresented) {
+        RunScriptPromptView(
+          script: runScriptDraft,
+          onCancel: {
+            store.send(.runScriptPromptPresented(false))
+          },
+          onSaveAndRun: {
+            store.send(.saveRunScriptAndRun)
           }
         )
       }
-    }
-    .sheet(isPresented: removeWorkspaceConfirmationPresented) {
-      if let confirmation = repositoriesStore.removeWorkspaceConfirmation {
-        RemoveWorkspaceConfirmationView(
-          confirmation: confirmation,
-          onDeleteFilesChanged: {
-            repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteFilesChanged($0)))
-          },
-          onDeleteBranchChanged: {
-            repositoriesStore.send(.repositoryManagement(.removeWorkspaceDeleteBranchChanged($0, $1)))
-          },
-          onCancel: {
-            repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptDismissed))
-          },
-          onRemove: {
-            repositoriesStore.send(.repositoryManagement(.removeWorkspacePromptConfirmed))
-          }
+      .focusedSceneAction(\.toggleLeftSidebarAction, enabled: true) {
+        toggleLeftSidebar()
+      }
+      .focusedSceneValue(\.renameBranchAction, renameBranchAction)
+      .focusedSceneValue(\.revealInSidebarAction, revealInSidebarAction.asFocusedAction())
+      .overlay {
+        CommandPaletteOverlayHost(
+          store: store,
+          terminalManager: terminalManager,
+          showsWorkflowItems: featureFlags.workflowUI
         )
       }
-    }
-    .sheet(isPresented: isRunScriptPromptPresented) {
-      RunScriptPromptView(
-        script: runScriptDraft,
-        onCancel: {
-          store.send(.runScriptPromptPresented(false))
-        },
-        onSaveAndRun: {
-          store.send(.saveRunScriptAndRun)
+      .overlay {
+        if featureFlags.workflowUI, !store.workflowStartFromSettings,
+          let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
+        {
+          WorkflowStartOverlayView(store: workflowStartStore)
         }
-      )
-    }
-    .focusedSceneAction(\.toggleLeftSidebarAction, enabled: true) {
-      toggleLeftSidebar()
-    }
-    .focusedSceneValue(\.renameBranchAction, renameBranchAction)
-    .focusedSceneValue(\.revealInSidebarAction, revealInSidebarAction.asFocusedAction())
-    .overlay {
-      CommandPaletteOverlayHost(
-        store: store,
-        terminalManager: terminalManager,
-        showsWorkflowItems: featureFlags.workflowUI
-      )
-    }
-    .overlay {
-      if featureFlags.workflowUI, !store.workflowStartFromSettings,
-        let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
-      {
-        WorkflowStartOverlayView(store: workflowStartStore)
       }
-    }
-    .background(windowTabbingDisabler)
+      .background(windowTabbingDisabler)
   }
 
   /// Also carries the ⌘Z route for an emptied worktree (docs-ai 069.002).

@@ -563,10 +563,11 @@ final class WorktreeTerminalManager {
     case .saveLayoutSnapshot:
       terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")
       Task { await persistLayoutSnapshot() }
-    case .restoreLayoutSnapshot(let worktrees):
+    case .restoreLayoutSnapshot(let worktrees, let isProvisional):
       terminalLogger.info(
-        "[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)")
-      Task { await restoreLayoutSnapshot(from: worktrees) }
+        "[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)"
+          + " provisional=\(isProvisional)")
+      Task { await restoreLayoutSnapshot(from: worktrees, isProvisional: isProvisional) }
     case .presentTabIconPicker(let worktree):
       state(for: worktree).presentIconPickerForFocusedTab()
     default:
@@ -1339,6 +1340,9 @@ final class WorktreeTerminalManager {
     emitNotificationIndicatorCountIfNeeded()
   }
 
+  /// Every worktree state, including ones without tabs.
+  var allWorktreeStates: [WorktreeTerminalState] { Array(states.values) }
+
   var activeWorktreeStates: [WorktreeTerminalState] {
     states.values.filter { !$0.tabManager.tabs.isEmpty }
   }
@@ -1591,13 +1595,45 @@ final class WorktreeTerminalManager {
     terminalLogger.info("[LayoutRestore] persistSync: save result=\(saved)")
   }
 
-  func restoreLayoutSnapshot(from worktrees: [Worktree]) async {
-    terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
-    guard let payload = await layoutPersistence.loadSnapshot() else {
+  /// The saved layout as read from disk, shared by the provisional and the final restore.
+  private var layoutSnapshotLoad: Task<TerminalLayoutSnapshotPayload?, Never>?
+  /// Set when the launch restore emitted its result. Later restore requests do nothing.
+  private var isLayoutRestoreSettled = false
+
+  func restoreLayoutSnapshot(from worktrees: [Worktree], isProvisional: Bool = false) async {
+    guard !isLayoutRestoreSettled else {
+      terminalLogger.info("[LayoutRestore] restore: already settled, ignoring")
+      return
+    }
+    let load: Task<TerminalLayoutSnapshotPayload?, Never>
+    if let layoutSnapshotLoad {
+      load = layoutSnapshotLoad
+    } else {
+      terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
+      let layoutPersistence = layoutPersistence
+      load = Task { await layoutPersistence.loadSnapshot() }
+      layoutSnapshotLoad = load
+    }
+    let loadedPayload = await load.value
+    // Another request can settle the restore while this one waits for the load.
+    guard !isLayoutRestoreSettled else {
+      terminalLogger.info("[LayoutRestore] restore: settled while loading, ignoring")
+      return
+    }
+    guard let payload = loadedPayload else {
       terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, skipping")
+      isLayoutRestoreSettled = true
       emit(.layoutRestored(selectedWorktreeID: nil))
       return
     }
+    if isProvisional,
+      let missingID = Self.firstUnrestorableWorktreeID(in: payload, availableWorktrees: worktrees)
+    {
+      terminalLogger.info(
+        "[LayoutRestore] restore: provisional list cannot restore \(missingID), waiting for the live load")
+      return
+    }
+    isLayoutRestoreSettled = true
     terminalLogger.info(
       "[LayoutRestore] restore: loaded snapshot with \(payload.worktrees.count) worktree(s),"
         + " available worktrees=\(worktrees.count)"
@@ -1631,6 +1667,30 @@ final class WorktreeTerminalManager {
       _ = await layoutPersistence.clearSnapshot()
       emit(.layoutRestoreFailed(message: layoutRestoreFailureMessage))
     }
+  }
+
+  /// The first saved worktree that a provisional restore cannot bring back: one that
+  /// `availableWorktrees` does not hold, or a local one whose directory is gone. A provisional
+  /// restore that skipped it would drop its tabs for good, while the live load can still list it.
+  nonisolated static func firstUnrestorableWorktreeID(
+    in payload: TerminalLayoutSnapshotPayload,
+    availableWorktrees: [Worktree],
+    fileManager: FileManager = .default
+  ) -> Worktree.ID? {
+    let worktreeByID = Dictionary(
+      availableWorktrees.map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    for snapshot in payload.worktrees {
+      guard let worktree = worktreeByID[snapshot.worktreeID] else { return snapshot.worktreeID }
+      if let directory = worktree.localURL {
+        var isDirectory = ObjCBool(false)
+        let exists = fileManager.fileExists(
+          atPath: directory.path(percentEncoded: false), isDirectory: &isDirectory)
+        if !exists || !isDirectory.boolValue { return snapshot.worktreeID }
+      }
+    }
+    return nil
   }
 
   /// Saved remote folder layouts that no remote pane has replaced yet (docs-ai 084 C5).

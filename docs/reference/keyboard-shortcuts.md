@@ -35,6 +35,10 @@ Symbols: **⌘** Command · **⇧** Shift · **⌥** Option · **⌃** Control �
 | Delete Worktree | ⌘⇧⌫ | _(menu-bound, fixed)_ | no |
 | Confirm Worktree Action (in dialogs) | ⌘↩ | _(menu-bound, fixed)_ | no |
 
+> **Select Next / Previous Worktree** and **Select Worktree 1–9** skip the rows
+> that a collapsed worktree list hides, the way they skip a collapsed
+> repository. **Show N More** brings them back.
+
 ## View & layout
 
 | Action | Default | Command ID | Remappable |

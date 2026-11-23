@@ -11,7 +11,7 @@ private final class MirrorLiveReadingLayout {
 /// History pages. Reading positions survive pane switches.
 struct ScreenView: View {
   @Bindable var session: MirrorSession
-  /// The remote scroll row and Latest; a phone on its side drops them while the keyboard is up.
+  /// The remote scroll buttons and Latest; a phone on its side drops them while the keyboard is up.
   var showsControls = true
   @State private var position = ScrollPosition(edge: .top)
   /// The end of the output is in view, from the scroll geometry.
@@ -117,15 +117,17 @@ struct ScreenView: View {
         session.followsLatest = false
         position.scrollTo(edge: .top)
       }
-      .safeAreaBar(edge: .top) {
-        if showsControls {
+      // Floats over the reader at its trailing edge, above Latest: it takes no height, and the
+      // navigation bar keeps only the title and the pane actions.
+      .overlay(alignment: .bottomTrailing) {
+        if showsControls, session.supportsRemoteScroll {
           scrollControls
         }
       }
       // An inset, not an overlay: it sits above the pane's composer and key bar, at their trailing
       // edge, in one row with the pane's Hide Keyboard.
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        // A phone on its side drops it while composing, as the remote scroll row: the reader has
+        // A phone on its side drops it while composing, as the remote scroll buttons: the reader has
         // no height to spare, and the arrow would be pushed into the navigation bar.
         if showsControls, !session.followsLatest {
           Button {
@@ -149,34 +151,29 @@ struct ScreenView: View {
   }
 
   /// Remote scrolling moves the Host pane, the only way to read a full-screen app's own history;
-  /// a swipe moves only this reader. No bar behind it: the output scrolls under the glass, as in
-  /// the chat.
+  /// a swipe moves only this reader. Two round glass buttons, like Latest under them; a scroll on
+  /// its way or a failed one shows beside them. A Host without remote scrolling shows none.
   private var scrollControls: some View {
-    HStack(alignment: .center, spacing: 8) {
+    HStack(alignment: .bottom, spacing: 8) {
       Group {
         if session.isScrolling {
-          ProgressView("Scrolling…").accessibilityIdentifier("mirror-scroll-progress")
+          ProgressView().accessibilityIdentifier("mirror-scroll-progress")
         } else if let error = session.scrollError {
-          Text(error)
-        } else if session.status == .live && !session.supportsRemoteScroll {
-          Text("Update Host to enable remote scrolling.")
+          Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(3)
         }
       }
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      Spacer(minLength: 0)
-      GlassEffectContainer {
-        HStack(spacing: 0) {
-          remoteScrollButton(.upward)
-          Divider().frame(height: 18)
-          remoteScrollButton(.downward)
-        }
-        .padding(.horizontal, 4)
-        .glassEffect(.regular.interactive(), in: Capsule())
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .glassEffect(.regular, in: Capsule())
+      .opacity(session.isScrolling || session.scrollError != nil ? 1 : 0)
+      .frame(maxWidth: 240, alignment: .trailing)
+      VStack(spacing: 8) {
+        remoteScrollButton(.upward)
+        remoteScrollButton(.downward)
       }
     }
-    .padding(.horizontal)
-    .padding(.top, 4)
+    .padding(.trailing, 12)
+    .padding(.bottom, 8)
   }
 
   /// The person's own scrolling decides following, except while a remote scroll is on its way:
@@ -191,12 +188,9 @@ struct ScreenView: View {
     return Button {
       session.scroll(direction)
     } label: {
-      Image(systemName: upward ? "chevron.up" : "chevron.down")
-        .font(.body.weight(.semibold))
-        .frame(width: 40, height: 36)
-        .contentShape(.rect)
+      MirrorFloatingIcon(systemName: upward ? "chevron.up" : "chevron.down")
     }
-    .buttonStyle(.borderless)
+    .mirrorFloatingButton()
     .disabled(!session.canScroll(direction))
     .accessibilityLabel(upward ? "Scroll Up" : "Scroll Down")
     .accessibilityIdentifier(upward ? "mirror-scroll-up" : "mirror-scroll-down")

@@ -225,6 +225,9 @@ actor AgentSessionResolver {
   /// eventually falls back to the scan.
   nonisolated static let pidKeyedHoldMisses = 3
 
+  /// How long after its start a process resolves every second; see `cacheLifetime`.
+  nonisolated static let youngProcessWindow: TimeInterval = 15
+
   /// The immutable inputs of one uncached resolution, grouped so the scan and
   /// match steps take a single subject rather than a long parameter list.
   private struct ResolveRequest {
@@ -252,8 +255,21 @@ actor AgentSessionResolver {
   /// scans (full history trees) start at the slow end. 15 s cap keeps a
   /// permanently ambiguous pane at negligible background cost while still
   /// converging after a session rotation.
-  nonisolated static func cacheLifetime(hasSession: Bool, usedWideScan: Bool, unresolvedStreak: Int) -> TimeInterval {
-    if hasSession { return 5 }
+  ///
+  /// A process younger than `youngProcessWindow` is still creating its session file: a Profile
+  /// launched with a prompt writes it within a few seconds. Until then a miss, or a session
+  /// whose transcript is not there yet, retries every second, so the conversation is
+  /// available soon after the file lands (docs-ai 089).
+  nonisolated static func cacheLifetime(
+    hasSession: Bool,
+    hasTranscript: Bool = true,
+    usedWideScan: Bool,
+    unresolvedStreak: Int,
+    processAge: TimeInterval = .infinity
+  ) -> TimeInterval {
+    let young = processAge < youngProcessWindow
+    if hasSession { return hasTranscript || !young ? 5 : 1 }
+    if young { return 1 }
     let base: TimeInterval = usedWideScan ? 8 : 1
     return min(15, base * TimeInterval(1 << min(unresolvedStreak, 4)))
   }
@@ -457,8 +473,10 @@ actor AgentSessionResolver {
     if !bypassResultCache, let cached {
       let lifetime = Self.cacheLifetime(
         hasSession: cached.session != nil,
+        hasTranscript: cached.session?.transcriptPath != nil,
         usedWideScan: cached.usedWideScan,
-        unresolvedStreak: cached.unresolvedStreak
+        unresolvedStreak: cached.unresolvedStreak,
+        processAge: now.timeIntervalSince(startedAt)
       )
       if now.timeIntervalSince(cached.resolvedAt) < lifetime {
         // Replayed cache hits are not new evidence; consumers must not age

@@ -42,6 +42,32 @@ struct RepositorySettingsFeatureTests {
     }
   }
 
+  @Test(.dependencies) func branchRefFailureKeepsTheDefaultBaseRef() async {
+    let rootURL = URL(filePath: "/tmp/settings-refs-\(UUID().uuidString)")
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        location: .local(rootURL), repositoryKind: .git, settings: .default, userSettings: .default)
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = SettingsTestStorage().storage
+      $0.settingsFileURL = rootURL.appending(path: "settings.json")
+      $0.repositoryLocalSettingsStorage = RepositoryLocalSettingsTestStorage().storage
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.branchRefs = { _ in
+        throw GitClientError.commandFailed(command: "git for-each-ref", message: "private settings diagnostic")
+      }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.task)
+    await store.receive(\.branchDataLoaded)
+    #expect(store.state.isBranchDataLoaded)
+    #expect(store.state.branchOptions == ["origin/main"])
+    #expect(store.state.defaultWorktreeBaseRef == "origin/main")
+  }
+
   @Test(.dependencies) func plainFolderTaskLoadsWithoutGitRequests() async throws {
     let rootURL = URL(fileURLWithPath: "/tmp/folder-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()

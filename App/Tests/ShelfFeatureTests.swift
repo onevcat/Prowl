@@ -565,6 +565,7 @@ struct ShelfFeatureTests {
     )
     var state = RepositoriesFeature.State(repositories: [repo])
     state.selection = .worktree(wt1.id)
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
     // Shelf NOT active — existing worktree-cycling behavior must survive.
     state.isShelfActive = false
     let store = TestStore(initialState: state) {
@@ -575,7 +576,6 @@ struct ShelfFeatureTests {
     await store.receive(\.selectWorktree) {
       $0.selection = .worktree(wt2.id)
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
-      $0.openedWorktreeIDs = [wt2.id]
       $0.worktreeHistoryBackStack = [wt1.id]
       $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
     }

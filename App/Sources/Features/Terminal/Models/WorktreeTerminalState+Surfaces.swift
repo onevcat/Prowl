@@ -512,7 +512,7 @@ extension WorktreeTerminalState {
       let keepsSearchFieldFocus = targetSurface.isSearchFieldFocused
       updateTree(tree.settingZoomed(newZoomed), for: tabId)
       if keepsSearchFieldFocus {
-        targetSurface.bridge.state.searchFocusPending = true
+        targetSurface.bridge.state.transitionSearchFocus(.restoreRequested)
         recordActiveSurface(targetSurface, in: tabId)
       } else {
         focusSurface(targetSurface, in: tabId)

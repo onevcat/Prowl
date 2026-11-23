@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class RemoteMirrorStore {
   let host: MirrorHost
+  @ObservationIgnored private let pushSender: MirrorPushSender
   private(set) var clients: [MirrorClient] = []
   var selectedID: UUID?
   let knownHosts = MirrorKnownHostStore()
@@ -25,10 +26,34 @@ final class RemoteMirrorStore {
   var isEnabled: Bool { settingsFile.global.remoteMirrorEnabled }
 
   init(manager: WorktreeTerminalManager, runtime: GhosttyRuntime) {
-    paneSource = GhosttyMirrorPaneSource(manager: manager)
+    let paneSource = GhosttyMirrorPaneSource(manager: manager)
+    self.paneSource = paneSource
     // The autoclosure keeps the shared reference, so the Host reads the current value.
     let settings = Shared(.settingsFile)
     host = MirrorHost(source: paneSource, enabled: settings.wrappedValue.global.remoteMirrorEnabled)
+    pushSender = MirrorPushSender(
+      host: host, enabled: { settings.wrappedValue.global.remoteMirrorEnabled },
+      paneStates: { paneSource.pushPaneStates() },
+      paneDetails: { id, kind in
+        guard let pane = paneSource.panes().first(where: { $0.id == id }) else { return nil }
+        let title = [pane.tabTitle, pane.worktreeName].compactMap { $0 }.joined(separator: " · ")
+        var details = MirrorPushSender.PaneDetails(
+          title: title.isEmpty ? pane.title : title, stateChangedAt: pane.stateChangedAt)
+        switch kind {
+        case .blocked:
+          details.summary = (try? paneSource.activeText(id)).flatMap(MirrorPushSummary.question(onScreen:))
+        case .done:
+          if let state = paneSource.agentState(id), let agent = state.detectedAgent,
+            let transcript = state.session?.transcriptPath
+          {
+            details.summary = await Task.detached {
+              MirrorPushSummary.lastReply(transcript: transcript, agent: agent)
+            }.value
+          }
+        }
+        return details
+      },
+      presence: MacPresenceMonitor(), gateway: URLSessionMirrorPushGateway.configured())
     self.runtime = runtime
     settingsObservation = $settingsFile.publisher
       .map(\.global.remoteMirrorEnabled)
@@ -40,6 +65,7 @@ final class RemoteMirrorStore {
           self.disconnectAll()
         }
       }
+    pushSender.start()
   }
 
   /// Starts the listener at launch when the user asked for it in Settings.

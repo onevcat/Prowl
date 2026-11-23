@@ -62,7 +62,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     }
     XCTAssertTrue(scrollUp.isEnabled)
     XCTAssertFalse(scrollDown.isEnabled)
-    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    // The buttons float over the lower reader, above Latest; the top keeps only the title bar.
+    XCTAssertGreaterThan(scrollUp.frame.minY, app.frame.midY)
+    XCTAssertLessThan(scrollUp.frame.maxY, scrollDown.frame.minY)
     scrollUp.tap()
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
@@ -70,7 +72,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(-2).waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.isEnabled)
     XCTAssertTrue(scrollDown.isEnabled)
-    attach("Top controls at Host scroll boundary")
+    attach("Scroll buttons at Host scroll boundary")
     scrollDown.tap()
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
@@ -88,19 +90,16 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   }
 
   @MainActor
-  func testOldHostKeepsScrollButtonsDisabledAndLocalReaderAvailable() {
+  func testOldHostShowsNoScrollButtonsAndKeepsTheLocalReader() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-no-scroll-fixture"]
     app.launch()
     XCUIDevice.shared.orientation = .portrait
-    let scrollUp = app.buttons["mirror-scroll-up"]
-    let scrollDown = app.buttons["mirror-scroll-down"]
-    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
-    XCTAssertFalse(scrollUp.isEnabled)
-    XCTAssertFalse(scrollDown.isEnabled)
     let text = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
-    XCTAssertTrue(text.exists)
-    XCTAssertLessThan(scrollUp.frame.maxY, text.frame.minY)
+    XCTAssertTrue(text.waitForExistence(timeout: 10))
+    // A Host without remote scrolling gets no buttons, rather than buttons that never work.
+    XCTAssertFalse(app.buttons["mirror-scroll-up"].exists)
+    XCTAssertFalse(app.buttons["mirror-scroll-down"].exists)
     app.scrollViews["mirror-live-scroll"].swipeDown()
     app.scrollViews["mirror-live-scroll"].swipeUp()
     XCTAssertTrue(text.exists)
@@ -234,7 +233,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
     down.tap()
     XCTAssertTrue(page(0).waitForExistence(timeout: 5))
-    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    XCTAssertGreaterThan(scrollUp.frame.minY, app.frame.midY)
     let reading = app.scrollViews["mirror-live-scroll"]
     reading.swipeDown()
     XCTAssertTrue(page(0).exists)
@@ -645,7 +644,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     let pane = app.descendants(matching: .any).matching(identifier: "pane-0F1C2D3E-4A5B-6C7D-8E9F-A0B1C2D3E4F5")
       .firstMatch
     XCTAssertTrue(pane.waitForExistence(timeout: 10))
-    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "host-menu").firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.exists)
     attach("Agents of one Host")
     pane.tap()
     let assistant = app.descendants(matching: .any).matching(identifier: "conversation-assistant").firstMatch
@@ -688,6 +687,105 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attach("Structured launch form")
     create.tap()
     XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
+  }
+
+  /// Settings (docs-ai 098): the gear menu opens one sheet with Hosts, Notifications and About.
+  @MainActor
+  func testSettingsMenuOpensHostsNotificationsAndAbout() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let menu = app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch
+    XCTAssertTrue(menu.waitForExistence(timeout: 10))
+    menu.tap()
+    XCTAssertTrue(app.buttons["Add Host…"].waitForExistence(timeout: 5))
+    attach("Settings menu")
+    app.buttons["Settings…"].tap()
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
+      .waitForExistence(timeout: 5))
+    XCTAssertTrue(app.switches["push-enabled"].exists)
+    let privacy = app.descendants(matching: .any).matching(identifier: "settings-privacy").firstMatch
+    if !privacy.exists { app.swipeUp() }
+    XCTAssertTrue(privacy.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-terms").firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-version").firstMatch.exists)
+    // The MIT notice ships in the bundle; Settings has no row for it.
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "settings-license").firstMatch.exists)
+    attach("Settings")
+    app.buttons["settings-done"].tap()
+    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+  }
+
+  /// The demo (docs-ai 098): onboarding offers it, it runs the real app on sample panes, and
+  /// leaving it returns to onboarding with nothing paired.
+  @MainActor
+  func testDemoRunsTheAppWithoutAMacAndLeavesNothing() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let tryDemo = app.buttons["try-demo"]
+    XCTAssertTrue(tryDemo.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "prowl-website").firstMatch.exists)
+    attach("Onboarding with the demo")
+    tryDemo.tap()
+
+    let blocked = app.descendants(matching: .any).matching(identifier: "pane-D0000000-0000-0000-0000-000000000001")
+      .firstMatch
+    XCTAssertTrue(blocked.waitForExistence(timeout: 10))
+    attach("Demo agents")
+    blocked.tap()
+    let allow = app.descendants(matching: .any).matching(identifier: "prompt-choice-1").firstMatch
+    XCTAssertTrue(allow.waitForExistence(timeout: 10))
+    attach("Demo permission prompt")
+    allow.tap()
+    let panel = app.descendants(matching: .any).matching(identifier: "prompt-panel").firstMatch
+    expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: panel)
+    waitForExpectations(timeout: 15)
+    XCTAssertTrue(
+      app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "The flaky failure is fixed."))
+        .firstMatch.waitForExistence(timeout: 15))
+    attach("Demo agent finished")
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+
+    app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.tap()
+    let exit = app.buttons["demo-exit"]
+    XCTAssertTrue(exit.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Add Host…"].exists)
+    // The demo's Settings show About only: its Hosts and notifications are not real.
+    app.buttons["Settings…"].tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(identifier: "settings-privacy").firstMatch.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.switches["push-enabled"].exists)
+    app.buttons["settings-done"].tap()
+    app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.tap()
+    XCTAssertTrue(exit.waitForExistence(timeout: 5))
+    exit.tap()
+    XCTAssertTrue(app.buttons["add-host"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["try-demo"].exists)
+  }
+
+  /// Wider than tall, onboarding puts the title beside the steps and actions, and nothing is cut.
+  @MainActor
+  func testOnboardingSitsSideBySideWhenWide() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let title = app.staticTexts["onboarding-title"]
+    let pair = app.buttons["add-host"]
+    XCTAssertTrue(pair.waitForExistence(timeout: 10))
+    expectation(for: NSPredicate { _, _ in title.frame.maxX < pair.frame.minX }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+    XCTAssertTrue(pair.isHittable)
+    XCTAssertTrue(app.buttons["try-demo"].isHittable)
+    attach("Onboarding side by side")
+    XCUIDevice.shared.orientation = .portrait
+    waitForOrientation(app, wide: false)
+    expectation(for: NSPredicate { _, _ in title.frame.maxY < pair.frame.minY }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
   }
 
   @MainActor

@@ -121,7 +121,7 @@ extension WorktreeTerminalState {
     } catch {
       failure = error
     }
-    terminalStateLogger.warning("Remote pane on \(profile.alias) did not start: \(failure.localizedDescription)")
+    terminalStateLogger.warning("Remote pane on \(profile.alias) did not start", error: failure)
     if consumesSetupScript { pendingSetupScript = true }
     // Nothing ran in the pane: a split goes alone, a tab with its only pane.
     if (trees[tabID]?.leaves().count ?? 0) > 1 {

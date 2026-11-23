@@ -49,8 +49,10 @@ surface creation, exact pre-input signal registration, dispatch binding, and rol
 synchronous transaction with no suspension point. One Profile launch owns one evidence epoch;
 a prompted dispatch adopts the epoch already created by its managed hook registration.
 
-Every prompted Profile launch is paired atomically with a pending dispatch; there is no
-opt-out. Prowl injects `PROWL_DISPATCH_ID` into the launched child only and appends the
+Every prompted CLI Profile launch is paired atomically with a pending dispatch; the CLI has no
+opt-out. The only exception is a Remote Mirror launch: the Host marks it `interactive` (a
+socket-only `launch` field that the CLI never sends), so the prompt goes in as typed, with no
+dispatch and no completion instruction (docs-ai 089). Prowl injects `PROWL_DISPATCH_ID` into the launched child only and appends the
 versioned completion instruction to the effective prompt. An unprompted Profile launch
 retains its interactive behavior and creates no dispatch. If launch, target snapshot, signal
 registration, or dispatch binding fails, Prowl removes the new resource and cancels the

@@ -206,19 +206,9 @@ struct RepositorySettingsFeature {
               keybindingUserOverrides: global.keybindingUserOverrides
             )
           )
-          let branches: [String]
-          do {
-            branches = try await repositoryHost.branchRefs(in: location)
-          } catch is RepositoryHostError {
-            // A remote repository has no host connection yet (B3); nothing failed.
-            branches = []
-          } catch {
-            let rootPath = location.id
-            ProwlLogger("Settings").warning(
-              "Branch refs failed for \(rootPath): \(error.localizedDescription)"
-            )
-            branches = []
-          }
+          // A remote repository with no host connection yet throws RepositoryHostError (B3).
+          // GitClient already logs a Git failure, so both cases fall back to no branches.
+          let branches = (try? await repositoryHost.branchRefs(in: location)) ?? []
           let defaultBaseRef = await repositoryHost.automaticWorktreeBaseRef(in: location) ?? "HEAD"
           await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
         }

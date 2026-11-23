@@ -145,7 +145,7 @@ extension RepositoryPersistenceClient: DependencyKey {
           return repositories
         } catch {
           repositoryPersistenceLogger.warning(
-            "Unable to decode repository snapshot cache: \(error.localizedDescription)"
+            "Unable to decode repository snapshot cache", error: error
           )
           discardRepositorySnapshot(at: snapshotURL)
           return nil
@@ -177,7 +177,7 @@ extension RepositoryPersistenceClient: DependencyKey {
           try data.write(to: snapshotURL, options: .atomic)
         } catch {
           repositoryPersistenceLogger.warning(
-            "Unable to write repository snapshot cache: \(error.localizedDescription)"
+            "Unable to write repository snapshot cache", error: error
           )
         }
       }
@@ -220,7 +220,7 @@ private nonisolated func discardRepositorySnapshot(at url: URL) {
     try FileManager.default.removeItem(at: url)
   } catch {
     repositoryPersistenceLogger.warning(
-      "Unable to remove repository snapshot cache: \(error.localizedDescription)"
+      "Unable to remove repository snapshot cache", error: error
     )
   }
 }

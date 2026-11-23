@@ -186,6 +186,8 @@ Edit menu: **Find…** (`start_search`), **Find Next/Previous**
 Selection for Find** (`search_selection`). These are Ghostty-managed.
 
 **Find…** (⌘F by default) opens the find bar and puts keyboard focus in its search field.
+Press ⌘F again to select the current query. During input method composition, ⌘F preserves
+the marked text and selection. You can continue typing at the same position.
 The query stays while the find bar is open, also when the split layout or the Shelf view
 changes. Split zoom keeps focus in the search field.
 
@@ -311,6 +313,13 @@ start a new shell: running commands and agents do not start again, and a folder
 outside the worktree falls back to the worktree root. It saves when you quit and
 each time Prowl stops being the active app, so a crash loses only the changes made
 since you last switched away. Notification bodies are not persisted.
+
+Launch restores the layout from the cached repository list, before Git finishes
+listing the worktrees again, when that list holds every saved worktree and each
+local worktree folder still exists. Otherwise the restore waits for the fresh
+list. The window shows the sidebar and the detail area from launch. Until the
+repository list loads and the restore selects a worktree, the detail area shows a
+loading view, not the empty "Open Repository" state.
 
 If a saved worktree is gone at launch (it was removed outside Prowl, or its
 repository failed to load), Prowl skips it and restores the rest. The next save

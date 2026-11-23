@@ -560,7 +560,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       workspace = try decoder.decode(ProjectWorkspace.self, from: data)
     } catch {
       log.warning(
-        "Ignoring malformed workspace metadata at \(metadataURL.path(percentEncoded: false)): \(error)"
+        "Ignoring malformed workspace metadata at \(metadataURL.path(percentEncoded: false))", error: error
       )
       return nil
     }
@@ -824,7 +824,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       )
       return nil
     } catch {
-      log.warning("Workspace member cleanup failed for \(entryPath): \(error)")
+      log.warning("Workspace member cleanup failed for \(entryPath)", error: error)
       return error.localizedDescription
     }
   }
@@ -924,7 +924,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         do {
           try await gitRunner.run(command)
         } catch {
-          log.warning("Workspace rollback command failed: \(command.displayCommand): \(error)")
+          log.warning("Workspace rollback command failed: \(command.displayCommand)", error: error)
         }
       }
       let removableURLs =
@@ -943,7 +943,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         do {
           try fileManager.removeItem(at: url)
         } catch {
-          log.warning("Workspace rollback could not remove \(path): \(error)")
+          log.warning("Workspace rollback could not remove \(path)", error: error)
         }
       }
     }
@@ -988,7 +988,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
           )
         )
       } catch {
-        log.warning("Workspace cleanup could not unregister worktree at \(entryPath): \(error)")
+        log.warning("Workspace cleanup could not unregister worktree at \(entryPath)", error: error)
         failedRemovals.append(entry.name)
       }
     }
@@ -1005,7 +1005,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     do {
       try fileManager.removeItem(at: rootURL)
     } catch {
-      log.warning("Workspace cleanup could not remove \(rootPath): \(error)")
+      log.warning("Workspace cleanup could not remove \(rootPath)", error: error)
     }
   }
 

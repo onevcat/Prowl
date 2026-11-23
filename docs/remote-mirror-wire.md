@@ -3,13 +3,15 @@
 All integers in binary packets are unsigned big-endian. A packet is `length:u32`,
 then `kind:u8`, then payload. Length includes kind, excludes the four-byte prefix,
 and must be 1…8,388,608. Unknown kinds, malformed UTF-8, missing required fields and
-invalid payloads close the connection. This revision has no compatibility negotiation.
+invalid payloads close the connection. Optional behavior is negotiated through the
+`panes` capabilities.
 
 | Kind | Payload |
 | --- | --- |
 | 0 | UTF-8 JSON control message |
 | 1 | subscription UUID:16 raw bytes, sequence:u64, columns:u32, rows:u32, raw VT bytes |
 | 2 | subscription UUID:16 raw bytes, sequence:u64, columns:u32, rows:u32, truncated:u8, UTF-8 text |
+| 3 | compressed: one complete kind 0, 1 or 2 packet body (`deflate-v1`, below) |
 
 Sequence starts at 1. VT grid dimensions are 1…1000. Text dimensions allow zero for
 an unspecified test/source grid; production Ghostty sources supply actual sizes.
@@ -24,7 +26,7 @@ fixed-byte vectors, independent of encode/decode round-trip tests.
 
 Controls: challenge, authenticate, pair, paired, authenticated; list, panes;
 subscribe, subscribed, acknowledge, input, refresh, scroll, scrollResult, viewport; history, historyPage; command,
-commandResult, commandReceipt; failure, ended, ping, pong. There is no private
+commandResult, commandReceipt; pushRegister, pushUnregister, pushStatus; compress; failure, ended, ping, pong. There is no private
 Agent-state or private submission control. Command envelopes preserve the public
 CLI JSON and UUID request ID. See the feature documentation for command scope.
 
@@ -32,9 +34,37 @@ The `launch-profile` capability permits Profile-backed background tab creation.
 `launch-shell` additionally permits a background `create tab` with no `launch`
 field. Neither capability permits arbitrary initial Shell input. Mac clients gate
 Shell creation on `launch-shell`; existing Profile requests remain unchanged.
+The Host marks every remote Profile launch `interactive`: a prompt goes into the agent as
+typed, with no dispatch receipt and no completion instruction, so the `create` result has no
+`dispatch` field. The CLI cannot set this field; `prowl create --prompt` keeps its dispatch.
 The remote `list` command result adds optional `data.worktrees`, using the same
 worktree fields as `data.items[].worktree`, to include known worktrees without
 terminal panes. Clients without that field can still use worktrees from `items`.
+
+## Compression (`deflate-v1`)
+
+A Host that lists `deflate-v1` in `panes` compresses what it sends on a connection once the
+client sends `{"compress":{}}` there (docs-ai 097). A client sends it once per connection, right
+after the first `panes` and before anything else it wants compressed, such as `subscribe`.
+Never send it to a Host without the capability: older Hosts close on unknown controls.
+
+From then on every Host packet is kind 3. Its payload is the next part of one raw DEFLATE
+stream (RFC 1951, no zlib or gzip header, 32 KB window) that holds exactly one plain packet
+body (kind byte included) and ends with a sync flush (`00 00 FF FF`). The stream continues
+across packets for the life of the connection, so a client keeps one inflate state per
+connection and feeds it the packets in order. The inflated body is decoded as usual; a nested
+kind 3, an inflate error, or more than 8,388,608 inflated bytes closes the connection. Clients
+do not compress what they send. Clients that never ask, and Hosts without the capability,
+exchange plain packets as before.
+
+Vector (one stream, three packets; made by Python's zlib, level 6), which must inflate to
+`{"list":{}}`, `{"list":{}}` and `{"pong":{}}` behind kind byte 0:
+
+```
+62 a8 56 ca c9 2c 2e 51 b2 aa ae ad 05 00 00 00 ff ff
+62 40 62 03 00 00 00 ff ff
+02 b2 0b f2 f3 d2 c1 6c 00 00 00 00 ff ff
+```
 
 ## Authentication and lifecycle
 
@@ -320,6 +350,82 @@ then presses the keys one at a time. Before each key, it checks that the connect
 the lease, that the pane still runs the same agent (or still none), and that nobody started
 editing on the Mac. A refusal after the first key says how many keys were
 pressed.
+
+## Push registration (`push-v1`)
+
+A Host that advertises `push-v1` keeps one push registration per paired device (docs-ai 095).
+A client sends these controls only after it sees the capability: an older Host closes the
+connection on an unknown control.
+
+```json
+{"pushRegister":{"_0":{"pushToken":"<token>","kinds":["blocked","done"]}}}
+{"pushUnregister":{}}
+```
+
+- `pushToken` is the send-only token that the push gateway issued for this device and Host:
+  URL-safe Base64, 16 to 256 characters. Any other value closes the connection.
+- `kinds` lists the events the device wants, at most 16 entries. The Host keeps `blocked` and
+  `done` and ignores other values. A list with no known kind removes the registration, like `pushUnregister`.
+- The client sends `pushRegister` again on every connection, so a new token or a changed
+  setting reaches the Host.
+- Only an authenticated device connection can register, and only for itself.
+
+The Host answers both with its state for that device:
+
+```json
+{"pushStatus":{"_0":{"pushEnabled":false,"pushAllowedByMac":true,"registered":true}}}
+```
+
+The Host also sends `pushStatus` when the Mac user changes the switch or a device's
+permission, so the phone can show where notifications are turned off. It goes only to that
+device's connections that have sent a push control themselves: a client that never does gets
+no unsolicited `pushStatus`, because older clients close on an unknown control. A connection may send at most 16 push controls; more closes it.
+
+`pushEnabled` is the Mac switch **Send Notifications to Paired Devices** (off by default).
+`pushAllowedByMac` is `false` when the Mac user turned notifications off for this device; a
+new `pushRegister` never changes it. `registered` says whether the Host keeps a registration
+now. Unpairing the device removes its registration.
+
+When the gateway answers a push with `410` (it no longer knows the token), the Host drops the
+registration and sends `pushStatus` with `"tokenGone":true` to the device's connections. Until
+the device registers another token, the Host refuses the dropped one: a `pushRegister` with it
+is not saved, and the reply carries `"tokenGone":true` too. The phone then gets a new token from
+the gateway and registers again, at most once per connection. The Host keeps the dropped token
+in memory only. `tokenGone` is absent in every other reply, and from Hosts that predate it.
+
+### Push content encryption
+
+The Host encrypts each push for the receiving device; the gateway and Apple see only the
+result.
+
+- Key: HKDF-SHA256 with the device's 32-byte secret as input key material, the Host UUID in
+  its uppercase canonical spelling (UTF-8) as salt, and `prowl-mirror-push-v1` as info;
+  32 bytes.
+- `sealed`: standard Base64 of the Host UUID's 16 raw bytes followed by the ChaCha20-Poly1305
+  combined box (12-byte nonce, ciphertext, 16-byte tag).
+- Plaintext: JSON `{"v":1,"kind":"blocked"|"done","paneID":"UUID","title":"…","body":"…",
+  "stateChangedAt":"…"}`. `title` is the tab and worktree name, or `Prowl` when the pane is
+  gone; `body` is a short localized text for the event. `stateChangedAt` (ISO 8601) is left
+  out when the Host does not know it, so a decoder must treat it as optional. A phone
+  refuses any `v` other than 1 and shows the generic text instead.
+- The Host and the iOS app compile the same implementation, `Mirror/Shared/MirrorPushCrypto.swift`;
+  the controls' payloads and the capability are in `Mirror/Shared/MirrorPushContract.swift`, and
+  `Mirror/Fixtures/push/contract.json` holds the examples that the Host, the app and the
+  gateway test against.
+  The phone keeps only the derived key, in a Keychain group shared with its Notification
+  Service Extension; the device secret stays in the app's own group.
+- `collapseID`: the first 16 bytes of HMAC-SHA256(key, `collapse:` + pane UUID), URL-safe
+  Base64 without padding (22 characters).
+- Test vector (also checked with an independent implementation): secret 32 × `0x07`, Host
+  `11111111-2222-3333-4444-555555555555` → key
+  `1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1`; nonce
+  `000102030405060708090a0b` and plaintext `{"hello":"push"}` → `sealed`
+  `ERERESIiMzNERFVVVVVVVQABAgMEBQYHCAkKC822FCs5oi5CZcjy+b8H7gVLmwX1v69/XSq/EKCoVU+w`; pane
+  `AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE` → `collapseID` `6O3nw3oYaPm_Beb9LXEOnA`.
+
+The Host posts `{"pushToken","collapseID","sealed"}` to `POST /v1/push` on the gateway. `2xx`
+is sent; `410` means the gateway no longer knows the token, and the Host removes that
+registration; any other result drops the event without retry.
 
 ## Conversation stream (`conversation-v1`)
 

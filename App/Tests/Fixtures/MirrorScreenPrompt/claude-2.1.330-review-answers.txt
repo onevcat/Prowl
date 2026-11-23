@@ -1,0 +1,34 @@
+
+
+❯ This is a UI test of a dialog, not a task. Do not read files or run commands. Call the           
+  AskUserQuestion tool exactly once, with two questions in that single call:                       
+  1. header "Color", question "Which color do you prefer?", single choice, options "Red" and       
+  "Blue".                                                                                          
+  2. header "Size", question "Which size do you prefer?", single choice, options "Small" and       
+  "Large".                                                                                         
+     After the answers come back, reply with one short sentence and stop.                          
+                                                                                                   
+  ---                                                                                              
+  Prowl dispatch completion protocol v1:                                                           
+  Before ending this task, choose exactly one terminal outcome and make this command your final    
+  tool action:                                                                                     
+  prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"           
+  Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be 
+  completed.                                                                                       
+  Keep the required summary to a single line with no control characters, and explain the result    
+  clearly.                                                                                         
+  Do not omit the command; Prowl supplies its dispatch context                                     
+  automatically.                                                                                   
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Color  ☒ Size  ✔ Submit  →
+
+Review your answers
+
+ ● Which color do you prefer?
+   → Red
+ ● Which size do you prefer?
+   → Small
+
+❯ 1. Submit answers
+  2. Cancel

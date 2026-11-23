@@ -2146,6 +2146,16 @@
         }
       }
     },
+    "Allow notifications to this device again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新允许向此设备发送通知"
+          }
+        }
+      }
+    },
     "Alpha" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2232,6 +2242,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 worktree 中已在运行的 Agent 将担任此角色。"
+          }
+        }
+      }
+    },
+    "An agent finished" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 已完成"
+          }
+        }
+      }
+    },
+    "An agent needs your attention" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 需要你处理"
           }
         }
       }
@@ -2697,6 +2727,16 @@
         }
       }
     },
+    "Asking agents to read the docs first" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在劝 Agent 先看文档再动手"
+          }
+        }
+      }
+    },
     "Assembling task graph" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2903,6 +2943,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "二进制文件。请打开 Bundle 查看。"
+          }
+        }
+      }
+    },
+    "Bisecting the slow part" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在二分查找到底哪里慢"
           }
         }
       }
@@ -3737,6 +3787,16 @@
         }
       }
     },
+    "Checking that nobody pushed to main" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在排查谁偷偷推了 main"
+          }
+        }
+      }
+    },
     "Checking the host…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3753,6 +3813,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "检出"
+          }
+        }
+      }
+    },
+    "Cherry-picking the good ideas" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在 cherry-pick 神之一手"
           }
         }
       }
@@ -5137,6 +5207,16 @@
         }
       }
     },
+    "Compacting yesterday's context" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把昨天的上下文压成饼干"
+          }
+        }
+      }
+    },
     "Comparing committed changes against %@ (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5423,6 +5503,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "控制 Prowl 在解析完配置、必需的角色选择和验证结果后，是否显示启动面板。"
+          }
+        }
+      }
+    },
+    "Convincing the linter to relax" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在劝 linter 别那么较真"
           }
         }
       }
@@ -7897,6 +7987,16 @@
         }
       }
     },
+    "Every worktree has an open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个 worktree 都有打开的标签页"
+          }
+        }
+      }
+    },
     "Evicting polite overcommit" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8328,6 +8428,16 @@
         }
       }
     },
+    "Feeding the cat" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在喂猫"
+          }
+        }
+      }
+    },
     "Fetch pull request state" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8745,6 +8855,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 worktree 历史中前进"
+          }
+        }
+      }
+    },
+    "Garbage-collecting excuses" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在回收没用的借口"
           }
         }
       }
@@ -9199,6 +9319,16 @@
         }
       }
     },
+    "Herding parallel agents" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在放牧一群并行的 Agent"
+          }
+        }
+      }
+    },
     "Hidden from workflow launch surfaces and rejected by the prowl CLI" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9255,6 +9385,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有 Agent 会话运行时隐藏该栏。默认关闭。"
+          }
+        }
+      }
+    },
+    "Hide the worktrees with no open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏没有打开标签页的 worktree"
+          }
+        }
+      }
+    },
+    "Hiding the force push button" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把 force push 按钮藏起来"
           }
         }
       }
@@ -10179,6 +10329,36 @@
         }
       }
     },
+    "Last notification at %@ failed (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知（%1$@）发送失败（%2$@）"
+          }
+        }
+      }
+    },
+    "Last notification at %@ not delivered · open Prowl Mirror on the device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知（%@）未送达 · 请在该设备上打开 Prowl Mirror"
+          }
+        }
+      }
+    },
+    "Last notification sent at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次通知已于 %@ 发送"
+          }
+        }
+      }
+    },
     "Last seen %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10615,6 +10795,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "位置："
+          }
+        }
+      }
+    },
+    "Looking for the missing semicolon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在寻找那个失踪的分号"
           }
         }
       }
@@ -11185,6 +11375,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要修正"
+          }
+        }
+      }
+    },
+    "Negotiating with the type checker" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在和类型检查器讨价还价"
           }
         }
       }
@@ -12109,12 +12309,62 @@
         }
       }
     },
+    "Notifications not turned on in Prowl Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在 Prowl Mirror 中开启通知"
+          }
+        }
+      }
+    },
+    "Notifications off for this device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭此设备的通知"
+          }
+        }
+      }
+    },
+    "Notifications on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知已开启"
+          }
+        }
+      }
+    },
     "Notifications. Hover or click to show all notifications." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "通知。悬停或点击可显示所有通知。"
+          }
+        }
+      }
+    },
+    "Notify paired devices when an agent needs you or finishes while you are away. End-to-end encrypted." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你离开时，若 Agent 需要你处理或已完成，会通知已配对的设备。端到端加密。"
+          }
+        }
+      }
+    },
+    "Notify paired iPhones and iPads when you are away from this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你离开这台 Mac 时通知已配对的 iPhone 和 iPad"
           }
         }
       }
@@ -14613,6 +14863,16 @@
         }
       }
     },
+    "Putting your tabs back in order" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在给标签页重新排队"
+          }
+        }
+      }
+    },
     "Queued" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14854,12 +15114,32 @@
         }
       }
     },
+    "Reattaching detached HEADs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在帮游离的 HEAD 找组织"
+          }
+        }
+      }
+    },
     "Rebase" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "变基"
+          }
+        }
+      }
+    },
+    "Rebasing onto good vibes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把心情 rebase 到正能量上"
           }
         }
       }
@@ -15140,6 +15420,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在本次会话中记住此选择"
+          }
+        }
+      }
+    },
+    "Reminding agents that tests exist" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提醒 Agent：测试是要跑的"
           }
         }
       }
@@ -15834,6 +16124,16 @@
         }
       }
     },
+    "Reopening the splits you left behind" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把你走前的分屏原样摆回去"
+          }
+        }
+      }
+    },
     "Reopens your tabs and splits in their folders. Commands that were running do not start again." : {
       "localizations" : {
         "zh-Hans" : {
@@ -16294,6 +16594,16 @@
         }
       }
     },
+    "Resolving merge conflicts diplomatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在和平调解合并冲突"
+          }
+        }
+      }
+    },
     "Restore card size" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16690,6 +17000,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第 %lld 轮"
+          }
+        }
+      }
+    },
+    "Rounding up stray processes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把走丢的进程领回家"
           }
         }
       }
@@ -18026,6 +18346,16 @@
         }
       }
     },
+    "Send notifications to paired devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向已配对的设备发送通知"
+          }
+        }
+      }
+    },
     "Send one command line from a mirror." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18306,6 +18636,16 @@
         }
       }
     },
+    "Show %lld More" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再显示 %lld 个"
+          }
+        }
+      }
+    },
     "Show Active Agents" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18372,6 +18712,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示隐藏文件夹"
+          }
+        }
+      }
+    },
+    "Show Less" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起"
           }
         }
       }
@@ -18682,6 +19032,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Prowl 程序坞图标上显示未读 worktree 数量。"
+          }
+        }
+      }
+    },
+    "Show the worktrees with no open tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示没有打开标签页的 worktree"
           }
         }
       }
@@ -19387,6 +19747,16 @@
         }
       }
     },
+    "Stashing your worries" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在把烦恼 stash 起来"
+          }
+        }
+      }
+    },
     "Status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19493,6 +19863,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止脚本"
+          }
+        }
+      }
+    },
+    "Stop notifications to this device until you turn them on here" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止向此设备发送通知，直到你在这里重新开启"
           }
         }
       }
@@ -19813,6 +20193,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务链接"
+          }
+        }
+      }
+    },
+    "Teaching agents to say \"I don't know\"" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在教 Agent 说“我不知道”"
           }
         }
       }
@@ -21664,6 +22054,16 @@
         }
       }
     },
+    "Turning it off and on again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在祭出重启大法"
+          }
+        }
+      }
+    },
     "URL:" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22575,12 +22975,32 @@
         }
       }
     },
+    "Waiting for CI, as usual" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "照例在等 CI"
+          }
+        }
+      }
+    },
     "Warming up shells" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在给 shell 预热"
+          }
+        }
+      }
+    },
+    "Warming up the context window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在给上下文窗口暖场"
           }
         }
       }
@@ -23621,6 +24041,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "macOS 无法将此快捷键注册为全局快捷键。请选择其他快捷键。"
+          }
+        }
+      }
+    },
+    "macOS denied access to this folder. In System Settings > Privacy & Security, check that Prowl has access to it under Files and Folders or Full Disk Access, then retry.\nGit command failed: %@\n%@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 拒绝了对此文件夹的访问。请在“系统设置 > 隐私与安全性”中，确认 Prowl 在“文件与文件夹”或“完全磁盘访问权限”下拥有访问权限，然后重试。\nGit 命令失败：%@\n%@"
           }
         }
       }

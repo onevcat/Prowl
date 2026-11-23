@@ -246,7 +246,8 @@ nonisolated struct RemoteRepositoryHost: Sendable {
     } catch {
       throw wrapShellError(
         error, operation: operation,
-        command: ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " "))
+        command: ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " "),
+        directory: gitWorkingDirectory(arguments))
     }
   }
 
@@ -354,7 +355,8 @@ nonisolated struct RemoteRepositoryHost: Sendable {
       throw RemoteWorktreeCreationError(underlying: error, addedPath: lines.addedPath)
     } catch {
       throw RemoteWorktreeCreationError(
-        underlying: wrapShellError(error, operation: .worktreeCreate, command: commandText),
+        underlying: wrapShellError(
+          error, operation: .worktreeCreate, command: commandText, directory: repository.path),
         addedPath: lines.addedPath)
     }
     guard let result = lines.result else {

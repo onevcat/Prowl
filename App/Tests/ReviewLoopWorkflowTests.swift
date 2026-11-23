@@ -131,6 +131,34 @@ struct ReviewLoopWorkflowTests {
     #expect(run.finished == .completed)
   }
 
+  @Test func pendingUserDecisionStopsWithoutClaimingClean() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let run = try await harness(root: root, inputs: ["min_rounds": "1"])
+    try await deliver(run)
+    try await deliver(run, verdict: "clean")
+    try await deliver(run, verdict: "decision")
+    #expect(run.run.currentStep?.id == "summary")
+    try await deliver(run)
+    #expect(run.finished == .completed)
+    #expect(run.notifications.last?.contains("needs user decision") == true)
+  }
+
+  @Test func userDecisionDoesNotStopWhileReviewerReportsIssues() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let run = try await harness(root: root, inputs: ["min_rounds": "1", "max_rounds": "2"])
+    try await deliver(run)
+    try await deliver(run, verdict: "issues")
+    try await deliver(run, verdict: "decision")
+    #expect(run.run.currentInvocation?.role == "reviewer")
+    try await deliver(run, verdict: "clean")
+    try await deliver(run, verdict: "decision")
+    try await deliver(run)
+    #expect(run.finished == .completed)
+    #expect(run.notifications.last?.contains("needs user decision") == true)
+  }
+
   @Test func invalidRangeStopsBeforeReviewerLaunch() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

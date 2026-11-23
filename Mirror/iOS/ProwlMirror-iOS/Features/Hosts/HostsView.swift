@@ -5,15 +5,18 @@ nonisolated struct MirrorPaneRoute: Hashable {
   let pane: MirrorPaneDescriptor
   /// The pane was just launched from this device; its agent is not detected yet.
   var launched = false
+  /// The first message of an agent launched from this device, shown in Chat until the
+  /// conversation arrives.
+  var kickoff: String?
 }
 
 extension MirrorPaneDescriptor: Hashable {
   nonisolated func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-/// The paired Hosts, opened from the Agents title menu (docs-ai 089): pick the Host to show,
-/// rename or forget one, or pair another.
-struct HostsManagerView: View {
+/// The paired Hosts in Settings (docs-ai 098): pick the Host to show, rename or forget one,
+/// or pair another.
+struct MirrorHostsSection: View {
   @Bindable var store: MirrorHostStore
   let onAddHost: () -> Void
   @Environment(MirrorHostSessions.self) private var sessions
@@ -22,52 +25,44 @@ struct HostsManagerView: View {
   @State private var alias = ""
 
   var body: some View {
-    NavigationStack {
-      List {
-        ForEach(store.hosts) { host in
-          Button {
-            store.select(host.id)
-            dismiss()
-          } label: {
-            HostRow(host: host, session: sessions.existing(for: host), selected: host.id == store.selectedHost?.id)
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("host-\(host.endpoint)")
-          .swipeActions(edge: .trailing) {
-            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-            Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
-          }
-          .contextMenu {
-            Button("Rename…", systemImage: "pencil") { startRenaming(host) }
-            Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
-          }
-        }
+    Section("Hosts") {
+      hostRows
+      Button("Add Host…", systemImage: "plus") {
+        dismiss()
+        onAddHost()
       }
-      .navigationTitle("Hosts")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Close", systemImage: "xmark") { dismiss() }
-            .help("Close the Host list")
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Button("Add Host", systemImage: "plus") {
-            dismiss()
-            onAddHost()
-          }
-          .accessibilityIdentifier("add-host")
-          .help("Pair with a Mac running Prowl")
-        }
+      .accessibilityIdentifier("settings-add-host")
+      .help("Pair with a Mac running Prowl")
+    }
+    .alert("Rename Host", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+      TextField("Name", text: $alias)
+      Button("Save") {
+        if let renaming { store.rename(renaming.id, alias: alias) }
+        renaming = nil
       }
-      .alert("Rename Host", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-        TextField("Name", text: $alias)
-        Button("Save") {
-          if let renaming { store.rename(renaming.id, alias: alias) }
-          renaming = nil
-        }
-        Button("Cancel", role: .cancel) { renaming = nil }
-      } message: {
-        Text("Shown on this device only.")
+      Button("Cancel", role: .cancel) { renaming = nil }
+    } message: {
+      Text("Shown on this device only.")
+    }
+  }
+
+  private var hostRows: some View {
+    ForEach(store.hosts) { host in
+      Button {
+        store.select(host.id)
+        dismiss()
+      } label: {
+        HostRow(host: host, session: sessions.existing(for: host), selected: host.id == store.selectedHost?.id)
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("host-\(host.endpoint)")
+      .swipeActions(edge: .trailing) {
+        Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
+        Button("Rename", systemImage: "pencil") { startRenaming(host) }.tint(.indigo)
+      }
+      .contextMenu {
+        Button("Rename…", systemImage: "pencil") { startRenaming(host) }
+        Button("Forget", systemImage: "trash", role: .destructive) { forget(host) }
       }
     }
   }
@@ -78,7 +73,7 @@ struct HostsManagerView: View {
   }
 
   private func forget(_ host: MirrorHostRecord) {
-    sessions.forget(host.id)
+    sessions.forgetPairing(host)
     store.remove(host.id)
     if store.hosts.isEmpty { dismiss() }
   }

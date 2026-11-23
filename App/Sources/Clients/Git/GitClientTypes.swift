@@ -58,6 +58,8 @@ enum GitClientError: LocalizedError {
   case notRepository
 
   case commandFailed(command: String, message: String)
+  /// macOS denied the command read access to its working directory.
+  case directoryAccessDenied(command: String, message: String)
   case worktreeNotRegistered(path: String)
   case worktreeRecoveryFailed(path: String, removalError: String, recoveryError: String)
 
@@ -75,6 +77,15 @@ enum GitClientError: LocalizedError {
         return String(localized: "Git command failed: \(command)")
       }
       return String(localized: "Git command failed: \(command)\n\(message)")
+    case .directoryAccessDenied(let command, let message):
+      return String(
+        localized: """
+          macOS denied access to this folder. In System Settings > Privacy & Security, check that Prowl \
+          has access to it under Files and Folders or Full Disk Access, then retry.
+          Git command failed: \(command)
+          \(message)
+          """
+      )
     case .worktreeNotRegistered(let path):
       return String(localized: "Git no longer recognizes this worktree: \(path)")
     case .worktreeRecoveryFailed(let path, let removalError, let recoveryError):

@@ -33,6 +33,28 @@ The app has three levels (docs-ai 088):
 
 iPhone and iPad use the same stack navigation (iOS 26+).
 
+With no Host paired, onboarding also offers **Try the Demo** (docs-ai 098). It runs this same
+app against `MirrorDemoHost`, an in-memory Host that serves the wire protocol to the real
+sessions, with sample panes from `MirrorDemoContent`. Answers, messages, Stop and New Session
+play scripted replies. The demo has its own `MirrorHostStore` in a cleared `UserDefaults`
+suite, makes no socket, Keychain item or push registration, and ends with **Exit Demo** or
+**Pair with a Mac** in the Settings menu. Paired users never see it.
+
+The gear at the top left of Agents is the Settings menu: quick actions (switch among up to five
+Hosts, **Add Host…**) and **Settings…**, a sheet with Hosts, Notifications and About. New
+app-level settings, such as a subscription, add a section to that sheet, not items to the menu.
+
+## iPhone Duo and other sizes
+
+The app builds with the iOS 27.2 SDK, so on iPhone Duo it fills both displays and the system
+moves toolbar items into the vertical bar on the cover display and in landscape. Layouts depend
+on the space the app has, never on the device or the orientation: onboarding is one column when
+taller than wide and two halves when wider than tall, which keeps the fold of a book-held device
+between them. The Agents list, Chat, Terminal, New Session and Settings use system containers and
+need nothing of their own. Checked on the iPhone Duo simulator (cover and inner display, portrait
+and landscape) on 2026-11-23; partially folded poses cannot be set in the simulator from the
+command line and are not checked.
+
 ## Chat
 
 Chat renders the Host's normalized events (see the [wire contract](../../docs/remote-mirror-wire.md#conversation-stream-conversation-v1)):
@@ -53,8 +75,8 @@ History reads 200-line pages from a frozen retained snapshot, with a 2 MiB budge
 The live and history reading positions survive a switch to Chat and back. Erased
 transient output is not archived. Ghostty is not embedded in this client.
 
-On Hosts advertising `remote-scroll`, **Scroll Up** and **Scroll Down** move the
-Host pane by its current height minus three rows (at least one row). Native
+On Hosts advertising `remote-scroll`, **Scroll Up** and **Scroll Down**, which float at the
+bottom right of Terminal above **Latest**, move the Host pane by its current height minus three rows (at least one row). Native
 scrollback moves exactly that far; application-managed scrolling uses an equivalent
 precision wheel distance adjusted by Host internal Agent profiles (Codex: three
 rows per event with eight rows reserved for composer/status). Host settings and

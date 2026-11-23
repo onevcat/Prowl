@@ -60,7 +60,9 @@ struct AgentComposerClearingTests {
       plan: plan, agentName: "Claude", clock: clock, now: { 100 })
   }
 
-  private func expectRefusal(_ outcome: AgentComposerClearing.Outcome) -> AgentInputRefusal? {
+  /// A nil outcome is a task that did not return; `advance(_:by:until:)` already recorded it.
+  private func expectRefusal(_ outcome: AgentComposerClearing.Outcome?) -> AgentInputRefusal? {
+    guard let outcome else { return nil }
     if case .refused(let refusal) = outcome { return refusal }
     Issue.record("expected a refusal, got \(outcome)")
     return nil
@@ -98,8 +100,7 @@ struct AgentComposerClearingTests {
     let screen = Screen(.draft(draft))
     let plan = AgentComposerClearPlan.killRow(endKey: "ctrl-e", killKey: "ctrl-u")
     let task = Task { await clearing(screen, plan: plan, clock: clock).clear(draft) }
-    await clock.advance(by: .seconds(2))
-    let refusal = expectRefusal(await task.value)
+    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
     #expect(refusal?.details?.reason == .clearing)
     #expect(screen.pressed == ["ctrl-e", "ctrl-u"])
   }
@@ -110,8 +111,7 @@ struct AgentComposerClearingTests {
     let task = Task {
       await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock).clear(.init(text: "hello", isComplete: true))
     }
-    await clock.advance(by: .seconds(2))
-    let refusal = expectRefusal(await task.value)
+    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
     #expect(refusal?.details?.reason == .clearing)
     #expect(refusal?.details?.replaceable == false)
     #expect(refusal?.details?.draft?.text == "hello")
@@ -133,8 +133,9 @@ struct AgentComposerClearingTests {
 
     let stubborn = Screen(.draft(draft))
     let capped = Task { await clearing(stubborn, plan: .killLines(key: "ctrl-u"), clock: clock).clear(draft) }
-    await clock.advance(by: .seconds(20))
-    let refusal = expectRefusal(await capped.value)
+    // Up to 80 settle polls in sequence: one advance can finish before the task reaches its
+    // next sleep on a loaded runner, so step the clock one poll at a time.
+    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: capped))
     #expect(refusal?.details?.reason == .clearing)
     #expect(stubborn.pressed.count == AgentComposerClearing.maximumPresses(forLines: 3))
     #expect(AgentComposerClearing.maximumPresses(forLines: 1) == 4)
@@ -181,8 +182,7 @@ struct AgentComposerClearingTests {
       }
     }
     let task = Task { await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock).clear(draft) }
-    await clock.advance(by: .seconds(2))
-    let refusal = expectRefusal(await task.value)
+    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
     #expect(refusal?.details?.reason == .editing)
     #expect(screen.pressed == ["ctrl-s"])
 

@@ -6,6 +6,7 @@ nonisolated struct ShellClientError: LocalizedError, Equatable, Sendable {
   let stdout: String
   let stderr: String
   let exitCode: Int32
+  var isRemote = false
 
   var errorDescription: String? {
     var parts: [String] = [String(localized: "Command failed: \(command)")]

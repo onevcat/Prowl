@@ -20,7 +20,8 @@ an unread-notification bell, and run/agent status. In place of the branch icon, 
 working agent shows the animated bagua indicator that Active Agents uses, an agent
 waiting for input shows a red exclamation mark, and the row's own work (create,
 archive, delete) or a command that reports progress shows a plain spinner. With
-Reduce Motion on, a working agent shows the plain spinner too.
+Reduce Motion on, a working agent shows the plain spinner too. A long list collapses
+behind **Show N More** (see [Collapsed worktree lists](#collapsed-worktree-lists)).
 
 ## Repository kinds
 
@@ -54,7 +55,16 @@ plain folder. The sidebar shows **Git is unavailable** or **Unable to read
 repository**. Click the warning icon for guidance and **Copy Details**. After
 fixing Git, permissions, or repository configuration, click **Retry** or use
 **Refresh Worktrees** (`⌘⇧R`). Failed loads use the error row rather than retaining
-an old worktree list. Existing terminal sessions for failed projects stay running.
+an old worktree list. When macOS denies Git access to a local folder (`Operation not
+permitted`), the details start with **macOS denied access to this folder**: check
+Prowl under **Files and Folders** or **Full Disk Access** in System Settings >
+Privacy & Security. For remote folders, the details show the error from the SSH
+host. Each failed Git command writes its operation, exit code, failure kind, and
+a hash of its folder to the unified log (category `Git`). In one app session, lines
+with the same hash came from the same folder; the log does not show the path. Use
+**Copy Details** for the folder and command output.
+Commands that a newer refresh cancels are not logged as failures. Existing
+terminal sessions for failed projects stay running.
 Removing a failed project from Prowl closes its retained terminals; other projects'
 terminals stay open. Background refreshes do not repeatedly open error dialogs.
 
@@ -172,6 +182,33 @@ change that a watcher missed.
   expanding a git repo moves the count onto the individual worktree rows
   (hidden at zero). Workspaces and plain folders always show the count on the
   header.
+
+## Collapsed worktree lists
+
+A repository that other tools also drive can accumulate worktrees you never open
+in Prowl. Its list collapses so the worktrees you work in stay in view.
+
+- A collapsed list shows the first three rows (the main worktree counts as one),
+  every pinned worktree, every worktree with an open terminal tab, and the
+  selected worktree. **Show N More** below the rows lists the rest; **Show Less**
+  collapses it again. The choice is remembered per repository.
+- Rows never move: collapsing hides rows in place, so a worktree that gets or
+  loses a tab keeps its position. The first three are positions in the list, so
+  opening a tab never hides another row.
+- Rows are newest first unless you reorder them by dragging, so the newest
+  worktrees take the first places. A list of three rows or fewer shows everything
+  and has no control.
+- **Show Less** is unavailable while every row past the first three has an open
+  tab. Agent detection plays no part.
+- Hidden rows are skipped by `⌘⌃↑` / `⌘⌃↓` and by `⌃1`–`⌃9`, like the rows of a
+  collapsed repository. Selecting a worktree opens a tab in it, so a row you
+  walk to stays visible after **Show Less**. The command palette lists every
+  worktree either way; opening a hidden one shows it in place.
+- Archiving or deleting the selected worktree selects the next row on screen.
+- At launch, while Prowl restores the terminal layout, nothing is hidden.
+- Plain folders, workspaces, and remote folders have no worktree list to
+  collapse. A collapsed [group](#repository-groups) hides the control with the
+  repository's rows.
 
 ## Repository groups
 

@@ -574,6 +574,8 @@ nonisolated enum AgentProfileLaunchPlanError: Error, Equatable, Sendable {
 }
 
 nonisolated enum AgentProfileLaunchPlanner {
+  /// Every reserved launch carrier starts with this; the typed launch command names them.
+  static let carrierNamePrefix = "PROWL_LAUNCH_"
   /// Reserved surface-environment carrier for prompted starts. The prompt is
   /// expanded as one quoted argv token and never enters Ghostty initial_input.
   static let promptCarrierName = "PROWL_LAUNCH_PROMPT"

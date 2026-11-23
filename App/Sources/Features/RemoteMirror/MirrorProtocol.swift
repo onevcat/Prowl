@@ -102,7 +102,7 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case challenge, authenticate, pair, paired, authenticated, list, panes, subscribe, subscribed,
       frame, textFrame, viewport, acknowledge, input, history, historyPage, failure, ping, pong, ended,
       refresh, scroll, scrollResult, scrollState, command, commandResult, commandReceipt,
-      conversationSnapshot, conversationEvents, screenPrompt
+      conversationSnapshot, conversationEvents, screenPrompt, pushRegister, pushUnregister, pushStatus, compress
   }
   case list
   case panes(PanesPayload)
@@ -182,6 +182,18 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     var prompt: MirrorConversationEvent.Prompt?
     var subscriptionID: UUID
   }
+  /// `push-v1`: where the Host sends push events for this device, and which events
+  /// (docs-ai 095). The phone sends it on every connection.
+  case pushRegister(PushRegisterPayload)
+  typealias PushRegisterPayload = MirrorPushRegisterPayload
+  /// `push-v1`: the phone turned notifications off for this Host.
+  case pushUnregister
+  /// `deflate-v1`: the client asks the Host to compress what it sends on this connection
+  /// (docs-ai 097). Sent once, only to a Host that lists the capability.
+  case compress
+  /// The Host's reply to `pushRegister` and `pushUnregister`.
+  case pushStatus(PushStatusPayload)
+  typealias PushStatusPayload = MirrorPushStatusPayload
   case acknowledge(AcknowledgePayload)
   struct AcknowledgePayload: Codable, Sendable {
     var sequence: UInt64
@@ -289,6 +301,10 @@ nonisolated enum MirrorMessage: Codable, Sendable {
     case .conversationSnapshot: .conversationSnapshot
     case .conversationEvents: .conversationEvents
     case .screenPrompt: .screenPrompt
+    case .pushRegister: .pushRegister
+    case .pushUnregister: .pushUnregister
+    case .compress: .compress
+    case .pushStatus: .pushStatus
     }
   }
   var panes: [MirrorPaneDescriptor]? {
@@ -542,6 +558,17 @@ nonisolated enum MirrorWire {
   static let maximumInput = 64 * 1024
 
   static func encode(_ message: MirrorMessage) throws -> Data {
+    try frame(payload(message))
+  }
+
+  /// The framed bytes for `message`, compressed when the connection compresses (docs-ai 097).
+  static func encode(_ message: MirrorMessage, compressor: MirrorWireCompression.Deflater?) throws -> Data {
+    let plain = try payload(message)
+    return try frame(compressor.map { try $0.compress(plain) } ?? plain)
+  }
+
+  /// The payload of `message`: its type byte and body, without the length prefix.
+  static func payload(_ message: MirrorMessage) throws -> Data {
     let payload: Data
     switch message {
     case .frame(let value):
@@ -570,7 +597,7 @@ nonisolated enum MirrorWire {
     default:
       payload = Data([0]) + (try JSONEncoder().encode(message))
     }
-    return try frame(payload)
+    return payload
   }
 
   private static func uuidBytes(_ id: UUID) -> Data {

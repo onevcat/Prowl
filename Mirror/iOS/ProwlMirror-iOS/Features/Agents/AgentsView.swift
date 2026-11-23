@@ -7,7 +7,7 @@ struct AgentsView: View {
   @Bindable var store: MirrorHostStore
   @Binding var path: NavigationPath
   let onAddHost: () -> Void
-  let onManageHosts: () -> Void
+  let onOpenSettings: () -> Void
   @Environment(MirrorHostSessions.self) private var sessions
   @State private var stateFilter: MirrorPaneState?
   @State private var expandedTerminals: Set<String> = []
@@ -31,10 +31,13 @@ struct AgentsView: View {
         }
       }
       if !all.counts.isEmpty {
+        // A header, not a row: an inset grouped row is masked to the section's larger corner
+        // radius, which cuts the outer corners of the edge tiles and their selection border.
         Section {
+        } header: {
           MirrorStateSummary(counts: all.counts, selection: $stateFilter)
+            .textCase(nil)
             .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
         }
       }
       ForEach(roster.projects) { project in
@@ -65,9 +68,9 @@ struct AgentsView: View {
     .navigationBarTitleDisplayMode(.large)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        HostMenu(
+        MirrorSettingsMenu(
           current: host, hosts: store.hosts, status: session.status,
-          select: { store.select($0.id) }, onAddHost: onAddHost, onManageHosts: onManageHosts)
+          select: { store.select($0.id) }, onAddHost: onAddHost, onOpenSettings: onOpenSettings)
       }
       ToolbarItem(placement: .topBarTrailing) {
         Button("New Session", systemImage: "plus") { launchRequest = .init(paneIDs: []) }
@@ -78,9 +81,9 @@ struct AgentsView: View {
     }
     .sheet(item: $launchRequest) { request in
       NavigationStack {
-        MirrorLaunchView(execute: { try await session.command($0) }, paneIDs: request.paneIDs) { pane in
+        MirrorLaunchView(execute: { try await session.command($0) }, paneIDs: request.paneIDs) { pane, kickoff in
           launchRequest = nil
-          path.append(MirrorPaneRoute(host: host, pane: pane, launched: true))
+          path.append(MirrorPaneRoute(host: host, pane: pane, launched: true, kickoff: kickoff))
         }
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {

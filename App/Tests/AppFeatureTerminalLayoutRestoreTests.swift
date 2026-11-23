@@ -55,7 +55,44 @@ struct AppFeatureTerminalLayoutRestoreTests {
     )
   }
 
-  @Test(.dependencies) func repositoriesChangedDuringRestoringPhaseDoesNotTriggerRestore() async {
+  @Test(.dependencies) func repositoriesChangedDuringRestoringPhaseSendsProvisionalRestore() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.snapshotPersistencePhase = .restoring
+    repositoriesState.selection = .worktree(worktree.id)
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    // The cached repository list restores at once instead of waiting for the live load.
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
+      $0.repositories.selection = nil
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .restoreLayoutSnapshot(worktrees: [worktree], isProvisional: true)
+      )
+    )
+    // The terminal can decline a provisional restore, so the live load must still be able to restore.
+    #expect(store.state.launchRestoreMode == .restoreLayout)
+  }
+
+  @Test(.dependencies) func liveLoadRestoresWhenProvisionalRestoreDidNotSettle() async {
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
@@ -76,22 +113,82 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
     store.exhaustivity = .off
 
-    // repositoriesChanged arrives while phase is still .restoring (from snapshot load).
-    // Layout restore must NOT trigger yet — only after phase becomes .active.
     await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
     await store.finish()
+    await store.send(liveLoad(of: repository))
+    await store.finish()
+    await store.skipReceivedActions()
+    #expect(store.state.launchRestoreMode == .lastFocusedWorktree)
+
+    let restores = sentCommands.value.filter {
+      if case .restoreLayoutSnapshot = $0 { return true }
+      return false
+    }
+    #expect(
+      restores == [
+        .restoreLayoutSnapshot(worktrees: [worktree], isProvisional: true),
+        .restoreLayoutSnapshot(worktrees: [worktree], isProvisional: false),
+      ])
+  }
+
+  @Test(.dependencies) func settledProvisionalRestoreIsNotRequestedAgainByLiveLoad() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.snapshotPersistencePhase = .restoring
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = true
+    var appState = AppFeature.State(repositories: repositoriesState, settings: settings)
+    appState.isRestoringLaunchLayout = true
+    appState.repositories.isLaunchLayoutRestorePending = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(initialState: appState) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: worktree.id))) {
+      $0.isRestoringLaunchLayout = false
+      $0.repositories.isLaunchLayoutRestorePending = false
+      $0.launchRestoreMode = .lastFocusedWorktree
+    }
+    await store.receive(\.repositories.selectWorktree)
+    await store.finish()
+    sentCommands.withValue { $0.removeAll() }
+
+    await store.send(liveLoad(of: repository))
+    await store.finish()
+    await store.skipReceivedActions()
 
     #expect(
       sentCommands.value.contains {
-        if case .restoreLayoutSnapshot = $0 {
-          return true
-        }
+        if case .restoreLayoutSnapshot = $0 { return true }
         return false
       } == false
     )
-    // launchRestoreMode should remain .restoreLayout so the next repositoriesChanged
-    // (after phase → .active) still has a chance to trigger the restore.
-    #expect(store.state.launchRestoreMode == .restoreLayout)
+    #expect(store.state.repositories.selection == .worktree(worktree.id))
+  }
+
+  @Test(.dependencies) func layoutRestoreFailedEndsLaunchRestore() async {
+    var appState = AppFeature.State()
+    appState.isRestoringLaunchLayout = true
+    appState.repositories.isLaunchLayoutRestorePending = true
+    let store = TestStore(initialState: appState) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestoreFailed(message: "reset"))) {
+      $0.isRestoringLaunchLayout = false
+      $0.repositories.isLaunchLayoutRestorePending = false
+    }
   }
 
   @Test(.dependencies) func repositoriesChangedRestoresLayoutWhenSomeRepositoriesFailed() async {
@@ -792,6 +889,13 @@ private func makeRepository(worktrees: [Worktree]) -> Repository {
     name: "repo",
     worktrees: IdentifiedArray(uniqueElements: worktrees)
   )
+}
+
+/// The first live load after the cached list, which moves the phase out of `.restoring`.
+private func liveLoad(of repository: Repository) -> AppFeature.Action {
+  .repositories(
+    .repositoriesLoaded(
+      [repository], failures: [], roots: [.local(URL(fileURLWithPath: "/tmp/repo"))], animated: false))
 }
 
 private func makePlainRepository() -> Repository {

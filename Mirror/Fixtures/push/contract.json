@@ -1,0 +1,155 @@
+{
+  "about": "Mirror push contract (docs-ai 095). The Host (App/Tests/RemoteMirror/MirrorPushContractTests.swift) and the iOS app (Mirror/iOS/ProwlMirror-iOSTests/MirrorPushContractTests.swift) test against this file. The gateway repository keeps a copy in test/fixtures/prowl-push-contract.json: change both together. Human-readable spec: docs/remote-mirror-wire.md.",
+  "capability": "push-v1",
+  "kinds": [
+    "blocked",
+    "done"
+  ],
+  "messages": {
+    "pushRegister": {
+      "pushRegister": {
+        "_0": {
+          "pushToken": "Zm9vYmFyLXB1c2gtdG9rZW4tMDEyMzQ1Njc4OQ",
+          "kinds": [
+            "blocked",
+            "done"
+          ]
+        }
+      }
+    },
+    "pushUnregister": {
+      "pushUnregister": {}
+    },
+    "pushStatus": {
+      "pushStatus": {
+        "_0": {
+          "pushEnabled": true,
+          "pushAllowedByMac": false,
+          "registered": true
+        }
+      }
+    },
+    "pushStatusTokenGone": {
+      "pushStatus": {
+        "_0": {
+          "pushEnabled": true,
+          "pushAllowedByMac": true,
+          "registered": false,
+          "tokenGone": true
+        }
+      }
+    }
+  },
+  "crypto": {
+    "info": "prowl-mirror-push-v1",
+    "deviceSecretHex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "hostID": "11111111-2222-3333-4444-555555555555",
+    "keyHex": "1e7f1b8f0c110534f475d3c51bdf3c98a0fb10d5ad60aa72cc4add9f1c702aa1",
+    "nonceHex": "000102030405060708090a0b",
+    "plaintext": "{\"hello\":\"push\"}",
+    "sealed": "ERERESIiMzNERFVVVVVVVQABAgMEBQYHCAkKC822FCs5oi5CZcjy+b8H7gVLmwX1v69/XSq/EKCoVU+w",
+    "paneID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+    "collapseID": "6O3nw3oYaPm_Beb9LXEOnA"
+  },
+  "content": {
+    "complete": {
+      "v": 1,
+      "kind": "blocked",
+      "paneID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "title": "Prowl · main",
+      "body": "An agent needs your attention",
+      "stateChangedAt": "2026-11-22T05:31:31Z"
+    },
+    "withoutTimestamp": {
+      "v": 1,
+      "kind": "done",
+      "paneID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "title": "Prowl · main",
+      "body": "An agent finished"
+    },
+    "unsupportedVersion": {
+      "v": 2,
+      "kind": "done",
+      "paneID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "title": "t",
+      "body": "b"
+    }
+  },
+  "gateway": {
+    "url": "https://prowl-push.onev.dev",
+    "pushTokenPattern": "^[A-Za-z0-9_-]{16,256}$",
+    "pushTokenSamples": {
+      "valid": [
+        "Zm9vYmFyLXB1c2gtdG9rZW4tMDEyMzQ1Njc4OQ",
+        "oPfe6eUOGJiGfHziFjsuXP2iScfa1am1Aa88EaXSHM0"
+      ],
+      "invalid": [
+        "short",
+        "has space in it, too long?",
+        "plus+and/slash/are/not/url/safe="
+      ]
+    },
+    "pushPath": "/v1/push",
+    "maximumSealedLength": 3000,
+    "pushRequestKeys": [
+      "collapseID",
+      "pushToken",
+      "sealed"
+    ],
+    "pushResults": {
+      "202": "accepted",
+      "410": "tokenGone",
+      "400": "failed",
+      "429": "failed",
+      "500": "failed"
+    },
+    "pushFailures": [
+      {
+        "status": 503,
+        "body": {
+          "error": "try-later",
+          "reason": "ServiceUnavailable"
+        },
+        "reason": "ServiceUnavailable"
+      },
+      {
+        "status": 429,
+        "body": {
+          "error": "rate-limited"
+        },
+        "reason": "rate-limited"
+      },
+      {
+        "status": 500,
+        "body": null,
+        "reason": "http-500"
+      }
+    ],
+    "apnsPayload": {
+      "aps": {
+        "alert": {
+          "title-loc-key": "MIRROR_PUSH_TITLE",
+          "loc-key": "MIRROR_PUSH_FALLBACK"
+        },
+        "mutable-content": 1,
+        "sound": "default"
+      },
+      "sealed": "<sealed>"
+    },
+    "management": {
+      "headers": [
+        "X-Prowl-Installation",
+        "X-Prowl-Challenge",
+        "X-Prowl-Assertion"
+      ],
+      "clientData": "<METHOD> <PATH>\n<challenge>\n<body>",
+      "renewInstallationOn401": [
+        "unknown-installation"
+      ],
+      "retryChallengeOn401": [
+        "invalid-challenge",
+        "replayed-assertion"
+      ]
+    }
+  }
+}

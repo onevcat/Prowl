@@ -183,7 +183,7 @@ extension RepositoriesFeature {
         let change = markRebind(hostProfileID, authority, state: &state)
         effects.append(connectionHoldEffects(for: change, state: state))
       }
-      remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID): \(message)")
+      remoteRefreshLogger.warning("Remote refresh failed for \(repositoryID)", privateDetail: message)
     case .refreshed(let refresh):
       state.answeredRemoteRepositoryIDs.insert(repositoryID)
       state.remoteRefreshFailureCounts[repositoryID] = nil
