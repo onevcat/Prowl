@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
@@ -877,7 +878,13 @@ internal fun LaunchDialog(session: Session, projectPanes: Set<String>? = null, d
                 Box {
                     AssistChip(
                         onClick = { worktrees = true }, leadingIcon = { Icon(Icons.Default.Folder, null) },
-                        label = { Text(worktree?.string("name") ?: "Project") },
+                        label = {
+                            val label = worktree?.let {
+                                val project = it.string("root_path").trimEnd('/').substringAfterLast('/').ifBlank { "/" }
+                                "$project · ${it.string("name")}"
+                            }
+                            Text(label ?: "Choose a project", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
                         enabled = state.worktrees.isNotEmpty() && !state.creating,
                     )
                     DropdownMenu(worktrees, { worktrees = false }) {

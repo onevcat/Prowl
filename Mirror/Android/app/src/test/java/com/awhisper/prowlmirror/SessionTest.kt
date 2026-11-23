@@ -74,17 +74,17 @@ class SessionTest {
             if (firstFrame) frame(scrollState = scrollState)
         }
 
-        fun frame(text: String = "", scrollState: Boolean = false) {
+        fun frame(text: String = "", scrollState: Boolean = false, subscription: String = lease) {
             if (scrollState)
-                peer.receive(control("scrollState", obj("subscriptionID" to lease, "sequence" to 1)))
-            peer.receive(Packet.Text(lease, 1, 80, 24, false, text))
+                peer.receive(control("scrollState", obj("subscriptionID" to subscription, "sequence" to 1)))
+            peer.receive(Packet.Text(subscription, 1, 80, 24, false, text))
         }
 
-        fun subscribed() {
+        fun subscribed(subscription: String = lease) {
             peer.receive(
                 control(
                     "subscribed",
-                    obj("paneID" to pane.id, "subscriptionID" to lease, "hostRunID" to run),
+                    obj("paneID" to pane.id, "subscriptionID" to subscription, "hostRunID" to run),
                 )
             )
         }
@@ -256,10 +256,97 @@ class SessionTest {
         f.session.showChat(false)
         assertEquals("text-v1", f.peer.sent.last().payload().string("representation"))
         f.subscribed()
+        f.frame()
         f.session.showChat(true)
         assertEquals("conversation-v1", f.peer.sent.last().payload().string("representation"))
         assertEquals(5L, f.peer.sent.last().payload().longInteger("since"))
         assertEquals(1, f.peers.size)
+        f.session.close()
+    }
+
+    @Test
+    fun modeSwitchWaitsForFirstFrameAndAcknowledgesItBeforeResubscribing() = runTest {
+        for (switchBeforeLease in listOf(true, false)) {
+            val f = Fixture(backgroundScope)
+            f.pane = f.pane.copy(conversation = "available")
+            f.session.connect()
+            f.ready(conversation = true)
+            f.session.choose(f.pane)
+            if (!switchBeforeLease) f.subscribed()
+            f.session.showChat(false)
+            assertEquals(1, f.peer.sent.count { it.kind == "subscribe" })
+            if (switchBeforeLease) f.subscribed()
+            val message = obj("seq" to 1, "source" to "transcript", "kind" to "assistant.message", "data" to obj())
+            f.peer.receive(control("conversationSnapshot", obj(
+                "subscriptionID" to f.lease, "sequence" to 1, "gap" to false, "events" to listOf(message),
+            )))
+            assertEquals(listOf("acknowledge", "subscribe"), f.peer.sent.takeLast(2).map { it.kind })
+            assertEquals("text-v1", f.peer.sent.last().payload().string("representation"))
+            val terminal = uuid()
+            f.subscribed(terminal)
+            f.frame("terminal", subscription = terminal)
+            assertEquals(Status.live, f.session.state.value.status)
+            assertEquals("terminal", f.session.state.value.text)
+            assertFalse(f.peer.stopped)
+            f.session.close()
+        }
+    }
+
+    @Test
+    fun oldHistoryRepliesDoNotDisconnectOrPopulateChat() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(conversation = "pending")
+        f.session.connect()
+        f.ready(conversation = true)
+        f.session.choose(f.pane)
+        f.subscribed()
+        f.frame()
+        f.session.loadHistory(refresh = true)
+        assertTrue(f.session.state.value.loadingHistory)
+        f.session.showChat(true)
+        assertFalse(f.session.state.value.loadingHistory)
+        f.peer.receive(control("historyPage", obj(
+            "subscriptionID" to f.lease, "historyID" to uuid(), "offset" to 0,
+            "total" to 1, "capturedAt" to 10, "truncated" to false, "lines" to listOf("old history"),
+        )))
+        val chat = uuid()
+        f.subscribed(chat)
+        f.peer.receive(control("failure", obj("subscriptionID" to f.lease, "error" to "HISTORY_UNAVAILABLE")))
+        f.peer.receive(control("conversationSnapshot", obj(
+            "subscriptionID" to chat, "sequence" to 0, "gap" to false, "events" to emptyList<Any>(),
+        )))
+        assertEquals(Status.live, f.session.state.value.status)
+        assertTrue(f.session.state.value.chat)
+        assertTrue(f.session.state.value.history.isEmpty())
+        assertFalse(f.peer.stopped)
+        f.session.close()
+    }
+
+    @Test
+    fun reconnectResumesChatWhileHostIsStillDetectingTheConversation() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(conversation = "available")
+        f.session.connect()
+        f.ready(conversation = true)
+        f.session.choose(f.pane)
+        f.subscribed()
+        val message = obj("seq" to 1, "source" to "transcript", "kind" to "assistant.message", "data" to obj())
+        f.peer.receive(control("conversationSnapshot", obj(
+            "subscriptionID" to f.lease, "sequence" to 1, "gap" to false, "events" to listOf(message),
+        )))
+        f.peer.closed("Connection lost")
+        f.pane = f.pane.copy(conversation = "pending")
+        f.session.retry()
+        f.ready(conversation = true)
+        val request = f.peer.sent.last().payload()
+        assertEquals("conversation-v1", request.string("representation"))
+        assertEquals(1L, request.longInteger("since"))
+        f.peer.receive(control("failure", obj("error" to "CONVERSATION_UNSUPPORTED")))
+        assertEquals("text-v1", f.peer.sent.last().payload().string("representation"))
+        f.subscribed()
+        f.frame()
+        assertEquals(Status.live, f.session.state.value.status)
+        assertFalse(f.session.state.value.chat)
         f.session.close()
     }
 

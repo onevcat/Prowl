@@ -85,6 +85,15 @@ class InterfaceTest {
     }
 
     @Test
+    fun newSessionNamesTheSelectedProjectAndBranch() {
+        rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("New Session").performClick()
+        rule.onNodeWithText("Prowl · main").assertIsDisplayed().performClick()
+        rule.onNodeWithText("/Users/demo/Projects/Kingfisher-8.4").performClick()
+        rule.onNodeWithText("Kingfisher · release/8.4").assertIsDisplayed()
+    }
+
+    @Test
     fun onboardingArrangesTheBrandAndActionsForTheWindowShape() {
         val window = rule.onRoot().fetchSemanticsNode().boundsInRoot
         val brand = rule.onNodeWithTag("onboarding-brand").fetchSemanticsNode().boundsInRoot

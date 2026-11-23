@@ -179,6 +179,8 @@ class Session(
     private var generation = 0
     private var requestedCompression = false
     private var lease: String? = null
+    private var retiredLease: String? = null
+    private var pendingChat: Boolean? = null
     private var runID: String? = null
     private var intent = "ifFree"
     private var choseMode = false
@@ -311,6 +313,8 @@ class Session(
         transport = null
         old?.close()
         lease = null
+        retiredLease = null
+        pendingChat = null
         val commands = pendingCommands.values.toList()
         pendingCommands.clear()
         commands.forEach { it.completeExceptionally(IOException("Connection lost before confirmation")) }
@@ -438,6 +442,7 @@ class Session(
             if (latest.id == current.id) applyDescriptor(current, latest)
         }
         choseMode = false
+        pendingChat = null
         submission = null
         historyGate.reset()
         state.update {
@@ -485,20 +490,39 @@ class Session(
         val current = state.value
         if (current.chat == chat || current.status !in setOf(Status.live, Status.subscribing)) return false
         if (chat && "conversation-v1" !in current.capabilities) return false
+        if (current.status == Status.subscribing) {
+            // The Host's subscribed reply has no representation. Finish reading its first
+            // frame before sending another subscribe so that the reply is unambiguous.
+            pendingChat = chat
+            state.update { it.copy(kickoff = null) }
+            return true
+        }
         state.update { it.copy(chat = chat, kickoff = null) }
         intent = "ifFree"
         subscribe()
         return true
     }
 
+    private fun finishModeSwitch() {
+        val chat = pendingChat ?: return
+        pendingChat = null
+        switchMode(chat)
+    }
+
     private fun subscribe() {
         clearScroll()
         val pane = state.value.pane ?: return
+        // A History reply may already be on the wire for the lease being replaced.
+        if (lease != null) retiredLease = lease
+        historyTimeout?.cancel()
         lease = null
         pendingScrollState = null
         val current = state.value
         expectsScrollState = !current.chat && "scroll-state-v1" in current.capabilities
-        state.update { it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds(), screenPrompt = null) }
+        state.update {
+            it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds(),
+                screenPrompt = null, loadingHistory = false)
+        }
         send(
             control(
                 "subscribe",
@@ -822,6 +846,7 @@ class Session(
                     obj("subscriptionID" to lease, "sequence" to packet.sequence),
                 )
             )
+            finishModeSwitch()
             return
         }
         packet as Packet.Control
@@ -857,7 +882,7 @@ class Session(
                         pane = updatedPane ?: it.pane,
                         capabilities = caps,
                         chat = if (it.status == Status.live) it.chat else
-                            it.chat && "conversation-v1" in caps && updatedPane?.conversation == "available",
+                            it.chat && "conversation-v1" in caps,
                         conversation = if (sameRun) it.conversation else ConversationFeed(),
                         answeredPrompt = it.answeredPrompt.takeIf { sameRun },
                         promptAction = it.promptAction.takeIf { sameRun },
@@ -952,12 +977,12 @@ class Session(
                 }
                 state.update { it.copy(status = Status.live, conversation = it.conversation.accept(p, snapshot)) }
                 if (!events.isEmpty) send(control("acknowledge", obj("subscriptionID" to active, "sequence" to sequence)))
+                finishModeSwitch()
             }
             "failure" -> {
                 val error = p.string("error")
                 if (error.startsWith("CONVERSATION_UNSUPPORTED") && state.value.chat) {
                     state.update { it.copy(chat = false) }
-                    intent = "ifFree"
                     subscribe()
                 } else if (error.startsWith("SCROLL_UNAVAILABLE") || error.startsWith("SCROLL_BUSY")) {
                     val request = scrollRequest
@@ -967,13 +992,15 @@ class Session(
                         clearScroll()
                         state.update { it.copy(scrollError = error) }
                     }
-                } else if (
-                    error.startsWith("HISTORY_UNAVAILABLE") &&
-                        state.value.loadingHistory &&
-                        p.optionalString("subscriptionID")?.let(::canonical) == lease
-                ) {
-                    historyTimeout?.cancel()
-                    state.update { it.copy(error = error, loadingHistory = false) }
+                } else if (error.startsWith("HISTORY_UNAVAILABLE")) {
+                    val replyLease = p.optionalString("subscriptionID")?.let(::canonical)
+                    if (replyLease != null && replyLease == retiredLease && replyLease != lease) return
+                    if (replyLease == null || replyLease != lease) {
+                        failed(error)
+                    } else if (state.value.loadingHistory) {
+                        historyTimeout?.cancel()
+                        state.update { it.copy(error = error, loadingHistory = false) }
+                    }
                 } else {
                     if (error.startsWith("PANE_BUSY"))
                         state.update { it.copy(status = Status.takenOver) }
@@ -983,9 +1010,9 @@ class Session(
             "scrollResult" -> scrollResult(p)
             "scrollState" -> receiveScrollState(p)
             "historyPage" -> {
-                require(
-                    canonical(p.string("subscriptionID")) == lease && state.value.loadingHistory
-                )
+                val replyLease = canonical(p.string("subscriptionID"))
+                if (replyLease == retiredLease && replyLease != lease) return
+                require(replyLease == lease && state.value.loadingHistory)
                 val continuation = historyGate.id != null
                 val lines = historyGate.accept(p)
                 historyTimeout?.cancel()
