@@ -181,6 +181,7 @@ class Session(
     private var lease: String? = null
     private var retiredLease: String? = null
     private var pendingChat: Boolean? = null
+    private var resumesConversation = false
     private var runID: String? = null
     private var intent = "ifFree"
     private var choseMode = false
@@ -315,6 +316,7 @@ class Session(
         lease = null
         retiredLease = null
         pendingChat = null
+        resumesConversation = false
         val commands = pendingCommands.values.toList()
         pendingCommands.clear()
         commands.forEach { it.completeExceptionally(IOException("Connection lost before confirmation")) }
@@ -518,6 +520,8 @@ class Session(
         lease = null
         pendingScrollState = null
         val current = state.value
+        val since = current.conversation.sequence.takeIf { current.chat && it > 0 }
+        resumesConversation = since != null
         expectsScrollState = !current.chat && "scroll-state-v1" in current.capabilities
         state.update {
             it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds(),
@@ -530,7 +534,7 @@ class Session(
                     "paneID" to pane.id,
                     "representation" to if (current.chat) "conversation-v1" else "text-v1",
                     "intent" to intent,
-                    "since" to current.conversation.sequence.takeIf { current.chat && it > 0 },
+                    "since" to since,
                     "includeScrollState" to true.takeIf { expectsScrollState },
                     "includeScreenPrompt" to true.takeIf { !current.chat && "prompt-respond" in current.capabilities },
                 ),
@@ -967,7 +971,7 @@ class Session(
                 val snapshot = packet.kind == "conversationSnapshot"
                 val sequence = p.longInteger("sequence")
                 val events = p.array("events")
-                if (snapshot && sequence < state.value.conversation.sequence) {
+                if (snapshot && resumesConversation && sequence < state.value.conversation.sequence) {
                     // A feed can expire and be recreated without a Host restart.
                     require(events.isEmpty) { "Conversation snapshot moved backwards" }
                     state.update { it.copy(conversation = ConversationFeed()) }
@@ -975,7 +979,10 @@ class Session(
                     subscribe()
                     return
                 }
-                state.update { it.copy(status = Status.live, conversation = it.conversation.accept(p, snapshot)) }
+                state.update {
+                    it.copy(status = Status.live, conversation = it.conversation.accept(p, snapshot, resumesConversation))
+                }
+                if (snapshot) resumesConversation = false
                 if (!events.isEmpty) send(control("acknowledge", obj("subscriptionID" to active, "sequence" to sequence)))
                 finishModeSwitch()
             }

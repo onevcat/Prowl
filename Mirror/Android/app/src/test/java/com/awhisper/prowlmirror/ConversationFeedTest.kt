@@ -66,7 +66,7 @@ class ConversationFeedTest {
         assertEquals(listOf(19L, 20L, 21L), resumed.events.map { it.sequence })
         val gap = resumed.accept(
             obj("sequence" to 30, "gap" to true, "events" to listOf(event(30))),
-            snapshot = true,
+            snapshot = true, resumed = true,
         )
         assertTrue(gap.gap)
         assertEquals(listOf(19L, 20L, 21L, 30L), gap.events.map { it.sequence })

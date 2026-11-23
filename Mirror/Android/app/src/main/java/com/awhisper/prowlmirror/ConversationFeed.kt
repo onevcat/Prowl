@@ -32,13 +32,14 @@ data class ConversationFeed(
     val agentState: String? get() = status?.optionalString("state")
     val attentionKind: String? get() = status?.optionalString("kind")
 
-    fun accept(packet: JsonObject, snapshot: Boolean): ConversationFeed {
+    fun accept(packet: JsonObject, snapshot: Boolean, resumed: Boolean = false): ConversationFeed {
+        val base = if (snapshot && !resumed) ConversationFeed() else this
         val end = packet.longInteger("sequence")
         val batch = packet.array("events")
-        require(batch.size() <= MAX_EVENTS && end >= sequence) { "Invalid conversation batch" }
+        require(batch.size() <= MAX_EVENTS && end >= base.sequence) { "Invalid conversation batch" }
         val missing = snapshot && packet.flag("gap")
         val incoming = batch.map { ConversationEvent.parse(it.asJsonObject) }
-        var previous = sequence
+        var previous = base.sequence
         for (event in incoming) {
             require(event.sequence > previous) { "Invalid conversation sequence" }
             if (!snapshot || (previous > 0 && !missing))
@@ -47,8 +48,8 @@ data class ConversationFeed(
         }
         require(incoming.isEmpty() || previous == end) { "Conversation sequence does not match the batch" }
 
-        val combined = events + incoming
-        return ConversationFeed(end, combined.takeLast(MAX_EVENTS), missing || gap || combined.size > MAX_EVENTS)
+        val combined = base.events + incoming
+        return ConversationFeed(end, combined.takeLast(MAX_EVENTS), missing || base.gap || combined.size > MAX_EVENTS)
     }
 
     companion object {

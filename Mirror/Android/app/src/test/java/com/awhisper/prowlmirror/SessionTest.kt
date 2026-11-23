@@ -351,6 +351,48 @@ class SessionTest {
     }
 
     @Test
+    fun freshConversationSnapshotReplacesPendingRowsButResumeKeepsMessages() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(conversation = "pending")
+        f.session.connect()
+        f.ready(conversation = true)
+        f.session.choose(f.pane)
+        f.subscribed()
+        f.frame()
+        f.session.showChat(true)
+
+        fun snapshot(subscription: String, sequence: Long, gap: Boolean, vararg events: com.google.gson.JsonObject) {
+            f.peer.receive(control("conversationSnapshot", obj(
+                "subscriptionID" to subscription, "sequence" to sequence, "gap" to gap, "events" to events.toList(),
+            )))
+        }
+        fun event(sequence: Long, kind: String, text: String? = null) =
+            obj("seq" to sequence, "kind" to kind, "source" to "transcript", "data" to obj(
+                "text" to text?.let { obj("text" to it) },
+            ))
+        fun rows() = f.session.state.value.conversation.events.map { it.kind }
+
+        val chat = uuid()
+        f.subscribed(chat)
+        snapshot(chat, 1, false, event(1, "session.pending"))
+        assertEquals(listOf("session.pending"), rows())
+        snapshot(chat, 5, true, event(3, "session.started"), event(4, "user.message", "hello"),
+            event(5, "assistant.message", "Hi"))
+        assertEquals(listOf("session.started", "user.message", "assistant.message"), rows())
+
+        f.peer.closed("Connection lost")
+        f.session.retry()
+        f.ready(conversation = true)
+        assertEquals(5L, f.peer.sent.last().payload().longInteger("since"))
+        val resumed = uuid()
+        f.subscribed(resumed)
+        snapshot(resumed, 6, false, event(6, "assistant.message", "Welcome back"))
+        assertEquals(listOf("session.started", "user.message", "assistant.message", "assistant.message"), rows())
+        assertEquals(Status.live, f.session.state.value.status)
+        f.session.close()
+    }
+
+    @Test
     fun scrollBoundsAreOptedInAndCommitWithTheirFrame() = runTest {
         val f = Fixture(backgroundScope)
         f.live(remoteScroll = true, scrollState = true, firstFrame = false)
