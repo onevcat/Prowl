@@ -41,7 +41,7 @@
   `listedHostLimit` = 5, **All Hosts…** beyond it, **Settings…**);
   `Features/Settings/MirrorSettingsView.swift` (sheet: `MirrorHostsSection` from
   `Features/Hosts/HostsView.swift`, `MirrorNotificationsSection`, `MirrorAboutSection` with
-  version, website, `https://prowl.cat/privacy` and the bundled LICENSE). The demo sheet shows
+  version, website, `https://prowl.cat/privacy`, `https://prowl.cat/terms` and the bundled LICENSE). The demo sheet shows
   About only. Decision: the menu stays for frequent actions; every setting lives in the sheet,
   so a subscription section (096) or a long Host list needs no menu change. Notifications moved
   out of the Hosts sheet because they are app-wide.
@@ -52,8 +52,8 @@
 
 ## Open questions
 
-- `https://prowl.cat/privacy` returned 404 on 2026-11-23. The page must exist before App Review
-  (Guideline 5.1.1(i) wants the policy reachable in the app).
+- `https://prowl.cat/privacy` and `/terms` are added by Prowl-Site PR #26 (not merged on
+  2026-11-23). They must be live before App Review (Guideline 5.1.1(i)).
 
 - Review notes and the demo video for App Review are not written yet.
 - The DEBUG `MirrorUIFixture` still has its own fake transport; it could move onto

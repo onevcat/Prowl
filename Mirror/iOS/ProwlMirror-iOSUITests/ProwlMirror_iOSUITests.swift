@@ -709,6 +709,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     let privacy = app.descendants(matching: .any).matching(identifier: "settings-privacy").firstMatch
     if !privacy.exists { app.swipeUp() }
     XCTAssertTrue(privacy.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-terms").firstMatch.exists)
     XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-version").firstMatch.exists)
     attach("Settings")
     app.descendants(matching: .any).matching(identifier: "settings-license").firstMatch.tap()
