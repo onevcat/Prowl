@@ -180,6 +180,46 @@ struct MirrorScreenPromptTests {
     #expect(MirrorScreenPrompt.parse("Plan:\n❯ 1. First\n  2. Second\n") == nil)
   }
 
+  /// Claude Code 2.1.330 dropped the question under the review page's answers; the heading
+  /// alone marks the page, and the answers stay its detail.
+  @Test func reviewPageWithoutAQuestionIsAPrompt() throws {
+    let prompt = try #require(
+      MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.330-review-answers.txt")))
+    #expect(prompt.title == "Review your answers")
+    #expect(prompt.answers.map(\.label) == ["Submit answers", "Cancel"])
+    #expect(prompt.highlighted == .option(1))
+    #expect(prompt.detail == "Which color do you prefer?\n→ Red\nWhich size do you prefer?\n→ Small")
+    #expect(!prompt.isPermission && !prompt.isMultiSelect)
+    #expect(prompt.nextKey(toward: .option(2)) == "down")
+    // A long question wraps onto an indented line; the current one may be quoted with `│`.
+    let wrapped = try #require(
+      MirrorScreenPrompt.parse(
+        """
+        Review your answers
+
+        │ ● Where should Prowl Mirror be available? Mainland China needs an
+          ICP filing number.
+          → All regions
+         ● What copyright line?
+           → 2026 onevcat
+
+        ❯ 1. Submit answers
+          2. Cancel
+        """))
+    #expect(wrapped.title == "Review your answers")
+    #expect(wrapped.detail?.hasSuffix("→ 2026 onevcat") == true)
+  }
+
+  /// Without a footer or a question, only a real review page counts: its heading, nothing but
+  /// indented answers under it, and a Submit answers row.
+  @Test func reviewHeadingAloneDoesNotMakeAListAPrompt() {
+    #expect(MirrorScreenPrompt.parse("Review your answers\n\n ● Pick one\n   → A\n\n❯ 1. First\n  2. Second\n") == nil)
+    #expect(
+      MirrorScreenPrompt.parse(
+        "Review your answers\n\n ● Pick one\n   → A\nThen we will:\n\n❯ 1. Submit answers\n  2. Cancel\n") == nil)
+    #expect(MirrorScreenPrompt.parse("Some notes\n\n❯ 1. Submit answers\n  2. Cancel\n") == nil)
+  }
+
   @Test func multiSelectReadsBoxesFreeformRowsAndTheSubmitRow() throws {
     let prompt = try #require(
       MirrorScreenPrompt.parse(Self.screen("MirrorScreenPrompt/claude-2.1.319-multi-select.txt")))
