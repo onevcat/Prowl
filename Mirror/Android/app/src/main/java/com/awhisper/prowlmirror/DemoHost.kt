@@ -2,20 +2,27 @@ package com.awhisper.prowlmirror
 
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
 /** Demo connections use the same messages as a Host, with state scoped to one visit. */
-internal class DemoHost {
+internal class DemoHost(private val scope: CoroutineScope) {
     val address = Host("demo", name = "Demo Mac")
     private val run = uuid()
     private val worktree = obj("id" to uuid(), "name" to "main", "path" to "/demo/Prowl", "root_path" to "/demo/Prowl")
     private val panes = linkedMapOf<String, DemoPane>()
+    private val connections = mutableSetOf<Connection>()
 
     private class DemoPane(val descriptor: JsonObject) {
         val events = mutableListOf<JsonObject>()
         val shell = mutableListOf<String>()
+        val queued = ArrayDeque<String>()
+        var script: Job? = null
+        var tool: String? = null
+        val working get() = descriptor.optionalString("agentState") == "working"
         val id get() = descriptor.string("id")
         val agent get() = descriptor.optionalString("agent")
         fun add(kind: String, data: JsonObject, source: String = "transcript") {
@@ -43,6 +50,10 @@ internal class DemoHost {
             add("agent.status", obj("state" to "blocked"))
             add("prompt.opened", approval, source = "screen")
         }
+        playTurn(
+            pane("Review the build", "codex"), "Check the demo build.",
+            toolDelay = 0, finishDelay = 120_000,
+        )
         pane("Terminal", null).shell += (1..150).map { "Demo terminal · line $it" }
     }
 
@@ -56,10 +67,74 @@ internal class DemoHost {
         )).also { panes[id] = it }
     }
 
+    fun close() {
+        panes.values.forEach { it.script?.cancel() }
+        connections.toList().forEach(Connection::close)
+    }
+
+    private fun setAgentState(pane: DemoPane, state: String, display: String = state) {
+        pane.descriptor.addProperty("agentState", state)
+        pane.descriptor.addProperty("displayState", display)
+        pane.add("agent.status", obj("state" to state), source = "osc")
+    }
+
+    private fun notifyPaneChanged(pane: DemoPane) {
+        connections.toList().forEach { it.paneChanged(pane) }
+    }
+
+    private fun playTurn(
+        pane: DemoPane, message: String, toolDelay: Long = 2_000, finishDelay: Long = 1_400,
+    ) {
+        pane.add("turn.started", obj("origin" to "human"))
+        pane.message("user.message", message)
+        setAgentState(pane, "working")
+        notifyPaneChanged(pane)
+        pane.script = scope.launch {
+            delay(toolDelay)
+            val id = uuid()
+            pane.tool = id
+            pane.add("tool.started", obj("id" to id, "name" to "Read", "kind" to "read",
+                "title" to "Read the request", "path" to "Demo.md"))
+            notifyPaneChanged(pane)
+            delay(finishDelay)
+            finishTurn(pane, interrupted = false)
+        }
+    }
+
+    private fun finishTurn(pane: DemoPane, interrupted: Boolean) {
+        if (interrupted) pane.script?.cancel()
+        pane.script = null
+        pane.tool?.let { id ->
+            pane.add("tool.completed", obj("id" to id, "name" to "Read",
+                "status" to if (interrupted) "interrupted" else "succeeded",
+                "output" to obj("text" to if (interrupted) "Tool interrupted." else "Read 12 lines")))
+        }
+        pane.tool = null
+        if (interrupted)
+            pane.add("notice", obj("level" to "info", "text" to "Interrupted. Tell the demo agent what to do differently."))
+        else pane.message("assistant.message", "This is a demo response. No message was sent to a Mac.")
+        pane.add("turn.completed", obj("status" to if (interrupted) "aborted" else "completed",
+            "reason" to "interrupted".takeIf { interrupted }))
+        setAgentState(pane, "idle", if (interrupted) "idle" else "done")
+        val next = pane.queued.removeFirstOrNull()
+        if (next == null) notifyPaneChanged(pane)
+        else {
+            pane.message("user.unqueued", next)
+            playTurn(pane, next)
+        }
+    }
+
+    private fun resolveApproval(pane: DemoPane, choice: String) {
+        val outcome = if (choice == "approve") "approved" else "dismissed"
+        pane.add("prompt.resolved", approval.deepCopy().apply { addProperty("outcome", outcome) }, source = "screen")
+        setAgentState(pane, "idle", "done")
+        notifyPaneChanged(pane)
+    }
+
     private data class History(val id: String, val capturedAt: Double, val lines: List<String>)
 
     val transport = TransportFactory { _, _, scope, receive, ready, _, _ ->
-        Connection(scope, receive, ready)
+        Connection(scope, receive, ready).also { connections += it }
     }
 
     private inner class Connection(
@@ -87,6 +162,7 @@ internal class DemoHost {
         }
 
         override fun close() {
+            connections -= this
             incoming.close()
             job.cancel()
         }
@@ -118,10 +194,7 @@ internal class DemoHost {
 
         private fun handle(message: Packet.Control) {
             when (message.kind) {
-                "list" -> emit("panes", "hostRunID" to run, "hostName" to "Demo Mac",
-                    "capabilities" to listOf("text-v1", "conversation-v1", "launch-profile", "agent-input",
-                        "shell-send", "refresh", "remote-scroll", "agent-keys", "shell-keys", "history", "prompt-respond", "scroll-state-v1"),
-                    "panes" to panes.values.map { it.descriptor })
+                "list" -> roster()
                 "subscribe" -> {
                     val p = message.payload()
                     val pane = panes[canonical(p.string("paneID"))] ?: return
@@ -177,6 +250,20 @@ internal class DemoHost {
         private fun reply(id: String, response: JsonObject) =
             emit("commandResult", "commandResponse" to obj("requestID" to id, "response" to response))
 
+        private fun roster() = emit(
+            "panes", "hostRunID" to run, "hostName" to "Demo Mac",
+            "capabilities" to listOf("text-v1", "conversation-v1", "launch-profile", "agent-input",
+                "shell-send", "refresh", "remote-scroll", "agent-keys", "shell-keys", "history", "prompt-respond", "scroll-state-v1"),
+            "panes" to panes.values.map { it.descriptor },
+        )
+
+        fun paneChanged(pane: DemoPane) {
+            if (selected == null) roster()
+            else if (selected == pane) {
+                if (chat) publishEvents(pane) else screen()
+            }
+        }
+
         private fun publishEvents(pane: DemoPane) {
             val events = pane.events.drop(delivered)
             delivered = pane.events.size
@@ -198,8 +285,7 @@ internal class DemoHost {
                     val launch = args.record("launch")
                     val created = pane("New demo session", launch.string("profile"))
                     launch.optionalString("prompt")?.let {
-                        created.message("user.message", it)
-                        created.message("assistant.message", "This is a demo response. No message was sent to a Mac.")
+                        playTurn(created, it)
                     }
                     success(data = obj("target" to obj("pane" to created.descriptor, "worktree" to worktree)))
                 }
@@ -212,29 +298,40 @@ internal class DemoHost {
                             "code" to "INPUT_NOT_READY", "message" to "The demo agent is waiting for your answer.",
                         ))
                     if (pane.agent != null) {
-                        pane.message("user.message", text)
-                        pane.message("assistant.message", "This is a demo response. No message was sent to a Mac.")
+                        if (pane.working) {
+                            pane.queued.addLast(text)
+                            pane.message("user.queued", text)
+                            notifyPaneChanged(pane)
+                        } else playTurn(pane, text)
                     } else {
                         pane.shell += "$ $text"
                         pane.shell += "demo: Commands do not run in the demo."
                         firstRow = lastPage(pane)
+                        screen()
                     }
-                    if (chat) publishEvents(pane) else screen()
                     success(if (kind == "agentsInput") "agents.input" else "send",
                         obj("input" to obj("bytes" to text.toByteArray().size, "trailing_enter_sent" to true)))
                 }
                 "promptRespond" -> {
                     val pane = selected
-                    if (pane == null || pane.descriptor.string("displayState") != "blocked")
-                        return obj("ok" to false, "error" to obj("code" to "PROMPT_CLOSED", "message" to "The demo prompt is closed"))
-                    pane.descriptor.addProperty("displayState", "done")
-                    val outcome = if (args.string("choice") == "approve") "approved" else "dismissed"
-                    pane.add("prompt.resolved", approval.deepCopy().apply { addProperty("outcome", outcome) }, source = "screen")
-                    pane.add("agent.status", obj("state" to "done"))
-                    if (chat) publishEvents(pane) else screen()
+                    val choice = args.string("choice")
+                    if (pane == null || pane.descriptor.string("displayState") != "blocked" ||
+                        args.string("prompt") != approval.string("id") || choice !in setOf("approve", "skip")
+                    ) return obj("ok" to false,
+                        "error" to obj("code" to "PROMPT_CHANGED", "message" to "The demo prompt changed."))
+                    resolveApproval(pane, choice)
                     success()
                 }
-                "agentKeys" -> success()
+                "agentKeys" -> {
+                    val target = panes[canonical(args.string("pane"))]
+                    if (target == null)
+                        return obj("ok" to false, "error" to obj("code" to "KEYS_REFUSED", "message" to "No such demo pane"))
+                    if (args.array("keys").any { it.asString in setOf("esc", "ctrl-c") }) {
+                        if (target.descriptor.string("displayState") == "blocked") resolveApproval(target, "skip")
+                        else if (target.working) finishTurn(target, interrupted = true)
+                    }
+                    success("agent.keys")
+                }
                 else -> obj("ok" to false, "error" to obj("code" to "UNAVAILABLE", "message" to "Not available in Demo"))
             }
         }

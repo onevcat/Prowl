@@ -497,8 +497,10 @@ rows in pages. The independent Terminal History reader shows the captured time
 and loaded line range and can refresh or request earlier lines.
 
 From the Android welcome screen, **Try the Demo** opens a sample Mac, without
-pairing or sending any traffic to a Host. Use **Settings → Exit Demo** to discard
-the sample sessions. Android Settings includes paired Hosts and About.
+pairing or sending any traffic to a Host. Messages sent to a working demo agent
+queue until its turn finishes. **Stop** interrupts that turn and starts the
+next queued message. Use **Settings → Exit Demo** to discard the sample sessions.
+Android Settings includes paired Hosts and About.
 
 ### Native history appearance on Mac
 

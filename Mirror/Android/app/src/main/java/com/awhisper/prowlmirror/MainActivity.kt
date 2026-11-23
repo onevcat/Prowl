@@ -62,14 +62,15 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
 
     fun startDemo() {
         if (roster != null) return
-        val host = DemoHost()
+        val host = DemoHost(viewModelScope)
         demo = host
         roster = Session(host.address, viewModelScope, host.transport, onLaunch = ::openLaunchedPane)
             .also { it.connect() }
     }
 
     fun exitDemo() {
-        if (demo == null) return
+        val host = demo ?: return
+        host.close()
         sessions.forEach(Session::close)
         sessions.clear()
         selected = null

@@ -19,11 +19,29 @@ class InterfaceTest {
         rule.onNodeWithText("The release notes are ready for review. You can reply from here.").assertIsDisplayed()
         rule.onNodeWithTag("composer").performTextInput("Can we ship?")
         rule.onNodeWithContentDescription("Send").performClick()
+        rule.waitUntil(8_000) {
+            rule.onAllNodesWithText("This is a demo response. No message was sent to a Mac.").fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithText("This is a demo response. No message was sent to a Mac.").assertIsDisplayed()
         rule.onNodeWithContentDescription("Agents").performClick()
         rule.onNodeWithContentDescription("Settings").performClick()
         rule.onNodeWithText("Exit Demo").performClick()
         rule.onNodeWithText("Pair with a Mac").assertIsDisplayed()
+    }
+
+    @Test
+    fun workingDemoQueuesInputAndStopStartsIt() {
+        rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
+        rule.onNodeWithText("Review the build").performClick()
+        rule.onNodeWithTag("composer").performTextInput("Check the queued follow-up")
+        rule.onNodeWithContentDescription("Send").performClick()
+        rule.onNodeWithText("queued").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Stop").performClick()
+        rule.onNodeWithText("Stop this agent?").assertIsDisplayed()
+        rule.onNodeWithText("Stop").performClick()
+        rule.onNodeWithText("Interrupted. Tell the demo agent what to do differently.").assertExists()
+        rule.onNodeWithText("queued").assertDoesNotExist()
+        rule.onNodeWithText("Check the queued follow-up").assertIsDisplayed()
     }
 
     @Test
