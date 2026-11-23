@@ -171,8 +171,8 @@ shows what it waits for above the composer. The **…** menu holds **History** a
 Output** for the terminal, **Reconnect** or **Take Over**, and **Disconnect**. The list keeps refreshing behind the pane, so a new agent or a closed pane
 is noticed within a few seconds.
 
-On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
-the live Host terminal by its current pane height minus three rows (at least one
+On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** (round buttons that
+float at the bottom right of Terminal, above **Latest**) move the live Host terminal by its current pane height minus three rows (at least one
 row). Native scrollback moves by that exact number of rows. Application-owned
 scrolling receives the equivalent precision wheel distance. Internal Agent defaults account for known application
 wheel steps: Codex uses three rows per event and reserves eight pane rows for its
@@ -201,7 +201,8 @@ The Host handles scrolling using its terminal's negotiated mouse/alternate-scrol
 mode, aimed at the center of its grid. Application-specific scroll regions or
 bindings can change the distance or response; this is not an exact line-number
 navigation contract. Both devices share the Host view, so scrolling can move the
-Host user's view too. An older Host leaves remote scrolling unavailable.
+Host user's view too. An older Host leaves remote scrolling unavailable, and the buttons do
+not show.
 
 The Mac client keeps the original styled terminal while an application redraws
 its own screen. Native terminal scrollback also keeps its styles when both Macs
@@ -361,8 +362,10 @@ Hide Keyboard button shows too. Both float above the composer in one row, Hide K
 left edge and the arrow at the right edge; the chat leaves room under its last message so the
 button does not cover it. While the agent works and the
 composer is empty, its button becomes **Stop**, which presses Escape on the Mac after you
-confirm. In Terminal, agent and shell panes get a key bar (esc, ⌃C, ⇧⇥, ⇥, arrows, Return): menus in a
-TUI, and in a shell ⌃C to stop a command, Tab to complete and the arrows for history.
+confirm. In Terminal, agent and shell panes get a key bar ordered by use, with Return first. An agent
+pane's bar is Return, ↑, ↓, esc, ⇥, ⇧⇥, ←, →, ⌃C: the arrows and Return work a TUI's menus,
+and ⌃C, which can end the agent, is last. A shell pane's bar is Return, ⌃C, ⇥, ↑, ↓, esc, ←, →,
+⇧⇥: ⌃C stops a command, Tab completes and the arrows recall history.
 When the Mac refuses a key or Stop, for example because someone is typing there, the reason
 shows above the composer. The prompt panel shows in Terminal too, above the key bar. While a message is still on its way to the Mac, the key bar and prompt answers wait.
 When the agent is blocked and the Host cannot read the question as a menu (a dialog layout it

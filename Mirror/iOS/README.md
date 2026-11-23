@@ -75,8 +75,8 @@ History reads 200-line pages from a frozen retained snapshot, with a 2 MiB budge
 The live and history reading positions survive a switch to Chat and back. Erased
 transient output is not archived. Ghostty is not embedded in this client.
 
-On Hosts advertising `remote-scroll`, **Scroll Up** and **Scroll Down** move the
-Host pane by its current height minus three rows (at least one row). Native
+On Hosts advertising `remote-scroll`, **Scroll Up** and **Scroll Down**, which float at the
+bottom right of Terminal above **Latest**, move the Host pane by its current height minus three rows (at least one row). Native
 scrollback moves exactly that far; application-managed scrolling uses an equivalent
 precision wheel distance adjusted by Host internal Agent profiles (Codex: three
 rows per event with eight rows reserved for composer/status). Host settings and
