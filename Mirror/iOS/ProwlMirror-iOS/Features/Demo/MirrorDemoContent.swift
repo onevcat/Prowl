@@ -180,11 +180,20 @@ nonisolated struct MirrorDemoContent: Sendable {
 
     // MARK: Screen
 
-    /// The terminal screen: the last lines of the session, and the menu the agent waits on.
-    var screen: String {
+    static let screenLines = 48
+
+    /// The terminal screen: the last lines of the session and the menu the agent waits on, or
+    /// an earlier window `scrolledBy` lines up from the end.
+    func screen(scrolledBy offset: Int = 0) -> String {
       let lines = transcriptLines
-      return lines.suffix(48).joined(separator: "\n")
+      let end = lines.count - min(max(0, offset), maximumScroll(lines))
+      return lines[max(0, end - Self.screenLines)..<end].joined(separator: "\n")
     }
+
+    /// How far the screen can scroll up from the end.
+    var maximumScroll: Int { maximumScroll(transcriptLines) }
+
+    private func maximumScroll(_ lines: [String]) -> Int { max(0, lines.count - Self.screenLines) }
 
     /// Everything the pane printed, for the terminal history.
     var historyText: String { transcriptLines.joined(separator: "\n") }

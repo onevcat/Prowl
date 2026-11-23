@@ -155,6 +155,33 @@ struct MirrorDemoHostTests {
     #expect(session.text.contains("❯ ls"))
   }
 
+  @Test(.timeLimit(.minutes(1))) func terminalScrollsThroughTheSessionAndReportsItsEnds() async {
+    let host = MirrorDemoHost(clock: DemoImmediateClock())
+    // Each command adds two lines (it replaces the prompt), so the shell holds more than one screen.
+    for index in 1...40 {
+      _ = host.run(.send(.init(pane: PaneID.prowlShell, text: "echo \(index)")))
+    }
+    let session = paneSession(host, PaneID.prowlShell, mode: .screen)
+    defer { session.disconnect() }
+    await settle { session.status == .live && session.scrollAtBottom != nil }
+    #expect(session.scrollAtBottom == true)
+    #expect(session.canScroll(.upward))
+    let live = session.text
+
+    session.scroll(.upward)
+    await settle { !session.isScrolling }
+    #expect(session.scrollError == nil)
+    #expect(session.scrollAtBottom == false)
+    #expect(session.text != live)
+
+    while session.scrollAtTop != true {
+      session.scroll(.upward)
+      await settle { !session.isScrolling }
+    }
+    #expect(session.text.hasPrefix("Prowl main ❯ git status --short"))
+    #expect(!session.canScroll(.upward))
+  }
+
   @Test(.timeLimit(.minutes(1))) func terminalHistoryPagesTheSession() async {
     let host = MirrorDemoHost(clock: DemoImmediateClock())
     let session = paneSession(host, PaneID.idle, mode: .screen)
