@@ -352,7 +352,7 @@ question) and the choices; tap one to answer. In a multi-select question, each t
 on the Mac and **Submit** sends the checked ones. A question in several parts ends on Claude's
 "Ready to submit your answers?" page, which the panel offers too. The Host checks that the Mac
 still shows the same question before it presses any key, so a stale tap is refused with a
-reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
+reason, and typed answers stay on the Mac. The panel shows the whole text of what the question is about; a long command scrolls inside its box. The panel takes at most half the pane, so the chat or the screen stays readable on a short display such as a phone on its side; answers that do not fit scroll inside the panel. Answered prompts leave one line in the chat. Instructions that Prowl adds to a launch prompt, such
 as the dispatch completion protocol, fold under **Prowl instructions** in your message.
 On a wide screen such as an iPad, the chat and its composer keep a readable column in the
 middle. The chat opens at the newest message and stays there as messages arrive. The arrow button shows

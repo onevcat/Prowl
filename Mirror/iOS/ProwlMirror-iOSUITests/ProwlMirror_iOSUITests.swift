@@ -767,6 +767,28 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(app.buttons["try-demo"].exists)
   }
 
+  /// Wider than tall, onboarding puts the title beside the steps and actions, and nothing is cut.
+  @MainActor
+  func testOnboardingSitsSideBySideWhenWide() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture", "--mirror-ui-onboarding-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
+    waitForOrientation(app, wide: true)
+    let title = app.staticTexts["onboarding-title"]
+    let pair = app.buttons["add-host"]
+    XCTAssertTrue(pair.waitForExistence(timeout: 10))
+    expectation(for: NSPredicate { _, _ in title.frame.maxX < pair.frame.minX }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+    XCTAssertTrue(pair.isHittable)
+    XCTAssertTrue(app.buttons["try-demo"].isHittable)
+    attach("Onboarding side by side")
+    XCUIDevice.shared.orientation = .portrait
+    waitForOrientation(app, wide: false)
+    expectation(for: NSPredicate { _, _ in title.frame.maxY < pair.frame.minY }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+  }
+
   @MainActor
   func testPairingCodeUsesTwoEditableHalves() {
     let app = XCUIApplication()
