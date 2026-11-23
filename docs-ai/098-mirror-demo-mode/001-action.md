@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 2026-11-23 | Plan, demo Host, demo content, onboarding entry, demo Host menu, tests, docs | #1164 |
 | 2026-11-23 | Review: Try the Demo becomes a link under Pair with a Mac; the top-left Host menu becomes the Settings menu (gear, red mark only on a failed connection) so app settings can join it | #1164 |
+| 2026-11-23 | Review: the Settings menu keeps quick actions (up to five Hosts, Add Host…) and opens a Settings sheet with Hosts, Notifications and About; Manage Hosts is gone | #1164 |
 
 ## Outcome & current state (as of 2026-11-23)
 
@@ -34,11 +35,23 @@
   `testDemoRunsTheAppWithoutAMacAndLeavesNothing` goes onboarding → demo → answer → exit.
 - Docs: `docs/remote-mirror.md`, `Mirror/iOS/README.md`.
 
+- Settings: `Features/Agents/AgentsComponents.swift` `MirrorSettingsMenu` (quick actions,
+  `listedHostLimit` = 5, **All Hosts…** beyond it, **Settings…**);
+  `Features/Settings/MirrorSettingsView.swift` (sheet: `MirrorHostsSection` from
+  `Features/Hosts/HostsView.swift`, `MirrorNotificationsSection`, `MirrorAboutSection` with
+  version, website, `https://prowl.cat/privacy` and the bundled LICENSE). The demo sheet shows
+  About only. Decision: the menu stays for frequent actions; every setting lives in the sheet,
+  so a subscription section (096) or a long Host list needs no menu change. Notifications moved
+  out of the Hosts sheet because they are app-wide.
+
 ## Deviations from plan
 
 - The demo copy and the Host name are English only: the iOS target has no string catalog yet.
 
 ## Open questions
+
+- `https://prowl.cat/privacy` returned 404 on 2026-11-23. The page must exist before App Review
+  (Guideline 5.1.1(i) wants the policy reachable in the app).
 
 - Review notes and the demo video for App Review are not written yet.
 - The DEBUG `MirrorUIFixture` still has its own fake transport; it could move onto

@@ -1,20 +1,24 @@
 import SwiftUI
 
-/// The app's settings menu in the toolbar. For now it switches, adds and manages Hosts; app
-/// settings belong here too. The gear carries a mark only when the Host connection failed.
+/// The Settings menu in the toolbar (docs-ai 098): quick actions on top — switch the Host,
+/// pair another — and **Settings…** for everything else. It lists at most
+/// `listedHostLimit` Hosts; with more, **All Hosts…** opens Settings, which lists them all.
+/// The gear carries a mark only when the Host connection failed.
 struct MirrorSettingsMenu: View {
+  static let listedHostLimit = 5
+
   let current: MirrorHostRecord
   let hosts: [MirrorHostRecord]
   let status: MirrorHostSession.Status
   let select: (MirrorHostRecord) -> Void
   let onAddHost: () -> Void
-  let onManageHosts: () -> Void
+  let onOpenSettings: () -> Void
   @Environment(\.mirrorDemo) private var demo
 
   var body: some View {
     Menu {
       if let demo {
-        // The demo has one sample Mac and nothing to manage (docs-ai 098).
+        // The demo has one sample Mac and nothing to manage.
         Section("Demo · Sample data") {
           Label(current.displayName, systemImage: "checkmark")
         }
@@ -24,7 +28,7 @@ struct MirrorSettingsMenu: View {
           .accessibilityIdentifier("demo-exit")
       } else {
         Section(status.label) {
-          ForEach(hosts) { host in
+          ForEach(Self.listed(hosts, current: current)) { host in
             Button {
               select(host)
             } label: {
@@ -36,9 +40,14 @@ struct MirrorSettingsMenu: View {
               Text(host.endpoint)
             }
           }
+          if hosts.count > Self.listedHostLimit {
+            Button("All Hosts…", systemImage: "list.bullet", action: onOpenSettings)
+          }
         }
         Button("Add Host…", systemImage: "plus", action: onAddHost)
-        Button("Manage Hosts", systemImage: "list.bullet", action: onManageHosts)
+      }
+      Section {
+        Button("Settings…", systemImage: "gearshape", action: onOpenSettings)
       }
     } label: {
       Image(systemName: "gearshape")
@@ -53,7 +62,16 @@ struct MirrorSettingsMenu: View {
     .accessibilityIdentifier("settings-menu")
     .accessibilityLabel("Settings")
     .accessibilityValue("\(current.displayName), \(status.label)")
-    .help(demo == nil ? "Settings: switch, add or manage Hosts" : "Settings: leave the demo or pair with a Mac")
+    .help(demo == nil ? "Switch or add Hosts, or open Settings" : "Leave the demo, pair with a Mac, or open Settings")
+  }
+
+  /// The first Hosts in list order, always with the current one.
+  static func listed(_ hosts: [MirrorHostRecord], current: MirrorHostRecord) -> [MirrorHostRecord] {
+    let first = Array(hosts.prefix(listedHostLimit))
+    guard !first.contains(where: { $0.id == current.id }), hosts.contains(where: { $0.id == current.id }) else {
+      return first
+    }
+    return Array(first.prefix(listedHostLimit - 1)) + [current]
   }
 }
 

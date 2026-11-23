@@ -40,6 +40,10 @@ play scripted replies. The demo has its own `MirrorHostStore` in a cleared `User
 suite, makes no socket, Keychain item or push registration, and ends with **Exit Demo** or
 **Pair with a Mac** in the Settings menu. Paired users never see it.
 
+The gear at the top left of Agents is the Settings menu: quick actions (switch among up to five
+Hosts, **Add Host…**) and **Settings…**, a sheet with Hosts, Notifications and About. New
+app-level settings, such as a subscription, add a section to that sheet, not items to the menu.
+
 ## Chat
 
 Chat renders the Host's normalized events (see the [wire contract](../../docs/remote-mirror-wire.md#conversation-stream-conversation-v1)):

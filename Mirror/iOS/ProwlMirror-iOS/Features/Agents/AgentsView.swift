@@ -7,7 +7,7 @@ struct AgentsView: View {
   @Bindable var store: MirrorHostStore
   @Binding var path: NavigationPath
   let onAddHost: () -> Void
-  let onManageHosts: () -> Void
+  let onOpenSettings: () -> Void
   @Environment(MirrorHostSessions.self) private var sessions
   @State private var stateFilter: MirrorPaneState?
   @State private var expandedTerminals: Set<String> = []
@@ -70,7 +70,7 @@ struct AgentsView: View {
       ToolbarItem(placement: .topBarLeading) {
         MirrorSettingsMenu(
           current: host, hosts: store.hosts, status: session.status,
-          select: { store.select($0.id) }, onAddHost: onAddHost, onManageHosts: onManageHosts)
+          select: { store.select($0.id) }, onAddHost: onAddHost, onOpenSettings: onOpenSettings)
       }
       ToolbarItem(placement: .topBarTrailing) {
         Button("New Session", systemImage: "plus") { launchRequest = .init(paneIDs: []) }

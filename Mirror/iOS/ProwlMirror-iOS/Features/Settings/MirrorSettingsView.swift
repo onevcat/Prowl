@@ -1,0 +1,89 @@
+import SwiftUI
+
+/// App settings (docs-ai 098), opened from the Settings menu: paired Hosts, notifications and
+/// About. New app-level settings, such as a subscription, add a section here; the menu keeps
+/// only the quick actions. The demo shows About only, since its Hosts are not real.
+struct MirrorSettingsView: View {
+  @Bindable var store: MirrorHostStore
+  let onAddHost: () -> Void
+  @Environment(\.mirrorDemo) private var demo
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if demo == nil {
+          MirrorHostsSection(store: store, onAddHost: onAddHost)
+          MirrorNotificationsSection(store: store)
+        }
+        MirrorAboutSection()
+      }
+      .navigationTitle("Settings")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done", systemImage: "checkmark") { dismiss() }
+            .accessibilityIdentifier("settings-done")
+            .help("Close Settings")
+        }
+      }
+    }
+  }
+}
+
+/// The version, the website, the privacy policy and the license.
+struct MirrorAboutSection: View {
+  static let website = URL(string: "https://prowl.cat/")!
+  static let privacyPolicy = URL(string: "https://prowl.cat/privacy")!
+
+  var body: some View {
+    Section {
+      LabeledContent("Version", value: Self.version)
+        .accessibilityIdentifier("settings-version")
+      Link(destination: Self.website) {
+        Label("Prowl Website", systemImage: "safari")
+      }
+      .accessibilityIdentifier("settings-website")
+      Link(destination: Self.privacyPolicy) {
+        Label("Privacy Policy", systemImage: "hand.raised")
+      }
+      .accessibilityIdentifier("settings-privacy")
+      NavigationLink {
+        MirrorLicenseView()
+      } label: {
+        Label("License", systemImage: "doc.text")
+      }
+      .accessibilityIdentifier("settings-license")
+    } header: {
+      Text("About")
+    }
+  }
+
+  /// `1.0 (202611230055)`: the marketing version and the build.
+  static var version: String {
+    let info = Bundle.main.infoDictionary
+    let short = info?["CFBundleShortVersionString"] as? String ?? "–"
+    guard let build = info?["CFBundleVersion"] as? String, build != short else { return short }
+    return "\(short) (\(build))"
+  }
+}
+
+/// The MIT notice that ships with the app.
+private struct MirrorLicenseView: View {
+  private var text: String {
+    Bundle.main.url(forResource: "LICENSE", withExtension: nil)
+      .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+  }
+
+  var body: some View {
+    ScrollView {
+      Text(verbatim: text)
+        .font(.footnote.monospaced())
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+    }
+    .navigationTitle("License")
+    .navigationBarTitleDisplayMode(.inline)
+  }
+}

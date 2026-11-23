@@ -690,6 +690,36 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
   }
 
+  /// Settings (docs-ai 098): the gear menu opens one sheet with Hosts, Notifications and About.
+  @MainActor
+  func testSettingsMenuOpensHostsNotificationsAndAbout() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    XCUIDevice.shared.orientation = .portrait
+    let menu = app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch
+    XCTAssertTrue(menu.waitForExistence(timeout: 10))
+    menu.tap()
+    XCTAssertTrue(app.buttons["Add Host…"].waitForExistence(timeout: 5))
+    attach("Settings menu")
+    app.buttons["Settings…"].tap()
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "host-127.0.0.1:7880").firstMatch
+      .waitForExistence(timeout: 5))
+    XCTAssertTrue(app.switches["push-enabled"].exists)
+    let privacy = app.descendants(matching: .any).matching(identifier: "settings-privacy").firstMatch
+    if !privacy.exists { app.swipeUp() }
+    XCTAssertTrue(privacy.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settings-version").firstMatch.exists)
+    attach("Settings")
+    app.descendants(matching: .any).matching(identifier: "settings-license").firstMatch.tap()
+    XCTAssertTrue(
+      app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "MIT License")).firstMatch
+        .waitForExistence(timeout: 5))
+    app.navigationBars["License"].buttons["BackButton"].tap()
+    app.buttons["settings-done"].tap()
+    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+  }
+
   /// The demo (docs-ai 098): onboarding offers it, it runs the real app on sample panes, and
   /// leaving it returns to onboarding with nothing paired.
   @MainActor
@@ -725,7 +755,15 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.tap()
     let exit = app.buttons["demo-exit"]
     XCTAssertTrue(exit.waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Manage Hosts"].exists)
+    XCTAssertFalse(app.buttons["Add Host…"].exists)
+    // The demo's Settings show About only: its Hosts and notifications are not real.
+    app.buttons["Settings…"].tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(identifier: "settings-privacy").firstMatch.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.switches["push-enabled"].exists)
+    app.buttons["settings-done"].tap()
+    app.descendants(matching: .any).matching(identifier: "settings-menu").firstMatch.tap()
+    XCTAssertTrue(exit.waitForExistence(timeout: 5))
     exit.tap()
     XCTAssertTrue(app.buttons["add-host"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["try-demo"].exists)
