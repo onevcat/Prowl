@@ -1,19 +1,18 @@
 name: mirror-android
 
-# Check the Android client when it or the shared contract changes and for published releases.
+# Check the Android client when it or the conversation fixtures its tests replay change, and for
+# published releases. Android does not compile Mirror/Shared, so contract changes alone do not run it.
 on:
   push:
     branches:
       - main
     paths:
       - Mirror/Android/**
-      - Mirror/Shared/**
       - Mirror/Fixtures/conversation/**
       - .github/workflows/mirror-android.yml
   pull_request:
     paths:
       - Mirror/Android/**
-      - Mirror/Shared/**
       - Mirror/Fixtures/conversation/**
       - .github/workflows/mirror-android.yml
   # Release tags are lightweight, so `git push --follow-tags` does not push them and
