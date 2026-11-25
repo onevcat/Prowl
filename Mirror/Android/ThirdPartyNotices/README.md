@@ -15,3 +15,8 @@ Runtime dependencies:
 
 Android uses Bouncy Castle's low-level `PSKTlsClient`, not the JSSE trust managers
 bundled in that dependency. No permissive X.509 TrustManager is installed by this app.
+
+Agent icons: the `agent_*.xml` drawables come from Lobe Icons, Pi, Oh My Pi, Qwen Code
+(MIT) and Simple Icons (CC0). [agent-icons.txt](agent-icons.txt) holds the MIT notices,
+and the APK ships it as `assets/THIRD_PARTY_NOTICES`. For the source of each icon, see
+[CommandIcons/README.md](../../../App/Sources/Assets.xcassets/CommandIcons/README.md).

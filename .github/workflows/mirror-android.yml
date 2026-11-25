@@ -1,17 +1,19 @@
 name: mirror-android
 
-# The Android mirror client needs only a minimal check, so CI runs it only when the client
-# changes and for each published release.
+# Check the Android client when it or the conversation fixtures its tests replay change, and for
+# published releases. Android does not compile Mirror/Shared, so contract changes alone do not run it.
 on:
   push:
     branches:
       - main
     paths:
       - Mirror/Android/**
+      - Mirror/Fixtures/conversation/**
       - .github/workflows/mirror-android.yml
   pull_request:
     paths:
       - Mirror/Android/**
+      - Mirror/Fixtures/conversation/**
       - .github/workflows/mirror-android.yml
   # Release tags are lightweight, so `git push --follow-tags` does not push them and
   # `gh release create` makes them on GitHub. That sends no tag push event.

@@ -1,43 +1,43 @@
 # Prowl Mirror for Android
 
 Experimental **native Kotlin / Jetpack Compose** text mirror client. One application
-supports Android phones and tablets (Android 8.0 / API 26 or later). At 840 dp
-available width the pane drawer becomes a persistent sidebar. Both layouts share
-session, protocol and rendering code; rotation is supported, not locked.
+supports Android phones and tablets (Android 8.0 / API 26 or later). On wider
+windows the app centers the roster and Chat while the Terminal uses the available
+width. Rotation preserves the current pane and reading position.
 
 The Android project lives in `Mirror/Android/` in the Prowl repository.
-The original Gradle project name and application ID are preserved.
+The application ID is `com.onevcat.prowl.mirror`, the same as the iOS bundle ID.
 
 ## Connect
 
 Use a Prowl Host built from the same revision (or a matching Prowl release), with
 **Settings → Remote Mirror → Enable Remote Mirror** turned on.
-On Mac: Start Host → Add a Device. On Android: Add Remote Pane → enter IP/port
-and the two halves of the single-use, 60-second code. The default port is 7880. After enrollment, credentials
-are encrypted using Android Keystore and the short code is discarded. Pick a saved
-Host and leave code blank on subsequent connections. If the first runtime connection fails
-after enrollment, Retry uses the saved device credential without another code.
+On Mac, start listening and choose **Add a Device**. On Android, tap **Pair with a Mac**
+and scan the QR code or enter the address, port and two halves of the 60-second code.
+The default port is 7880. Android Keystore protects the saved device credential.
 
-Select an open pane, or New Agent Pane → workspace → available Host Agent Profile
-→ optional initial message. Models and permissions come from that Profile. There
-is no private AI console or dependency on personal shell wrappers.
+The app opens the last selected Mac's Agents screen. Use the Mac menu to switch
+Hosts, add another, or rename and forget saved connections. The roster follows the
+Mac's project order and can filter by Blocked, Working and Done. Shell panes are
+collapsed within each project. Open a pane, or use **New Session** and select a
+project, worktree, Host Agent Profile and optional initial message.
 
 - Live text replaces the last viewport snapshot; it is not an append-only transcript.
 - Markdown emphasis/inline code, code fences and tables have readable previews;
   expanding code/table freezes the detail and supports copying the original text.
 - Multiline input sends only on Send or two physical Returns within 350 ms.
   IME composition disables Send. Host checks Agent readiness through shared interactive input;
-  shell Send requires an explicit Host capability. Current Hosts refuse it because
-  they cannot verify an empty command line; the draft remains available.
+  shell Send requires the Host capability and a recognized empty shell prompt. Refusals
+  preserve the draft.
 - An unconfirmed delivery preserves the draft and blocks accidental resending.
   Check receipt only queries the original request; it never repeats input.
-- Mirror, Retry and foreground reconnection use `ifFree`; Take Over is explicit.
-  If another client claims a free pane before Mirror completes, Android reports it busy.
+- Opening a pane labeled **Mirrored elsewhere** requests takeover. Retry and
+  foreground reconnection request the pane only if free.
 - History is a bounded frozen snapshot with earlier-page loading. Returning to Live
   keeps receiving current output. Closing a mirror never stops the Host program.
 - Hosts with `remote-scroll` show **Scroll up / Scroll down** above the Live text.
   Only these buttons send remote scroll input; swipes, edge pulls, selection and
-  History remain local. **Follow latest** stays below the text and follows new frames.
+  History remain local. **Latest** appears when reading away from the end.
   These actions scroll the actual Host pane, including a terminal application's own
   scroll handling. Host targets its pane height minus three rows (at least one row),
   with exact native scrollback movement and equivalent precision wheel input for
@@ -54,7 +54,19 @@ is no private AI console or dependency on personal shell wrappers.
   following is paused by remote scrolling. Completion is consumed once: switching
   panes or recreating the reader preserves later local reading positions.
 - Saving credentials does not persist terminal output or drafts across process death.
-  Rotation retains the current ViewModel; reopening the app offers saved Hosts.
+  Rotation retains the current ViewModel; reopening the app restores the selected Host.
+
+## Chat and Terminal
+
+When the Host advertises `conversation-v1` and a pane has a supported conversation,
+the app opens that pane in Chat. Terminal remains available on the same connection
+and is the default for other panes. Chat shows Markdown messages, grouped tool steps and expandable details and requests retained events after the last received sequence when reconnecting.
+Chat and its composer expand on phones and use a centered 720 dp column on wide displays.
+
+On Hosts with `prompt-respond`, the app can answer supported screen prompts, including
+multi-select menus. Terminal offers a key bar when the Host grants key input.
+A draft refusal can offer **Replace and Send** or **Bring Draft Here**, depending on
+what the Host can read and clear. An uncertain delivery still requires receipt recovery.
 
 ## Build and test
 
@@ -99,8 +111,17 @@ Use **Scan QR Code** in the Host connection form to scan **Add a Device** on Hos
 Scanning connects with the encoded address, port and short-lived code. Camera
 permission is optional; manual entry remains available. The scanner opens in portrait
 without a red scanning line. Refresh expired codes on Host.
-The Live scroll toolbar places Scroll up on the left and Scroll down on the right,
-with loading feedback centered between them.
+The Terminal places **Scroll Up** and **Scroll Down** beside the lower-right edge
+with loading feedback next to the controls.
+
+## Agent icons
+
+The `agent_*.xml` drawables in `app/src/main/res/drawable/` are vector conversions of
+the Mac `CommandIcons` SVGs. Each `pathData` is the same as the Mac SVG path, and the
+viewport is the same as the SVG `viewBox` (`agent_codex.xml` moves its `1 1 18 18`
+origin with a group translation). For the source and license of each icon, see
+[CommandIcons/README.md](../../App/Sources/Assets.xcassets/CommandIcons/README.md).
+Update the drawable when the Mac SVG changes.
 
 ## License
 

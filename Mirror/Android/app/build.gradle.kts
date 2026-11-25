@@ -1,33 +1,38 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
-    namespace = "com.awhisper.prowlmirror"
+    namespace = "com.onevcat.prowl.mirror"
     compileSdk = 34
     defaultConfig {
-        applicationId = "com.awhisper.prowlmirror"
+        applicationId = "com.onevcat.prowl.mirror"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0-experimental"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    sourceSets.getByName("test").resources.srcDir("../../Fixtures/conversation")
     buildFeatures { compose = true; buildConfig = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "META-INF/versions/**/OSGI-INF/MANIFEST.MF" }
 }
-// Ship the MIT notice with every distributed copy of the app (assets/LICENSE).
+// Ship the MIT notices with every distributed copy of the app (assets/LICENSE and
+// assets/THIRD_PARTY_NOTICES).
 abstract class CopyLicenseAsset : DefaultTask() {
     @get:InputFile abstract val license: RegularFileProperty
+    @get:InputFile abstract val notices: RegularFileProperty
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun copy() {
         license.get().asFile.copyTo(outputDir.get().file("LICENSE").asFile, overwrite = true)
+        notices.get().asFile.copyTo(outputDir.get().file("THIRD_PARTY_NOTICES").asFile, overwrite = true)
     }
 }
 val copyLicenseAsset = tasks.register<CopyLicenseAsset>("copyLicenseAsset") {
     license.set(rootProject.layout.projectDirectory.file("LICENSE"))
+    notices.set(rootProject.layout.projectDirectory.file("ThirdPartyNotices/agent-icons.txt"))
 }
 androidComponents {
     onVariants { variant ->
