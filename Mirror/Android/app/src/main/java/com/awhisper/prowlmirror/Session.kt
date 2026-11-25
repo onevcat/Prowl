@@ -163,6 +163,17 @@ class HistoryGate {
     }
 }
 
+class ReadingPositions {
+    var chatVisibleLimit = CHAT_PAGE
+    var chatScrollIndex = 0
+    var chatScrollOffset = 0
+    var chatFollowsLatest = true
+    var liveScrollIndex = 0
+    var liveScrollOffset = 0
+    var historyScrollIndex = 0
+    var historyScrollOffset = 0
+}
+
 class Session(
     host: Host,
     private val scope: CoroutineScope,
@@ -231,14 +242,8 @@ class Session(
     )
 
     private var submission: Submission? = null
-    var chatVisibleLimit = CHAT_PAGE
-    var chatScrollIndex = 0
-    var chatScrollOffset = 0
-    var chatFollowsLatest = true
-    var liveScrollIndex = 0
-    var liveScrollOffset = 0
-    var historyScrollIndex = 0
-    var historyScrollOffset = 0
+    /** Where each reader was, so that recreated views reopen at the same place. */
+    val reading = ReadingPositions()
 
     fun connect(code: String = "") {
         if (transport != null) return

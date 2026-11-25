@@ -140,12 +140,12 @@ internal const val CHAT_PAGE = 120
 internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLatest: Boolean = false) {
     val tools = remember(feed.events) { toolCompletions(feed.events) }
     val allRows = remember(feed.events, tools) { chatRows(feed.events, tools) }
-    var visibleLimit by remember(session.id) { mutableIntStateOf(session.chatVisibleLimit) }
+    var visibleLimit by remember(session.id) { mutableIntStateOf(session.reading.chatVisibleLimit) }
     val rows = remember(allRows, visibleLimit) { allRows.takeLast(visibleLimit) }
     val hidden = allRows.size - rows.size
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = session.chatScrollIndex,
-        initialFirstVisibleItemScrollOffset = session.chatScrollOffset,
+        initialFirstVisibleItemIndex = session.reading.chatScrollIndex,
+        initialFirstVisibleItemScrollOffset = session.reading.chatScrollOffset,
     )
     val working = feed.agentState == "working"
     val lastIndex = rows.lastIndex + (if (feed.gap) 1 else 0) + (if (hidden > 0) 1 else 0) +
@@ -153,7 +153,7 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     var userScrolled by remember { mutableStateOf(false) }
-    var follow by remember { mutableStateOf(session.chatFollowsLatest) }
+    var follow by remember { mutableStateOf(session.reading.chatFollowsLatest) }
     val awayFromLatest by remember {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.isNotEmpty() && listState.canScrollForward }
     }
@@ -170,8 +170,8 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .collect { (index, offset) ->
-                session.chatScrollIndex = index
-                session.chatScrollOffset = offset
+                session.reading.chatScrollIndex = index
+                session.reading.chatScrollOffset = offset
             }
     }
     LaunchedEffect(listState) {
@@ -189,7 +189,7 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
         }
     }
     LaunchedEffect(feed.sequence, follow, lastIndex, viewport) {
-        session.chatFollowsLatest = follow
+        session.reading.chatFollowsLatest = follow
         if (follow && lastIndex >= 0) listState.revealEnd(lastIndex)
     }
 
@@ -207,7 +207,7 @@ internal fun ConversationReader(session: Session, feed: ConversationFeed, hideLa
                     onClick = {
                         follow = false
                         visibleLimit += CHAT_PAGE
-                        session.chatVisibleLimit = visibleLimit
+                        session.reading.chatVisibleLimit = visibleLimit
                     },
                     modifier = Modifier.testTag("conversation-earlier"),
                 ) { Text("Show ${minOf(hidden, CHAT_PAGE)} earlier") }

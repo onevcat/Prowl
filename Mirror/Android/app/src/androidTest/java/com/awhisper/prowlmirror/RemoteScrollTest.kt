@@ -203,21 +203,21 @@ class RemoteScrollTest {
         output.performTouchInput { swipeUp() }
         rule.runOnIdle {
             assertEquals(0, sent.count { it.kind == "scroll" })
-            assertTrue(session.liveScrollIndex > 0 || session.liveScrollOffset > 0)
+            assertTrue(session.reading.liveScrollIndex > 0 || session.reading.liveScrollOffset > 0)
         }
         rule.onNodeWithContentDescription("Scroll Up").performClick()
         complete(text)
         rule.runOnIdle {
-            assertEquals(0, session.liveScrollIndex)
-            assertEquals(0, session.liveScrollOffset)
+            assertEquals(0, session.reading.liveScrollIndex)
+            assertEquals(0, session.reading.liveScrollOffset)
         }
         output.performTouchInput { swipeUp() }
-        rule.runOnIdle { assertTrue(session.liveScrollIndex > 0 || session.liveScrollOffset > 0) }
+        rule.runOnIdle { assertTrue(session.reading.liveScrollIndex > 0 || session.reading.liveScrollOffset > 0) }
         rule.onNodeWithContentDescription("Scroll Down").performClick()
         complete(text)
         rule.runOnIdle {
-            assertEquals(0, session.liveScrollIndex)
-            assertEquals(0, session.liveScrollOffset)
+            assertEquals(0, session.reading.liveScrollIndex)
+            assertEquals(0, session.reading.liveScrollOffset)
         }
         screenshot("local-reading")
         rule.onNodeWithContentDescription("Latest").performClick()
@@ -237,13 +237,13 @@ class RemoteScrollTest {
         rule.onNodeWithTag("mirror-output").performTouchInput { swipeUp() }
         var position = 0 to 0
         rule.runOnIdle {
-            position = session.liveScrollIndex to session.liveScrollOffset
+            position = session.reading.liveScrollIndex to session.reading.liveScrollOffset
             assertTrue(position.first > 0 || position.second > 0)
             compositionGeneration.value++
         }
         rule.waitForIdle()
         rule.runOnIdle {
-            assertEquals(position, session.liveScrollIndex to session.liveScrollOffset)
+            assertEquals(position, session.reading.liveScrollIndex to session.reading.liveScrollOffset)
         }
     }
 
@@ -262,8 +262,8 @@ class RemoteScrollTest {
         rule.onNodeWithContentDescription("Latest").performClick()
         rule.waitForIdle()
         rule.runOnIdle {
-            assertEquals(0, session.liveScrollIndex)
-            assertTrue(session.liveScrollOffset > 0)
+            assertEquals(0, session.reading.liveScrollIndex)
+            assertTrue(session.reading.liveScrollOffset > 0)
         }
     }
 

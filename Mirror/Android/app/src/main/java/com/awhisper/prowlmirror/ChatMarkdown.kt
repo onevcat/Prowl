@@ -133,13 +133,18 @@ private fun MarkdownLines(text: String) {
 
 private val inlinePattern = Regex("""`([^`\n]+)`|\[([^\]\n]+)]\((https?://[^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|(?<!\w)_([^_\n]+)_(?!\w)""")
 
-internal fun chatInline(text: String, linkStyle: SpanStyle): AnnotatedString = buildAnnotatedString {
+// Terminal output is rarely Markdown: globs and snake_case names must stay as printed.
+private val terminalInlinePattern = Regex("""`([^`\n]+)`|\*\*(.+?)\*\*""")
+
+/** Inline Markdown spans. Without [linkStyle] (terminal text) only code and bold are styled. */
+internal fun inlineMarkdown(text: String, linkStyle: SpanStyle? = null): AnnotatedString = buildAnnotatedString {
     var start = 0
-    for (match in inlinePattern.findAll(text)) {
+    for (match in (if (linkStyle == null) terminalInlinePattern else inlinePattern).findAll(text)) {
         append(text.substring(start, match.range.first))
         val group = match.groups
         when {
             group[1] != null -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(group[1]!!.value) }
+            linkStyle == null -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(group[2]!!.value) }
             group[2] != null && group[3] != null -> {
                 pushStringAnnotation("URL", group[3]!!.value)
                 withStyle(linkStyle) { append(group[2]!!.value) }
@@ -167,7 +172,7 @@ private fun MarkdownText(
     val linkColor = MaterialTheme.colorScheme.primary
     val contentColor = LocalContentColor.current
     val parsed = remember(text, linkColor) {
-        chatInline(text, SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+        inlineMarkdown(text, SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
     }
     if (parsed.getStringAnnotations("URL", 0, parsed.length).isEmpty()) {
         Text(parsed, modifier, style = style, fontWeight = fontWeight)
