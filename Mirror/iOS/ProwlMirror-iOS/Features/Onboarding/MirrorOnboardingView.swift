@@ -83,8 +83,8 @@ struct MirrorOnboardingView: View {
 
   private var steps: some View {
     VStack(alignment: .leading, spacing: 16) {
-      step("macbook", "On the Mac, open the Remote Mirror button in the Prowl toolbar.")
-      step("qrcode", "Choose Add a Device to show a pairing code.")
+      step("macbook", "On the Mac, turn on Remote Mirror in Prowl Settings.")
+      step("qrcode", "Click Remote Mirror in the toolbar, then Add a Device.")
       step("iphone", "Scan the code here, or type the address and code.")
     }
     .frame(maxWidth: .infinity, alignment: .leading)
