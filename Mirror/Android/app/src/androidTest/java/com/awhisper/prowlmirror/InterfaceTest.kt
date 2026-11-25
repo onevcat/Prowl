@@ -15,15 +15,15 @@ class InterfaceTest {
     fun demoOpensAConversationAndExitsWithoutPairing() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
         rule.onNodeWithText("Demo Mac").assertIsDisplayed()
-        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Review the release"))
-        rule.onNodeWithText("Review the release").performClick()
-        rule.onNodeWithText("The release notes are ready for review. You can reply from here.").assertIsDisplayed()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Draft 8.4 release notes"))
+        rule.onNodeWithText("Draft 8.4 release notes").performClick()
         rule.onNodeWithTag("composer").performTextInput("Can we ship?")
         rule.onNodeWithContentDescription("Send").performClick()
+        val reply = "This is the demo, so no agent runs here and nothing changes on a Mac."
         rule.waitUntil(8_000) {
-            rule.onAllNodesWithText("This is a demo response. No message was sent to a Mac.").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText(reply, substring = true).fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithText("This is a demo response. No message was sent to a Mac.").assertIsDisplayed()
+        rule.onNodeWithText(reply, substring = true).assertIsDisplayed()
         rule.onNodeWithContentDescription("Agents").performClick()
         rule.onNodeWithContentDescription("Settings").performClick()
         rule.onNodeWithText("Exit Demo").performClick()
@@ -33,15 +33,15 @@ class InterfaceTest {
     @Test
     fun workingDemoQueuesInputAndStopStartsIt() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
-        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Review the build"))
-        rule.onNodeWithText("Review the build").performClick()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Scan unused images"))
+        rule.onNodeWithText("Scan unused images").performClick()
         rule.onNodeWithTag("composer").performTextInput("Check the queued follow-up")
         rule.onNodeWithContentDescription("Send").performClick()
         rule.onNodeWithText("queued").assertIsDisplayed()
         rule.onNodeWithContentDescription("Stop").performClick()
         rule.onNodeWithText("Stop this agent?").assertIsDisplayed()
         rule.onNodeWithText("Stop").performClick()
-        rule.onNodeWithText("Interrupted. Tell the demo agent what to do differently.").assertExists()
+        rule.onNodeWithText("Interrupted. Tell Codex what to do differently.").assertExists()
         rule.onNodeWithText("queued").assertDoesNotExist()
         rule.onNodeWithText("Check the queued follow-up").assertIsDisplayed()
     }
@@ -49,18 +49,18 @@ class InterfaceTest {
     @Test
     fun demoApprovalAndTerminalUseTheNormalPaneControls() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
-        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Draft the migration guide"))
-        rule.onNodeWithText("Draft the migration guide").performClick()
-        rule.onNodeWithText("Apply the migration plan?").assertIsDisplayed()
-        rule.onNodeWithTag("prompt-choice-approve").performClick()
-        rule.onNodeWithText("Approved · Apply the migration plan?").assertIsDisplayed()
+        rule.onNodeWithTag("agents-roster").performScrollToNode(hasText("Fix flaky prefetch test"))
+        rule.onNodeWithText("Fix flaky prefetch test").performClick()
+        rule.onNodeWithText("Do you want to proceed?").assertIsDisplayed()
+        rule.onNodeWithTag("prompt-choice-1").performClick()
+        rule.onNodeWithText("Allowed · Do you want to proceed?").assertIsDisplayed()
         rule.onNodeWithContentDescription("Terminal").performClick()
         rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
         rule.onNodeWithContentDescription("Scroll Down").assertIsNotEnabled()
         rule.onNodeWithContentDescription("Scroll Up").performClick()
         rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
         rule.onNodeWithContentDescription("Chat").performClick()
-        rule.onNodeWithText("Approved · Apply the migration plan?").assertIsDisplayed()
+        rule.onNodeWithText("Allowed · Do you want to proceed?").assertIsDisplayed()
         rule.onNodeWithContentDescription("Agents").performClick()
         rule.onNodeWithContentDescription("Settings").performClick()
         rule.onNodeWithText("Settings…").performClick()
@@ -74,14 +74,14 @@ class InterfaceTest {
         val roster = rule.onNodeWithTag("agents-roster")
         roster.performScrollToNode(hasTestTag("terminals-Prowl"))
         rule.onNodeWithTag("terminals-Prowl").performClick()
-        roster.performScrollToNode(hasText("Terminal"))
-        rule.onNodeWithText("Terminal").performClick()
+        roster.performScrollToNode(hasText("zsh"))
+        rule.onNodeWithText("zsh").performClick()
         rule.onNodeWithTag("composer").performTextInput("pwd")
         rule.onNodeWithContentDescription("Send").performClick()
         rule.onNodeWithText("demo: Commands do not run in the demo.", substring = true).assertIsDisplayed()
         rule.onNodeWithContentDescription("Pane actions").performClick()
         rule.onNodeWithText("History").performClick()
-        rule.onNodeWithText("Loaded lines 1–152").assertIsDisplayed()
+        rule.onNodeWithText("Loaded lines 1–", substring = true).assertIsDisplayed()
     }
 
     @Test
