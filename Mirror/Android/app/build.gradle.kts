@@ -1,9 +1,9 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
-    namespace = "com.awhisper.prowlmirror"
+    namespace = "com.onevcat.prowl.mirror"
     compileSdk = 34
     defaultConfig {
-        applicationId = "com.awhisper.prowlmirror"
+        applicationId = "com.onevcat.prowl.mirror"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

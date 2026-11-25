@@ -6,7 +6,7 @@ windows the app centers the roster and Chat while the Terminal uses the availabl
 width. Rotation preserves the current pane and reading position.
 
 The Android project lives in `Mirror/Android/` in the Prowl repository.
-The original Gradle project name and application ID are preserved.
+The application ID is `com.onevcat.prowl.mirror`, the same as the iOS bundle ID.
 
 ## Connect
 
