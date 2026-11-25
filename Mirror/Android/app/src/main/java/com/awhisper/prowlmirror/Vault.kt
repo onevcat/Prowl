@@ -11,8 +11,36 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+/** Saved Hosts and the choices remembered with them. */
+interface HostStore {
+    fun hosts(): List<Host>
+    fun save(host: Host, replacingCredential: Boolean)
+    fun rename(endpoint: String, name: String?)
+    fun forget(endpoint: String)
+    var selectedEndpoint: String?
+    var lastProfile: String?
+}
+
+/**
+ * The saved Hosts after saving [host], or null when nothing changes. A roster connected with an
+ * earlier key must not overwrite a new enrollment, and a rename made meanwhile wins.
+ */
+internal fun mergeSavedHost(entries: List<Host>, host: Host, replacingCredential: Boolean): List<Host>? {
+    require(host.credential != null)
+    val previous = entries.firstOrNull { it.endpoint == host.endpoint }
+    if (!replacingCredential && previous?.credential != host.credential) return null
+    val remembered = host.copy(
+        name = if (previous == null) host.name else previous.name,
+        hostName = host.hostName ?: previous?.hostName,
+        lastConnectedAt = host.lastConnectedAt ?: previous?.lastConnectedAt,
+        pairedAt = previous?.pairedAt ?: host.pairedAt,
+    )
+    return if (previous == null) listOf(remembered) + entries
+    else entries.map { if (it.endpoint == host.endpoint) remembered else it }
+}
+
 /** Credentials never fall back to cleartext if Keystore or persistence fails. */
-class Vault(context: Context) {
+class Vault(context: Context) : HostStore {
     private val prefs = context.getSharedPreferences("mirror-vault", Context.MODE_PRIVATE)
     private val alias = "prowl-mirror-devices"
 
@@ -37,7 +65,7 @@ class Vault(context: Context) {
     }
 
     @Synchronized
-    fun hosts(): List<Host> {
+    override fun hosts(): List<Host> {
         val encoded = prefs.getString("hosts", null) ?: return emptyList()
         val bytes = Base64.getDecoder().decode(encoded)
         require(bytes.size >= 28) { "Saved Host credentials are damaged" }
@@ -52,39 +80,26 @@ class Vault(context: Context) {
     }
 
     @Synchronized
-    fun save(host: Host, replacingCredential: Boolean) {
-        require(host.credential != null)
-        val entries = hosts()
-        val previous = entries.firstOrNull { it.endpoint == host.endpoint }
-        // A roster already connected with an earlier key must not overwrite a new enrollment.
-        if (!replacingCredential && previous?.credential != host.credential) return
-        val remembered = host.copy(
-            name = if (previous == null) host.name else previous.name,
-            hostName = host.hostName ?: previous?.hostName,
-            lastConnectedAt = host.lastConnectedAt ?: previous?.lastConnectedAt,
-            pairedAt = previous?.pairedAt ?: host.pairedAt,
-        )
-        write(if (previous == null) listOf(remembered) + entries else entries.map {
-            if (it.endpoint == host.endpoint) remembered else it
-        })
+    override fun save(host: Host, replacingCredential: Boolean) {
+        mergeSavedHost(hosts(), host, replacingCredential)?.let(::write)
     }
 
     @Synchronized
-    fun rename(endpoint: String, name: String?) {
+    override fun rename(endpoint: String, name: String?) {
         write(hosts().map { if (it.endpoint == endpoint) it.copy(name = name) else it })
     }
 
     @Synchronized
-    fun forget(endpoint: String) {
+    override fun forget(endpoint: String) {
         write(hosts().filterNot { it.endpoint == endpoint })
         if (selectedEndpoint == endpoint) selectedEndpoint = null
     }
 
-    var selectedEndpoint: String?
+    override var selectedEndpoint: String?
         get() = prefs.getString("selected-host", null)
         set(value) { prefs.edit().putString("selected-host", value).apply() }
 
-    var lastProfile: String?
+    override var lastProfile: String?
         get() = prefs.getString("last-profile", null)
         set(value) { prefs.edit().putString("last-profile", value).apply() }
 

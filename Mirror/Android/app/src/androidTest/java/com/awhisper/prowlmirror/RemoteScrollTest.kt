@@ -73,7 +73,14 @@ class RemoteScrollTest {
             if (includesScrollState) bounds(sequence)
             receive(Packet.Text(lease, sequence, 80, 24, false, text))
             session.setFollow(false)
-            model = MirrorModel(rule.activity.application)
+            model = MirrorModel(scope, object : HostStore {
+                override fun hosts() = emptyList<Host>()
+                override fun save(host: Host, replacingCredential: Boolean) {}
+                override fun rename(endpoint: String, name: String?) {}
+                override fun forget(endpoint: String) {}
+                override var selectedEndpoint: String? = null
+                override var lastProfile: String? = null
+            }) { _, _, _, _, _, _, _ -> error("No Host in this test") }
             model.sessions += session
             model.selected = session.id
         }
