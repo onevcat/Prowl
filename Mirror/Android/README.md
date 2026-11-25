@@ -114,6 +114,15 @@ without a red scanning line. Refresh expired codes on Host.
 The Terminal places **Scroll Up** and **Scroll Down** beside the lower-right edge
 with loading feedback next to the controls.
 
+## Agent icons
+
+The `agent_*.xml` drawables in `app/src/main/res/drawable/` are vector conversions of
+the Mac `CommandIcons` SVGs. Each `pathData` is the same as the Mac SVG path, and the
+viewport is the same as the SVG `viewBox` (`agent_codex.xml` moves its `1 1 18 18`
+origin with a group translation). For the source and license of each icon, see
+[CommandIcons/README.md](../../App/Sources/Assets.xcassets/CommandIcons/README.md).
+Update the drawable when the Mac SVG changes.
+
 ## License
 
 The Android mirror client is licensed under the [MIT License](LICENSE). This covers

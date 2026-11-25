@@ -17,18 +17,22 @@ android {
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "META-INF/versions/**/OSGI-INF/MANIFEST.MF" }
 }
-// Ship the MIT notice with every distributed copy of the app (assets/LICENSE).
+// Ship the MIT notices with every distributed copy of the app (assets/LICENSE and
+// assets/THIRD_PARTY_NOTICES).
 abstract class CopyLicenseAsset : DefaultTask() {
     @get:InputFile abstract val license: RegularFileProperty
+    @get:InputFile abstract val notices: RegularFileProperty
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun copy() {
         license.get().asFile.copyTo(outputDir.get().file("LICENSE").asFile, overwrite = true)
+        notices.get().asFile.copyTo(outputDir.get().file("THIRD_PARTY_NOTICES").asFile, overwrite = true)
     }
 }
 val copyLicenseAsset = tasks.register<CopyLicenseAsset>("copyLicenseAsset") {
     license.set(rootProject.layout.projectDirectory.file("LICENSE"))
+    notices.set(rootProject.layout.projectDirectory.file("ThirdPartyNotices/agent-icons.txt"))
 }
 androidComponents {
     onVariants { variant ->
