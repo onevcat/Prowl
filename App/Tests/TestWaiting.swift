@@ -35,6 +35,9 @@ nonisolated func waitUntil(
 /// fixed number of ticks can run ahead of it and leave it suspended for good. Use it only
 /// where the code counts the ticks it waited, not clock time: a tick that no sleep receives
 /// then changes nothing.
+///
+/// Every tick runs `Task.megaYield` twice: 20 detached background-priority tasks each, which
+/// starve on a busy runner. For a long chain of sleeps, inject `YieldingClock` instead.
 @MainActor
 func advance<Value: Sendable>(
   _ clock: TestClock<Duration>,
@@ -57,4 +60,17 @@ func advance<Value: Sendable>(
 @MainActor
 private final class TaskResult<Value> {
   var value: Value?
+}
+
+/// A clock whose sleeps return after one `Task.yield()`, for code that counts the sleeps it
+/// waited, not clock time. Unlike `TestClock` and `ImmediateClock`, it never runs
+/// `Task.megaYield`, so a long chain of sleeps stays fast when the runner is busy.
+nonisolated struct YieldingClock: Clock {
+  var now: ContinuousClock.Instant { .now }
+  var minimumResolution: Duration { .zero }
+
+  func sleep(until deadline: ContinuousClock.Instant, tolerance: Duration?) async throws {
+    try Task.checkCancellation()
+    await Task.yield()
+  }
 }

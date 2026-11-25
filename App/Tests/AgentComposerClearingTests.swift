@@ -1,4 +1,3 @@
-import Clocks
 import Foundation
 import ProwlCLIShared
 import Testing
@@ -53,26 +52,25 @@ struct AgentComposerClearingTests {
   }
 
   private func clearing(
-    _ screen: Screen, plan: AgentComposerClearPlan, clock: TestClock<Duration>, observeNil: Bool = false
+    _ screen: Screen, plan: AgentComposerClearPlan, observeNil: Bool = false
   ) -> AgentComposerClearing {
+    // The executor counts settle polls, not time. Stepping a `TestClock` through them starved
+    // on busy CI runners (see `YieldingClock`).
     AgentComposerClearing(
       observe: { observeNil ? nil : screen.observation() }, press: { screen.press($0) },
-      plan: plan, agentName: "Claude", clock: clock, now: { 100 })
+      plan: plan, agentName: "Claude", clock: YieldingClock(), now: { 100 })
   }
 
-  /// A nil outcome is a task that did not return; `advance(_:by:until:)` already recorded it.
-  private func expectRefusal(_ outcome: AgentComposerClearing.Outcome?) -> AgentInputRefusal? {
-    guard let outcome else { return nil }
+  private func expectRefusal(_ outcome: AgentComposerClearing.Outcome) -> AgentInputRefusal? {
     if case .refused(let refusal) = outcome { return refusal }
     Issue.record("expected a refusal, got \(outcome)")
     return nil
   }
 
   @Test(.timeLimit(.minutes(1))) func stashPressesOnceAndReportsTheRecovery() async {
-    let clock = TestClock()
     let screen = Screen(.draft(.init(text: "hello", isComplete: true)))
     screen.responses = [.empty]
-    let outcome = await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock)
+    let outcome = await clearing(screen, plan: .stash(key: "ctrl-s"))
       .clear(.init(text: "hello", isComplete: true))
     #expect(outcome == .cleared(.init(text: "hello", isComplete: true, recovery: .stash)))
     #expect(screen.pressed == ["ctrl-s"])
@@ -82,11 +80,10 @@ struct AgentComposerClearingTests {
   /// in the draft (seen live on 2.1.322): the end key goes first, and the box is not expected to
   /// change after it.
   @Test(.timeLimit(.minutes(1))) func killRowMovesToTheEndThenKillsAndReportsNoRecovery() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "one two three", isComplete: true)
     let screen = Screen(.draft(draft))
     screen.responses = [.draft(draft), .empty]
-    let outcome = await clearing(screen, plan: .killRow(endKey: "ctrl-e", killKey: "ctrl-u"), clock: clock)
+    let outcome = await clearing(screen, plan: .killRow(endKey: "ctrl-e", killKey: "ctrl-u"))
       .clear(draft)
     #expect(outcome == .cleared(.init(text: "one two three", isComplete: true, recovery: nil)))
     #expect(screen.pressed == ["ctrl-e", "ctrl-u"])
@@ -95,23 +92,19 @@ struct AgentComposerClearingTests {
   /// The end key and the kill key go in one main-actor turn, so nothing can come between them;
   /// a kill key that leaves the draft is a partial-clear refusal, as for a stash.
   @Test(.timeLimit(.minutes(1))) func killRowThatLeavesTheDraftRefuses() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "one two three", isComplete: true)
     let screen = Screen(.draft(draft))
     let plan = AgentComposerClearPlan.killRow(endKey: "ctrl-e", killKey: "ctrl-u")
-    let task = Task { await clearing(screen, plan: plan, clock: clock).clear(draft) }
-    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
+    let refusal = expectRefusal(await clearing(screen, plan: plan).clear(draft))
     #expect(refusal?.details?.reason == .clearing)
     #expect(screen.pressed == ["ctrl-e", "ctrl-u"])
   }
 
   @Test(.timeLimit(.minutes(1))) func aKeyThatDoesNotEmptyTheBoxIsAPartialClearRefusal() async {
-    let clock = TestClock()
     let screen = Screen(.draft(.init(text: "hello", isComplete: true)))
-    let task = Task {
-      await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock).clear(.init(text: "hello", isComplete: true))
-    }
-    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
+    let refusal = expectRefusal(
+      await clearing(screen, plan: .stash(key: "ctrl-s"))
+        .clear(.init(text: "hello", isComplete: true)))
     #expect(refusal?.details?.reason == .clearing)
     #expect(refusal?.details?.replaceable == false)
     #expect(refusal?.details?.draft?.text == "hello")
@@ -119,7 +112,6 @@ struct AgentComposerClearingTests {
   }
 
   @Test(.timeLimit(.minutes(1))) func killLinesStopsAtTheFirstEmptyReadingAndCapsPresses() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "l1\nl2\nl3", isComplete: false)
     let screen = Screen(.draft(draft))
     // Codex removes a line's text with one press and its newline with the next.
@@ -127,15 +119,14 @@ struct AgentComposerClearingTests {
       .draft(.init(text: "l1\nl2\n", isComplete: false)), .draft(.init(text: "l1\nl2", isComplete: false)),
       .draft(.init(text: "l1\n", isComplete: false)), .draft(.init(text: "l1", isComplete: true)), .empty,
     ]
-    let outcome = await clearing(screen, plan: .killLines(key: "ctrl-u"), clock: clock).clear(draft)
+    let outcome = await clearing(screen, plan: .killLines(key: "ctrl-u")).clear(draft)
     #expect(outcome == .cleared(.init(text: "l1\nl2\nl3", isComplete: false, recovery: nil)))
     #expect(screen.pressed.count == 5)
 
+    // Up to 80 settle polls in sequence.
     let stubborn = Screen(.draft(draft))
-    let capped = Task { await clearing(stubborn, plan: .killLines(key: "ctrl-u"), clock: clock).clear(draft) }
-    // Up to 80 settle polls in sequence: one advance can finish before the task reaches its
-    // next sleep on a loaded runner, so step the clock one poll at a time.
-    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: capped))
+    let refusal = expectRefusal(
+      await clearing(stubborn, plan: .killLines(key: "ctrl-u")).clear(draft))
     #expect(refusal?.details?.reason == .clearing)
     #expect(stubborn.pressed.count == AgentComposerClearing.maximumPresses(forLines: 3))
     #expect(AgentComposerClearing.maximumPresses(forLines: 1) == 4)
@@ -145,23 +136,26 @@ struct AgentComposerClearingTests {
   /// Someone typing on the Mac while Prowl waits for its first key to redraw stops the sequence
   /// before another key goes in (review R090-001).
   @Test(.timeLimit(.minutes(1))) func typingOnTheMacDuringTheSettleWaitStopsTheSequence() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "l1\nl2", isComplete: false)
     let screen = Screen(.draft(draft))
-    // The first key shows no change yet, so the executor waits for the screen.
-    let task = Task { await clearing(screen, plan: .killLines(key: "ctrl-u"), clock: clock).clear(draft) }
-    await clock.advance(by: .milliseconds(100))
-    screen.typeLocally()
-    screen.reading = .draft(.init(text: "l1\nl2x", isComplete: false))
-    await clock.advance(by: .seconds(2))
-    let refusal = expectRefusal(await task.value)
+    var observations = 0
+    // The first key shows no change yet, so the executor waits for the screen; someone types
+    // before its first settle poll reads the box.
+    screen.onObserve = { screen in
+      observations += 1
+      if observations == 3 {
+        screen.typeLocally()
+        screen.reading = .draft(.init(text: "l1\nl2x", isComplete: false))
+      }
+    }
+    let refusal = expectRefusal(await clearing(screen, plan: .killLines(key: "ctrl-u")).clear(draft))
     #expect(refusal?.details?.reason == .editing)
     #expect(refusal?.message.contains("partly cleared") == true)
     #expect(screen.pressed == ["ctrl-u"])
 
     let composing = Screen(.draft(draft))
     composing.hasMarkedText = true
-    let first = expectRefusal(await clearing(composing, plan: .killLines(key: "ctrl-u"), clock: clock).clear(draft))
+    let first = expectRefusal(await clearing(composing, plan: .killLines(key: "ctrl-u")).clear(draft))
     #expect(first?.details?.reason == .editing)
     #expect(composing.pressed.isEmpty)
   }
@@ -169,7 +163,6 @@ struct AgentComposerClearingTests {
   /// A key that is not Prowl's own, landing with the reading that first shows the box empty,
   /// means someone else emptied or replaced it: no success, and nothing is sent.
   @Test(.timeLimit(.minutes(1))) func aLocalKeyCoincidingWithTheEmptyReadingRefuses() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "hello", isComplete: true)
     let screen = Screen(.draft(draft))
     var observations = 0
@@ -181,33 +174,32 @@ struct AgentComposerClearingTests {
         screen.reading = .empty
       }
     }
-    let task = Task { await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock).clear(draft) }
-    let refusal = expectRefusal(await advance(clock, by: AgentComposerClearing.settleInterval, until: task))
+    let refusal = expectRefusal(
+      await clearing(screen, plan: .stash(key: "ctrl-s")).clear(draft))
     #expect(refusal?.details?.reason == .editing)
     #expect(screen.pressed == ["ctrl-s"])
 
     // Prowl's own key, and only it, may empty the box.
     let own = Screen(.draft(draft))
     own.responses = [.empty]
-    let outcome = await clearing(own, plan: .stash(key: "ctrl-s"), clock: clock).clear(draft)
+    let outcome = await clearing(own, plan: .stash(key: "ctrl-s")).clear(draft)
     #expect(outcome == .cleared(.init(text: "hello", isComplete: true, recovery: .stash)))
   }
 
   @Test(.timeLimit(.minutes(1))) func unsupportedPlanRefusesWithoutPressingAndAGoneScreenRefuses() async {
-    let clock = TestClock()
     let draft = AgentComposerDraft(text: "hello", isComplete: true)
     let screen = Screen(.draft(draft))
-    let refused = expectRefusal(await clearing(screen, plan: .unsupported, clock: clock).clear(draft))
+    let refused = expectRefusal(await clearing(screen, plan: .unsupported).clear(draft))
     #expect(refused?.details?.reason == .draft)
     #expect(refused?.details?.replaceable == false)
     #expect(screen.pressed.isEmpty)
 
     let gone = expectRefusal(
-      await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock, observeNil: true).clear(draft))
+      await clearing(screen, plan: .stash(key: "ctrl-s"), observeNil: true).clear(draft))
     #expect(gone?.message.contains("no longer available") == true)
 
     screen.accepts = false
-    let notAccepted = expectRefusal(await clearing(screen, plan: .stash(key: "ctrl-s"), clock: clock).clear(draft))
+    let notAccepted = expectRefusal(await clearing(screen, plan: .stash(key: "ctrl-s")).clear(draft))
     #expect(notAccepted?.message.contains("did not accept") == true)
   }
 }

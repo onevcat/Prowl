@@ -1,5 +1,6 @@
 # ProwlMirror-iOS
-Native iOS mirror client for Prowl, supporting iPhone and iPad
+Native iOS mirror client for Prowl, supporting iPhone and iPad. It ships on the App Store as
+[Prowl Mirror](https://apps.apple.com/app/id6831901271).
 
 Migrated from `Awhisper/ProwlMirror-iPad` at commit `2b8e237` into this repository.
 The original repository and history remain available separately. The app now uses `com.onevcat.prowl.mirror`, so it installs

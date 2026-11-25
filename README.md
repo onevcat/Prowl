@@ -119,6 +119,21 @@ Walk away: Prowl posts a macOS notification when an agent finishes or stops to a
 
 <br clear="all">
 
+### 📱 Prowl Mirror — your agents, in your pocket
+
+<img align="right" width="240" src="https://prowl.onev.cat/images/shots/mirror-prompt.webp" alt="Prowl Mirror on an iPhone showing a blocked agent's conversation with a permission prompt whose choices are buttons">
+
+Step away from the desk and keep your agents within reach. [Prowl Mirror](https://apps.apple.com/app/id6831901271), the free companion app for iPhone and iPad, pairs with Prowl on your Mac.
+
+- **Every agent, every state**, grouped by project as in the sidebar.
+- **Answer from your phone.** Permission prompts and questions show as buttons. Tap one, and Prowl answers on your Mac. Send a message, stop a turn, or start a new session.
+- **Chat or terminal.** Read the conversation as a clean chat, or switch to the live terminal screen.
+- **Private by design.** The app connects straight to your Mac over your local network or VPN, encrypted with a key made when you pair. No account. Optional notifications are end-to-end encrypted.
+
+Turn on **Settings → Remote Mirror** (alpha), choose **Add a Device…**, and scan the code with the app. **Get the App…** in the same Settings tab shows a QR code that opens Prowl Mirror on the App Store.
+
+<br clear="all">
+
 ## Reach agents on other machines
 
 Some work has to run where the code, the data, or the hardware is: a build box, a GPU server, a dev VM. Prowl puts those machines in the same sidebar and watches their agents as closely as the ones on your Mac. It uses plain SSH and installs nothing on the host.
@@ -258,11 +273,13 @@ Want the full picture? Take the [feature tour](https://prowl.onev.cat/details/) 
 brew install --cask onevcat/tap/prowl
 ```
 
+**Prowl Mirror** for iPhone and iPad: [App Store](https://apps.apple.com/app/id6831901271)
+
 Then add a repository with `⌘⇧O`, press `⌘N` to create a worktree, and launch an agent from the toolbar's Agents menu. Run a few in parallel and turn on Agent Island: you will always know which one needs you.
 
 ## Requirements
 
-macOS 26.0+
+macOS 26.0+ (Prowl Mirror: iOS or iPadOS 26.0+)
 
 ## Privacy & Telemetry
 

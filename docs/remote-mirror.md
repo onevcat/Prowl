@@ -13,6 +13,10 @@ by default. While it is off, the Remote Mirror button and the sidebar section ar
 and the Host cannot start a listener; turning it off stops the Host and closes all mirrors
 opened from this Mac.
 
+Below the switch, whether it is on or off, **Prowl Mirror for iPhone and iPad → Get the App…**
+shows a QR code to scan with the iPhone or iPad camera. It opens Prowl Mirror on the App Store
+(`https://apps.apple.com/app/id6831901271`); the popover also has the link for a browser.
+
 With the switch on, the Settings section has two groups, named by direction:
 
 - **Connect to This Mac**: this Mac is the Host. A paired iPhone or another Mac sees and
@@ -40,7 +44,8 @@ code, a connection fails during the TLS handshake.
 
 **Add a Device** opens a modal pairing sheet with a 60-second code and a reachable
 Wi-Fi or VPN address and port. A control at the top selects the device to pair: the
-**iPhone** page shows a QR code to scan in Prowl Mirror; the **Mac** page shows
+**iPhone** page shows a QR code to scan in Prowl Mirror, and a link that shows the App Store
+QR code for an iPhone that does not have the app yet; the **Mac** page shows
 **Copy Connection Details** (⌘C), which copies the address, port, code, and expiry
 together. When multiple addresses are
 available, choose **Connection address** first. If the listener is restarting, the sheet waits before generating
@@ -457,6 +462,7 @@ Real Agent and cross-device acceptance remain separate from component/socket tes
 
 ## Mobile client projects
 
+The iOS client is on the App Store as [Prowl Mirror](https://apps.apple.com/app/id6831901271).
 Native clients live in [Mirror/iOS](../Mirror/iOS/) (iPhone and iPad)
 and [Mirror/Android](../Mirror/Android/) (phones and tablets). Each
 project retains its own build and test entry points; neither is built by the Mac
