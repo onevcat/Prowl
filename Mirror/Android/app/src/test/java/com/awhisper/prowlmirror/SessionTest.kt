@@ -99,7 +99,7 @@ class SessionTest {
         }
 
         fun listing(agent: String? = "codex") {
-            val id = peer.sent.last().payload().record("commandRequest").string("requestID")
+            val id = peer.sent.last { it.kind == "command" }.payload().record("commandRequest").string("requestID")
             answer(
                 id,
                 obj(
@@ -203,23 +203,93 @@ class SessionTest {
     }
 
     @Test
-    fun aConnectedRosterPollsAndCorrelatesConcurrentCommands() = runTest {
+    fun aConnectedRosterPollsAndSendsOneCommandAtATime() = runTest {
         val f = Fixture(backgroundScope)
         f.session.connect()
         f.ready()
         val first = async { f.session.command(Commands.list()) }
-        val second = async { f.session.command(Commands.profiles()) }
         runCurrent()
+        val second = runCatching { f.session.command(Commands.profiles()) }
+        assertEquals(HOST_BUSY, second.exceptionOrNull()?.message)
         val requests = f.peer.sent.filter { it.kind == "command" }
             .map { it.payload().record("commandRequest").string("requestID") }
-        assertEquals(2, requests.size)
-        f.answer(requests[1], obj("name" to "profiles"))
+        assertEquals(1, requests.size)
         f.answer(requests[0], obj("name" to "list"))
         assertEquals("list", first.await().string("name"))
-        assertEquals("profiles", second.await().string("name"))
+        val third = async { f.session.command(Commands.profiles()) }
+        runCurrent()
+        f.answer(f.peer.sent.last().payload().record("commandRequest").string("requestID"), obj("name" to "profiles"))
+        assertEquals("profiles", third.await().string("name"))
         advanceTimeBy(3_000)
         runCurrent()
         assertEquals(2, f.peer.sent.count { it.kind == "list" })
+        f.session.close()
+    }
+
+    @Test
+    fun aTimedOutCommandHoldsTheHostUntilItsLateReply() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.ready()
+        val first = async { runCatching { f.session.command(Commands.list()) } }
+        runCurrent()
+        val late = f.peer.sent.last().payload().record("commandRequest").string("requestID")
+        advanceTimeBy(30_001)
+        runCurrent()
+        assertTrue(first.await().exceptionOrNull() is TimeoutCancellationException)
+        assertEquals(HOST_BUSY, runCatching { f.session.command(Commands.profiles()) }.exceptionOrNull()?.message)
+        assertEquals(1, f.peer.sent.count { it.kind == "command" })
+        f.answer(late, obj("name" to "list"))
+        assertFalse(f.peer.stopped)
+        assertEquals(Status.choosing, f.session.state.value.status)
+        val next = async { f.session.command(Commands.profiles()) }
+        runCurrent()
+        assertEquals(2, f.peer.sent.count { it.kind == "command" })
+        f.answer(f.peer.sent.last().payload().record("commandRequest").string("requestID"), obj("name" to "profiles"))
+        assertEquals("profiles", next.await().string("name"))
+        f.session.close()
+    }
+
+    @Test
+    fun aMessageInputHoldsTheHostUntilItsReceipt() = runTest {
+        val f = Fixture(backgroundScope)
+        f.live()
+        f.session.setDraft("Review")
+        f.session.submit()
+        runCurrent()
+        f.listing()
+        runCurrent()
+        val input = f.peer.sent.last().payload().record("commandRequest").string("requestID")
+        assertEquals(HOST_BUSY, runCatching { f.session.command(Commands.list()) }.exceptionOrNull()?.message)
+        f.answer(input, obj("ok" to true, "command" to "agents.input",
+            "data" to obj("input" to obj("bytes" to 6, "trailing_enter_sent" to true))))
+        assertEquals(Delivery.ACCEPTED, f.session.state.value.delivery)
+        val next = async { f.session.command(Commands.list()) }
+        runCurrent()
+        assertEquals(3, f.peer.sent.count { it.kind == "command" })
+        next.cancel()
+        f.session.close()
+    }
+
+    @Test
+    fun aLeaseChangeDuringTheListingRejectsTheMessageWithoutSendingIt() = runTest {
+        val f = Fixture(backgroundScope)
+        f.pane = f.pane.copy(conversation = "pending")
+        f.session.connect()
+        f.ready(conversation = true)
+        f.session.choose(f.pane)
+        f.subscribed()
+        f.frame()
+        f.session.setDraft("Review")
+        f.session.submit()
+        runCurrent()
+        f.session.updatePane(f.pane.copy(conversation = "available"))
+        assertEquals("conversation-v1", f.peer.sent.last().payload().string("representation"))
+        f.listing()
+        runCurrent()
+        assertEquals(Delivery.REJECTED, f.session.state.value.delivery)
+        assertEquals("Review", f.session.state.value.draft)
+        assertEquals(1, f.peer.sent.count { it.kind == "command" })
         f.session.close()
     }
 
@@ -900,23 +970,6 @@ class SessionTest {
     }
 
     @Test
-    fun rejectedHostEditKeepsOriginalConnectionAndDraft() = runTest {
-        val f = Fixture(backgroundScope)
-        f.live()
-        f.session.setDraft("hello")
-        f.session.submit()
-        runCurrent()
-        f.listing()
-        runCurrent()
-        f.session.editHost(Host("different"), "ABCD2345")
-        assertFalse(f.peer.stopped)
-        assertEquals(Status.live, f.session.state.value.status)
-        assertEquals("hello", f.session.state.value.draft)
-        assertEquals(Delivery.PENDING, f.session.state.value.delivery)
-        f.session.close()
-    }
-
-    @Test
     fun historyPageTimeoutCannotCancelNextPage() = runTest {
         val f = Fixture(backgroundScope)
         f.live()
@@ -962,6 +1015,37 @@ class SessionTest {
         f.ready()
         f.subscribed()
         assertTrue(f.session.state.value.history.isEmpty())
+        f.session.close()
+    }
+
+    @Test
+    fun aLateHistoryPageAfterTheTimeoutIsShownWithoutDisconnecting() = runTest {
+        val f = Fixture(backgroundScope)
+        f.live()
+        f.session.loadHistory()
+        runCurrent()
+        advanceTimeBy(8_001)
+        runCurrent()
+        assertFalse(f.session.state.value.loadingHistory)
+        assertEquals(HISTORY_TIMED_OUT, f.session.state.value.error)
+        f.session.loadHistory()
+        assertTrue(f.session.state.value.loadingHistory)
+        assertEquals(1, f.peer.sent.count { it.kind == "history" })
+        advanceTimeBy(8_001)
+        runCurrent()
+        f.peer.receive(
+            control(
+                "historyPage",
+                obj(
+                    "subscriptionID" to f.lease, "historyID" to uuid(), "offset" to 0, "total" to 1,
+                    "capturedAt" to 4.0, "truncated" to false, "lines" to listOf("late"),
+                ),
+            )
+        )
+        assertFalse(f.peer.stopped)
+        assertEquals(Status.live, f.session.state.value.status)
+        assertEquals(listOf("late"), f.session.state.value.history)
+        assertNull(f.session.state.value.error)
         f.session.close()
     }
 }

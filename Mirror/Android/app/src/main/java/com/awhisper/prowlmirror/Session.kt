@@ -27,6 +27,9 @@ enum class Delivery {
     REJECTED,
 }
 
+internal const val HOST_BUSY = "The Mac is still finishing the previous request. Try again in a moment."
+internal const val HISTORY_TIMED_OUT = "History timed out. Retry history."
+
 data class HostDraft(val text: String, val complete: Boolean, val replaceable: Boolean, val discardable: Boolean)
 
 data class PromptAction(val id: String, val choice: String, val error: String? = null)
@@ -196,7 +199,15 @@ class Session(
     internal val leasedPaneID get() = state.value.pane?.id.takeIf { lease != null }
     private val historyGate = HistoryGate()
     private var historyTimeout: Job? = null
-    private val pendingCommands = mutableMapOf<String, CompletableDeferred<JsonObject>>()
+    // The Host runs one command per connection and closes the connection on a second one. A
+    // command this device stopped waiting for, or a message input it sent, still holds the
+    // Host until its reply arrives or the connection ends.
+    private var pendingCommand: Pair<String, CompletableDeferred<JsonObject>>? = null
+    private var abandonedCommand: String? = null
+    private var inputInFlight: String? = null
+    // A History request that has no reply yet. A retry waits for it instead of sending another,
+    // so a late reply is never mistaken for an invalid message.
+    private var historyOutstanding = false
     private var scrollTimeout: Job? = null
     private data class ScrollRequest(
         val id: String,
@@ -308,6 +319,7 @@ class Session(
         expectsScrollState = false
         state.update { it.copy(scrollBounds = ScrollBounds()) }
         historyTimeout?.cancel()
+        historyOutstanding = false
         state.update { it.copy(loadingHistory = false) }
         generation++
         val old = transport
@@ -317,9 +329,11 @@ class Session(
         retiredLease = null
         pendingChat = null
         resumesConversation = false
-        val commands = pendingCommands.values.toList()
-        pendingCommands.clear()
-        commands.forEach { it.completeExceptionally(IOException("Connection lost before confirmation")) }
+        val command = pendingCommand
+        pendingCommand = null
+        abandonedCommand = null
+        inputInFlight = null
+        command?.second?.completeExceptionally(IOException("Connection lost before confirmation"))
         if (state.value.delivery == Delivery.PENDING)
             state.update {
                 it.copy(
@@ -365,33 +379,6 @@ class Session(
         detach()
         intent = "takeover"
         connect()
-    }
-
-    fun editHost(host: Host, code: String) {
-        val prior = state.value
-        val sameIdentity =
-            host.credential?.hostID != null &&
-                host.credential.hostID == prior.host.credential?.hostID
-        if (!sameIdentity && prior.delivery in setOf(Delivery.PENDING, Delivery.UNKNOWN)) {
-            state.update {
-                it.copy(error = "Check the unconfirmed message before changing Host identity.")
-            }
-            return
-        }
-        detach()
-        historyGate.reset()
-        state.value =
-            state.value.copy(
-                host = host,
-                status = Status.disconnected,
-                error = null,
-                pane = if (sameIdentity) prior.pane else null,
-                text = if (sameIdentity) prior.text else "",
-                history = emptyList(),
-                showsHistory = false,
-            )
-        intent = "ifFree"
-        connect(code)
     }
 
     fun refreshPanes() {
@@ -652,7 +639,9 @@ class Session(
         scope.launch {
             try {
                 val listing = command(Commands.list())
-                if (lease != activeLease || submission != item || state.value.delivery != Delivery.PENDING) return@launch
+                if (submission != item || state.value.delivery != Delivery.PENDING) return@launch
+                // A mode switch or a reconnection replaced the lease while the listing ran.
+                if (lease != activeLease) throw IOException("The mirror reopened before sending")
                 val input = Commands.input(listing, item.pane, item.text, onDraft)
                 check(!input.has("agentsInput") || "agent-input" in state.value.capabilities) {
                     "Update Host to support interactive Agent input"
@@ -660,7 +649,10 @@ class Session(
                 check(!input.has("send") || "shell-send" in state.value.capabilities) {
                     "Host cannot verify an empty command line for remote shell Send. Use an Agent Profile or control the shell on Host"
                 }
+                inputInFlight = item.id
                 send(Commands.request(item.id, input, activeLease))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (submission == item && state.value.delivery == Delivery.PENDING)
                     state.update {
@@ -682,14 +674,20 @@ class Session(
         ) {
             "Host command unavailable"
         }
+        if (pendingCommand != null || abandonedCommand != null || inputInFlight != null)
+            throw IOException(HOST_BUSY)
         val id = uuid()
         val result = CompletableDeferred<JsonObject>()
-        pendingCommands[id] = result
+        pendingCommand = id to result
         return try {
             send(Commands.request(id, command, lease))
             withTimeout(30_000) { result.await() }
         } finally {
-            pendingCommands.remove(id)
+            if (pendingCommand?.first == id) {
+                pendingCommand = null
+                // The Host can still be running it; the reply releases the connection.
+                if (!result.isCompleted && transport != null) abandonedCommand = id
+            }
         }
     }
 
@@ -723,31 +721,37 @@ class Session(
         val active = lease ?: return
         if (state.value.chat || state.value.loadingHistory || "history" !in state.value.capabilities) return
         clearScroll()
-        if (refresh) {
+        if (refresh && !historyOutstanding) {
             historyGate.reset()
         }
-        if (historyGate.id != null && historyGate.offset == 0) {
+        if (!historyOutstanding && historyGate.id != null && historyGate.offset == 0) {
             state.update { it.copy(showsHistory = true) }
             return
         }
-        state.update { it.copy(showsHistory = true, loadingHistory = true) }
-        send(
-            control(
-                "history",
-                obj(
-                    "subscriptionID" to active,
-                    "historyID" to historyGate.id,
-                    "offset" to historyGate.offset.takeIf { historyGate.id != null },
-                ),
+        state.update {
+            it.copy(showsHistory = true, loadingHistory = true,
+                error = it.error.takeUnless { error -> error == HISTORY_TIMED_OUT })
+        }
+        if (!historyOutstanding) {
+            historyOutstanding = true
+            send(
+                control(
+                    "history",
+                    obj(
+                        "subscriptionID" to active,
+                        "historyID" to historyGate.id,
+                        "offset" to historyGate.offset.takeIf { historyGate.id != null },
+                    ),
+                )
             )
-        )
+        }
         historyTimeout?.cancel()
         historyTimeout =
             scope.launch {
                 delay(8_000)
                 if (lease == active && state.value.loadingHistory)
                     state.update {
-                        it.copy(loadingHistory = false, error = "History timed out. Retry history.")
+                        it.copy(loadingHistory = false, error = HISTORY_TIMED_OUT)
                     }
             }
     }
@@ -933,6 +937,7 @@ class Session(
                 lease = canonical(p.string("subscriptionID"))
                 runID = canonical(p.string("hostRunID"))
                 historyTimeout?.cancel()
+                historyOutstanding = false
                 historyGate.reset()
                 state.update {
                     it.copy(
@@ -1004,7 +1009,8 @@ class Session(
                     if (replyLease != null && replyLease == retiredLease && replyLease != lease) return
                     if (replyLease == null || replyLease != lease) {
                         failed(error)
-                    } else if (state.value.loadingHistory) {
+                    } else if (historyOutstanding) {
+                        historyOutstanding = false
                         historyTimeout?.cancel()
                         state.update { it.copy(error = error, loadingHistory = false) }
                     }
@@ -1019,12 +1025,14 @@ class Session(
             "historyPage" -> {
                 val replyLease = canonical(p.string("subscriptionID"))
                 if (replyLease == retiredLease && replyLease != lease) return
-                require(replyLease == lease && state.value.loadingHistory)
+                require(replyLease == lease && historyOutstanding)
+                historyOutstanding = false
                 val continuation = historyGate.id != null
                 val lines = historyGate.accept(p)
                 historyTimeout?.cancel()
                 state.update {
                     it.copy(
+                        error = it.error.takeUnless { error -> error == HISTORY_TIMED_OUT },
                         history = if (continuation) lines + it.history else lines,
                         historyOffset = historyGate.offset,
                         historyTime = p.get("capturedAt").asDouble,
@@ -1037,8 +1045,18 @@ class Session(
                 val response = p.record("commandResponse")
                 val id = canonical(response.string("requestID"))
                 val result = response.record("response")
-                val pending = pendingCommands.remove(id)
-                if (pending != null) pending.complete(result) else delivery(id, result)
+                val pending = pendingCommand?.takeIf { it.first == id }
+                when {
+                    pending != null -> {
+                        pendingCommand = null
+                        pending.second.complete(result)
+                    }
+                    id == abandonedCommand -> abandonedCommand = null
+                    else -> {
+                        if (id == inputInFlight) inputInFlight = null
+                        delivery(id, result)
+                    }
+                }
             }
             else -> throw IOException("Unexpected Host message: ${packet.kind}")
         }
