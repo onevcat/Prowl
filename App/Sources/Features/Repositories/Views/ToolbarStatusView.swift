@@ -38,6 +38,8 @@ struct ToolbarStatusView: View {
           onIntent: onWorkflowIntent
         )
       }
+      // Display-only content does not take hits, so a double-click on it reaches the titlebar
+      // and runs the system zoom action. Interactive status buttons must keep hit testing.
       switch selection {
       case .toast(.inProgress(let message)):
         HStack(spacing: 6) {
@@ -47,6 +49,7 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .allowsHitTesting(false)
         .transition(.opacity)
       case .toast(.success(let message)):
         HStack(spacing: 6) {
@@ -57,6 +60,7 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .allowsHitTesting(false)
         .transition(.opacity)
       case .toast(.warning(let message)):
         HStack(spacing: 6) {
@@ -67,6 +71,7 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .allowsHitTesting(false)
         .transition(.opacity)
       case .workflow:
         EmptyView()
@@ -87,6 +92,7 @@ struct ToolbarStatusView: View {
           .transition(.opacity)
       case .motivational:
         MotivationalStatusView()
+          .allowsHitTesting(false)
           .transition(.opacity)
       }
     }

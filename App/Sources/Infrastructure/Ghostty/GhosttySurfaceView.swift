@@ -668,6 +668,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     guard let window, window.isVisible else { return }
     let opacity = runtime.backgroundOpacity()
     window.titlebarAppearsTransparent = true
+    TitlebarDoubleClick.keepEnabled(in: window)
     if !isBackgroundOpaqueOverride, !window.styleMask.contains(.fullScreen), opacity < 1 {
       window.isOpaque = false
       let isDark = window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
