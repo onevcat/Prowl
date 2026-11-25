@@ -55,10 +55,9 @@ class InterfaceTest {
         rule.onNodeWithTag("prompt-choice-1").performClick()
         rule.onNodeWithText("Allowed · Do you want to proceed?").assertIsDisplayed()
         rule.onNodeWithContentDescription("Terminal").performClick()
-        rule.onNodeWithContentDescription("Scroll Up").assertIsEnabled()
+        // The demo screen fits on one page, so the Host reports both bounds.
+        rule.onNodeWithContentDescription("Scroll Up").assertIsNotEnabled()
         rule.onNodeWithContentDescription("Scroll Down").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("Scroll Up").performClick()
-        rule.onNodeWithContentDescription("Scroll Down").assertIsEnabled()
         rule.onNodeWithContentDescription("Chat").performClick()
         rule.onNodeWithText("Allowed · Do you want to proceed?").assertIsDisplayed()
         rule.onNodeWithContentDescription("Agents").performClick()
@@ -88,7 +87,7 @@ class InterfaceTest {
     fun newSessionNamesTheSelectedProjectAndBranch() {
         rule.onNodeWithText("Try the Demo").performScrollTo().performClick()
         rule.onNodeWithContentDescription("New Session").performClick()
-        rule.onNodeWithText("Prowl · main").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Kingfisher · main").assertIsDisplayed().performClick()
         rule.onNodeWithText("/Users/demo/Projects/Kingfisher-8.4").performClick()
         rule.onNodeWithText("Kingfisher · release/8.4").assertIsDisplayed()
     }
