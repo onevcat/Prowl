@@ -27,8 +27,10 @@ internal fun Composer(session: Session, state: SessionState) {
         state.keysAvailable && state.draft.isBlank() && state.delivery != Delivery.PENDING
     var stop by remember(session.id) { mutableStateOf(false) }
     LaunchedEffect(state.draft) {
-        if (state.draft != value.text)
-            value = TextFieldValue(state.draft, TextRange(state.draft.length))
+        // Read the current draft, not the one this composition captured: typing can run ahead of
+        // recomposition, and the captured draft would roll the field back and drop characters.
+        val draft = session.state.value.draft
+        if (draft != value.text) value = TextFieldValue(draft, TextRange(draft.length))
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         state.hostDraft?.let { draft ->
