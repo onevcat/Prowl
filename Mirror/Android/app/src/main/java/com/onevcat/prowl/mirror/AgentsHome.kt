@@ -55,8 +55,8 @@ internal fun MirrorOnboarding(pair: () -> Unit, demo: () -> Unit) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 listOf(
-                    Icons.Default.LaptopMac to "On the Mac, turn on Remote Mirror in Prowl Settings, then open the Remote Mirror button in the toolbar.",
-                    Icons.Default.QrCode to "Choose Add a Device to show a pairing code.",
+                    Icons.Default.LaptopMac to "On the Mac, turn on Remote Mirror in Prowl Settings.",
+                    Icons.Default.QrCode to "Click Remote Mirror in the toolbar, then Add a Device.",
                     Icons.Default.Smartphone to "Scan the code here, or type the address and code.",
                 ).forEach { (icon, text) ->
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
