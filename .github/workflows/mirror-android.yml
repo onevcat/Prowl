@@ -36,7 +36,8 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '17'
+          # November 2026 CSPU fixes CVE-2026-114938 (Java4Shell).
+          java-version: '17.0.21.1+2'
           cache: gradle
       - uses: android-actions/setup-android@v4
       - name: Install Android SDK 34
