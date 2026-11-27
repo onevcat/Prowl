@@ -595,7 +595,11 @@ nonisolated enum MirrorWire {
       bytes.append(Data(value.text.utf8))
       payload = bytes
     default:
-      payload = Data([0]) + (try JSONEncoder().encode(message))
+      // Without sorted keys, one value can encode to different bytes on each call, and the
+      // compressed stream cannot refer back to a message it has already sent.
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = .sortedKeys
+      payload = Data([0]) + (try encoder.encode(message))
     }
     return payload
   }

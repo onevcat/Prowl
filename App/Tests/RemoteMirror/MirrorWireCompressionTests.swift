@@ -52,6 +52,22 @@ struct MirrorWireCompressionTests {
     #expect(sizes[1] < 64 && sizes[2] < 64, "repeated list sizes: \(sizes)")
   }
 
+  /// The dictionary behind `JSONEncoder` can order the keys of one value differently on each
+  /// call. A repeated message must have the same bytes, or the stream cannot refer back to it.
+  @Test func aJSONPayloadHasOneKeyOrder() throws {
+    let message = MirrorMessage.panes(
+      .init(
+        panes: [
+          MirrorPaneDescriptor(
+            id: UUID(), title: "Claude Code", directory: "/Users/me/Projects/Prowl", busy: false,
+            projectName: "Prowl", agent: "claude")
+        ],
+        capabilities: [MirrorWireCompression.capability], hostRunID: UUID()))
+    let sorted = JSONEncoder()
+    sorted.outputFormatting = .sortedKeys
+    #expect(try MirrorWire.payload(message).dropFirst() == sorted.encode(message))
+  }
+
   @Test func plainPayloadsPassThroughWithoutAStream() throws {
     var inflater: MirrorWireCompression.Inflater?
     let plain = try MirrorWire.payload(.pong)
