@@ -8,18 +8,20 @@ nonisolated struct WorkflowExpressionParser {
     "??": 1, "||": 2, "&&": 3, "==": 4, "!=": 4,
     "<": 5, "<=": 5, ">": 5, ">=": 5, "+": 6, "-": 6, "*": 7, "/": 7, "%": 7,
   ]
+  /// A parser is made for each template on every render, so the pattern is compiled once.
+  /// `Regex` is not Sendable; this literal is immutable and only read.
+  nonisolated(unsafe) private static let token =
+    #/
+    \s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|
+    [0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|[a-zA-Z_][a-zA-Z0-9_]*|
+    \?\?|\|\||&&|==|!=|<=|>=|[.\[\](),!+*\/%<>-])
+    /#
 
   init(_ source: String) throws {
     guard source.utf8.count <= 16_384 else { throw WorkflowExpressionError.limit("Expression exceeds 16 KiB.") }
     var remaining = source[...]
-    let token =
-      #/
-      \s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|
-      [0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|[a-zA-Z_][a-zA-Z0-9_]*|
-      \?\?|\|\||&&|==|!=|<=|>=|[.\[\](),!+*\/%<>-])
-      /#
     while !remaining.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      guard let match = remaining.prefixMatch(of: token) else {
+      guard let match = remaining.prefixMatch(of: Self.token) else {
         throw WorkflowExpressionError.syntax("Invalid token near '\(remaining.prefix(30))'.")
       }
       guard tokens.count < 256 else { throw WorkflowExpressionError.limit("Expression exceeds 256 tokens.") }
@@ -75,7 +77,7 @@ nonisolated struct WorkflowExpressionParser {
     while true {
       if consume(".") {
         let name = peek
-        guard name.wholeMatch(of: /[a-zA-Z_][a-zA-Z0-9_]*/) != nil else {
+        guard Self.isIdentifier(name) else {
           throw WorkflowExpressionError.syntax("Expected a field name.")
         }
         offset += 1
@@ -117,11 +119,20 @@ nonisolated struct WorkflowExpressionParser {
       try WorkflowJSON.validate(value)
       return .literal(value)
     }
-    guard token.wholeMatch(of: /[a-zA-Z_][a-zA-Z0-9_]*/) != nil else {
+    guard Self.isIdentifier(token) else {
       throw WorkflowExpressionError.syntax("Unexpected token '\(token)'.")
     }
     if consume("(") { return try .call(token, arguments(ending: ")")) }
     return .name(token)
+  }
+
+  /// Every token comes from `token`, so a token that starts as an identifier is one.
+  private static func isIdentifier(_ token: String) -> Bool {
+    guard let first = token.utf8.first else { return false }
+    return switch first {
+    case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "_"): true
+    default: false
+    }
   }
 
   private mutating func arguments(ending: String) throws -> [WorkflowExpressionNode] {

@@ -12,6 +12,8 @@ struct WorkflowStartFeature {
   @ObservableState
   struct State: Equatable {
     let context: WorkflowStartContext
+    /// The sheet asks for the Skip consequence of every optional step on each refresh.
+    private let skipIndex: WorkflowSkipIndex
     var selectedSourceSurfaceID: UUID?
     /// Launch role name → chosen profile. Pre-filled from the resolver's answer.
     var launchSelections: [String: UUID]
@@ -37,6 +39,7 @@ struct WorkflowStartFeature {
 
     init(context: WorkflowStartContext) {
       self.context = context
+      skipIndex = WorkflowSkipIndex(definition: context.definition)
       requiresBundleApproval = context.requiresBundleApproval
       cliInstalled = context.cliInstalled
       selectedSourceSurfaceID = context.source?.preselectedSurfaceID
@@ -82,7 +85,7 @@ struct WorkflowStartFeature {
     func skipConsequence(for stepID: String) -> WorkflowSkipConsequence? {
       WorkflowRunMachine.startSkipConsequence(
         forStep: stepID, definition: context.definition,
-        alreadySkipped: skippedSteps.subtracting([stepID]))
+        alreadySkipped: skippedSteps.subtracting([stepID]), index: skipIndex)
     }
 
     var requiredLaunchRoles: [WorkflowStartLaunchRole] {
@@ -106,8 +109,10 @@ struct WorkflowStartFeature {
     var visibleSkipOptions: [(stepID: String, title: String?)] {
       context.skipOptions.filter { option in
         if skippedSteps.contains(option.stepID) { return true }
-        if case .endsRun = skipConsequence(for: option.stepID) { return false }
-        return skipConsequence(for: option.stepID) != nil
+        switch skipConsequence(for: option.stepID) {
+        case .endsRun, nil: return false
+        case .noDelivery, .continues: return true
+        }
       }
     }
 

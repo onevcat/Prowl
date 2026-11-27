@@ -62,10 +62,6 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
   let elapsedText: String
   let status: Status
   let currentStepTitle: String
-  let currentPrompt: String?
-  let roles: [WorkflowRolePresentation]
-  let stepItems: [WorkflowStepListItem]
-  let attentionControls: [WorkflowAttentionControl]
   let runDirectory: URL
   let logURL: URL
 
@@ -89,30 +85,6 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
       }
     let context = Self.templateContext(for: run, iteration: run.currentIteration)
     currentStepTitle = Self.title(for: run.currentStep, context: context) ?? String(localized: "Finishing workflow")
-    currentPrompt = Self.prompt(for: run.currentStep, context: context)
-    roles = run.definition.roles.map { role in
-      WorkflowRolePresentation(role: role, binding: run.bindings[role.name])
-    }
-    stepItems = Self.stepItems(for: run)
-    if let attention = run.status.attention {
-      let machine = WorkflowRunMachine(
-        run: run,
-        limits: WorkflowDeliveryLimits(),
-        now: { now },
-        makeToken: { "presentation-does-not-mint-tokens" }
-      )
-      let skipConsequence = machine.skipConsequence(forStep: attention.stepID)
-      attentionControls = attention.actions.map {
-        WorkflowAttentionControl(
-          action: $0,
-          run: run,
-          attention: attention,
-          skipConsequence: skipConsequence
-        )
-      }
-    } else {
-      attentionControls = []
-    }
     runDirectory = run.runDirectory
     logURL = run.runDirectory.appending(path: "log.md", directoryHint: .notDirectory)
   }
@@ -174,105 +146,6 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
   private static func fallbackTitle(for step: WorkflowStepDefinition) -> String {
     step.historyTitle
   }
-
-  private static func prompt(
-    for step: WorkflowStepDefinition?,
-    context: [String: WorkflowJSONValue]
-  ) -> String? {
-    guard let step else { return nil }
-    let source: String?
-    switch step.action {
-    case .message(_, let prompt, _):
-      source = prompt
-    case .launch(_, let prompt, _, _):
-      source = prompt
-    case .action(let id, _):
-      source = String(localized: "Run action \(id).")
-    case .notify(let text):
-      source = text
-    case .close(let role):
-      source = String(localized: "Close the pane bound to \(role).")
-    case .control:
-      source = nil
-    }
-    guard let source else { return nil }
-    return (try? WorkflowExpression.renderText(source, values: context)) ?? source
-  }
-
-  private static func stepItems(for run: WorkflowRun) -> [WorkflowStepListItem] {
-    var items: [WorkflowStepListItem] = []
-    for step in run.definition.steps {
-      switch step.action {
-      case .control(.loop(_, let maximum, let children)):
-        let body = children.flatMap { [$0] + $0.action.descendants }
-        let recordedIterations = run.stepRecords.compactMap { record in
-          body.contains { $0.id == record.stepID } ? record.iteration : nil
-        }
-        var iterations = Set(recordedIterations)
-        if body.contains(where: { $0.id == run.currentStep?.id }),
-          let current = run.currentIteration
-        {
-          iterations.insert(current)
-        }
-        if iterations.isEmpty {
-          items.append(
-            .step(
-              WorkflowStepPresentation(
-                id: "\(step.id)-pending",
-                stepID: step.id,
-                title: title(for: step, context: templateContext(for: run, iteration: nil)) ?? step.id,
-                state: .pending
-              )))
-        } else {
-          for iteration in iterations.sorted() {
-            let steps = body.map { inner in
-              let record = run.stepRecords.last {
-                $0.stepID == inner.id && $0.iteration == iteration
-              }
-              let context = templateContext(for: run, iteration: iteration)
-              return WorkflowStepPresentation(
-                id: "\(step.id)-\(iteration)-\(inner.id)",
-                stepID: inner.id,
-                title: title(for: inner, context: context) ?? inner.id,
-                state: record.map { WorkflowStepPresentation.State($0.state) } ?? .pending
-              )
-            }
-            items.append(
-              .round(
-                WorkflowRoundPresentation(
-                  id: "\(step.id)-\(iteration)",
-                  index: iteration,
-                  maximum: maximum,
-                  steps: steps
-                )))
-          }
-        }
-      case .control(.conditional(_, let yes, let otherwise)):
-        for child in [step] + (yes + otherwise).flatMap({ [$0] + $0.action.descendants }) {
-          let record = run.stepRecords.last { $0.stepID == child.id }
-          let context = templateContext(for: run, iteration: record?.iteration)
-          items.append(
-            .step(
-              .init(
-                id: child.id, stepID: child.id,
-                title: title(for: child, context: context) ?? child.id,
-                state: record.map { .init($0.state) } ?? .pending)))
-        }
-      default:
-        let record = run.stepRecords.last { $0.stepID == step.id && $0.iteration == nil }
-        let context = templateContext(for: run, iteration: nil)
-        items.append(
-          .step(
-            WorkflowStepPresentation(
-              id: "\(step.id)-top",
-              stepID: step.id,
-              title: title(for: step, context: context) ?? step.id,
-              state: record.map { WorkflowStepPresentation.State($0.state) } ?? .pending
-            )))
-      }
-    }
-    return items
-  }
 }
 
 nonisolated extension WorkflowRunPresentation.Status {
@@ -285,65 +158,6 @@ nonisolated extension WorkflowRunPresentation.Status {
     if case .finished = self { return true }
     return false
   }
-}
-
-nonisolated struct WorkflowRolePresentation: Equatable, Sendable, Identifiable {
-  let id: String
-  let displayName: String
-  let agent: String?
-  let paneHandle: String?
-  let surfaceID: UUID?
-
-  init(role: WorkflowRoleDefinition, binding: WorkflowRoleBinding?) {
-    id = role.name
-    displayName = binding?.displayName ?? role.name
-    agent = binding?.agent.nilIfEmpty
-    paneHandle = binding?.pane?.handle
-    surfaceID = binding?.pane?.surfaceID
-  }
-}
-
-nonisolated enum WorkflowStepListItem: Equatable, Sendable, Identifiable {
-  case step(WorkflowStepPresentation)
-  case round(WorkflowRoundPresentation)
-
-  var id: String {
-    switch self {
-    case .step(let step): step.id
-    case .round(let round): round.id
-    }
-  }
-}
-
-nonisolated struct WorkflowRoundPresentation: Equatable, Sendable, Identifiable {
-  let id: String
-  let index: Int
-  let maximum: Int?
-  let steps: [WorkflowStepPresentation]
-}
-
-nonisolated struct WorkflowStepPresentation: Equatable, Sendable, Identifiable {
-  enum State: Equatable, Sendable {
-    case pending
-    case active
-    case completed
-    case skipped
-    case failed
-
-    init(_ state: WorkflowStepState) {
-      switch state {
-      case .active: self = .active
-      case .completed: self = .completed
-      case .skipped: self = .skipped
-      case .failed: self = .failed
-      }
-    }
-  }
-
-  let id: String
-  let stepID: String
-  let title: String
-  let state: State
 }
 
 nonisolated enum WorkflowRunPanelIntent: Equatable, Sendable {
@@ -362,6 +176,23 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
   let focusSurfaceID: UUID?
   let verdicts: [String]
   let confirmationMessage: String?
+
+  /// The controls for a run that needs attention. The toolbar status item rebuilds its
+  /// presentation on every refresh, and the Skip consequence reads every remaining step,
+  /// so only the view that shows the controls asks for them.
+  static func controls(for run: WorkflowRun, now: Date) -> [Self] {
+    guard let attention = run.status.attention else { return [] }
+    let machine = WorkflowRunMachine(
+      run: run,
+      limits: WorkflowDeliveryLimits(),
+      now: { now },
+      makeToken: { "presentation-does-not-mint-tokens" }
+    )
+    let skipConsequence = machine.skipConsequence(forStep: attention.stepID)
+    return attention.actions.map {
+      Self(action: $0, run: run, attention: attention, skipConsequence: skipConsequence)
+    }
+  }
 
   init(
     action: WorkflowAttentionAction,
@@ -477,13 +308,5 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
         localized: "Skip step '\(stepID)'? This ends the run because step '\(dependent)' depends on its output."
       )
     }
-  }
-}
-nonisolated extension String {
-  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
-}
-nonisolated extension Collection {
-  fileprivate subscript(safe index: Index) -> Element? {
-    indices.contains(index) ? self[index] : nil
   }
 }
