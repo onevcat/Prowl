@@ -44,4 +44,12 @@ struct WorkflowExpressionTests {
     #expect(throws: (any Error).self) { try WorkflowExpression.evaluate(source, values: [:]) }
   }
 
+  @Test func namesAndFieldsMustBeIdentifiers() throws {
+    let values: [String: WorkflowJSONValue] = ["_a1": .object(["b_2": .object(["C": .integer(7)])])]
+    #expect(try WorkflowExpression.evaluate("_a1.b_2.C", values: values) == .integer(7))
+    #expect(try WorkflowExpression.requiredReferences(in: "{{ _a1.b_2.C }} and {{ x.y ?? 1 }}") == [["_a1", "b_2", "C"]])
+    for expression in ["_a1.1", "_a1.'b_2'", "_a1.(b_2)", "_a1.", ". _a1", ")", "_a1.b-2.C", "é", "_a1.é"] {
+      #expect(throws: (any Error).self) { try WorkflowExpression.evaluate(expression, values: values) }
+    }
+  }
 }

@@ -22,8 +22,9 @@ nonisolated public enum WorkflowTemplate {
     case invalidPath(String)
   }
 
-  private static var referencePattern: Regex<(Substring, Substring)> { /\{\{([^{}]*)\}\}/ }
-  private static var pathPattern: Regex<Substring> { /^[a-z0-9_.-]+$/ }
+  /// `Regex` is not Sendable; these literals are immutable and only read.
+  nonisolated(unsafe) private static let referencePattern = /\{\{([^{}]*)\}\}/
+  nonisolated(unsafe) private static let pathPattern = /^[a-z0-9_.-]+$/
 
   public static func containsReference(_ text: String) -> Bool {
     text.contains("{{")

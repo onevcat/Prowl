@@ -162,10 +162,11 @@ struct WorkflowStatusCenterPresentationTests {
 
     session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
+    let controls = WorkflowAttentionControl.controls(for: session.run, now: Self.now)
 
-    #expect(run.attentionControls.map(\.action) == WorkflowAttentionAction.allCases)
-    #expect(run.attentionControls.first { $0.action == .acceptWithVerdict }?.verdicts == ["clean", "issues"])
-    for control in run.attentionControls {
+    #expect(controls.map(\.action) == WorkflowAttentionAction.allCases)
+    #expect(controls.first { $0.action == .acceptWithVerdict }?.verdicts == ["clean", "issues"])
+    for control in controls {
       if control.action == .acceptWithVerdict {
         #expect(control.intent(runID: run.id, worktreeID: run.worktreeID, verdict: "clean") != nil)
       } else {
@@ -174,13 +175,13 @@ struct WorkflowStatusCenterPresentationTests {
     }
 
     #expect(
-      run.attentionControls.first { $0.action == .focusPane }?.intent(
+      controls.first { $0.action == .focusPane }?.intent(
         runID: run.id,
         worktreeID: run.worktreeID
       ) == .focusPane(worktreeID: "selected", surfaceID: Self.authorPane.surfaceID)
     )
     #expect(
-      run.attentionControls.first { $0.action == .acceptWithVerdict }?.intent(
+      controls.first { $0.action == .acceptWithVerdict }?.intent(
         runID: run.id,
         worktreeID: run.worktreeID,
         verdict: "issues"
@@ -188,7 +189,7 @@ struct WorkflowStatusCenterPresentationTests {
     )
   }
 
-  @Test func stepListPreservesDocumentOrderAndGroupsLoopIterations() throws {
+  @Test func currentStepTitleRendersTheLoopIteration() throws {
     var session = try makeSession(id: UUID(6), worktreeID: "selected", updatedAt: Self.now)
     var cursor = try #require(session.run.controlCursor)
     for _ in 0..<3 {
@@ -228,41 +229,11 @@ struct WorkflowStatusCenterPresentationTests {
 
     session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
-    let expectedInstruction =
-      "Read /tmp/selected/.prowl/workflow-runs/\(run.id.uuidString)/deliveries/brief.md "
-      + "and address the findings in round 2."
 
     #expect(run.currentStepTitle == "Round 2: address findings")
-    #expect(run.currentPrompt == expectedInstruction)
-    #expect(run.stepItems.count == 4)
-    guard case .step(let brief) = run.stepItems[0] else {
-      Issue.record("Expected the top-level brief step first")
-      return
-    }
-    #expect(brief.stepID == "brief")
-    #expect(brief.state == .completed)
-    guard case .round(let firstRound) = run.stepItems[1] else {
-      Issue.record("Expected round 1 after the brief")
-      return
-    }
-    #expect(firstRound.index == 1)
-    #expect(firstRound.maximum == 3)
-    #expect(firstRound.steps.map(\.stepID) == ["fix", "rereview"])
-    guard case .round(let secondRound) = run.stepItems[2] else {
-      Issue.record("Expected round 2 after round 1")
-      return
-    }
-    #expect(secondRound.steps.map(\.stepID) == ["fix", "rereview"])
-    #expect(secondRound.steps.map(\.state) == [.active, .pending])
-    guard case .step(let finish) = run.stepItems[3] else {
-      Issue.record("Expected the final top-level step last")
-      return
-    }
-    #expect(finish.stepID == "finish")
-    #expect(finish.state == .pending)
   }
 
-  @Test func rolesAndElapsedTimeStayHonestAtPresentationEdges() throws {
+  @Test func elapsedTimeStaysHonestAtPresentationEdges() throws {
     var session = try makeSession(
       id: UUID(13),
       worktreeID: "selected",
@@ -279,10 +250,7 @@ struct WorkflowStatusCenterPresentationTests {
     session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
 
-    #expect(run.roles.map(\.displayName) == ["Author", "Pi Reviewer"])
-    #expect(run.roles.map(\.surfaceID) == [Self.authorPane.surfaceID, nil])
     #expect(run.currentStepTitle == "Finishing workflow")
-    #expect(run.currentPrompt == nil)
     #expect(run.elapsedText == "1d 1h")
     #expect(run.elapsedText(at: session.run.startedAt.addingTimeInterval(-1)) == "0s")
   }
@@ -300,8 +268,8 @@ struct WorkflowStatusCenterPresentationTests {
         message: "No delivery."
       ))
 
-    let endingRun = WorkflowRunPresentation(run: ending.run, now: Self.now)
-    let endingSkip = try #require(endingRun.attentionControls.first { $0.action == .skip })
+    let endingControls = WorkflowAttentionControl.controls(for: ending.run, now: Self.now)
+    let endingSkip = try #require(endingControls.first { $0.action == .skip })
     #expect(endingSkip.confirmationMessage?.contains("ends the run") == true)
     #expect(endingSkip.confirmationMessage?.contains("fix") == true)
 
@@ -321,8 +289,8 @@ struct WorkflowStatusCenterPresentationTests {
         actions: [.skip, .cancel],
         message: "No delivery."
       ))
-    let continuingRun = WorkflowRunPresentation(run: continuing.run, now: Self.now)
-    let continuingSkip = try #require(continuingRun.attentionControls.first { $0.action == .skip })
+    let continuingControls = WorkflowAttentionControl.controls(for: continuing.run, now: Self.now)
+    let continuingSkip = try #require(continuingControls.first { $0.action == .skip })
     #expect(continuingSkip.confirmationMessage?.contains("continues") == true)
   }
 

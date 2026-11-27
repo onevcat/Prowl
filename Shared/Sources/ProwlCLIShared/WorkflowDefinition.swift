@@ -16,10 +16,11 @@ nonisolated public enum WorkflowSchema {
   public static let runEnvironmentKey = "PROWL_WORKFLOW_RUN"
   public static let roleEnvironmentKey = "PROWL_WORKFLOW_ROLE"
   /// Workflow and skill ids may contain dots; a leading alphanumeric rules out `.` and `..`.
-  public static var workflowIDPattern: Regex<Substring> { /^[a-z0-9][a-z0-9_.-]{0,63}$/ }
+  /// `Regex` is not Sendable; the two patterns are immutable and only read.
+  nonisolated(unsafe) public static let workflowIDPattern = /^[a-z0-9][a-z0-9_.-]{0,63}$/
   /// Step ids, role names, delivery names, input names, and verdict values become path
   /// components and CLI arguments.
-  public static var slugPattern: Regex<Substring> { /^[a-z0-9][a-z0-9_-]{0,63}$/ }
+  nonisolated(unsafe) public static let slugPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
   public static func isWorkflowID(_ value: String) -> Bool {
     value.wholeMatch(of: workflowIDPattern) != nil

@@ -126,21 +126,21 @@ struct WorkflowStepHistoryDetailView: View {
   }
 
   private func attentionControls(_ run: WorkflowRun) -> some View {
-    let presentation = WorkflowRunPresentation(run: run, now: Date())
+    let attentionControls = WorkflowAttentionControl.controls(for: run, now: Date())
     return VStack(alignment: .leading, spacing: 8) {
       if let attention = run.status.attention {
         Text(attention.message).font(.callout).foregroundStyle(.orange).lineLimit(4)
       }
       ViewThatFits {
-        controls(presentation, run: run)
-        ScrollView(.horizontal) { controls(presentation, run: run) }
+        controls(attentionControls, run: run)
+        ScrollView(.horizontal) { controls(attentionControls, run: run) }
       }
     }
   }
 
-  private func controls(_ presentation: WorkflowRunPresentation, run: WorkflowRun) -> some View {
+  private func controls(_ attentionControls: [WorkflowAttentionControl], run: WorkflowRun) -> some View {
     HStack {
-      ForEach(presentation.attentionControls) { control in
+      ForEach(attentionControls) { control in
         if control.action == .acceptWithVerdict {
           Menu(control.label) {
             ForEach(control.verdicts, id: \.self) { verdict in
