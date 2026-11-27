@@ -235,11 +235,14 @@ nonisolated struct WorkflowRunMachine {
       guard let step = flattened.first(where: { $0.id == stepID }) else { throw .unknownSkipStep(stepID) }
       guard step.action.expect != nil else { throw .skipNotExpecting(stepID) }
     }
-    for stepID in skippedSteps.sorted() {
-      if case .endsRun(let dependent) = Self.startConsequence(
-        forStep: stepID, definition: definition, preSkipped: skippedSteps)
-      {
-        throw .skipNotAllowed(step: stepID, dependent: dependent)
+    if !skippedSteps.isEmpty {
+      let index = WorkflowSkipIndex(definition: definition)
+      for stepID in skippedSteps.sorted() {
+        if case .endsRun(let dependent) = Self.startSkipConsequence(
+          forStep: stepID, definition: definition, alreadySkipped: skippedSteps, index: index)
+        {
+          throw .skipNotAllowed(step: stepID, dependent: dependent)
+        }
       }
     }
     var machine = WorkflowRunMachine(run: run, limits: request.limits, now: now, makeToken: makeToken)
@@ -598,102 +601,48 @@ nonisolated struct WorkflowRunMachine {
   /// consequence of skipping `stepID` given the other steps already chosen to skip, or nil when
   /// the step carries no `expect` (or does not exist) and so offers no skip choice.
   static func startSkipConsequence(
-    forStep stepID: String, definition: WorkflowDefinition, alreadySkipped: Set<String>
+    forStep stepID: String, definition: WorkflowDefinition, alreadySkipped: Set<String>,
+    index: WorkflowSkipIndex? = nil
   ) -> WorkflowSkipConsequence? {
-    guard let step = definition.flattenedSteps.first(where: { $0.id == stepID }),
-      step.action.expect != nil
-    else { return nil }
-    return startConsequence(forStep: stepID, definition: definition, preSkipped: alreadySkipped)
-  }
-
-  /// Before execution, conservatively inspect every branch that could consume a skipped delivery.
-  private static func startConsequence(
-    forStep stepID: String, definition: WorkflowDefinition, preSkipped: Set<String>
-  ) -> WorkflowSkipConsequence {
-    guard let name = definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
-      return .noDelivery
-    }
-    let remaining = definition.steps
-    return consequence(of: name, forStep: stepID, remaining: remaining, preSkipped: preSkipped)
+    let index = index ?? WorkflowSkipIndex(definition: definition)
+    guard let name = index.delivery(ofStep: stepID) else { return nil }
+    return consequence(
+      of: name, forStep: stepID, remaining: definition.steps, preSkipped: alreadySkipped, index: index)
   }
 
   /// Inspect the cursor's remaining steps, including subsequent loop iterations, for required readers.
   private static func skipConsequence(forStep stepID: String, in run: WorkflowRun)
     -> WorkflowSkipConsequence
   {
-    guard let name = run.definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
-      return .noDelivery
-    }
+    let index = WorkflowSkipIndex(definition: run.definition)
+    guard let name = index.delivery(ofStep: stepID) else { return .noDelivery }
     return consequence(
       of: name, forStep: stepID,
-      remaining: run.controlCursor?.remainingSteps ?? run.definition.steps, preSkipped: run.preSkippedSteps)
+      remaining: run.controlCursor?.remainingSteps ?? run.definition.steps, preSkipped: run.preSkippedSteps,
+      index: index)
   }
 
   private static func consequence(
     of name: String, forStep stepID: String, remaining: [WorkflowStepDefinition],
-    preSkipped: Set<String>
+    preSkipped: Set<String>, index: WorkflowSkipIndex
   ) -> WorkflowSkipConsequence {
-    var optional: [String] = []
     for step in remaining where step.id != stepID && !preSkipped.contains(step.id) {
-      if let dependent = reader(of: name, in: step, preSkipped: preSkipped, optional: &optional) {
+      if let dependent = reader(of: name, in: step, preSkipped: preSkipped, index: index) {
         return .endsRun(dependent: dependent)
       }
     }
-    return .continues(optionalInputs: optional)
+    return .continues(optionalInputs: [])
   }
 
   /// The id of the step that reads `name` in a way the Skip rule does not tolerate, or nil.
   private static func reader(
-    of name: String, in step: WorkflowStepDefinition, preSkipped: Set<String>, optional: inout [String]
+    of name: String, in step: WorkflowStepDefinition, preSkipped: Set<String>, index: WorkflowSkipIndex
   ) -> String? {
-    if let title = step.title, references(name, in: title) { return step.id }
-    switch step.action {
-    case .message(_, let prompt, _):
-      if references(name, in: prompt) { return step.id }
-    case .launch(_, let prompt, _, _):
-      if references(name, in: prompt) { return step.id }
-    case .notify(let text):
-      if references(name, in: text) { return step.id }
-    case .close:
-      break
-    case .action(_, let inputs):
-      if inputs.values.contains(where: { references(name, in: $0) }) { return step.id }
-    case .control(let control):
-      return controlReader(of: name, in: step, control: control, preSkipped: preSkipped, optional: &optional)
-    }
-
-    return nil
-  }
-
-  private static func controlReader(
-    of name: String, in step: WorkflowStepDefinition, control: WorkflowControlStep,
-    preSkipped: Set<String>, optional: inout [String]
-  ) -> String? {
-    let expressions: [String]
-    switch control {
-    case .set(let assignments): expressions = Array(assignments.values)
-    case .conditional(let condition, _, _), .loop(let condition, _, _): expressions = [condition]
-    case .breakLoop, .continueLoop: expressions = []
-    }
-    if expressions.contains(where: { references(name, in: "{{ " + $0 + " }}") }) { return step.id }
+    if index.step(step.id, requires: name) { return step.id }
     for inner in step.action.children where !preSkipped.contains(inner.id) {
-      if let dependent = reader(of: name, in: inner, preSkipped: preSkipped, optional: &optional) { return dependent }
+      if let dependent = reader(of: name, in: inner, preSkipped: preSkipped, index: index) { return dependent }
     }
     return nil
-  }
-
-  private static func references(_ name: String, in text: String) -> Bool {
-    guard let paths = try? WorkflowExpression.requiredReferences(in: text) else { return false }
-    return paths.contains { $0.count >= 2 && $0[0] == "deliveries" && $0[1] == name }
-  }
-
-  private static func references(_ name: String, in value: WorkflowJSONValue) -> Bool {
-    switch value {
-    case .string(let text): references(name, in: text)
-    case .array(let items): items.contains { references(name, in: $0) }
-    case .object(let fields): fields.values.contains { references(name, in: $0) }
-    default: false
-    }
   }
 
   // MARK: Advancing
