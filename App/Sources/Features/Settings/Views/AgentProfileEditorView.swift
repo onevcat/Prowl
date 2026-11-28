@@ -7,6 +7,7 @@ struct AgentProfileEditorView: View {
   @Bindable var store: StoreOf<AgentProfileEditorFeature>
   @State private var isIconPickerPresented = false
   @State private var isHoveringIconTile = false
+  @State private var loadedModelCatalog: LoadedModelCatalog?
 
   var body: some View {
     Form {
@@ -19,6 +20,12 @@ struct AgentProfileEditorView: View {
     .formStyle(.grouped)
     .navigationTitle(store.profile.name)
     .task { store.send(.task) }
+    .task(id: modelCatalogKey) {
+      let key = modelCatalogKey
+      guard runtimeAdapter?.supportsModelSelection == true else { return }
+      let catalog = await AgentModelCatalogLoader.load(for: key.runtime, dedicatedHome: key.dedicatedHome)
+      loadedModelCatalog = LoadedModelCatalog(key: key, catalog: catalog)
+    }
     .alert($store.scope(state: \.alert, action: \.alert))
     .sheet(isPresented: $isIconPickerPresented) {
       TabIconPickerView(
@@ -61,7 +68,8 @@ struct AgentProfileEditorView: View {
           title: String(localized: "Model"),
           prompt: String(localized: "Runtime default"),
           text: $store.profile.model,
-          suggestions: modelSuggestions
+          suggestions: displayedModelCatalog?.primary.map(\.id) ?? [],
+          moreSuggestions: displayedModelCatalog?.overflow.map(\.id) ?? []
         )
       }
       if runtimeAdapter?.supportsReasoningEffort == true {
@@ -327,9 +335,10 @@ struct AgentProfileEditorView: View {
     title: String,
     prompt: String,
     text: Binding<String?>,
-    suggestions: [String]
+    suggestions: [String],
+    moreSuggestions: [String] = []
   ) -> some View {
-    let selection = suggestionSelection(for: text, suggestions: suggestions)
+    let selection = suggestionSelection(for: text, suggestions: suggestions + moreSuggestions)
     return HStack {
       Text(title)
       Spacer()
@@ -339,19 +348,36 @@ struct AgentProfileEditorView: View {
           .labelsHidden()
           .multilineTextAlignment(.trailing)
           .accessibilityLabel(title)
-        Picker("", selection: selection) {
-          Text("Runtime Default").tag(AgentProfileSuggestionSelection.runtimeDefault)
-          ForEach(suggestions, id: \.self) { suggestion in
-            Text(suggestion).tag(AgentProfileSuggestionSelection.suggestion(suggestion))
+        Menu {
+          Picker("", selection: selection) {
+            Text("Runtime Default").tag(AgentProfileSuggestionSelection.runtimeDefault)
+            ForEach(suggestions, id: \.self) { suggestion in
+              Text(suggestion).tag(AgentProfileSuggestionSelection.suggestion(suggestion))
+            }
+            if case .custom = selection.wrappedValue {
+              Text("Custom Value").tag(selection.wrappedValue)
+            }
           }
-          if case .custom = selection.wrappedValue {
-            Text("Custom Value").tag(selection.wrappedValue)
+          .pickerStyle(.inline)
+          .labelsHidden()
+          if !moreSuggestions.isEmpty {
+            Menu("More Models") {
+              Picker("", selection: selection) {
+                ForEach(moreSuggestions, id: \.self) { suggestion in
+                  Text(suggestion).tag(AgentProfileSuggestionSelection.suggestion(suggestion))
+                }
+              }
+              .pickerStyle(.inline)
+              .labelsHidden()
+            }
           }
+        } label: {
+          Image(systemName: "chevron.up.chevron.down")
         }
-        .pickerStyle(.menu)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
         .controlSize(.small)
-        .labelsHidden()
-        .frame(width: 28)
+        .fixedSize()
         .accessibilityLabel("\(title) suggestions")
         .help("Pick a known value, or type any value.")
       }
@@ -386,15 +412,44 @@ struct AgentProfileEditorView: View {
     return plan?.previewText ?? String(localized: "Unavailable")
   }
 
+  /// The selected model's own effort levels when the catalog knows them, so
+  /// the menu does not offer an effort that the model rejects.
   private var effortSuggestions: [String] {
-    runtimeAdapter?.reasoningEffortSuggestions ?? []
+    displayedModelCatalog?.reasoningEfforts(for: store.profile.model)
+      ?? runtimeAdapter?.reasoningEffortSuggestions ?? []
   }
 
-  private var modelSuggestions: [String] {
-    runtimeAdapter?.modelSuggestions ?? []
+  /// The built-in list stands in until the installed agent's catalog loads.
+  private var displayedModelCatalog: AgentModelCatalog? {
+    guard let loadedModelCatalog, loadedModelCatalog.key == modelCatalogKey else {
+      return AgentModelCatalog.builtIn(for: store.profile.runtime)
+    }
+    return loadedModelCatalog.catalog
+  }
+
+  private var modelCatalogKey: ModelCatalogKey {
+    ModelCatalogKey(
+      runtime: store.profile.runtime,
+      dedicatedHome: store.profile.bindsDedicatedHome
+        ? AgentProfileLaunchPlanner.dedicatedHomeDirectory(
+          for: store.profile.id,
+          base: ProwlPaths.agentProfileHomesDirectory
+        )
+        : nil
+    )
   }
 
   private var runtimeAdapter: (any AgentRuntimeAdapter)? {
     AgentRuntimeAdapterRegistry.profileAdapter(for: store.profile.runtime)
   }
+}
+
+private struct ModelCatalogKey: Hashable {
+  let runtime: AgentProfileRuntime
+  let dedicatedHome: URL?
+}
+
+private struct LoadedModelCatalog {
+  let key: ModelCatalogKey
+  let catalog: AgentModelCatalog?
 }
