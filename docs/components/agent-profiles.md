@@ -174,8 +174,17 @@ after choosing the destination agent.
 
 **Model** and **Reasoning Effort** offer suggestions and accept custom values
 supported by your CLI and account. For example, a Codex profile can select
-`gpt-6.1-sol` and `max` from the suggestions. Leave either field blank to use
-the runtime default. Type in the right-aligned value field, or use the adjacent
+`gpt-6.2-sol` and `ultra` from the suggestions. Leave either field blank to use
+the runtime default.
+
+For Codex and Claude Code, the model suggestions come from the model list that
+the installed agent caches after it runs (`models_cache.json` in the Codex home,
+`cache/model-catalog/` in the Claude Code config folder). A profile with a
+dedicated home reads its own home first. The menu shows the agent's first models
+in the agent's own order and puts the rest under **More Models**. When no cached
+list is available, Prowl shows a built-in list. The Reasoning Effort suggestions
+follow the selected model, so a model that stops at `max` does not offer
+`ultra`. Suggestions never change a value that a profile already saved. Type in the right-aligned value field, or use the adjacent
 menu to select a suggestion.
 
 **Recommended** resolves in three tiers: the repo's **Default Agent Profile**
