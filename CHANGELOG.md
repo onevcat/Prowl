@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026.11.28](https://github.com/onevcat/Prowl/releases/tag/v2026.11.28)
+
+This release updates Prowl Mirror on iOS and Android and makes it easier to choose a model for an agent profile.
+
+### New
+
+- In the Agent Profile editor, the Model menu now lists models from your installed Codex or Claude Code catalog. Reasoning Effort options follow the selected model when the catalog lists them.
+- **Settings → Remote Mirror → Get the App…** shows a QR code and link that open Prowl Mirror for iPhone and iPad on the App Store. The app is still in App Store review, so they work after Apple approves it.
+- On iPhone and iPad, tap **Try the Demo** before pairing a Mac to explore sample sessions, answer a permission prompt, or stop an agent.
+- Android Mirror now lets you follow conversations in Chat, send replies, and start agent sessions. If you used an earlier Android build, pair your Mac again after installing this version.
+
+### Improved
+
+- The workflow start sheet refreshes faster for large workflows with many optional steps.
+
+### Fixed
+
+- On macOS 27.2, double-clicking empty toolbar space once again performs your configured title bar action.
+- Web links in the Mac terminal and iOS Mirror chat now open the correct URL when followed by Chinese, Japanese, or Korean punctuation.
+- Mirror now lets you submit or cancel Claude Code’s multi-question review from your phone. On Android, fast typing no longer drops characters, and a delayed terminal history response no longer disconnects the pane.
+
 ## [2026.11.23](https://github.com/onevcat/Prowl/releases/tag/v2026.11.23)
 
 Prowl Mirror brings agent notifications to iPhone and opens long chats faster. Prowl Mirror for iPhone is in TestFlight beta.
