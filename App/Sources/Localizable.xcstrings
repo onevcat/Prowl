@@ -2376,6 +2376,16 @@
         }
       }
     },
+    "App Store QR code for Prowl Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl Mirror 的 App Store 二维码"
+          }
+        }
+      }
+    },
     "Appearance" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4873,16 +4883,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭分屏"
-          }
-        }
-      }
-    },
-    "Close the pane bound to %@." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭绑定到 %@ 的窗格。"
           }
         }
       }
@@ -8799,6 +8799,16 @@
         }
       }
     },
+    "Follow and answer your agents from your phone. Free on the App Store." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在手机上关注并回应你的 Agent。可在 App Store 免费下载。"
+          }
+        }
+      }
+    },
     "Follows the title until you change it. Prowl creates the workspace in this folder." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8895,6 +8905,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "获取 GitHub CLI"
+          }
+        }
+      }
+    },
+    "Get Prowl Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取 Prowl Mirror"
+          }
+        }
+      }
+    },
+    "Get the App…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取 App…"
           }
         }
       }
@@ -11129,6 +11159,16 @@
         }
       }
     },
+    "More Models" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多模型"
+          }
+        }
+      }
+    },
     "More actions for %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11715,6 +11755,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有待推送的更改"
+          }
+        }
+      }
+    },
+    "No Prowl Mirror on the iPhone yet? Get it from the App Store…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 上还没有 Prowl Mirror？从 App Store 获取…"
           }
         }
       }
@@ -13111,6 +13161,16 @@
         }
       }
     },
+    "Open the Prowl Mirror page on the App Store in your browser" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器中打开 App Store 上的 Prowl Mirror 页面"
+          }
+        }
+      }
+    },
     "Open the bundle location in Finder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14229,6 +14289,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prowl 经典音效"
+          }
+        }
+      }
+    },
+    "Prowl Mirror for iPhone and iPad" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于 iPhone 和 iPad 的 Prowl Mirror"
+          }
+        }
+      }
+    },
+    "Prowl Mirror is still in App Store review. This code and link work as soon as Apple approves the app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl Mirror 仍在 App Store 审核中。Apple 批准后，此二维码和链接即可使用。"
+          }
+        }
+      }
+    },
+    "Prowl Mirror needs iOS 26 or later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl Mirror 需要 iOS 26 或更高版本。"
           }
         }
       }
@@ -17144,16 +17234,6 @@
         }
       }
     },
-    "Run action %@." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "运行操作 %@。"
-          }
-        }
-      }
-    },
     "Run details are unavailable: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17540,6 +17620,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请扫描主机“添加设备”中的 Prowl 配对二维码。"
+          }
+        }
+      }
+    },
+    "Scan this code with the Camera app on your iPhone or iPad to open Prowl Mirror on the App Store." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 iPhone 或 iPad 上的“相机”App 扫描此二维码，即可在 App Store 中打开 Prowl Mirror。"
           }
         }
       }
@@ -18742,6 +18832,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示工作流文件夹"
+          }
+        }
+      }
+    },
+    "Show a QR code that opens Prowl Mirror on the App Store on an iPhone or iPad" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示一个二维码，在 iPhone 或 iPad 上打开 App Store 中的 Prowl Mirror"
           }
         }
       }
@@ -22140,6 +22240,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法删除 worktree"
+          }
+        }
+      }
+    },
+    "Unable to generate the QR code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法生成二维码。"
           }
         }
       }
