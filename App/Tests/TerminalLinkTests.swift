@@ -120,6 +120,23 @@ struct TerminalLinkTests {
     #expect(TerminalLink(unknownKindValue: "/tmp/a\u{202E}b").decision == .deny(.unsafeCharacters))
   }
 
+  @Test func hyperlinksEndAtProsePunctuation() {
+    // Claude Code prints the GFM autolink of `#1（https://…/1）里，好。` as this OSC 8 target.
+    #expect(
+      TerminalLink(hyperlink: "https://github.com/onevcat/Prowl/pull/1）里，好。").string
+        == "https://github.com/onevcat/Prowl/pull/1")
+    #expect(TerminalLink(hyperlink: "https://example.com/a。下一步").string == "https://example.com/a")
+    #expect(TerminalLink(hyperlink: "https://example.com/a　b").string == "https://example.com/a")
+  }
+
+  @Test func hyperlinksKeepNonPunctuationAndNonWebTargets() {
+    #expect(TerminalLink(hyperlink: "https://zh.wikipedia.org/wiki/猫").string == "https://zh.wikipedia.org/wiki/猫")
+    #expect(TerminalLink(hyperlink: "https://example.com/%EF%BC%89").string == "https://example.com/%EF%BC%89")
+    #expect(TerminalLink(hyperlink: "https://（example").string == "https://（example")
+    #expect(TerminalLink(hyperlink: "file:///tmp/报告（终稿）.pdf").string == "file:///tmp/报告（终稿）.pdf")
+    #expect(TerminalLink(hyperlink: "vscode://file/a（b）").string == "vscode://file/a（b）")
+  }
+
   @Test func displayStringEscapesUnsafeCharacters() {
     #expect(TerminalLink("https://example.com/\u{202E}x").displayString == "https://example.com/\\u{202E}x")
   }

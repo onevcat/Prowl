@@ -48,6 +48,14 @@ nonisolated struct TerminalLink: Equatable, Sendable {
     self.string = string
   }
 
+  /// The target of an OSC 8 hyperlink. Agent CLIs print a GFM autolink as
+  /// one, and that autolink swallows the CJK prose that follows the URL
+  /// (`…/1）里，好。`), so a web target ends at its first non-ASCII
+  /// punctuation. See `ProseURLTrimmer`.
+  init(hyperlink value: String) {
+    self.init(ProseURLTrimmer.trimmed(value))
+  }
+
   /// The target for a value of Ghostty's `unknown` kind. Unlike an OSC 8 URI,
   /// such a value may be a plain path (`~/notes.txt`, `/tmp/log`), which is
   /// checked as a file URL. A value with unsafe characters stays unchanged so

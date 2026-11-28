@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import ProwlMirror_iOS
@@ -125,6 +126,33 @@ struct MirrorMarkdownTests {
 
   @Test func aPipeLineWithoutDelimiterRowIsAParagraph() {
     #expect(MirrorMarkdown.parse("a | b") == [.paragraph("a | b")])
+  }
+
+  @MainActor private func links(in text: String) -> [(text: String, url: String)] {
+    let attributed = MirrorMarkdownCache.shared.inline(for: text)
+    return attributed.runs.compactMap { run in
+      run.link.map { (String(attributed[run.range].characters), $0.absoluteString.removingPercentEncoding ?? "") }
+    }
+  }
+
+  @Test @MainActor func autolinksEndAtCJKPunctuation() {
+    let found = links(in: "改动都在 PR #1183（https://github.com/onevcat/Prowl/pull/1183）里，标题已经更新。")
+    #expect(found.count == 1)
+    #expect(found.first?.text == "https://github.com/onevcat/Prowl/pull/1183")
+    #expect(found.first?.url == "https://github.com/onevcat/Prowl/pull/1183")
+
+    let www = links(in: "见 www.example.com/a。下一步")
+    #expect(www.first?.text == "www.example.com/a")
+    #expect(www.first?.url == "http://www.example.com/a")
+  }
+
+  @Test @MainActor func explicitLinksAndNonPunctuationAutolinksStay() {
+    let explicit = links(in: "看 [这里（全文）](https://example.com/a)。")
+    #expect(explicit.first?.text == "这里（全文）")
+    #expect(explicit.first?.url == "https://example.com/a")
+
+    let wiki = links(in: "见 https://zh.wikipedia.org/wiki/猫 吧")
+    #expect(wiki.first?.text == "https://zh.wikipedia.org/wiki/猫")
   }
 }
 
