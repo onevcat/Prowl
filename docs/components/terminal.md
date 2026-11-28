@@ -253,6 +253,12 @@ Symlinks and Finder aliases are judged by the file they point to, and that file
 is what opens. A relative path is resolved against Prowl's own working
 directory, not the pane's, so it is usually blocked as missing.
 
+An `http`/`https` OSC 8 target ends at its first non-ASCII punctuation or space
+character. Agent CLIs print a bare URL in CJK prose, such as
+`PR #1（https://example.com/1）里，`, as a link that includes the text after
+the URL. Prowl opens `https://example.com/1`. The underline still covers the
+full text that the CLI printed.
+
 ## Ghostty config
 
 By default Prowl reads the same config files as the standalone Ghostty app

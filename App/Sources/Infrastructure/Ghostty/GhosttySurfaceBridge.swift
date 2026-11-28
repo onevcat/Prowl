@@ -152,7 +152,7 @@ final class GhosttySurfaceBridge {
     guard let value = string(from: openURL.url, length: openURL.len) else { return true }
     switch openURL.kind {
     case GHOSTTY_ACTION_OPEN_URL_KIND_OSC8:
-      TerminalLinkOpener.open(TerminalLink(value))
+      TerminalLinkOpener.open(TerminalLink(hyperlink: value))
       return true
     case GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN:
       TerminalLinkOpener.open(TerminalLink(unknownKindValue: value))

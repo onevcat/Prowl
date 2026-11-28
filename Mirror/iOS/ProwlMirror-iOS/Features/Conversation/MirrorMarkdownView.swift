@@ -139,8 +139,38 @@ struct MirrorInlineText: View {
       (try? AttributedString(
         markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
       ?? AttributedString(text)
+    Self.trimProseAutolinks(in: &attributed)
     inlineCache.setObject(Box(attributed), forKey: text as NSString)
     return attributed
+  }
+
+  /// A bare URL in CJK prose autolinks the text after it (`…/1183）里，`), so the
+  /// link opens a missing page. An autolink is a link whose text ends with the
+  /// part that `ProseURLTrimmer` cuts off; that part loses its link, and the rest
+  /// links to the trimmed URL. Explicit `[text](url)` links keep their target.
+  private static func trimProseAutolinks(in attributed: inout AttributedString) {
+    // Scalar offsets, not indices: an attribute change may invalidate indices.
+    let scalars = attributed.unicodeScalars
+    let autolinks: [(start: Int, split: Int, end: Int, url: URL)] = attributed.runs.compactMap { run in
+      guard let target = run.link?.absoluteString.removingPercentEncoding else { return nil }
+      let trimmed = ProseURLTrimmer.trimmed(target)
+      let removed = String(target.unicodeScalars.dropFirst(trimmed.unicodeScalars.count))
+      let text = String(attributed[run.range].characters)
+      let keptLength = text.unicodeScalars.count - removed.unicodeScalars.count
+      guard !removed.isEmpty, keptLength > 0, text.hasSuffix(removed), let url = URL(string: trimmed) else {
+        return nil
+      }
+      let start = scalars.distance(from: scalars.startIndex, to: run.range.lowerBound)
+      return (start, start + keptLength, start + text.unicodeScalars.count, url)
+    }
+    for autolink in autolinks {
+      let scalars = attributed.unicodeScalars
+      let start = scalars.index(scalars.startIndex, offsetBy: autolink.start)
+      let split = scalars.index(scalars.startIndex, offsetBy: autolink.split)
+      let end = scalars.index(scalars.startIndex, offsetBy: autolink.end)
+      attributed[start..<split].link = autolink.url
+      attributed[split..<end].link = nil
+    }
   }
 
   private final class Box<Value> {
