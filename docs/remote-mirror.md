@@ -15,7 +15,9 @@ opened from this Mac.
 
 Below the switch, whether it is on or off, **Prowl Mirror for iPhone and iPad → Get the App…**
 shows a QR code to scan with the iPhone or iPad camera. It opens Prowl Mirror on the App Store
-(`https://apps.apple.com/app/id6831901271`); the popover also has the link for a browser.
+(`https://apps.apple.com/app/id6831901271`); the popover also has the link for a browser. While
+the first release waits for App Store review, a note at the top of the popover says that the
+code and the link work once Apple approves the app.
 
 With the switch on, the Settings section has two groups, named by direction:
 
