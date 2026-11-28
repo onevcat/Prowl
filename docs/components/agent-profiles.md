@@ -174,7 +174,8 @@ after choosing the destination agent.
 
 **Model** and **Reasoning Effort** offer suggestions and accept custom values
 supported by your CLI and account. For example, a Codex profile can select
-`gpt-6.1-sol` and `max` from the suggestions. Leave either field blank to use
+`gpt-6.2-sol` and `ultra` from the suggestions. Not every model accepts every
+effort: the Codex `luna` models stop at `max`. Leave either field blank to use
 the runtime default. Type in the right-aligned value field, or use the adjacent
 menu to select a suggestion.
 
