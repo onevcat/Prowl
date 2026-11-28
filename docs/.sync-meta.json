@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.agents/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "669a301f5609dd0e4a8cb3f961ba90b8d24b9b4b",
-  "last_synced_date": "2026-11-23",
-  "note": "Mirror push (095), wire compression (097), notification copy and content summaries updated docs/remote-mirror.md and docs/remote-mirror-wire.md in their PRs; the CLI launch model gained an interactive field that only the Mirror Host sets (no CLI flag). No further edits needed."
+  "last_synced_commit": "b414801d847e0092ca736bb96f5ba84514707b38",
+  "last_synced_date": "2026-11-28",
+  "note": "Profile model catalog (PR #1183), OSC 8 CJK punctuation trimming (PR #1184) and the Mirror App Store review notice (PR #1185) updated docs/components/agent-profiles.md, docs/components/terminal.md and docs/remote-mirror.md in their PRs; workflow regex caching, the macOS 27.2 titlebar double-click fix and Mirror wire key ordering change no documented behavior. No further edits needed."
 }
